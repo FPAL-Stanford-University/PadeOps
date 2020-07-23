@@ -1,6 +1,6 @@
 &INPUT
-inputdir                      = "/scratch/05294/mhowland/diurnal/init/debug"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal/kumar/debug"   ! Directory for all output files
+inputdir                      = "/scratch/05294/mhowland/diurnal/init/debug_180"   ! Directory for any input files
+outputdir                     = "/scratch/05294/mhowland/diurnal/kumar/debug_180"   ! Directory for all output files
 nx                            = 160          ! Number of points in X
 ny                            = 160          ! Number of points in Y
 nz                            = 160          ! Number of points in Z
@@ -10,7 +10,7 @@ dt                            = 0.025D0     ! Fixed time step value (only used i
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 1676           ! TimeID of the restart file being used
+restartFile_TID               = 1671           ! TimeID of the restart file being used
 restartFile_RID               = 1           ! RunID of the restart file being used
 /
 /
@@ -69,10 +69,10 @@ G_alpha                       = 0.D0      ! Geostrophic wind angle (degrees, fro
 dPfdx                         = 0.D0            ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                         = 0.D0            ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                         = 0.D0            ! Additional Acceleration in Z; used if useExtraForcing is ON
-assume_fplane                 = .TRUE.          ! F-plane assumption for horizontal component?
+assume_fplane                 = .FALSE.          ! F-plane assumption for horizontal component?
 latitude                      = 36.d0          ! latitude
 useHITForcing                 = .FALSE.         ! Use an extra forcing term used for HIT?
-frameAngle                    = 0.d0            ! Frame angle (degrees)
+frameAngle                    = 180.d0            ! Frame angle (degrees)
 /
 /
 &PRESSURE_CALC

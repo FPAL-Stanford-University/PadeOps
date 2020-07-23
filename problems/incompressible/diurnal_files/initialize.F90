@@ -12,7 +12,7 @@ module convective_igrid_parameters
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
     
-    real(rkind), parameter :: xDim = 2000._rkind, uDim = sqrt(3.0_rkind**2+9._rkind**2)
+    real(rkind), parameter :: xDim = 1000._rkind, uDim = 8._rkind !sqrt(3.0_rkind**2+9._rkind**2)
     real(rkind), parameter :: timeDim = xDim/uDim
 
 end module     
@@ -20,7 +20,7 @@ end module
 module diurnalBCsmod
     use kind_parameters, only: rkind, clen
     use basic_io, only: read_2d_ascii 
-    use interpolation, only: spline, ispline 
+    use interpolation, only: spline, ispline, binarysearch 
     real(rkind), dimension(:), allocatable :: t_geo, G_geo, t_flux, wT_flux, a_geo, b_geo, c_geo, a_flux, b_flux, c_flux
     real(rkind) :: G_tolerance = 0.1d0
 contains
@@ -43,7 +43,7 @@ contains
         allocate(a_geo(size(data2read,1)))
         allocate(b_geo(size(data2read,1)))
         allocate(c_geo(size(data2read,1)))
-        t_geo = data2read(:,1)
+        t_geo = data2read(:,1) * 60.d0*60.d0/1000.d0
         G_geo = data2read(:,2)
         call spline(t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
         deallocate(data2read)
@@ -54,7 +54,7 @@ contains
         allocate(a_flux(size(data2read,1)))
         allocate(b_flux(size(data2read,1)))
         allocate(c_flux(size(data2read,1)))
-        t_flux = data2read(:,1)
+        t_flux = data2read(:,1) * 60.d0*60.d0/1000.d0
         wT_flux = data2read(:,2)
         call spline(t_flux, wT_flux, a_flux, b_flux, c_flux, size(t_flux))
         deallocate(data2read)
@@ -67,9 +67,16 @@ contains
         real(rkind), intent(in) :: time, G
         real(rkind) :: Gtrue
 
+        ! Test function
+        !call linear_interp(size(t_geo,1),t_geo,G_geo,10.8d0,Gtrue)
+        !Gtrue = ispline(10.8d0, t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
+        !Gtrue = ispline(10.8d0, t_flux, wT_flux, a_flux, b_flux, c_flux, size(t_flux))
+        !call linear_interp(size(t_flux,1),t_flux,wT_flux,10.8d0,Gtrue)
+ 
         ! Interpolate G: 
-        Gtrue = ispline(time, t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
-
+        !Gtrue = ispline(time, t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
+        call linear_interp(size(t_geo,1),t_geo,G_geo,time,Gtrue)
+        
         if (abs(Gtrue - G) .ge. G_tolerance) then 
             print*, "time:", time
             print*, "G entered:", G
@@ -83,14 +90,42 @@ contains
         real(rkind), intent(out) :: G, wTheta
 
         ! Convert units for time? 
-
+        ! This assumes that the input files' time vector is appropriately
+        ! nondimensionalized       
+         
         ! Interpolate G: 
-        G = ispline(time, t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
-
+        ! Only works for the diurnal case based on 1 hour of unstable
+        ! initialization
+        ! I directly modified the RESTART file to be zero time!!!
+        !G = ispline(time, t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
         ! Interpolate wTheta: 
-        wTheta = ispline(time, t_flux, wT_flux, a_flux, b_flux, c_flux, size(t_flux))
+        !wTheta = ispline(time, t_flux, wT_flux, a_flux, b_flux, c_flux, size(t_flux))
+ 
+        ! Linear inteprolation
+        call linear_interp(size(t_geo,1),t_geo,G_geo,time,G)
+        call linear_interp(size(t_flux,1),t_flux,wT_flux,time,wTheta)
 
     end subroutine 
+
+    
+    subroutine linear_interp(xlen,x,y,xv,yv)
+        use kind_parameters, only: rkind
+        use decomp_2d,        only: decomp_info
+        implicit none
+        integer, intent(in)                   :: xlen
+        real(rkind), dimension(xlen), intent(in) :: x, y
+        real(rkind), intent(in)               :: xv
+        real(rkind), intent(out)              :: yv
+        integer                               :: ind
+     
+        ! binary search
+        call binarysearch(xlen, x, xv, ind, 1.d-6)
+    
+        ! Linear interpolation
+        yv = y(ind) + (xv-x(ind)) * (y(ind+1)-y(ind)) / (x(ind+1)-x(ind))
+    
+    end subroutine
+
 end module 
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
@@ -132,25 +167,35 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     !allocate(randArr(size(T,1),size(T,2),size(T,3)))
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    u = 3.0_rkind/uDim
-    v = -9.0_rkind/uDim
+    u = uDim
+    v = zero/uDim
     wC = zero/uDim
 
+    ! From Kumar et al. (2006)
     allocate(ztmp(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     ztmp = z*xDim
     do k = 1, decompC%xsz(3)
-      if(ztmp(1,1,k) < 200.d0) then
-        T(:,:,k) = 286.d0 - ztmp(1,1,k)/200.d0*2.0d0
-      elseif(ztmp(1,1,k) < 850.d0) then
-        T(:,:,k) = 286.0d0
-      elseif(ztmp(1,1,k) < 900.d0) then
-        T(:,:,k) = 286.0d0 + (ztmp(1,1,k)-850.d0)/50.0d0*2.0d0
-      elseif(ztmp(1,1,k) < 1000.d0) then
-        T(:,:,k) = 288.0d0 + (ztmp(1,1,k)-900.d0)/100.0d0*4.0d0
-      else
-        T(:,:,k) = 292.0d0 + (ztmp(1,1,k)-1000.d0)/1000.d0*8.0d0
-      endif
-    enddo
+       if (ztmp(1,1,k)<800.d0) then
+           T(:,:,k) = Tsurf0
+       elseif (ztmp(1,1,k)>=800.d0 .and. ztmp(1,1,k)<1000.d0) then
+           T(:,:,k) = Tsurf0 + (ztmp(1,1,k)-800.d0) * 6.d0 / 200.d0
+       elseif (ztmp(1,1,k)>=1000.d0) then
+           T(:,:,k) = Tsurf0 + (1000.d0 - 800.d0) * 6.d0 / 200.d0 + (ztmp(1,1,k)-1000.d0) * 1.d0 / 100.d0
+       end if
+    end do
+    !do k = 1, decompC%xsz(3)
+    !  if(ztmp(1,1,k) < 800.d0) then
+    !    T(:,:,k) = 301.D0
+    !  elseif(ztmp(1,1,k) < 850.d0) then
+    !    T(:,:,k) = 286.0d0
+    !  elseif(ztmp(1,1,k) < 900.d0) then
+    !    T(:,:,k) = 286.0d0 + (ztmp(1,1,k)-850.d0)/50.0d0*2.0d0
+    !  elseif(ztmp(1,1,k) < 1000.d0) then
+    !    T(:,:,k) = 288.0d0 + (ztmp(1,1,k)-900.d0)/100.0d0*4.0d0
+    !  else
+    !    T(:,:,k) = 292.0d0 + (ztmp(1,1,k)-1000.d0)/1000.d0*8.0d0
+    !  endif
+    !enddo
 
     ! Add random numbers
     allocate(randArr1(size(T,1),size(T,2),size(T,3)))
@@ -387,3 +432,9 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
 
     scalarSource = 0.d0
 end subroutine 
+
+
+
+
+
+
