@@ -272,7 +272,7 @@ end subroutine
 
 subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw, step)
     class(dynamicYaw), intent(inout) :: this
-    real(rkind), dimension(:,:), intent(in) :: psi_k
+    real(rkind), dimension(:,:), intent(inout) :: psi_k
     real(rkind), dimension(:), intent(in) :: P_kp1, yaw
     real(rkind), dimension(:), intent(inout) :: kw, sigma_0
     integer :: NN, i, j
@@ -343,6 +343,7 @@ subroutine EnKF_update(this, psi_k, P_kp1, kw, sigma_0, yaw, step)
     kw = psi_kp1(1:this%Nt,1);
     sigma_0 = psi_kp1(this%Nt+1:NN,1);
     !error = p_sum(abs(rbuff(:,1)-P_kp1)) / real(this%Nt)
+    psi_k = psi_kp1
     
     ! Deallocate
     deallocate(psi_kp,psi_kp1,psi_kpp,chi,psiHat_kp,psiHat_kpp,Phat,ones_Ne)
