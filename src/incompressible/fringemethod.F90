@@ -23,7 +23,7 @@ module fringeMethod
       logical, public :: useFringeAsSponge_Scalar = .true. 
       logical :: firstCallComplete = .false.
       logical :: firstCallCompleteScalar = .false.
-      logical :: useShiftedPeriodicBC = .false. 
+      logical, public :: useShiftedPeriodicBC = .false. 
       real(rkind) :: shift_distance, Lxeff
       integer :: ixst_1, ixen_1, ixst_2, ixen_2
       contains

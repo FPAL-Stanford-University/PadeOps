@@ -98,7 +98,7 @@ module budgets_xy_avg_mod
 
    type :: budgets_xy_avg
         private
-        integer :: budgetType = 1, run_id, nz, num_vars_rz
+        integer :: budgetType = 1, run_id, nz, num_vars_rz, nxeff
 
         complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb
         type(igrid), pointer :: igrid_sim 
@@ -124,7 +124,7 @@ module budgets_xy_avg_mod
         integer :: tidx_compute
         integer :: tidx_budget_start 
         real(rkind) :: time_budget_start 
-        logical :: do_budgets, do_spectra, do_autocorrel, forceDump
+        logical :: do_budgets, do_spectra, do_autocorrel, forceDump, isXPeriodic
 
     contains
         procedure           :: init
@@ -172,10 +172,10 @@ contains
         character(len=clen) :: budgets_dir = "NULL"
         integer :: ioUnit, ierr,  budgetType = 1, restart_tid = 0, restart_rid = 0, restart_counter = 0
         logical :: restart_budgets = .false. 
-        integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = -100
-        logical :: do_budgets = .false., do_spectra = .false., do_autocorrel = .false.
+        integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = -100, nxeff = 1
+        logical :: do_budgets = .false., do_spectra = .false., do_autocorrel = .false., isXPeriodic = .true.
         real(rkind) :: time_budget_start = -1.0d0
-        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start, time_budget_start, do_spectra, do_autocorrel
+        namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start, time_budget_start, do_spectra, do_autocorrel, isXPeriodic, nxeff
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
         ioUnit = 534
@@ -194,10 +194,24 @@ contains
         this%tidx_budget_start = tidx_budget_start  
         this%time_budget_start = time_budget_start  
         this%forceDump = .false.
+        this%isXPeriodic = isXPeriodic
 
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
-        this%avgFact = 1.d0/(real(igrid_sim%nx,rkind)*real(igrid_sim%ny,rkind))
+
+        if(this%isXPeriodic) then
+            this%nxeff = this%igrid_sim%nx
+            if(this%igrid_sim%useFringe) then
+                if(this%igrid_sim%fringe_x%useShiftedPeriodicBC) then
+                    call message("!!!!!! WARNING :: isXPeriodic is true although fringe is on. Please ensure this is what you want !!!!!!!",11)
+                endif
+            endif
+        else
+            this%nxeff = nxeff
+        endif
+        call message(1, "nxeff in budget_xy_avg :", this%nxeff)
+
+        this%avgFact = 1.d0/(real(this%nxeff,rkind)*real(igrid_sim%ny,rkind))
 
         if((this%tidx_budget_start > 0) .and. (this%time_budget_start > 0.0d0)) then
             call GracefulExit("Both tidx_budget_start and time_budget_start in budget_xy_avg are positive. Turn one negative", 100)
@@ -1291,16 +1305,47 @@ contains
         class(budgets_xy_avg), intent(inout) :: this
         complex(rkind), dimension(this%igrid_sim%sp_gpC%ysz(1), this%igrid_sim%sp_gpC%ysz(2), this%igrid_sim%sp_gpC%ysz(3)), intent(in) :: fhat
         real(rkind), dimension(this%nz), intent(out) :: fmean
-        integer :: ierr
+        integer :: ierr, j, k
 
-        call transpose_y_to_z(fhat, this%igrid_sim%cbuffzC(:,:,:,1), this%igrid_sim%sp_gpC)
-        if (nrank == 0) then
-            fmean = real(this%igrid_sim%cbuffzC(1,1,:,1),rkind)*this%avgFact
+        if(this%isXPeriodic) then
+            call transpose_y_to_z(fhat, this%igrid_sim%cbuffzC(:,:,:,1), this%igrid_sim%sp_gpC)
+            if (nrank == 0) then
+                fmean = real(this%igrid_sim%cbuffzC(1,1,:,1),rkind)*this%avgFact
+            else
+                fmean = 0.d0 ! Only 0 processor has the actual mean  
+            end if 
+            
+            call mpi_bcast(fmean,this%nz,mpirkind,0,mpi_comm_world, ierr)
         else
-            fmean = 0.d0 ! Only 0 processor has the actual mean  
-        end if 
-        
-        call mpi_bcast(fmean,this%nz,mpirkind,0,mpi_comm_world, ierr)
+            ! take average in x
+            call this%igrid_sim%spectC%ifft(fhat, this%igrid_sim%rbuffxC(:,:,:,2))
+            do k = 1, size(this%igrid_sim%rbuffxC,3)
+              do j = 1, size(this%igrid_sim%rbuffxC,2)
+                  this%igrid_sim%rbuffxC(1,j,k,2) = sum(this%igrid_sim%rbuffxC(1:this%nxeff,j,k,2))
+              enddo
+            enddo
+
+            ! transpose x to y
+            call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,2), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+
+            ! take average in y
+            do k = 1, size(this%igrid_sim%rbuffyC,3)
+              do j = 1, size(this%igrid_sim%rbuffyC,2)
+                  this%igrid_sim%rbuffyC(1,1,k,1) = this%igrid_sim%rbuffyC(1,1,k,1) + this%igrid_sim%rbuffyC(1,j,k,1)
+              enddo
+            enddo
+
+            ! transpose y to z
+            call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%rbuffzC(:,:,:,1), this%igrid_sim%gpC)
+
+            if (nrank == 0) then
+                fmean = this%igrid_sim%rbuffzC(1,1,:,1)*this%avgFact
+            else
+                fmean = 0.d0 ! Only 0 processor has the actual mean  
+            end if 
+            
+            call mpi_bcast(fmean,this%nz,mpirkind,0,mpi_comm_world, ierr)
+        endif
 
     end subroutine 
 
@@ -1308,16 +1353,47 @@ contains
         class(budgets_xy_avg), intent(inout) :: this
         complex(rkind), dimension(this%igrid_sim%sp_gpE%ysz(1), this%igrid_sim%sp_gpE%ysz(2), this%igrid_sim%sp_gpE%ysz(3)), intent(in) :: fhat
         real(rkind), dimension(this%nz+1), intent(out) :: fmean
-        integer :: ierr
+        integer :: ierr, j, k
 
-        call transpose_y_to_z(fhat, this%igrid_sim%cbuffzE(:,:,:,1), this%igrid_sim%sp_gpE)
-        if (nrank == 0) then
-            fmean = real(this%igrid_sim%cbuffzE(1,1,:,1),rkind)*this%avgFact
+        if(this%isXPeriodic) then
+            call transpose_y_to_z(fhat, this%igrid_sim%cbuffzE(:,:,:,1), this%igrid_sim%sp_gpE)
+            if (nrank == 0) then
+                fmean = real(this%igrid_sim%cbuffzE(1,1,:,1),rkind)*this%avgFact
+            else
+                fmean = 0.d0 ! Only 0 processor has the actual mean  
+            end if 
+            
+            call mpi_bcast(fmean,this%nz+1,mpirkind,0,mpi_comm_world, ierr)
         else
-            fmean = 0.d0 ! Only 0 processor has the actual mean  
-        end if 
-        
-        call mpi_bcast(fmean,this%nz+1,mpirkind,0,mpi_comm_world, ierr)
+            ! take average in x
+            call this%igrid_sim%spectE%ifft(fhat, this%igrid_sim%rbuffxE(:,:,:,2))
+            do k = 1, size(this%igrid_sim%rbuffxE,3)
+              do j = 1, size(this%igrid_sim%rbuffxE,2)
+                  this%igrid_sim%rbuffxE(1,j,k,2) = sum(this%igrid_sim%rbuffxE(1:this%nxeff,j,k,2))
+              enddo
+            enddo
+
+            ! transpose x to y
+            call transpose_x_to_y(this%igrid_sim%rbuffxE(:,:,:,2), this%igrid_sim%rbuffyE(:,:,:,1), this%igrid_sim%gpE)
+
+            ! take average in y
+            do k = 1, size(this%igrid_sim%rbuffyE,3)
+              do j = 1, size(this%igrid_sim%rbuffyE,2)
+                  this%igrid_sim%rbuffyE(1,1,k,1) = this%igrid_sim%rbuffyE(1,1,k,1) + this%igrid_sim%rbuffyE(1,j,k,1)
+              enddo
+            enddo
+
+            ! transpose y to z
+            call transpose_y_to_z(this%igrid_sim%rbuffyE(:,:,:,1), this%igrid_sim%rbuffzE(:,:,:,1), this%igrid_sim%gpE)
+
+            if (nrank == 0) then
+                fmean = this%igrid_sim%rbuffzE(1,1,:,1)*this%avgFact
+            else
+                fmean = 0.d0 ! Only 0 processor has the actual mean  
+            end if
+            
+            call mpi_bcast(fmean,this%nz+1,mpirkind,0,mpi_comm_world, ierr)
+        end if
 
     end subroutine 
     
@@ -1325,16 +1401,46 @@ contains
         class(budgets_xy_avg), intent(inout) :: this
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1), this%igrid_sim%gpC%xsz(2), this%igrid_sim%gpC%xsz(3)), intent(in) :: f
         real(rkind), dimension(this%nz), intent(out) :: fmean
-        integer :: ierr
+        integer :: ierr, j, k
 
-        call this%igrid_sim%spectC%fft(f, this%igrid_sim%cbuffyC(:,:,:,1))
-        call transpose_y_to_z(this%igrid_sim%cbuffyC(:,:,:,1), this%igrid_sim%cbuffzC(:,:,:,1), this%igrid_sim%sp_gpC)
-        if (nrank == 0) then
-            fmean = real(this%igrid_sim%cbuffzC(1,1,:,1),rkind)*this%avgFact
+        if(this%isXPeriodic) then
+            call this%igrid_sim%spectC%fft(f, this%igrid_sim%cbuffyC(:,:,:,1))
+            call transpose_y_to_z(this%igrid_sim%cbuffyC(:,:,:,1), this%igrid_sim%cbuffzC(:,:,:,1), this%igrid_sim%sp_gpC)
+            if (nrank == 0) then
+                fmean = real(this%igrid_sim%cbuffzC(1,1,:,1),rkind)*this%avgFact
+            else
+                fmean = 0.d0 ! Only 0 processor has the actual mean  
+            end if 
+            call mpi_bcast(fmean,this%nz,mpirkind,0,mpi_comm_world, ierr)
         else
-            fmean = 0.d0 ! Only 0 processor has the actual mean  
-        end if 
-        call mpi_bcast(fmean,this%nz,mpirkind,0,mpi_comm_world, ierr)
+            ! take average in x
+            do k = 1, size(this%igrid_sim%rbuffxC,3)
+              do j = 1, size(this%igrid_sim%rbuffxC,2)
+                  this%igrid_sim%rbuffxC(1,j,k,2) = sum(f(1:this%nxeff,j,k))
+              enddo
+            enddo
+
+            ! transpose x to y
+            call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,2), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+
+            ! take average in y
+            do k = 1, size(this%igrid_sim%rbuffyC,3)
+              do j = 1, size(this%igrid_sim%rbuffyC,2)
+                  this%igrid_sim%rbuffyC(1,1,k,1) = this%igrid_sim%rbuffyC(1,1,k,1) + this%igrid_sim%rbuffyC(1,j,k,1)
+              enddo
+            enddo
+
+            ! transpose y to z
+            call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%rbuffzC(:,:,:,1), this%igrid_sim%gpC)
+
+            if (nrank == 0) then
+                fmean = this%igrid_sim%rbuffzC(1,1,:,1)*this%avgFact
+            else
+                fmean = 0.d0 ! Only 0 processor has the actual mean  
+            end if 
+            
+            call mpi_bcast(fmean,this%nz,mpirkind,0,mpi_comm_world, ierr)
+        end if
 
     end subroutine 
     
@@ -1342,16 +1448,46 @@ contains
         class(budgets_xy_avg), intent(inout) :: this
         real(rkind), dimension(this%igrid_sim%gpE%xsz(1), this%igrid_sim%gpE%xsz(2), this%igrid_sim%gpE%xsz(3)), intent(in) :: f
         real(rkind), dimension(this%nz+1), intent(out) :: fmean
-        integer :: ierr
+        integer :: ierr, j, k
 
-        call this%igrid_sim%spectE%fft(f, this%igrid_sim%cbuffyE(:,:,:,1))
-        call transpose_y_to_z(this%igrid_sim%cbuffyE(:,:,:,1), this%igrid_sim%cbuffzE(:,:,:,1), this%igrid_sim%sp_gpE)
-        if (nrank == 0) then
-            fmean = real(this%igrid_sim%cbuffzE(1,1,:,1),rkind)*this%avgFact
+        if(this%isXPeriodic) then
+            call this%igrid_sim%spectE%fft(f, this%igrid_sim%cbuffyE(:,:,:,1))
+            call transpose_y_to_z(this%igrid_sim%cbuffyE(:,:,:,1), this%igrid_sim%cbuffzE(:,:,:,1), this%igrid_sim%sp_gpE)
+            if (nrank == 0) then
+                fmean = real(this%igrid_sim%cbuffzE(1,1,:,1),rkind)*this%avgFact
+            else
+                fmean = 0.d0 ! Only 0 processor has the actual mean  
+            end if 
+            call mpi_bcast(fmean,this%nz+1,mpirkind,0,mpi_comm_world, ierr)
         else
-            fmean = 0.d0 ! Only 0 processor has the actual mean  
-        end if 
-        call mpi_bcast(fmean,this%nz+1,mpirkind,0,mpi_comm_world, ierr)
+            ! take average in x
+            do k = 1, size(this%igrid_sim%rbuffxE,3)
+              do j = 1, size(this%igrid_sim%rbuffxE,2)
+                  this%igrid_sim%rbuffxE(1,j,k,2) = sum(f(1:this%nxeff,j,k))
+              enddo
+            enddo
+
+            ! transpose x to y
+            call transpose_x_to_y(this%igrid_sim%rbuffxE(:,:,:,2), this%igrid_sim%rbuffyE(:,:,:,1), this%igrid_sim%gpE)
+
+            ! take average in y
+            do k = 1, size(this%igrid_sim%rbuffyE,3)
+              do j = 1, size(this%igrid_sim%rbuffyE,2)
+                  this%igrid_sim%rbuffyE(1,1,k,1) = this%igrid_sim%rbuffyE(1,1,k,1) + this%igrid_sim%rbuffyE(1,j,k,1)
+              enddo
+            enddo
+
+            ! transpose y to z
+            call transpose_y_to_z(this%igrid_sim%rbuffyE(:,:,:,1), this%igrid_sim%rbuffzE(:,:,:,1), this%igrid_sim%gpE)
+
+            if (nrank == 0) then
+                fmean = this%igrid_sim%rbuffzE(1,1,:,1)*this%avgFact
+            else
+                fmean = 0.d0 ! Only 0 processor has the actual mean  
+            end if
+            
+            call mpi_bcast(fmean,this%nz+1,mpirkind,0,mpi_comm_world, ierr)
+        end if
 
     end subroutine 
     

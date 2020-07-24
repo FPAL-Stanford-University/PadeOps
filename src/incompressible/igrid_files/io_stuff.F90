@@ -49,7 +49,7 @@
    ! NOTE: If you want to dump an edge field, you need to call in dumpFullField
    ! routine with this%gpE passed in as the 3rd argument. If it's a cell field,
    ! then you don't need to pass in any gp since the default gp is this%gpC
-   subroutine dumpFullField(this,arr,label,gp2use)
+   subroutine dumpFullField(this,arr,label,gp2use, outdir)
        use decomp_2d_io
        use mpi
        use exits, only: message
@@ -58,9 +58,14 @@
        real(rkind), dimension(:,:,:), intent(in) :: arr
        character(len=4), intent(in) :: label
        type(decomp_info), intent(in), optional :: gp2use
+       character(len=clen), intent(in), optional :: outdir
 
         write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
-        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        if(present(outdir)) then
+            fname = outdir(:len_trim(outdir))//"/"//trim(tempname)
+        else
+            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        endif
         if (present(gp2use)) then
            call decomp_2d_write_one(1,arr,fname,gp2use)
         else
