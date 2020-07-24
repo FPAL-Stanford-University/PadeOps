@@ -40,8 +40,8 @@ module dynamicYawMod
         ! Cache stuff
         real(rkind), dimension(:), allocatable :: u_eff, Cp, a_mom
         real(rkind), dimension(:), allocatable :: ap, delta_u_face_store
-        real(rkind), dimension(:,:), allocatable :: gaussianStore, y_c, yCenter
-        real(rkind), dimension(:,:), allocatable :: deltaUIndividual, sigmaEnd
+        real(rkind), dimension(:,:), allocatable :: gaussianStore, y_c, yCenter, erfStore
+        real(rkind), dimension(:,:), allocatable :: deltaUIndividual, sigmaEnd, turbinesInFront
         real(rkind) :: A, rho
         ! Backward stuff
         real(rkind), dimension(:), allocatable :: dp_dgamma 
@@ -50,6 +50,10 @@ module dynamicYawMod
         real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, dir_minus_n
         real(rkind), dimension(:), allocatable :: Phat, Phat_yaw
         logical :: check = .true., useInitialParams = .false.
+        ! Superposition stuff
+        ! Superpostion: 1) Linear 2) Momentum conserving 3) Modified linear
+        integer :: superposition = 1, ucMaxIt = 10, Ny = 100
+        real(rkind) :: epsUc = 1.0D-3
 
     contains
         procedure :: init
@@ -71,7 +75,7 @@ contains
 subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, dirType, considerAdvection, lookup)
     class(dynamicYaw), intent(inout) :: this
     character(len=*), intent(in) :: inputfile
-    integer :: ioUnit, conditionTurb, ierr, i, n_moving_average
+    integer :: ioUnit, conditionTurb, ierr, i, n_moving_average, superposition
     real(rkind) :: beta1 = 0.9d0, beta2 = 0.999d0, learning_rate_yaw = 10D-4
     integer :: epochsYaw = 5000, stateEstimationEpochs = 500, Ne = 20, Nx = 500
     real(rkind) :: var_p = 0.04d0, var_k = 9D-6, var_sig = 9D-6, D = 0.315
@@ -87,7 +91,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
                            Ne, Ct, eta, beta1, beta2, conditionTurb, n_moving_average, &
                            fixedYaw, dynamicStart, dirType, considerAdvection, lookup, &
-                           useInitialParams, powerExp
+                           useInitialParams, powerExp, superposition
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -105,6 +109,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     this%n_moving_average = n_moving_average
     this%useInitialParams = useInitialParams 
     this%powerExp = powerExp
+    this%superposition = superposition
 
     ! Allocate
     allocate(this%yaw(this%Nt))
@@ -120,7 +125,9 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     allocate(this%ap(this%Nt))
     allocate(this%delta_u_face_store(this%Nt))
     allocate(this%gaussianStore(this%Nt,this%Nt))
+    allocate(this%erfStore(this%Nt,this%Nt))
     allocate(this%deltaUIndividual(this%Nt,this%Nt))
+    allocate(this%turbinesInFront(this%Nt,this%Nt))
     allocate(this%y_c(this%Nt,this%Nt))
     allocate(this%yCenter(this%Nt,this%Nt))
     allocate(this%turbCenter(this%Nt,2))
@@ -458,14 +465,16 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:), intent(in) :: kw, sigma_0, yaw
     real(rkind), dimension(this%Nt), intent(out) :: Phat
-    real(rkind) :: D, R, dx, boundLow, boundHigh, edgeLow, edgeHigh
-    integer :: Nx, i, j, k
-    real(rkind), dimension(this%Nt) :: delta_v0
-    real(rkind) :: dw, aPrev, du, gaussian, delta_u_face, L
+    real(rkind) :: D, R, dx, boundLow, boundHigh, edgeLow, edgeHigh, uc_error
+    integer :: Nx, i, j, k, ucCount
+    real(rkind), dimension(this%Nt) :: delta_v0, Uc, Uc_old
+    real(rkind) :: dw, aPrev, du, gaussian, delta_u_face, L, temp
     logical, dimension(this%Nt, this%Nt) :: turbinesInFront
     real(rkind), dimension(this%Nx) :: xpFront, delta_v, dwVect
     logical :: check
-    
+    real(rkind), dimension(this%Ny) :: duSum, us, ylocal, uw
+    real(rkind), dimension(this%Nt, this%Nt) :: uci 
+ 
     ! Definitions
     ! Set the relevant turbine length scale
     L = 1.d0
@@ -475,82 +484,135 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     R = D/2.d0
     ! Atmospheric conditions
     this%rho = 1.d0
-    ! Model parameters
+    ! Convective superposition
+    Uc = this%wind_speed; uci = this%wind_speed
+    Uc_old = this%wind_speed
 
     !! Forward prop
-    ! Loop over turbines
-    do j = 1,this%Nt
-        ! Find the leading turbine
-        do i = 1,this%Nt
-            dx = this%turbCenter(j, 1) - this%turbCenter(i, 1);
-            if (dx > 0.d0) then
-               dw = 1.d0 + kw(i) * log(1.d0 + exp((dx - 2.0d0 * R) / R));
-               boundLow = this%turbCenter(i,2)-dw/2;
-               boundHigh = this%turbCenter(i,2)+dw/2;
-               edgeLow = this%turbCenter(j,2)-D/2;
-               edgeHigh = this%turbCenter(j,2)+D/2;
-               check = 0
-               if (edgeLow>=boundLow .and. edgeLow<=boundHigh) then
-                   check = 1
-               end if
-               if (edgeHigh>=boundLow .and. edgeHigh<=boundHigh) then
-                   check = 1
-               end if
-               if (check == .TRUE.) then
-                   turbinesInFront(j,i) = .true.
-               end if
-            end if
-        end do
-        ! sum of squared deficits, loop over front turbines
-        delta_u_face = 0.d0
-        do k = 1, this%Nt
-            if (turbinesInFront(j,k) == .TRUE.) then
-                ! sum of squared deficits
-                aPrev = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(k))**2))
-                dx = this%turbCenter(j, 1) - this%turbCenter(k, 1)
-                xpFront = linspace(0.d0, dx, this%Nx)
-                dw = 1.d0 + kw(k) * log(1.d0 + exp((dx - 2.0 * R) / R));
+    ! While loop for convective velocity convergences
+    uc_error = 1.0D10; ucCount = 1;
+    do while (uc_error>this%epsUc .and. ucCount<this%ucMaxIt)
+        ! Loop over turbines
+        do j = 1,this%Nt
+            ! Find the leading turbine
+            do i = 1,this%Nt
+                dx = this%turbCenter(j, 1) - this%turbCenter(i, 1);
+                if (dx > 0.d0) then
+                   dw = 1.d0 + kw(i) * log(1.d0 + exp((dx - 2.0d0 * R) / R));
+                   boundLow = this%turbCenter(i,2)-dw/2;
+                   boundHigh = this%turbCenter(i,2)+dw/2;
+                   edgeLow = this%turbCenter(j,2)-D/2;
+                   edgeHigh = this%turbCenter(j,2)+D/2;
+                   check = 0
+                   if (edgeLow>=boundLow .and. edgeLow<=boundHigh) then
+                       check = 1
+                   end if
+                   if (edgeHigh>=boundLow .and. edgeHigh<=boundHigh) then
+                       check = 1
+                   end if
+                   if (check == .TRUE.) then
+                       turbinesInFront(j,i) = .true.
+                   end if
+                end if
+            end do
+            ! Loop over turbines and superposition
+            delta_u_face = 0.d0
+            duSum = 0.d0; us = 0.d0; duSum = 0.d0; uw = 0.d0
+            ylocal = linspace(this%turbCenter(j, 2)-D/2, this%turbCenter(j, 2)+D/2, this%Ny);
+            do k = 1, this%Nt
+                if (turbinesInFront(j,k) == .TRUE.) then
+                    ! Individual velocity deficits
+                    aPrev = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(k))**2))
+                    dx = this%turbCenter(j, 1) - this%turbCenter(k, 1)
+                    xpFront = linspace(0.d0, dx, this%Nx)
+                    dw = 1.d0 + kw(k) * log(1.d0 + exp((dx - 2.0 * R) / R));
+                    if (this%superposition == 1) then
+                        du = this%wind_speed * aPrev/(dw**2+this%eps) * & 
+                                (1.d0+erf(dx/(R*sqrt(2.d0))));
+                    elseif (this%superposition == 2) then
+                        du = this%u_eff(k) * aPrev/(dw**2+this%eps) * & 
+                                (1.d0+erf(dx/(R*sqrt(2.d0))));
+                    elseif (this%superposition == 3) then
+                        du = this%u_eff(k) * aPrev/(dw**2+this%eps) * & 
+                                (1.d0+erf(dx/(R*sqrt(2.d0))));
+                    end if
+                    this%deltaUIndividual(j,k) = du
 
-                du = this%wind_speed * aPrev/(dw**2+this%eps) * & 
-                        (1.d0+erf(dx/(R*sqrt(2.d0))));
-                this%deltaUIndividual(j,k) = du
-
-                ! Deflection
-                dwVect = 1.d0 + kw(k) * log(1.d0 + exp((xpFront - 2.0 * R) / R));
-                delta_v0(j) = 0.25 * this%Ct * cos(yaw(k))**2 * sin(yaw(k))
-                ! Velocity deficit
-                delta_v = (delta_v0(j) / (dwVect**2+this%eps)) * 0.5 * (1.d0 + erf(xpFront & 
-                          / (R*sqrt(2.d0))))
-                where (xpFront<0.d0)
-                    delta_v = 0.d0
-                end where
-                ! y_c
-                !this%y_c(k, j) = integrate(xpFront, -delta_v) !mytrapz(xpFront, -delta_v)
-                this%y_c(k, j) = mytrapz(xpFront, -delta_v)
-                ! Local y frame
-                this%sigmaEnd(k, j) = sigma_0(k) * dw 
-                ! take the last value of sigma which is at the next turbine
-                this%yCenter(k, j) = this%y_c(k, j) + this%turbCenter(k, 2);
-                ! Effective velocity at turbine face
-                gaussian = erf((this%turbCenter(j, 2)+D/2.d0-this%yCenter(k,j))/ & 
-                             sqrt(2.d0*this%sigmaEnd(k, j)**2+this%eps)) - &
-                             erf((this%turbCenter(j, 2)-D/2.d0-this%yCenter(k, j))/ & 
-                             sqrt(2.d0*this%sigmaEnd(k,j)**2+this%eps));
-                gaussian = gaussian * (D**2)/(16.d0*sigma_0(k)**2) & 
-                           * this%sigmaEnd(k,j)*sqrt(2.d0*pi)
-                delta_u_face = delta_u_face + du * gaussian;
-                this%gaussianStore(k, j) = gaussian;
+                    ! Deflection
+                    dwVect = 1.d0 + kw(k) * log(1.d0 + exp((xpFront - 2.0 * R) / R));
+                    delta_v0(j) = 0.25 * this%Ct * cos(yaw(k))**2 * sin(yaw(k))
+                    ! Velocity deficit
+                    delta_v = (delta_v0(j) / (dwVect**2+this%eps)) * 0.5 * (1.d0 + erf(xpFront & 
+                              / (R*sqrt(2.d0))))
+                    where (xpFront<0.d0)
+                        delta_v = 0.d0
+                    end where
+                    ! y_c
+                    !this%y_c(k, j) = integrate(xpFront, -delta_v) !mytrapz(xpFront, -delta_v)
+                    this%y_c(k, j) = mytrapz(xpFront, -delta_v)
+                    ! Local y frame
+                    this%sigmaEnd(k, j) = sigma_0(k) * dw 
+                    ! take the last value of sigma which is at the next turbine
+                    this%yCenter(k, j) = this%y_c(k, j) + this%turbCenter(k, 2);
+                    ! Effective velocity at turbine face
+                    gaussian = erf((this%turbCenter(j, 2)+D/2.d0-this%yCenter(k,j))/ & 
+                                 sqrt(2.d0*this%sigmaEnd(k, j)**2+this%eps)) - &
+                                 erf((this%turbCenter(j, 2)-D/2.d0-this%yCenter(k, j))/ & 
+                                 sqrt(2.d0*this%sigmaEnd(k,j)**2+this%eps));
+                    gaussian = gaussian * (D**2)/(16.d0*sigma_0(k)**2) & 
+                               * this%sigmaEnd(k,j)*sqrt(2.d0*pi)
+                    if (this%superposition == 1) then
+                        delta_u_face = delta_u_face + du * gaussian;
+                    elseif (this%superposition == 2 .or. this%superposition == 3) then
+                        ! compute local convective velocity
+                        us = du * D**2 / (8*sigma_0(k)**2) * &
+                             exp(-(ylocal-this%yCenter(k,j))**2 / (2*this%sigmaEnd(k, j)**2));
+                        uw = this%u_eff(k) - us
+                        uci(k, j) = mytrapz(ylocal, uw*us) / mytrapz(ylocal, us);
+                        if (this%superposition==3) then
+                            uci(k, j) = this%wind_speed
+                        end if
+                        ! Update cache stuff
+                        delta_u_face = delta_u_face + du * gaussian * uci(k, j) / Uc(j);
+                        this%deltaUIndividual(j,k) = du * uci(k, j) / Uc(j);
+                        duSum = duSum + us * uci(k, j) / Uc(j);
+                        this%erfStore(k, j) = (du/this%u_eff(k)) * gaussian * uci(k, j) / Uc(j); 
+                    end if
+                    this%gaussianStore(k, j) = gaussian;
+                end if
+            end do
+            ! Superposition
+            if (this%superposition == 2 .or. this%superposition == 3) then
+                ! Global convection velocity
+                Uc_old(j) = Uc(j); us = duSum;
+                uw = this%wind_speed - us;
+                temp = mytrapz(ylocal, us)
+                if (temp < this%eps) then
+                    Uc(j) = this%wind_speed
+                else
+                    Uc(j) = mytrapz(ylocal, uw*us) / mytrapz(ylocal, us)
+                end if
+                if (this%superposition==3) then
+                    Uc(j) = this%wind_speed
+                end if
             end if
+            this%delta_u_face_store(j) = delta_u_face;
+            this%u_eff(j) = (1.d0/D) * (D*this%wind_speed - delta_u_face);
+            ! Calculate the induction factor at the end
+            this%a_mom(j) = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(j))**2))
+            ! Power
+            this%ap(j) = 0.5d0*(1.d0 - sqrt(1.d0-this%Ct))
+            this%Cp(j) = 4.d0*this%eta*this%ap(j)*(1.d0-this%ap(j))**2 * & 
+                           cos(yaw(j))**this%powerExp
+            Phat(j) = 0.5 * this%rho * this%A * this%Cp(j) * this%u_eff(j)**3;  
         end do
-        this%delta_u_face_store(j) = delta_u_face;
-        this%u_eff(j) = (1.d0/D) * (D*this%wind_speed - delta_u_face);
-        ! Calculate the induction factor at the end
-        this%a_mom(j) = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(j))**2))
-        ! Power
-        this%ap(j) = 0.5d0*(1.d0 - sqrt(1.d0-this%Ct))
-        this%Cp(j) = 4.d0*this%eta*this%ap(j)*(1.d0-this%ap(j))**2 * & 
-                       cos(yaw(j))**this%powerExp
-        Phat(j) = 0.5 * this%rho * this%A * this%Cp(j) * this%u_eff(j)**3;  
+        ! Error update
+        if (this%superposition == 2) then
+            uc_error = sum(abs(Uc_old-Uc))/real(this%Nt); 
+            ucCount = ucCount+1; this%turbinesInFront = turbinesInFront
+        else
+            uc_error=0.d0;
+        end if
     end do
 
 end subroutine
@@ -559,15 +621,16 @@ end subroutine
 subroutine backward(this, kw, sigma_0, yaw)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:), intent(in) :: kw, sigma_0, yaw
-    integer :: i, j, k
+    integer :: i, j, k, m
     real(rkind), dimension(this%Nt) :: dp_du_eff, dp_dcp, dcp_dap
     real(rkind), dimension(this%Nt) :: du_eff_dyc, dy_c_dgamma
     real(rkind), dimension(this%Nt) :: dcp_dgamma, da_dgamma
-    real(rkind) :: dx, R=0.5, D = 1.d0
+    real(rkind) :: dx, R=0.5, D = 1.d0, du_eff_dueffUp
     logical :: check
     real(rkind) :: boundLow, boundHigh, edgeLow, edgeHigh, dw, du_eff_da
     logical, dimension(this%Nt) :: turbinesInBack
     real(rkind), dimension(this%Nx) :: dwVect, xpFront
+    logical, dimension(this%Nt, this%Nt) :: turbinesInBackMat
 
     !! Backprop
     this%dp_dgamma = 0.d0
@@ -589,7 +652,7 @@ subroutine backward(this, kw, sigma_0, yaw)
         this%dp_dgamma(i) = this%dp_dgamma(i) + dp_dcp(i)*dcp_dgamma(i);
     end do
     do i = this%Nt, 1, -1
-        turbinesInBack = .false.
+        turbinesInBack = .false.; turbinesInBackMat = .false.
         do j = 1, this%Nt
             dx = this%turbCenter(j, 1) - this%turbCenter(i, 1);
             if (dx > 0) then
@@ -607,6 +670,7 @@ subroutine backward(this, kw, sigma_0, yaw)
                end if
                if (check == .true.) then
                    turbinesInBack(j) = .true.
+                   turbinesInBackMat(i,j) = .true.
                end if
             end if
         end do
@@ -643,7 +707,43 @@ subroutine backward(this, kw, sigma_0, yaw)
             end if
         end do    
     end do
-    
+    ! Extra terms from convective superposition
+    if (this%superposition == 2 .or. this%superposition == 3) then
+        do i = this%Nt, 1, -1
+            do m = 1, this%Nt
+            if (this%turbinesInFront(i, m) == .true.) then
+                do k = 1, this%Nt
+                if (turbinesInBackMat(i, k) == .true.) then
+                    du_eff_dueffUp = -this%erfStore(i, k);
+                    ! 1
+                    du_eff_da = -this%deltaUIndividual(i,m) / (this%a_mom(m)+this%eps) * this%gaussianStore(m, i);
+                    this%dp_dgamma(m) = this%dp_dgamma(m) + &
+                        dp_du_eff(k)*du_eff_dueffUp*du_eff_da*da_dgamma(m); 
+                    ! 2
+                    ! d u_eff / d y_c
+                    du_eff_dyc(m) = -(1/D) * (this%delta_u_face_store(i) * & 
+                                    D**2 / (8*sigma_0(m)**2) * &
+                                    (-exp(-(this%turbCenter(i, 2)+D/2 - &
+                                    this%yCenter(m,i))**2/(2*this%sigmaEnd(m, i)**2)) + &
+                                    exp(-(this%turbCenter(i, 2)-D/2 - &
+                                    this%yCenter(m,i))**2/(2*this%sigmaEnd(m, i)**2))));
+                    ! d y_c / d gamma
+                    dx = this%turbCenter(i, 1) - this%turbCenter(m, 1)
+                    xpFront = linspace(0.d0, dx, this%Nx)
+                    dwVect = 1.d0 + kw(m) * log(1.d0 + exp((xpFront - 2.0d0 * R) / R))
+                    dy_c_dgamma(m) = (cos(yaw(m))**3-2*sin(yaw(m))**2*cos(yaw(m))) * & 
+                                     mytrapz(xpFront, -0.25*this%Ct*0.5 * &
+                                     (1.d0+erf(xpFront / (R*sqrt(2.d0))))/dwVect**2);
+                    this%dp_dgamma(m) = this%dp_dgamma(m) + &
+                                   dp_du_eff(k)*du_eff_dueffUp*du_eff_dyc(m)*dy_c_dgamma(m); 
+                end if
+                end do
+            end if
+            end do
+        end do
+    end if
+
+ 
 end subroutine
 
 
