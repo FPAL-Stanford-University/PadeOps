@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_180"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_180"   ! Directory for all output files
+inputdir              = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_0"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_0_yaw_aligned"   ! Directory for all output files
 nx                    = 1800         ! Number of points in X
 ny                    = 704          ! Number of points in Y
 nz                    = 384          ! Number of points in Z
@@ -31,8 +31,8 @@ donot_dealias         = .FALSE.
 /
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 5000       ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 1000       ! Data dumping frequency (# of timesteps)
+t_restartDump         = 10000       ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 10000       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 5         ! Plane dumping frequency (# of timesteps)
@@ -89,7 +89,7 @@ dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useE
 dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
 assume_fplane         = .FALSE.      ! Assume fplane (ignore horizontal component of Coriolis force)? 
 latitude              = 45.d0       ! Latitude; important if useCoriolis is TRUE && assume_fplane is FALSE
-frameAngle            = 180.D0        ! Mean wind direction; important if assume_fplane is FALSE
+frameAngle            = 0.D0        ! Mean wind direction; important if assume_fplane is FALSE
 useHITforcing         = .false.     ! Use additional HIT forcing? 
 useScalars            = .TRUE.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
@@ -152,11 +152,11 @@ useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
 num_turbines          = 25
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
 turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/5x5array"
-ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "XXX"
-useDynamicYaw         = .FALSE.
-yawUpdateInterval     = 50000
-inputDirDyaw          = "XXX"
+ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
+powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_0_yaw_aligned/yaw"
+useDynamicYaw         = .TRUE.
+yawUpdateInterval     = 1000
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw_neutral_aligned.inp"
 /
 /
 &FRINGE
@@ -177,9 +177,9 @@ Fringe_delta_en_y    = 0.05d0
 &BUDGET_TIME_AVG
 do_budgets            = .TRUE.    ! Perform budget calculations? 
 budgetType            = 3         ! See type descriptions in budget_time_avg.F90
-budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_180/budgets"   ! Write in default output directory
+budgets_dir           = "/scratch/05294/mhowland/neutral_concurrent/finiteFarm/5x5_fine_0_yaw_aligned/budgets"   ! Write in default output directory
 tidx_compute          = 5         ! How often should budgets be computed?  
-tidx_dump             = 1000      ! How often should budget files be written to disk? 
+tidx_dump             = 10000      ! How often should budget files be written to disk? 
 tidx_budget_start     = 5000      ! Start budget computation from this timestep onward
 restart_budgets       = .FALSE.   ! use existing budget file to restart budget calculations? 
 restart_rid           = 1         ! Restart budget file run index

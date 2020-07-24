@@ -585,7 +585,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                 tempname, this%powerUpdate(:,i), this%dyaw%Phat, & 
                                 this%gamma, this%gamma_nm1, this%meanP, &
                                 this%dyaw%kw, this%dyaw%sigma_0, &
-                                this%dyaw%Phat_yaw, this%updateCounter, this%meanPbaseline, this%hubDirection, this%dyaw%Popti, this%stdP)
+                                this%dyaw%Phat_yaw, this%updateCounter, this%meanPbaseline, this%hubDirection, this%dyaw%Popti, this%stdP, angleIn)
                        end do
                        this%timeStep = 0
                        this%updateCounter=this%updateCounter+1

@@ -361,7 +361,7 @@ end subroutine
 subroutine dumpPowerUpdate(this, outputfile, tempname, & 
                            powerUpdate, Phat, yaw, yawOld, & 
                            meanP, kw, sigma, phat_yaw, i, pBaseline, &
-                           hubDirection, Popti, stdP)
+                           hubDirection, Popti, stdP, YawOptiVal)
     class(actuatordisk_yaw), intent(inout) :: this
     character(len=*),    intent(in)            :: outputfile, tempname
     integer :: fid = 1234
@@ -369,7 +369,7 @@ subroutine dumpPowerUpdate(this, outputfile, tempname, &
     character(len=clen) :: fname, tempname2
     real(rkind), dimension(:), intent(in) :: powerUpdate, Phat, yaw, yawOld, meanP
     real(rkind), dimension(:), intent(in) :: kw, sigma, phat_yaw, pBaseline, hubDirection
-    real(rkind), dimension(:), intent(in) :: Popti, stdP
+    real(rkind), dimension(:), intent(in) :: Popti, stdP, YawOptiVal
 
     ! Write power
     !fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
@@ -436,6 +436,12 @@ subroutine dumpPowerUpdate(this, outputfile, tempname, &
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
     open(fid,file=trim(fname), form='formatted')
     write(fid, *) Popti
+    close(fid)
+    ! Write optimized yaw in this time interval
+    write(tempname2,"(A6,I3.3,A4)") "gOpti_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) YawOptiVal
     close(fid)
 
 end subroutine    
