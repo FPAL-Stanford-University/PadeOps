@@ -155,6 +155,8 @@ module budgets_xy_avg_mod
         procedure, private  :: Assemble_autocorrel_x
         procedure, private  :: Assemble_autocorrel_y
         procedure, private  :: Assemble_autocorrel_z
+        procedure, private  :: Assemble_autocorrel_x_XNonPeriodic
+        procedure, private  :: Assemble_autocorrel_x_XPeriodic
         procedure, private  :: dump_autocorrel_x
         procedure, private  :: dump_autocorrel_y
         procedure, private  :: dump_autocorrel_z
@@ -168,7 +170,7 @@ contains
         class(budgets_xy_avg), intent(inout) :: this
         character(len=*), intent(in) :: inputfile 
         type(igrid), intent(inout), target :: igrid_sim 
-        
+
         character(len=clen) :: budgets_dir = "NULL"
         integer :: ioUnit, ierr,  budgetType = 1, restart_tid = 0, restart_rid = 0, restart_counter = 0
         logical :: restart_budgets = .false. 
@@ -209,7 +211,6 @@ contains
         else
             this%nxeff = nxeff
         endif
-        call message(1, "nxeff in budget_xy_avg :", this%nxeff)
 
         this%avgFact = 1.d0/(real(this%nxeff,rkind)*real(igrid_sim%ny,rkind))
 
@@ -218,6 +219,8 @@ contains
         endif
 
         if(this%do_budgets) then
+            call message(1, "nxeff in budget_xy_avg :", this%nxeff)
+
             allocate(this%Budget_0s(this%nz,21))
             allocate(this%Budget_0(this%nz,21))
             allocate(this%Budget_1(this%nz,14))
@@ -625,6 +628,57 @@ contains
     subroutine Assemble_autocorrel_x(this)
         class(budgets_xy_avg), intent(inout) :: this
 
+        if(this%isXPeriodic) then
+            call this%Assemble_autocorrel_x_XPeriodic()
+        else
+            call this%Assemble_autocorrel_x_XNonPeriodic()
+        endif
+
+    end subroutine 
+
+    subroutine Assemble_autocorrel_x_XNonPeriodic(this)
+        class(budgets_xy_avg), intent(inout) :: this
+
+        integer :: i, j, k, i2, ir, jindx, nsample
+        real(rkind) :: vartmp
+
+        this%igrid_sim%rbuffxC(:,:,:,1) = zero
+        jindx = 1 ! u velocity
+        do k = 1, this%igrid_sim%gpC%xsz(3)
+          do j = 1, this%igrid_sim%gpC%xsz(2)
+            do ir = 1, this%nxeff
+              vartmp = 0.0d0
+              nsample = 0
+              do i = 1, this%nxeff
+                i2 = i + (ir-1)
+                if((i2>=1) .and. (i2<=this%nxeff)) then
+                    nsample = nsample + 1
+                    vartmp = vartmp + this%igrid_sim%u(i,j,k)*this%igrid_sim%u(i2,j,k)
+                endif
+
+                !i2 = i - (ir-1)
+                !if((i2>=1) .and. (i2<=this%nxeff)) then
+                !    nsample = nsample + 1
+                !    vartmp = vartmp + this%igrid_sim%u(i,j,k)*this%igrid_sim%u(i2,j,k)
+                !endif
+              enddo
+              vartmp = vartmp/(real(nsample, rkind) + 1.0d-18)
+              this%igrid_sim%rbuffxC(ir,j,k,1) = this%igrid_sim%rbuffxC(ir,j,k,1) + vartmp
+            enddo
+          enddo
+        enddo
+        call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+        do k = 1, this%igrid_sim%gpC%ysz(3)
+          do j = 1, this%igrid_sim%gpC%ysz(2)
+              this%RFx(:,jindx,k) = this%RFx(:,jindx,k) + this%igrid_sim%rbuffyC(:,j,k,1)
+          enddo
+        enddo
+
+    end subroutine 
+
+    subroutine Assemble_autocorrel_x_XPeriodic(this)
+        class(budgets_xy_avg), intent(inout) :: this
+
         integer :: i, j, k, i2, ir, jindx
 
         this%igrid_sim%rbuffxC(:,:,:,1) = zero
@@ -736,6 +790,7 @@ contains
 
     end subroutine 
 
+
     subroutine Assemble_autocorrel_y(this)
         class(budgets_xy_avg), intent(inout) :: this
 
@@ -756,7 +811,7 @@ contains
         call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,2), this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%gpC)
         do k = 1, this%igrid_sim%gpC%xsz(3)
           do j = 1, this%igrid_sim%gpC%xsz(2)
-              this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(:,j,k,1))
+              this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(1:this%nxeff,j,k,1))
           enddo
         enddo
 
@@ -775,7 +830,7 @@ contains
         call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,2), this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%gpC)
         do k = 1, this%igrid_sim%gpC%xsz(3)
           do j = 1, this%igrid_sim%gpC%xsz(2)
-              this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(:,j,k,1))
+              this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(1:this%nxeff,j,k,1))
           enddo
         enddo
 
@@ -794,7 +849,7 @@ contains
         call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,2), this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%gpC)
         do k = 1, this%igrid_sim%gpC%xsz(3)
           do j = 1, this%igrid_sim%gpC%xsz(2)
-              this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(:,j,k,1))
+              this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(1:this%nxeff,j,k,1))
           enddo
         enddo
 
@@ -815,7 +870,7 @@ contains
           call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,2), this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%gpC)
           do k = 1, this%igrid_sim%gpC%xsz(3)
             do j = 1, this%igrid_sim%gpC%xsz(2)
-                this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(:,j,k,1))
+                this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(1:this%nxeff,j,k,1))
             enddo
           enddo
         endif
@@ -836,7 +891,7 @@ contains
           call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,2), this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%gpC)
           do k = 1, this%igrid_sim%gpC%xsz(3)
             do j = 1, this%igrid_sim%gpC%xsz(2)
-                this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(:,j,k,1))
+                this%RFy(iindx,j,k) = this%RFy(iindx,j,k) + sum(this%igrid_sim%rbuffxC(1:this%nxeff,j,k,1))
             enddo
           enddo
         endif
@@ -848,7 +903,15 @@ contains
         integer :: iindx, k, kr, k2, nsample, ierr
 
         iindx = 1 ! u velocity
-        call transpose_x_to_y(this%igrid_sim%u,                this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+        if(this%isXPeriodic) then
+            call transpose_x_to_y(this%igrid_sim%u, this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+        else
+            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u
+            if(this%nxeff < this%igrid_sim%gpC%xsz(1)) then
+                this%igrid_sim%rbuffxC(this%nxeff+1:this%igrid_sim%gpC%xsz(1),:,:,1) = 0.0d0
+            endif
+            call transpose_x_to_y(this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
+        endif
         call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%rbuffzC(:,:,:,1), this%igrid_sim%gpC)
         this%tmpz1 = 0.0d0
         do k = 1, this%igrid_sim%gpC%zsz(3)
@@ -868,11 +931,11 @@ contains
             endif
 
             this%tmpz1(kr, k) = this%tmpz1(kr, k)/(real(nsample, rkind) + 1.0d-18)
+
           enddo
         enddo
         call mpi_reduce(this%tmpz1, this%tmpz2, this%nz*this%nz, mpirkind, mpi_sum, 0, mpi_comm_world, ierr)
         this%RFz(:,:,iindx) = this%RFz(:,:,iindx) + this%tmpz2
-        !print *, '--1111--', nrank, maxval(abs(this%tmpz2))
 
     end subroutine 
 
@@ -912,7 +975,11 @@ contains
         call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,1), this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%gpC)
 
         ! normalize and subtract the squares of the means
-        normfac = one/real(this%igrid_sim%gpC%xsz(1) * this%igrid_sim%gpC%ysz(2) * this%counter, rkind)
+        if(this%isXPeriodic) then
+            normfac = one/real(this%igrid_sim%gpC%xsz(1) * this%igrid_sim%gpC%ysz(2) * this%counter, rkind)
+        else
+            normfac = one/real(this%igrid_sim%gpC%ysz(2) * this%counter, rkind)
+        endif
         tmpvar = normfac*this%RFx
         tmpvar = tmpvar - this%igrid_sim%rbuffyC(:,:,:,1)
 
@@ -988,7 +1055,7 @@ contains
         call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1), this%igrid_sim%gpC)
 
         ! normalize and subtract the squares of the means
-        normfac = one/real(this%igrid_sim%gpC%xsz(1) * this%igrid_sim%gpC%ysz(2) * this%counter, rkind)
+        normfac = one/real(this%nxeff * this%igrid_sim%gpC%ysz(2) * this%counter, rkind)
         tmpvar = normfac*this%RFy
         tmpvar = tmpvar - this%igrid_sim%rbuffxC(:,:,:,1)
 
@@ -1057,10 +1124,9 @@ contains
               this%tmpz1(kr, k) = this%tmpz1(kr, k)/(real(nsample, rkind) + 1.0d-18)
             enddo
           enddo
-          normfac = one/real(this%igrid_sim%gpC%xsz(1) * this%igrid_sim%gpC%ysz(2) * this%counter, rkind)
+          normfac = one/real(this%nxeff * this%igrid_sim%gpC%ysz(2) * this%counter, rkind)
 
           this%tmpz2 = normfac*this%RFz(:,:,iindx) - this%tmpz1
-          !print *, '--2222--', nrank, maxval(abs(this%tmpz2)), maxval(abs(this%RFz(:,:,iindx)))
           write(tempname,"(A3,I2.2,A17,I6.6,A4)") "Run", this%run_id,"_autocorrel_u_z_t",this%igrid_sim%step,".out"
           fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
           call write_2d_ascii(this%tmpz2, fname) 
@@ -1069,8 +1135,8 @@ contains
           !fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
           !call write_2d_ascii(this%tmpz1, fname) 
 
-          !this%tmpz2 = normfac*this%RFz(:,:,iindx) - this%tmpz1
-          !write(tempname,"(A3,I2.2,A17,I6.6,A4)") "Run", this%run_id,"_autocorre3_u_z_t",this%igrid_sim%step,".out"
+          !this%tmpz2 = normfac*this%RFz(:,:,iindx) !- this%tmpz1
+          !write(tempname,"(A3,I2.2,A17,I6.6,A4)") "Run", this%run_id,"_autocorre2_u_z_t",this%igrid_sim%step,".out"
           !fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
           !call write_2d_ascii(this%tmpz2, fname) 
 
@@ -1311,14 +1377,24 @@ contains
             call transpose_y_to_z(fhat, this%igrid_sim%cbuffzC(:,:,:,1), this%igrid_sim%sp_gpC)
             if (nrank == 0) then
                 fmean = real(this%igrid_sim%cbuffzC(1,1,:,1),rkind)*this%avgFact
+                !write(*,'(a,3(e19.12,1x))') 'Full avg(1,1,1,1) = ', fmean(1), real(this%igrid_sim%cbuffzC(1,1,1,1)), this%avgFact
             else
                 fmean = 0.d0 ! Only 0 processor has the actual mean  
             end if 
             
             call mpi_bcast(fmean,this%nz,mpirkind,0,mpi_comm_world, ierr)
+
+            !this%igrid_sim%rbuffxC(:,:,:,2) = 0.0d0
+            !this%igrid_sim%rbuffxC(:,:,1,2) = this%igrid_sim%u(:,:,1)
+            !write(*,*) 'Full sum u = ', p_sum(this%igrid_sim%rbuffxC(:,:,:,2))
         else
             ! take average in x
             call this%igrid_sim%spectC%ifft(fhat, this%igrid_sim%rbuffxC(:,:,:,2))
+
+            !this%igrid_sim%rbuffxC(:,:,:,2) = 0.0d0
+            !this%igrid_sim%rbuffxC(:,:,1,2) = this%igrid_sim%u(:,:,1)
+            !write(*,*) 'Part sum u = ', p_sum(this%igrid_sim%rbuffxC(:,:,:,2))
+
             do k = 1, size(this%igrid_sim%rbuffxC,3)
               do j = 1, size(this%igrid_sim%rbuffxC,2)
                   this%igrid_sim%rbuffxC(1,j,k,2) = sum(this%igrid_sim%rbuffxC(1:this%nxeff,j,k,2))
@@ -1330,7 +1406,7 @@ contains
 
             ! take average in y
             do k = 1, size(this%igrid_sim%rbuffyC,3)
-              do j = 1, size(this%igrid_sim%rbuffyC,2)
+              do j = 2, size(this%igrid_sim%rbuffyC,2)
                   this%igrid_sim%rbuffyC(1,1,k,1) = this%igrid_sim%rbuffyC(1,1,k,1) + this%igrid_sim%rbuffyC(1,j,k,1)
               enddo
             enddo
@@ -1340,6 +1416,7 @@ contains
 
             if (nrank == 0) then
                 fmean = this%igrid_sim%rbuffzC(1,1,:,1)*this%avgFact
+                !write(*,'(a,3(e19.12,1x))') 'Part avg(1,1,1,1) = ', fmean(1), this%igrid_sim%rbuffzC(1,1,1,1), this%avgFact
             else
                 fmean = 0.d0 ! Only 0 processor has the actual mean  
             end if 
@@ -1378,7 +1455,7 @@ contains
 
             ! take average in y
             do k = 1, size(this%igrid_sim%rbuffyE,3)
-              do j = 1, size(this%igrid_sim%rbuffyE,2)
+              do j = 2, size(this%igrid_sim%rbuffyE,2)
                   this%igrid_sim%rbuffyE(1,1,k,1) = this%igrid_sim%rbuffyE(1,1,k,1) + this%igrid_sim%rbuffyE(1,j,k,1)
               enddo
             enddo
@@ -1425,7 +1502,7 @@ contains
 
             ! take average in y
             do k = 1, size(this%igrid_sim%rbuffyC,3)
-              do j = 1, size(this%igrid_sim%rbuffyC,2)
+              do j = 2, size(this%igrid_sim%rbuffyC,2)
                   this%igrid_sim%rbuffyC(1,1,k,1) = this%igrid_sim%rbuffyC(1,1,k,1) + this%igrid_sim%rbuffyC(1,j,k,1)
               enddo
             enddo
@@ -1472,7 +1549,7 @@ contains
 
             ! take average in y
             do k = 1, size(this%igrid_sim%rbuffyE,3)
-              do j = 1, size(this%igrid_sim%rbuffyE,2)
+              do j = 2, size(this%igrid_sim%rbuffyE,2)
                   this%igrid_sim%rbuffyE(1,1,k,1) = this%igrid_sim%rbuffyE(1,1,k,1) + this%igrid_sim%rbuffyE(1,j,k,1)
               enddo
             enddo
