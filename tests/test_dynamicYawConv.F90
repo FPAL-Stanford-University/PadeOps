@@ -14,7 +14,7 @@ program test_dynamicYaw
 
     type(dynamicYaw) :: dyaw
     type(actuatorDisk_yaw), allocatable, dimension(:) :: ad
-    character(len=clen) :: inputDir = "/home1/05294/mhowland/dynamicYawFiles/dynamicYaw.inp"
+    character(len=clen) :: inputDir = "/home1/05294/mhowland/dynamicYawFiles/WES_P1_2020_inputs/dynamicYaw.inp"
     character(len=clen) :: inputDir_turb = "/home1/05294/mhowland/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/3x1array"
 
     integer, parameter :: nx = 192, ny = 96, nz = 128
@@ -106,6 +106,14 @@ program test_dynamicYaw
     write(*,*) dyaw%kw
     write(*,*) 'sigma'
     write(*,*) dyaw%sigma_0
+    write(*,*) 'Pratio'
+    write(*,*) dyaw%Popti
+    write(*,*) 'Ptot_ratio'
+    write(*,*) dyaw%Ptot_final
+    write(*,*) 'v'
+    write(*,*) dyaw%v
+    write(*,*) 'yc'
+    write(*,*) dyaw%y_c
 
     call MPI_Finalize(ierr)
 end program 

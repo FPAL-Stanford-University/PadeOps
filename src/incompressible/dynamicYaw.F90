@@ -49,11 +49,13 @@ module dynamicYawMod
         integer :: n_moving_average
         real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, dir_minus_n
         real(rkind), dimension(:), allocatable :: Phat, Phat_yaw
-        logical :: check = .true., useInitialParams = .false.
+        logical :: check = .true., useInitialParams = .false., secondary = .false.
         ! Superposition stuff
         ! Superpostion: 1) Linear 2) Momentum conserving 3) Modified linear
         integer :: superposition = 1, ucMaxIt = 10, Ny = 100
         real(rkind) :: epsUc = 1.0D-3
+        real(rkind), dimension(:,:), allocatable :: ucr
+        real(rkind), dimension(:), allocatable :: v
 
     contains
         procedure :: init
@@ -85,13 +87,13 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     integer, intent(in) :: Nt
     logical, intent(out) :: fixedYaw, considerAdvection, lookup
     integer, intent(out) :: dynamicStart, dirType
-    logical :: useInitialParams 
+    logical :: useInitialParams, secondary 
 
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
                            Ne, Ct, eta, beta1, beta2, conditionTurb, n_moving_average, &
                            fixedYaw, dynamicStart, dirType, considerAdvection, lookup, &
-                           useInitialParams, powerExp, superposition
+                           useInitialParams, powerExp, superposition, secondary
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -110,6 +112,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     this%useInitialParams = useInitialParams 
     this%powerExp = powerExp
     this%superposition = superposition
+    this%secondary = secondary
 
     ! Allocate
     allocate(this%yaw(this%Nt))
@@ -128,6 +131,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     allocate(this%erfStore(this%Nt,this%Nt))
     allocate(this%deltaUIndividual(this%Nt,this%Nt))
     allocate(this%turbinesInFront(this%Nt,this%Nt))
+    allocate(this%ucr(this%Nt,this%Nt))
     allocate(this%y_c(this%Nt,this%Nt))
     allocate(this%yCenter(this%Nt,this%Nt))
     allocate(this%turbCenter(this%Nt,2))
@@ -137,6 +141,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     allocate(this%Phat(this%Nt))
     allocate(this%Phat_yaw(this%Nt))
     allocate(this%Popti(this%Nt))
+    allocate(this%v(this%Nt))
     allocate(this%power_minus_n(this%n_moving_average,this%Nt))
     allocate(this%ws_minus_n(this%n_moving_average,this%Nt))
     allocate(this%pb_minus_n(this%n_moving_average,this%Nt))
@@ -465,15 +470,15 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:), intent(in) :: kw, sigma_0, yaw
     real(rkind), dimension(this%Nt), intent(out) :: Phat
-    real(rkind) :: D, R, dx, boundLow, boundHigh, edgeLow, edgeHigh, uc_error
+    real(rkind) :: D, R, dx, boundLow, boundHigh, edgeLow, edgeHigh, uc_error, dvi, dv
     integer :: Nx, i, j, k, ucCount
     real(rkind), dimension(this%Nt) :: delta_v0, Uc, Uc_old
     real(rkind) :: dw, aPrev, du, gaussian, delta_u_face, L, temp
     logical, dimension(this%Nt, this%Nt) :: turbinesInFront
-    real(rkind), dimension(this%Nx) :: xpFront, delta_v, dwVect
+    real(rkind), dimension(this%Nx) :: xpFront, delta_v, dwVect, dvec
     logical :: check
     real(rkind), dimension(this%Ny) :: duSum, us, ylocal, uw
-    real(rkind), dimension(this%Nt, this%Nt) :: uci 
+    real, dimension(this%Nt, this%Nt) :: uci
  
     ! Definitions
     ! Set the relevant turbine length scale
@@ -492,6 +497,8 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     ! While loop for convective velocity convergences
     uc_error = 1.0D10; ucCount = 1;
     do while (uc_error>this%epsUc .and. ucCount<this%ucMaxIt)
+        ! Initialize
+        this%v = 0.d0
         ! Loop over turbines
         do j = 1,this%Nt
             ! Find the leading turbine
@@ -540,16 +547,33 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
 
                     ! Deflection
                     dwVect = 1.d0 + kw(k) * log(1.d0 + exp((xpFront - 2.0 * R) / R));
-                    delta_v0(j) = 0.25 * this%Ct * cos(yaw(k))**2 * sin(yaw(k))
+                    if (this%superposition == 1) then
+                        dvi = this%wind_speed * 0.25 * this%Ct * cos(yaw(k))**2 * sin(yaw(k))
+                    elseif (this%superposition == 2 .or. this%superposition == 3) then
+                        dvi = this%u_eff(k) * 0.25 * this%Ct * cos(yaw(k))**2 * sin(yaw(k))
+                    end if
+                    if (this%secondary == .true.) then
+                        delta_v0(j) = dvi + this%v(k)
+                    else
+                        delta_v0(j) = dvi
+                    end if
                     ! Velocity deficit
                     delta_v = (delta_v0(j) / (dwVect**2+this%eps)) * 0.5 * (1.d0 + erf(xpFront & 
                               / (R*sqrt(2.d0))))
                     where (xpFront<0.d0)
                         delta_v = 0.d0
                     end where
+                    dv = (1.d0 / (dw**2+this%eps)) * 0.5 * (1.d0 + erf(dx & 
+                              / (R*sqrt(2.d0))))
+                    dvec = (1.d0 / (dwVect**2+this%eps)) * 0.5 * (1.d0 + erf(xpFront & 
+                              / (R*sqrt(2.d0))))
+                    
                     ! y_c
-                    !this%y_c(k, j) = integrate(xpFront, -delta_v) !mytrapz(xpFront, -delta_v)
-                    this%y_c(k, j) = mytrapz(xpFront, -delta_v)
+                    if (this%superposition == 1) then
+                        this%y_c(k, j) = mytrapz(xpFront, -delta_v/this%wind_speed)
+                    elseif (this%superposition == 2 .or. this%superposition == 3) then
+                        this%y_c(k, j) = mytrapz(xpFront, -delta_v/this%u_eff(k))
+                    end if
                     ! Local y frame
                     this%sigmaEnd(k, j) = sigma_0(k) * dw 
                     ! take the last value of sigma which is at the next turbine
@@ -579,6 +603,10 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                         this%erfStore(k, j) = (du/this%u_eff(k)) * gaussian * uci(k, j) / Uc(j); 
                     end if
                     this%gaussianStore(k, j) = gaussian;
+                    if (this%secondary == .true.) then
+                        this%ucr(k, j) = (uci(k, j) / Uc(j)) * dv * gaussian;
+                        this%v(j) = this%v(j) + dvi * this%ucr(k, j);
+                    end if
                 end if
             end do
             ! Superposition
@@ -704,6 +732,22 @@ subroutine backward(this, kw, sigma_0, yaw)
                 ! Sum together to get dP / dgamma
                 this%dp_dgamma(i) = this%dp_dgamma(i) + & 
                                     dp_du_eff(k)*du_eff_dyc(i)*dy_c_dgamma(i) 
+                ! Extra terms from secondary steering
+                if ((this%superposition==2 .or. this%superposition==3) .and. &
+                    this%secondary==.true.) then;
+                    do m = 1, this%Nt
+                        if (this%turbinesInFront(i, m) == .true.) then
+                            ! d y_c / d gamma
+                            dy_c_dgamma(m) = (this%u_eff(m)/this%u_eff(i)) * this%ucr(m, i) &
+                                             * (cos(yaw(m))**3-2*sin(yaw(m))**2*cos(yaw(m)))* &
+                                             mytrapz(xpFront, -0.25*this%Ct*0.5*(1.d0+erf(xpFront &
+                                             / (R*sqrt(2.d0)))) / dwVect**2);
+                            ! Sum together to get dP / dgamma
+                            this%dp_dgamma(m) = this%dp_dgamma(m) + &
+                                           dp_du_eff(k)*du_eff_dyc(i)*dy_c_dgamma(m);
+                        end if 
+                    end do
+                end if
             end if
         end do    
     end do
