@@ -25,7 +25,8 @@ module fringeMethod
       logical :: firstCallCompleteScalar = .false.
       logical, public :: useShiftedPeriodicBC = .false. 
       real(rkind) :: shift_distance, Lxeff
-      integer :: ixst_1, ixen_1, ixst_2, ixen_2
+      integer :: ixst_1, ixen_1, ixst_2, ixen_2 ! for shifted periodic BC
+      integer :: xst_forc, xen_forc, xst_targ, xen_targ
       contains
          procedure :: init
          procedure :: destroy
@@ -36,6 +37,7 @@ module fringeMethod
          procedure :: addFringeRHS_scalar
          procedure :: associateFringeTarget_scalar
          procedure :: getShiftedFields
+         procedure :: get_ixen_2
    end type
     
 contains
@@ -82,8 +84,17 @@ contains
       endif
 
       if (this%targetsAssociated) then
-         ! u velocity source term 
-         this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%u_target - uC)
+         !! u velocity source term 
+         !this%rbuffxC(1:this%xst_forc,:,:,1) = 0.0d0
+         !this%rbuffxC(this%xst_forc:this%xen_forc,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells(this%xst_forc:this%xen_forc,:,:))*(this%u_target(this%xst_targ:this%xen_targ,:,:) - uC(this%xst_forc:this%xen_forc,:,:))
+         !this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%u_target - uC)
+         
+         !!! note :: u_target is same as rbuffxC(:,:,:,2) if useShiftedPeriodicBC is .true.
+         this%rbuffxC(:,:,:,2) = this%u_target
+         if(.not. this%useShiftedPeriodicBC) then
+             this%rbuffxC(this%xst_forc:this%xen_forc,:,:,2) = this%u_target(this%xst_targ:this%xen_targ,:,:)
+         endif
+         this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%rbuffxC(:,:,:,2) - uC)
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          urhs = urhs + this%cbuffyC(:,:,:,1)
          if (allOptionalsPresent) then
@@ -94,8 +105,16 @@ contains
             end if
          end if
 
-         ! v velocity source term 
-         this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%v_target - vC)
+         !! v velocity source term 
+         !this%rbuffxC(1:this%xst_forc,:,:,1) = 0.0d0
+         !this%rbuffxC(this%xst_forc:this%xen_forc,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells(this%xst_forc:this%xen_forc,:,:))*(this%v_target(this%xst_targ:this%xen_targ,:,:) - vC(this%xst_forc:this%xen_forc,:,:))
+         !this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%v_target - vC)
+
+         this%rbuffxC(:,:,:,2) = this%v_target
+         if(.not. this%useShiftedPeriodicBC) then
+             this%rbuffxC(this%xst_forc:this%xen_forc,:,:,2) = this%v_target(this%xst_targ:this%xen_targ,:,:)
+         endif
+         this%rbuffxC(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_cells)*(this%rbuffxC(:,:,:,2) - vC)
          call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
          vrhs = vrhs + this%cbuffyC(:,:,:,1)
          if (allOptionalsPresent) then
@@ -106,8 +125,16 @@ contains
             end if
          end if
          
-         ! w velocity source term 
-         this%rbuffxE(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_edges)*(this%w_target - wE)
+         !! w velocity source term 
+         !this%rbuffxE(1:this%xst_forc,:,:,1) = 0.0d0
+         !this%rbuffxE(this%xst_forc:this%xen_forc,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_edges(this%xst_forc:this%xen_forc,:,:))*(this%w_target(this%xst_targ:this%xen_targ,:,:) - wE(this%xst_forc:this%xen_forc,:,:))
+         !this%rbuffxE(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_edges)*(this%w_target - wE)
+
+         this%rbuffxE(:,:,:,2) = this%w_target
+         if(.not. this%useShiftedPeriodicBC) then
+             this%rbuffxE(this%xst_forc:this%xen_forc,:,:,2) = this%w_target(this%xst_targ:this%xen_targ,:,:)
+         endif
+         this%rbuffxE(:,:,:,1) = (this%Lambdafact/dt)*(this%Fringe_kernel_edges)*(this%rbuffxE(:,:,:,2) - wE)
          call this%spectE%fft(this%rbuffxE(:,:,:,1), this%cbuffyE(:,:,:,1))      
          wrhs = wrhs + this%cbuffyE(:,:,:,1)
          if (allOptionalsPresent) then
@@ -129,12 +156,20 @@ contains
 
       if (this%firstCallCompleteScalar) then      
           if (this%useFringeAsSponge_Scalar) then
+                !this%rbuffxC(this%xst_forc:this%xen_forc,:,:,1) = -(this%LambdafactPotTemp/dt)*(this%Fringe_kernel_cells(this%xst_forc:this%xen_forc,:,:))*(F(this%xst_forc:this%xen_forc,:,:))
+         
                 this%rbuffxC(:,:,:,1) = -(this%LambdafactPotTemp/dt)*(this%Fringe_kernel_cells)*(F)
                 call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
                 Frhs = Frhs + this%cbuffyC(:,:,:,1)
           else
              if (associated(this%F_target)) then
-                this%rbuffxC(:,:,:,1) = (this%LambdafactPotTemp/dt)*(this%Fringe_kernel_cells)*(this%F_target - F)
+                !this%rbuffxC(this%xst_forc:this%xen_forc,:,:,1) = (this%LambdafactPotTemp/dt)*(this%Fringe_kernel_cells(this%xst_forc:this%xen_forc,:,:))*(this%F_target(this%xst_targ:this%xen_targ,:,:) - F(this%xst_forc:this%xen_forc,:,:))
+
+                this%rbuffxC(:,:,:,2) = this%F_target
+                if(.not. this%useShiftedPeriodicBC) then
+                    this%rbuffxC(this%xst_forc:this%xen_forc,:,:,2) = this%F_target(this%xst_targ:this%xen_targ,:,:)
+                endif
+                this%rbuffxC(:,:,:,1) = (this%LambdafactPotTemp/dt)*(this%Fringe_kernel_cells)*(this%rbuffxC(:,:,:,2) - F)
                 call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))      
                 Frhs = Frhs + this%cbuffyC(:,:,:,1)
              end if 
@@ -161,11 +196,12 @@ contains
 
    end subroutine 
 
-   subroutine associateFringeTargets(this, utarget, vtarget, wtarget, Ttarget)
+   subroutine associateFringeTargets(this, utarget, vtarget, wtarget, Ttarget, xen_targ)
       class(fringe), intent(inout) :: this
       real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), target           :: utarget, vtarget
       real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in), target           :: wtarget 
       real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in), optional, target :: Ttarget 
+      integer,                                                                 intent(in), optional         :: xen_targ
  
       if(this%useShiftedPeriodicBC) then
           call GracefulExit("Fringe targets already associated at setup if &
@@ -182,8 +218,34 @@ contains
       end if
       this%TargetsAssociated = .true.
 
+      if(present(xen_targ)) then
+        this%xen_targ = xen_targ
+        print *, ' given xen_targ = ', xen_targ, this%xen_targ
+      else
+        this%xen_targ = size(this%Fringe_kernel_cells, 1)
+        print *, ' not given xen_targ = ', this%xen_targ
+      endif
+      this%xst_targ = this%xen_targ - (this%xen_forc - this%xst_forc)
+      call message(1, "xst_targ:", this%xst_targ)
+      call message(1, "xen_targ:", this%xen_targ)
+      if(this%xst_targ < 1) then
+          call GracefulExit("Incompatible inputs. Either increase xen_targ or decrease width of the fringe.",111)
+      endif
+
+      if(this%xst_targ > this%xen_targ) then
+          call GracefulExit("Incompatible xst_targ and xen_targ. Check your inputs carefully.",111)
+      endif
+
       call message(0, "Fringe targets successfully associated.")
    end subroutine
+
+   pure function get_ixen_2(this) result(val)
+      class(fringe), intent(in) :: this
+      integer                   :: val
+      
+      val = this%ixen_2
+   end function
+
 
    subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, fringeID)
       use reductions, only: p_minval, p_maxval
@@ -215,7 +277,7 @@ contains
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
       logical :: useShiftedPeriodicBC = .false.
-      real(rkind) :: shift_distance = 0.5d0, Lxeff = 0.5d0
+      real(rkind) :: shift_distance = 0.5d0, Lxeff = 0.5d0, threshold_val
 
       namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
                         Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFactPotTemp, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
@@ -299,6 +361,31 @@ contains
          call S_fringe(x1, S1)
          call S_fringe(x2, S2)
          Fringe_func = S1 - S2
+
+         threshold_val = 1.0d-4
+         ! find xst_forc
+         do i = 1, nx-1
+           if( (Fringe_func(i) <= threshold_val) .and. (Fringe_func(i+1) >= threshold_val) ) then
+             exit
+           endif
+         enddo
+         this%xst_forc = max(1, i-4) ! 4 is arbitrary here
+         call message(1, "xst_forc:", this%xst_forc)
+
+         ! find xen_forc
+         do i = nx, 2, -1
+           !if(nrank==0) then
+           !  write(*,'(i4,1x,2(e19.12,1x))') i, x(i), Fringe_func(i)
+           !endif
+           if( (Fringe_func(i) <= threshold_val) .and. (Fringe_func(i-1) >= threshold_val) ) then
+             exit
+           endif
+         enddo
+         this%xen_forc = min(nx, i+4) ! 4 is arbitrary here
+         if(this%xen_forc < this%xst_forc) then
+             this%xen_forc = nx
+         endif
+         call message(1, "xen_forc:", this%xen_forc)
 
          do k = 1,this%gpC%xsz(3)
             do j = 1,this%gpC%xsz(2)

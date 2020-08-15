@@ -19,7 +19,7 @@ program concurrentSimulation
     character(len=clen) :: inputfile, precInputFile, mainInputFile
     integer :: ierr
     !real(rkind), dimension(:,:,:), allocatable :: utarget, vtarget, wtarget
-    integer :: ioUnit
+    integer :: ioUnit, prec_ixen_2
     type(budgets_time_avg) :: budg_tavg
     type(budgets_xy_avg) :: budg_xyavg
     namelist /concurrent/ precInputFile, mainInputFile
@@ -36,15 +36,22 @@ program concurrentSimulation
     close(ioUnit)    
 
     call prec%init(precInputFile, .true.)                                    !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
+    if(nrank==0) then
+        print *, '---------- Done prec init---------  '
+    endif
     call prec%start_io(.true.)                                           !<-- Start I/O by creating a header file (see io.F90)
     call prec%printDivergence()
  
     call igp%init(mainInputFile, .false.)                                            !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
+    if(nrank==0) then
+        print *, '---------- Done main init---------  '
+    endif
     call igp%start_io(.true.)                                           !<-- Start I/O by creating a header file (see io.F90)
     call igp%printDivergence()
 
     ! Fringe associations for non-periodic BCs in x
-    call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w) !<-- Link the target velocity array to igp 
+    prec_ixen_2 = prec%fringe_x%get_ixen_2()
+    call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w, xen_targ=prec_ixen_2) !<-- Link the target velocity array to igp 
 
     call budg_xyavg%init(precInputFile, prec)   !<-- Budget class initialization 
 
