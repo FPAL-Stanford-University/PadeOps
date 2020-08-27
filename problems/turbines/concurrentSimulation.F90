@@ -12,6 +12,7 @@ program concurrentSimulation
     use exits, only: message
     use budgets_time_avg_mod, only: budgets_time_avg  
     use budgets_xy_avg_mod, only: budgets_xy_avg  
+    use decomp_2d, only: nrank
 
     implicit none
 
