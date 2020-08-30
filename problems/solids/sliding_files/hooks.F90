@@ -2,6 +2,7 @@ module sliding_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,three,eight,three,six
     use FiltersMod,       only: filters
+    use reductions,       only: p_maxval
     implicit none
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
@@ -13,6 +14,11 @@ module sliding_data
     real(rkind) :: interface_init = 0.65_rkind, shock_init = 0.5_rkind
     logical     :: normal = .false.
     logical     :: sliding = .false.
+    logical     :: spng_x1 = .false., spng_xn = .false.
+
+    real(rkind), dimension(:,:,:), allocatable :: rho_x1, u_x1, v_x1
+    real(rkind), dimension(:,:,:), allocatable :: rho_xn, u_xn, v_xn
+    real(rkind), dimension(:,:,:), allocatable :: mask
 
     type(filters) :: mygfil
 
@@ -144,7 +150,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = one/real(nx,rkind)
+        dx = two/real(nx,rkind)
         dy = dx
         dz = dx
 
@@ -188,7 +194,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(8) :: fparams
     integer, dimension(2) :: iparams
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, rhoRatio, muRatio, thick, shock_thick, minVF, shock_init, interface_init, normal, sliding
+    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, rhoRatio, muRatio, thick, shock_thick, minVF, shock_init, interface_init, normal, sliding, spng_x1, spng_xn
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -272,6 +278,24 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
+        allocate( rho_x1(4,decomp%ysz(2),decomp%ysz(3)) )
+        allocate(   u_x1(4,decomp%ysz(2),decomp%ysz(3)) )
+        allocate(   v_x1(4,decomp%ysz(2),decomp%ysz(3)) )
+
+        rho_x1 = tmp(1:4,:,:)
+        u_x1   = u  (1:4,:,:)
+        v_x1   = v  (1:4,:,:)
+
+        allocate( rho_xn(4,decomp%ysz(2),decomp%ysz(3)) )
+        allocate(   u_xn(4,decomp%ysz(2),decomp%ysz(3)) )
+        allocate(   v_xn(4,decomp%ysz(2),decomp%ysz(3)) )
+
+        rho_xn = tmp(decomp%ysz(1)-3:decomp%ysz(1),:,:)
+        u_xn   = u  (decomp%ysz(1)-3:decomp%ysz(1),:,:)
+        v_xn   = v  (decomp%ysz(1)-3:decomp%ysz(1),:,:)
+
+        allocate(mask(size(mesh,1), size(mesh,2), size(mesh,3)))
+
     end associate
 
 end subroutine
@@ -315,7 +339,13 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3),       &
                  sos  => fields(:,:,:,sos_index) )
 
-       write(str,'(ES7.1E2)') minVF
+        ! compute mask which was active for sliding
+        mask = mix%material(1)%VF*(one - mix%material(1)%VF)
+        mask = mask/P_MAXVAL(mask)
+        mask = one - (one - mask)**40
+
+       !write(str,'(ES7.1E2)') minVF
+       write(str, '(i5.5)') decomp%ysz(1)
        
        if (mix%use_gTg) then
            str = trim(str)//'_gTg'
@@ -327,17 +357,33 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
            write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/sliding_"//trim(str)//"_", vizcount, ".dat"
 
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
-           write(outputunit,'(4ES27.16E3)') tsim, minVF, thick
+           !write(outputunit,'(4ES27.16E3)') tsim, minVF, thick
            do i=1,decomp%ysz(1)
-               write(outputunit,'(24ES27.16E3)') x(i,1,1), rho(i,1,1), u(i,1,1), v(i,1,1), e(i,1,1), p(i,1,1), &
-                                              mix%material(1)%p (i,1,1), mix%material(2)%p (i,1,1), &
-                                              mix%material(1)%Ys(i,1,1), mix%material(2)%Ys(i,1,1), &
-                                              mix%material(1)%VF(i,1,1), mix%material(2)%VF(i,1,1), &
-                                              mix%material(1)%eh(i,1,1), mix%material(2)%eh(i,1,1), &
-                                              mix%material(1)%T (i,1,1), mix%material(2)%T (i,1,1), &
-                                              mix%material(1)%g11(i,1,1), mix%material(2)%g11(i,1,1), &
+               write(outputunit,'(55ES27.16E3)') x(i,1,1), rho(i,1,1), u(i,1,1), v(i,1,1), e(i,1,1), p(i,1,1), &
+                                              mix%material(1)%p (i,1,1), mix%material(2)%p (i,1,1), &     ! 7, 8
+                                              mix%material(1)%Ys(i,1,1), mix%material(2)%Ys(i,1,1), &     ! 9, 10
+                                              mix%material(1)%VF(i,1,1), mix%material(2)%VF(i,1,1), &     ! 11, 12  
+                                              mix%material(1)%eh(i,1,1), mix%material(2)%eh(i,1,1), &     ! 13, 14
+                                              mix%material(1)%T (i,1,1), mix%material(2)%T (i,1,1), &     ! 15, 16
+                                              mix%material(1)%g11(i,1,1), mix%material(2)%g11(i,1,1), &   ! 17, 18
+                                              mix%material(1)%g12(i,1,1), mix%material(2)%g12(i,1,1), &   ! 19, 20
+                                              mix%material(1)%g13(i,1,1), mix%material(2)%g13(i,1,1), &   ! 21, 22
+                                              mix%material(1)%g21(i,1,1), mix%material(2)%g21(i,1,1), &   ! 23, 24
+                                              mix%material(1)%g22(i,1,1), mix%material(2)%g22(i,1,1), &   ! 25, 26
+                                              mix%material(1)%g23(i,1,1), mix%material(2)%g23(i,1,1), &   ! 27, 28
+                                              mix%material(1)%g31(i,1,1), mix%material(2)%g31(i,1,1), &   ! 29, 30
+                                              mix%material(1)%g32(i,1,1), mix%material(2)%g32(i,1,1), &   ! 31, 32
+                                              mix%material(1)%g33(i,1,1), mix%material(2)%g33(i,1,1), &   ! 33, 34
+                                              mix%material(1)%sxx(i,1,1), mix%material(2)%sxx(i,1,1), &   ! 35, 36
+                                              mix%material(1)%sxy(i,1,1), mix%material(2)%sxy(i,1,1), &   ! 37, 38
+                                              mix%material(1)%sxz(i,1,1), mix%material(2)%sxz(i,1,1), &   ! 39, 40
+                                              mix%material(1)%syy(i,1,1), mix%material(2)%syy(i,1,1), &   ! 41, 42
+                                              mix%material(1)%syz(i,1,1), mix%material(2)%syz(i,1,1), &   ! 43, 44
+                                              mix%material(1)%szz(i,1,1), mix%material(2)%szz(i,1,1), &   ! 45, 46
                                               mu(i,1,1), bulk(i,1,1), mix%material(1)%kap(i,1,1), mix%material(2)%kap(i,1,1), &
-                                              mix%material(1)%diff(i,1,1), mix%material(2)%diff(i,1,1)
+                                              mix%material(1)%diff(i,1,1), mix%material(2)%diff(i,1,1), & ! 51, 52
+                                              mix%material(1)%eel(i,1,1),  mix%material(2)%eel(i,1,1), &  ! 53, 54
+                                              mask(i,1,1)                                                 ! 55
            end do
            close(outputunit)
        end if
@@ -364,7 +410,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx, i, j
-    real(rkind) :: dx, xspng, tspng
+    real(rkind) :: dx, xspng, tspng, normfac
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     
     nx = decomp%ysz(1)
@@ -375,20 +421,115 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+
         if (normal) then
+          if(x_bc(1)==0) then
             rho(1,:,:) = rho_0
             u  (1,:,:) = half
             v  (1,:,:) = zero
             w  (1,:,:) = zero
             p  (1,:,:) = p_amb
+          end if
 
+          if(x_bc(2)==0) then
             rho(nx,:,:) = rho_0_2
             u  (nx,:,:) = -half
             v  (nx,:,:) = zero
             w  (nx,:,:) = zero
             p  (nx,:,:) = p_amb
+          end if
+        else   
+          if(x_bc(1)==0) then
+            rho(1,:,:) = rho_0
+            u  (1,:,:) = zero
+            v  (1,:,:) = half
+            w  (1,:,:) = zero
+            p  (1,:,:) = p_amb
+          end if
+
+          if(x_bc(2)==0) then
+            rho(nx,:,:) = rho_0_2
+            u  (nx,:,:) = zero
+            v  (nx,:,:) = -half
+            w  (nx,:,:) = zero
+            p  (nx,:,:) = p_amb
+          end if
         end if
 
+        ! Sponge BC in x direction
+        dum = zero
+
+        if(spng_x1==.true.) then
+            rho(1:4,:,:) = rho_x1
+            u  (1:4,:,:) = u_x1
+            v  (1:4,:,:) = v_x1
+            w  (1:4,:,:) = zero
+            p  (1:4,:,:) = p_amb
+
+            xspng = 0.02
+            tspng = 0.01_rkind
+            dum = dum + half*(one - tanh( (x-xspng)/(tspng) ))
+        end if
+
+        if(spng_xn==.true.) then
+            rho(nx-3:nx,:,:) = rho_xn
+            u  (nx-3:nx,:,:) = u_xn
+            v  (nx-3:nx,:,:) = v_xn
+            w  (nx-3:nx,:,:) = zero
+            p  (nx-3:nx,:,:) = p_amb
+
+            xspng = x(nx,1,1) - 0.02;
+            tspng = 0.01_rkind
+            dum = dum + half*(one + tanh( (x-xspng)/(tspng) ))
+        end if
+
+        normfac = p_maxval(dum)
+        normfac = max(normfac, 1.0d0)
+        dum = dum/normfac
+    
+        if((spng_x1==.true.) .or. (spng_xn==.true.)) then
+ 
+          do i=1,4
+              tmp = u
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              u = u + dum*(tmp - u)
+
+              tmp = v
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              v = v + dum*(tmp - v)
+
+              tmp = w
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              w = w + dum*(tmp - w)
+
+              tmp = e
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              e = e + dum*(tmp - e)
+
+              tmp = rho
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              rho = rho + dum*(tmp - rho)
+
+              tmp = mix%material(1)%p
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+
+              tmp = mix%material(2)%p
+              call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+              mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+
+              do j = 1,9
+                  tmp = mix%material(1)%g(:,:,:,j)
+                  call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                  mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
+
+                  tmp = mix%material(2)%g(:,:,:,j)
+                  call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                  mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
+              end do
+          end do
+        end if
     end associate
 end subroutine
 
