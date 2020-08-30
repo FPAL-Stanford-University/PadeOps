@@ -387,6 +387,18 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             v  (nx,:,:) = zero
             w  (nx,:,:) = zero
             p  (nx,:,:) = p_amb
+        else   
+            rho(1,:,:) = rho_0
+            u  (1,:,:) = zero
+            v  (1,:,:) = half
+            w  (1,:,:) = zero
+            p  (1,:,:) = p_amb
+
+            rho(nx,:,:) = rho_0_2
+            u  (nx,:,:) = zero
+            v  (nx,:,:) = -half
+            w  (nx,:,:) = zero
+            p  (nx,:,:) = p_amb
         end if
 
     end associate

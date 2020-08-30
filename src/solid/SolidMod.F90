@@ -1256,12 +1256,12 @@ contains
         integer, dimension(1) :: min_norm
         integer :: iters
         integer, parameter :: niters = 500
-        integer :: lwork, info
+        integer :: lwork_dsyev, lwork_dgesvd, info
         integer, dimension(3) :: ipiv
         integer :: nxp, nyp, nzp
         character(len=clen) :: charout
 
-        real(rkind), dimension(:), allocatable :: svdwork     ! Work array for SVD stuff
+        real(rkind), dimension(:), allocatable :: svdwork, eigwork     ! Work array for SVD, EIG stuff
 
         real(rkind) :: dx, dy, x, y, rad, theta = 45._rkind * pi / 180._rkind
 
@@ -1277,21 +1277,24 @@ contains
         ! mask = mask/maxval(mask)
         ! mask = one - (one - mask)**mask_exponent
 
-        allocate(svdwork(1))
-        if (this%use_gTg) then
-            ! Get optimal lwork
-            lwork = -1
-            call dsyev('V', 'U', 3, G, 3, sval, svdwork, lwork, info)
-            lwork = svdwork(1)
-        else
-            ! Get optimal lwork
-            lwork = -1
-            call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, svdwork, lwork, info)
-            lwork = svdwork(1)
+        allocate(svdwork(1), eigwork(1))
+
+        ! Get optimal lwork for dsyev
+        lwork_dsyev = -1
+        call dsyev('V', 'U', 3, G, 3, sval, eigwork, lwork_dsyev, info)
+        lwork_dsyev = eigwork(1)
+        if (lwork_dsyev .GT. size(eigwork)) then
+            deallocate(eigwork)
+            allocate(eigwork(lwork_dsyev))
         end if
 
-        if (lwork .GT. size(svdwork)) then
-            deallocate(svdwork); allocate(svdwork(lwork))
+        ! Get optimal lwork for dgesvd
+        lwork_dgesvd = -1
+        call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, svdwork, lwork_dgesvd, info)
+        lwork_dgesvd = svdwork(1)
+        if (lwork_dgesvd .GT. size(svdwork)) then
+            deallocate(svdwork)
+            allocate(svdwork(lwork_dgesvd))
         end if
 
         if ( nancheck(this%g) ) then
@@ -1369,12 +1372,12 @@ contains
 
                         if (this%use_gTg) then
                             ! Get eigenvalues and eigenvectors of G
-                            call dsyev('V', 'U', 3, G, 3, sval, svdwork, lwork, info)
+                            call dsyev('V', 'U', 3, G, 3, sval, eigwork, lwork_dsyev, info)
                             if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
                             sval = sqrt(sval)  ! Get singular values of g
                         else
                             ! Get SVD of g
-                            call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, svdwork, lwork, info)
+                            call dgesvd('A', 'A', 3, 3, g, 3, sval, u, 3, vt, 3, svdwork, lwork_dgesvd, info)
                             if(info .ne. 0) then
                                 write(charout, '(A,I0,A)') 'proc ', nrank, ': Problem with SVD. Please check.'
                                 call GracefulExit(charout,3475)
@@ -1440,7 +1443,7 @@ contains
                         ! sigma_tilde = mask(i,j,k)*sigma_tilde + (one - mask(i,j,k))*sigma
 
                         ! Get eigenvalues and eigenvectors of sigma
-                        call dsyev('V', 'U', 3, sigma_tilde, 3, Sa, svdwork, lwork, info)
+                        call dsyev('V', 'U', 3, sigma_tilde, 3, Sa, eigwork, lwork_dsyev, info)
                         if(info .ne. 0) then
                             print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
                             print *, "sigma:"

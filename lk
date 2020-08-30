@@ -1,0 +1,604 @@
+103d102
+<         procedure :: sliding_correction
+386c385
+<     subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,coordsys,rho0mix,mumix,yieldmix,solidVF)
+---
+>     subroutine update_g(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,rho0mix,mumix,yieldmix,solidVF)
+398d396
+<         integer,               intent(in) :: coordsys
+410,440c408,435
+<         ! Get the normals and mask function to apply sliding treatment
+<         if (this%sliding) then
+<             ! ! Set normal to be radially outwards for a cylindrical interface
+<             ! theta = atan2(y,x)
+<             ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
+< 
+<             ! Set normal to be the maximal gradient direction of the volume fraction
+<             ! Use auxiliary function as in Shukla, Pantano and Freund (JCP 2010)
+<             auxVF = this%VF
+<             where (auxVF < zero)
+<                 auxVF = zero
+<             end where
+<             where (auxVF > one)
+<                 auxVF = one
+<             end where
+<             call filter3D(this%decomp, this%gfil, auxVF, 1)
+<             auxVF = (auxVF**auxVF_exponent) / ( auxVF**auxVF_exponent + (one - auxVF)**auxVF_exponent )
+<             this%kap = auxVF
+<             call gradient(this%decomp,this%der,x,y,z,auxVF,normal(:,:,:,1),normal(:,:,:,2),normal(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
+<             ! Normalize to magnitude 1
+<             mask = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
+<             do l = 1,3
+<                 do k = 1,this%nzp
+<                     do j = 1,this%nyp
+<                         do i = 1,this%nxp
+<                             if (mask(i,j,k) > eps) then
+<                                 normal(i,j,k,l) = normal(i,j,k,l) / mask(i,j,k)
+<                             else
+<                                 normal(i,j,k,:) = [one, zero, zero] ! This is arbitrary but should not affect anything
+<                             end if
+<                         end do
+---
+>         ! ! Set normal to be radially outwards for a cylindrical interface
+>         ! theta = atan2(y,x)
+>         ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
+> 
+>         ! Set normal to be the maximal gradient direction of the volume fraction
+>         ! Use auxiliary function as in Shukla, Pantano and Freund (JCP 2010)
+>         auxVF = this%VF
+>         where (auxVF < zero)
+>             auxVF = zero
+>         end where
+>         where (auxVF > one)
+>             auxVF = one
+>         end where
+>         call filter3D(this%decomp, this%gfil, auxVF, 1)
+>         auxVF = (auxVF**auxVF_exponent) / ( auxVF**auxVF_exponent + (one - auxVF)**auxVF_exponent )
+>         this%kap = auxVF
+>         call gradient(this%decomp, this%der, auxVF, normal(:,:,:,1), normal(:,:,:,2), normal(:,:,:,3), x_bc, y_bc, z_bc)
+>         ! Normalize to magnitude 1
+>         mask = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
+>         do l = 1,3
+>             do k = 1,this%nzp
+>                 do j = 1,this%nyp
+>                     do i = 1,this%nxp
+>                         if (mask(i,j,k) > eps) then
+>                             normal(i,j,k,l) = normal(i,j,k,l) / mask(i,j,k)
+>                         else
+>                             normal(i,j,k,:) = [one, zero, zero] ! This is arbitrary but should not affect anything
+>                         end if
+443a439,443
+>         end do
+>         if ( nancheck(normal,i,j,k,l) ) then
+>             write(charout,'(A,4(I0,A))') "NaN encountered in interface normal at (",i,", ",j,", ",k,", ",l,")"
+>             call GracefulExit(charout,4809)
+>         end if
+445c445,446
+<             ! Now get the mask function
+---
+>         ! Get the mask function to apply sliding treatment
+>         if (this%sliding) then
+450,453d450
+<             ! not really used, so set to dummy values
+<             normal(:,:,:,1) = one
+<             normal(:,:,:,2) = zero
+<             normal(:,:,:,3) = zero
+457,461d453
+<         if ( nancheck(normal,i,j,k,l) ) then
+<             write(charout,'(A,4(I0,A))') "NaN encountered in interface normal at (",i,", ",j,", ",k,", ",l,")"
+<             call GracefulExit(charout,4809)
+<         end if
+< 
+463c455
+<             call this%getRHS_g(rho,u,v,w,x,y,z,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,coordsys,rho0mix,solidVF)
+---
+>             call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+465c457
+<             call this%getRHS_g(rho,u,v,w,x,y,z,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,coordsys)
+---
+>             call this%getRHS_g(rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc)
+471a464
+>         !print *, 'Before : ', this%g11(89,1,1), rhsg(89,1,1,1)
+472a466
+>         !print *, 'After 1: ', this%g11(89,1,1)
+475a470
+>         !print *, 'After 2: ', this%g11(89,1,1)
+497c492
+<                     call this%elastic%plastic_deformation(this%g, this%use_gTg, dt, mumix, yieldmix)
+---
+>                     call this%elastic%plastic_deformation(this%g, this%use_gTg, mumix, yieldmix)
+499c494
+<                     call this%elastic%plastic_deformation(this%g, this%use_gTg, dt)
+---
+>                     call this%elastic%plastic_deformation(this%g, this%use_gTg)
+516a512
+>         !print *, 'After 3: ', this%g11(89,1,1)
+520c516
+<     subroutine getRHS_g(this,rho,u,v,w,x,y,z,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,coordsys,rho0mix,solidVF)
+---
+>     subroutine getRHS_g(this,rho,u,v,w,dt,src,normal,mask,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+523c519
+<         use operators, only: gradient, curl, crossprod
+---
+>         use operators, only: gradient, curl
+525,529c521,525
+<         class(solid),                                         intent(inout) :: this
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)    :: rho,u,v,w,x,y,z,src,mask
+<         real(rkind),                                          intent(in)    :: dt
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)    :: normal
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out)   :: rhsg
+---
+>         class(solid),                                         intent(in)  :: this
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src,mask
+>         real(rkind),                                          intent(in)  :: dt
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)  :: normal
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
+531d526
+<         integer,               intent(in) :: coordsys
+534,536c529,533
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg, cx, cy, cz
+<         !real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ttxx,ttxy,ttxz,ttyx,ttyy,ttyz,ttzx,ttzy,ttzz
+---
+>         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
+>         real(rkind), dimension(:,:,:), pointer :: dutdx,dutdy,dutdz,dvtdx,dvtdy,dvtdz,dwtdx,dwtdy,dwtdz
+> 
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: penalty, tmp, detg, ut, vt, wt, rad, theta
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: curlg
+539c536
+<         real(rkind) :: dx, dy!, x, y
+---
+>         real(rkind) :: dx, dy, x, y
+553,555c550,586
+<         detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
+<              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
+<              + this%g13*(this%g21*this%g32-this%g31*this%g22)
+---
+>         ! if (this%sliding) then
+>         !     mask = this%VF*(one - this%VF)
+>         !     mask = mask/P_MAXVAL(mask)
+>         !     mask = one - (one - mask)**mask_exponent
+>         ! else
+>         !     mask = zero
+>         ! end if
+>         ! mask = zero
+> 
+>         ! Set normal to be aligned with the x direction
+>         ! normal(:,:,:,1) = one; normal(:,:,:,2) = zero; normal(:,:,:,3) = zero
+> 
+>         ! Set normal to be normal to the specified oblique interface
+>         ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) =-sin(theta); normal(:,:,:,3) = zero
+> 
+>         ! Set normal to be radially outwards for a cylindrical interface
+>         ! dx = one/real(this%decomp%xsz(1)-1,rkind)
+>         ! dy = dx
+>         ! do k=1,this%decomp%ysz(3)
+>         !     do j=1,this%decomp%ysz(2)
+>         !         do i=1,this%decomp%ysz(1)
+>         !             x = - half + real( this%decomp%yst(1) - 1 + i - 1, rkind ) * dx
+>         !             y = - half + real( this%decomp%yst(2) - 1 + j - 1, rkind ) * dy
+>         !             rad(i,j,k) = sqrt(x**2 + y**2)
+>         !             theta(i,j,k) = atan2(y,x)
+>         !         end do
+>         !     end do
+>         ! end do
+>         ! normal(:,:,:,1) = cos(theta); normal(:,:,:,2) = sin(theta); normal(:,:,:,3) = zero
+> 
+>         ! ! Set normal to be the maximal volume fraction gradient direction
+>         ! call gradient(this%decomp, this%der, this%VF, normal(:,:,:,1), normal(:,:,:,2), normal(:,:,:,3), x_bc, y_bc, z_bc)
+>         ! ! Normalize to magnitude 1
+>         ! tmp = sqrt( normal(:,:,:,1)*normal(:,:,:,1) + normal(:,:,:,2)*normal(:,:,:,2) + normal(:,:,:,3)*normal(:,:,:,3) )
+>         ! do i = 1,3
+>         !     normal(:,:,:,i) = normal(:,:,:,i) / tmp
+>         ! end do
+557,666c588,589
+<         ! Get the species density = rho*Y/VF (additional terms to give correct limiting behaviour as Ys and VF tend to 0)
+<         tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall)   
+<         ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
+< 
+<         if (this%elastic%mu < eps) then
+<             penalty = zero
+<         else
+<             if(present(rho0mix)) then
+<                 penalty = etafac*(rho/rho0mix/detg - one)/dt
+<             else
+<                 penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+<             endif
+<             if(this%pRelax) penalty = this%VF*etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density -- change2
+<             if(this%pEqb) then  !--actually, these source terms should be included for PTeqb as well -- NSG
+<                 ! add Fsource term to penalty 
+<                 penalty = penalty - src/this%VF
+<             endif
+<         endif
+< 
+< !!!!!!!!--------OLD BLOCK :: OPERATING ON VECTOR-COMPONENTS AT A TIME----!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+< !!!!!!!!--------This worked OK for Cartesian Meshes-----------------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+< !!        tmp = -u*this%g11-v*this%g12-w*this%g13
+< !!        call gradient(this%decomp,this%der,x,y,z,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),coordsys,-x_bc, y_bc, z_bc)
+< !!        
+< !!        call curl(this%decomp, this%der, x, y, z, this%g11, this%g12, this%g13, curlg, coordsys, -x_bc, y_bc, z_bc)
+< !!        rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11
+< !!        rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12
+< !!        rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13
+< !! 
+< !!        tmp = -u*this%g21-v*this%g22-w*this%g23
+< !!        call gradient(this%decomp,this%der,x,y,z,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6),coordsys, x_bc,-y_bc, z_bc)   
+< !!        
+< !!        call curl(this%decomp, this%der, x, y, z, this%g21, this%g22, this%g23, curlg, coordsys, x_bc, -y_bc, z_bc)
+< !!        rhsg(:,:,:,4) = rhsg(:,:,:,4) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g21
+< !!        rhsg(:,:,:,5) = rhsg(:,:,:,5) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g22
+< !!        rhsg(:,:,:,6) = rhsg(:,:,:,6) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g23
+< !! 
+< !!        tmp = -u*this%g31-v*this%g32-w*this%g33
+< !!        call gradient(this%decomp,this%der,x,y,z,tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9),coordsys, x_bc, y_bc,-z_bc)
+< !!
+< !!        call curl(this%decomp, this%der, x, y, z, this%g31, this%g32, this%g33, curlg, coordsys, x_bc, y_bc, -z_bc)
+< !!        rhsg(:,:,:,7) = rhsg(:,:,:,7) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g31
+< !!        rhsg(:,:,:,8) = rhsg(:,:,:,8) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g32
+< !!        rhsg(:,:,:,9) = rhsg(:,:,:,9) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g33
+< !!!!!!!!--------OLD BLOCK :: OPERATING ON VECTOR-COMPONENTS AT A TIME----!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+< 
+< !!!!!!!!--------NEW BLOCK :: OPERATING ON FULL VECTOR AT A TIME----!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+<          ! Evaluate [ Del x g^T ] :: Note that indices of this%g are transposed
+<          call curl(this%decomp, this%der, x, y, z, &
+<                    this%g11, this%g21, this%g31, this%g12, this%g22, this%g32, this%g13, this%g23, this%g33, &
+<                    ttxx, ttxy, ttxz, ttyx, ttyy, ttyz, ttzx, ttzy, ttzz, &
+<                    coordsys, x_bc, y_bc, z_bc   )
+< 
+<          ! Evaluate [ u x [ Del x g^T ]^T ] :: Note that indices of rhsg are transposed
+<          call crossprod(u, v, w, ttxx, ttxy, ttxz, ttyx, ttyy, ttyz, ttzx, ttzy, ttzz, &
+<                         rhsg(:,:,:,1), rhsg(:,:,:,4), rhsg(:,:,:,7), &
+<                         rhsg(:,:,:,2), rhsg(:,:,:,5), rhsg(:,:,:,8), &
+<                         rhsg(:,:,:,3), rhsg(:,:,:,6), rhsg(:,:,:,9) )
+< 
+<          cx = this%g11*u + this%g12*v + this%g13*w
+<          cy = this%g21*u + this%g22*v + this%g23*w
+<          cz = this%g31*u + this%g32*v + this%g33*w
+< 
+<          ! Evaluate [ Grad ( g . u ) ]
+<          call gradient(this%decomp, this%der, x, y, z, cx, cy, cz, &
+<                    ttxx, ttxy, ttxz, ttyx, ttyy, ttyz, ttzx, ttzy, ttzz, &
+<                    coordsys,x_bc, y_bc, z_bc )
+< 
+<          ! Assemble rhsg
+<          rhsg(:,:,:,1) = rhsg(:,:,:,1) - ttxx + penalty*this%g11
+<          rhsg(:,:,:,2) = rhsg(:,:,:,2) - ttxy + penalty*this%g12
+<          rhsg(:,:,:,3) = rhsg(:,:,:,3) - ttxz + penalty*this%g13
+<          rhsg(:,:,:,4) = rhsg(:,:,:,4) - ttyx + penalty*this%g21
+<          rhsg(:,:,:,5) = rhsg(:,:,:,5) - ttyy + penalty*this%g22
+<          rhsg(:,:,:,6) = rhsg(:,:,:,6) - ttyz + penalty*this%g23
+<          rhsg(:,:,:,7) = rhsg(:,:,:,7) - ttzx + penalty*this%g31
+<          rhsg(:,:,:,8) = rhsg(:,:,:,8) - ttzy + penalty*this%g32
+<          rhsg(:,:,:,9) = rhsg(:,:,:,9) - ttzz + penalty*this%g33
+< 
+< !!!!!!!!--------NEW BLOCK :: OPERATING ON FULL VECTOR AT A TIME----!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+< 
+< 
+<         if (this%sliding) call this%sliding_correction(x,y,z,u,v,w,normal,mask,rhsg,coordsys,x_bc,y_bc,z_bc)
+< 
+<         if (this%plast) then
+<             if(this%explPlast) then
+<                 call this%getPlasticSources(detg,rhsg)
+<             end if
+<         end if
+< 
+<         if(present(solidVF)) then
+<            do i = 1, 9
+<                rhsg(:,:,:,i) = rhsg(:,:,:,i) * solidVF
+<            enddo
+<         endif
+< 
+<     end subroutine
+< 
+<     subroutine sliding_correction(this,x,y,z,u,v,w,normal,mask,rhsg,coordsys,x_bc,y_bc,z_bc)
+<         use operators, only: gradient
+<         class(solid), intent(inout) :: this
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp  ), intent(in)  :: x,y,z,u,v,w,mask
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in)  :: normal
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(out) :: rhsg
+<         integer,                                              intent(in) :: coordsys
+<         integer,     dimension(2),                            intent(in) :: x_bc, y_bc, z_bc
+< 
+<         real(rkind), dimension(this%nxp, this%nyp, this%nzp)           :: tmp, ut, vt, wt
+<         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
+<         real(rkind), dimension(:,:,:), pointer :: dutdx,dutdy,dutdz,dvtdx,dvtdy,dvtdz,dwtdx,dwtdy,dwtdz
+---
+>         ! print *, "mask = ", mask(39,83,1)
+>         ! print *, "normal = ", normal(39,83,1,:)
+670a594,595
+>         ! print *, "normal velocity = ", wt(39,83,1)
+> 
+675a601,602
+>         ! print *, "tangential velocity = ", sqrt(ut(39,83,1)**2 + vt(39,83,1)**2 + wt(39,83,1)**2)
+> 
+680,682c607,609
+<         call gradient(this%decomp, this%der, x, y, z, ut, dutdx, dutdy, dutdz, coordsys, -x_bc,  y_bc,  z_bc)
+<         call gradient(this%decomp, this%der, x, y, z, vt, dvtdx, dvtdy, dvtdz, coordsys,  x_bc, -y_bc,  z_bc)
+<         call gradient(this%decomp, this%der, x, y, z, wt, dwtdx, dwtdy, dwtdz, coordsys,  x_bc,  y_bc, -z_bc)
+---
+>         call gradient(this%decomp, this%der, ut, dutdx, dutdy, dutdz, -x_bc,  y_bc,  z_bc)
+>         call gradient(this%decomp, this%der, vt, dvtdx, dvtdy, dvtdz,  x_bc, -y_bc,  z_bc)
+>         call gradient(this%decomp, this%der, wt, dwtdx, dwtdy, dwtdz,  x_bc,  y_bc, -z_bc)
+694,696c621,689
+<         rhsg(:,:,:,1) = rhsg(:,:,:,1) + mask*(this%g11*dutdx + this%g12*dvtdx + this%g13*dwtdx)
+<         rhsg(:,:,:,2) = rhsg(:,:,:,2) + mask*(this%g11*dutdy + this%g12*dvtdy + this%g13*dwtdy)
+<         rhsg(:,:,:,3) = rhsg(:,:,:,3) + mask*(this%g11*dutdz + this%g12*dvtdz + this%g13*dwtdz)
+---
+>         detg = this%g11*(this%g22*this%g33-this%g23*this%g32) &
+>              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
+>              + this%g13*(this%g21*this%g32-this%g31*this%g22)
+> 
+>         ! Get the species density = rho*Y/VF (additional terms to give correct limiting behaviour as Ys and VF tend to 0)
+>         tmp = (rho*this%Ys + this%elastic%rho0*detg*epssmall)/(this%VF + epssmall)   
+>         ! tmp = rho*this%Ys/(this%VF + epssmall)   ! Get the species density = rho*Y/VF
+> 
+>         if(present(rho0mix)) then
+>             penalty = etafac*(rho/rho0mix/detg - one)/dt
+>         else
+>             penalty = etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density
+>         endif
+>         if(this%pRelax) penalty = this%VF*etafac*( tmp/detg/this%elastic%rho0-one)/dt ! Penalty term to keep g consistent with species density -- change2
+> 
+>         if (this%elastic%mu < eps) penalty = zero
+> 
+>         if(this%pEqb) then  !--actually, these source terms should be included for PTeqb as well -- NSG
+>             ! add Fsource term to penalty 
+>             penalty = penalty - src/this%VF
+>         endif
+> 
+>         tmp = -u*this%g11-v*this%g12-w*this%g13
+>         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
+>         !do i = 1, size(u,1)
+>         !  print '(4(e19.12,1x))', u(i,1,1), this%g11(i,1,1), tmp(i,1,1), rhsg(i,1,1,1)
+>         !enddo
+>         !print *, 'rhsg 1 : ', rhsg(89,1,1,1)
+>         
+>         call curl(this%decomp, this%der, this%g11, this%g12, this%g13, curlg, -x_bc, y_bc, z_bc)
+>         ! call P_MAXLOC( abs(penalty*this%g11), pmax, imax, jmax, kmax, rmax)
+>         ! if (nrank == rmax) then
+>         !     print*, "Maximum penalty term = ", pmax
+>         !     print*, "        curl    term = ", v(imax,jmax,kmax)*curlg(imax,jmax,kmax,3) - w(imax,jmax,kmax)*curlg(imax,jmax,kmax,2)
+>         !     print*, "        g11          = ", this%g11(imax,jmax,kmax)
+>         !     print*, "        VF           = ", this%VF(imax,jmax,kmax)
+>         ! end if
+>         ! call P_MAXLOC( abs(v*curlg(:,:,:,3) - w*curlg(:,:,:,2)), pmax, imax, jmax, kmax, rmax)
+>         ! if (nrank == rmax) then
+>         !     print*, "Maximum curl    term = ", pmax
+>         !     print*, "        penalty term = ", penalty(imax,jmax,kmax)*this%g11(imax,jmax,kmax)
+>         !     print*, "        g11          = ", this%g11(imax,jmax,kmax)
+>         !     print*, "        VF           = ", this%VF(imax,jmax,kmax)
+>         !     print*, ""
+>         ! end if
+>         rhsg(:,:,:,1) = rhsg(:,:,:,1) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g11 + mask*(this%g11*dutdx + this%g12*dvtdx + this%g13*dwtdx)
+>         rhsg(:,:,:,2) = rhsg(:,:,:,2) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g12 + mask*(this%g11*dutdy + this%g12*dvtdy + this%g13*dwtdy)
+>         rhsg(:,:,:,3) = rhsg(:,:,:,3) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g13 + mask*(this%g11*dutdz + this%g12*dvtdz + this%g13*dwtdz)
+>         !print *, 'rhsg 2 : ', rhsg(89,1,1,1)
+>         !print *, '------ : ', v(89,1,1), curlg(89,1,1,3)
+>         !print *, '------ : ', w(89,1,1), curlg(89,1,1,2)
+>         !print *, '------ : ', penalty(89,1,1), this%g11(89,1,1)
+>         !print *, '------ : ', mask(89,1,1)
+>  
+>         tmp = -u*this%g21-v*this%g22-w*this%g23
+>         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,4),rhsg(:,:,:,5),rhsg(:,:,:,6), x_bc,-y_bc, z_bc)   
+>         
+>         call curl(this%decomp, this%der, this%g21, this%g22, this%g23, curlg, x_bc, -y_bc, z_bc)
+>         rhsg(:,:,:,4) = rhsg(:,:,:,4) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g21 + mask*(this%g21*dutdx + this%g22*dvtdx + this%g23*dwtdx)
+>         rhsg(:,:,:,5) = rhsg(:,:,:,5) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g22 + mask*(this%g21*dutdy + this%g22*dvtdy + this%g23*dwtdy)
+>         rhsg(:,:,:,6) = rhsg(:,:,:,6) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g23 + mask*(this%g21*dutdz + this%g22*dvtdz + this%g23*dwtdz)
+>  
+>         tmp = -u*this%g31-v*this%g32-w*this%g33
+>         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,7),rhsg(:,:,:,8),rhsg(:,:,:,9), x_bc, y_bc,-z_bc)
+> 
+>         call curl(this%decomp, this%der, this%g31, this%g32, this%g33, curlg, x_bc, y_bc, -z_bc)
+>         rhsg(:,:,:,7) = rhsg(:,:,:,7) + v*curlg(:,:,:,3) - w*curlg(:,:,:,2) + penalty*this%g31 + mask*(this%g31*dutdx + this%g32*dvtdx + this%g33*dwtdx)
+>         rhsg(:,:,:,8) = rhsg(:,:,:,8) + w*curlg(:,:,:,1) - u*curlg(:,:,:,3) + penalty*this%g32 + mask*(this%g31*dutdy + this%g32*dvtdy + this%g33*dwtdy)
+>         rhsg(:,:,:,9) = rhsg(:,:,:,9) + u*curlg(:,:,:,2) - v*curlg(:,:,:,1) + penalty*this%g33 + mask*(this%g31*dutdz + this%g32*dvtdz + this%g33*dwtdz)
+698,700c691,695
+<         rhsg(:,:,:,4) = rhsg(:,:,:,4) + mask*(this%g21*dutdx + this%g22*dvtdx + this%g23*dwtdx)
+<         rhsg(:,:,:,5) = rhsg(:,:,:,5) + mask*(this%g21*dutdy + this%g22*dvtdy + this%g23*dwtdy)
+<         rhsg(:,:,:,6) = rhsg(:,:,:,6) + mask*(this%g21*dutdz + this%g22*dvtdz + this%g23*dwtdz)
+---
+>         if (this%plast) then
+>             if(this%explPlast) then
+>                 call this%getPlasticSources(detg,rhsg)
+>             end if
+>         end if
+701a697,702
+>         if(present(solidVF)) then
+>            do i = 1, 9
+>                rhsg(:,:,:,i) = rhsg(:,:,:,i) * solidVF
+>            enddo
+>         endif
+>         !print *, 'rhsg 3 : ', rhsg(89,1,1,1)
+703,705d703
+<         rhsg(:,:,:,7) = rhsg(:,:,:,7) + mask*(this%g31*dutdx + this%g32*dvtdx + this%g33*dwtdx)
+<         rhsg(:,:,:,8) = rhsg(:,:,:,8) + mask*(this%g31*dutdy + this%g32*dvtdy + this%g33*dwtdy)
+<         rhsg(:,:,:,9) = rhsg(:,:,:,9) + mask*(this%g31*dutdz + this%g32*dvtdz + this%g33*dwtdz)
+708c706
+<     subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,coordsys,rho0mix,mumix,yieldmix,solidVF)
+---
+>     subroutine update_gTg(this,isub,dt,rho,u,v,w,x,y,z,src,tsim,x_bc,y_bc,z_bc,rho0mix,mumix,yieldmix,solidVF)
+715,716c713
+<         integer, dimension(2),                                intent(in) :: x_bc, y_bc, z_bc
+<         integer,                                              intent(in) :: coordsys
+---
+>         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+722c719
+<             call this%getRHS_gTg(rho,u,v,w,x,y,z,dt,src,rhsg,coordsys,x_bc,y_bc,z_bc,rho0mix,solidVF)
+---
+>             call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+724c721
+<             call this%getRHS_gTg(rho,u,v,w,x,y,z,dt,src,rhsg,coordsys,x_bc,y_bc,z_bc)
+---
+>             call this%getRHS_gTg(rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc)
+736c733
+<                     call this%elastic%plastic_deformation(this%g, this%use_gTg, dt, mumix, yieldmix)
+---
+>                     call this%elastic%plastic_deformation(this%g, this%use_gTg, mumix, yieldmix)
+738c735
+<                     call this%elastic%plastic_deformation(this%g, this%use_gTg, dt)
+---
+>                     call this%elastic%plastic_deformation(this%g, this%use_gTg)
+745,746c742,743
+<     subroutine getRHS_gTg(this,rho,u,v,w,x,y,z,dt,src,rhsg,coordsys,x_bc,y_bc,z_bc,rho0mix,solidVF)
+<         use operators, only: gradient
+---
+>     subroutine getRHS_gTg(this,rho,u,v,w,dt,src,rhsg,x_bc,y_bc,z_bc,rho0mix,solidVF)
+>         use operators, only: gradient, curl
+748c745
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,x,y,z,src
+---
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,src
+751,752c748
+<         integer, dimension(2),                                intent(in) :: x_bc, y_bc, z_bc
+<         integer,                                              intent(in) :: coordsys
+---
+>         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+767,769c763,765
+<         call gradient(this%decomp, this%der, x, y, z, u, dudx, dudy, dudz, coordsys, -x_bc,  y_bc,  z_bc)
+<         call gradient(this%decomp, this%der, x, y, z, v, dvdx, dvdy, dvdz, coordsys,  x_bc, -y_bc,  z_bc)
+<         call gradient(this%decomp, this%der, x, y, z, w, dwdx, dwdy, dwdz, coordsys,  x_bc,  y_bc, -z_bc)
+---
+>         call gradient(this%decomp, this%der, u, dudx, dudy, dudz, -x_bc,  y_bc,  z_bc)
+>         call gradient(this%decomp, this%der, v, dvdx, dvdy, dvdz,  x_bc, -y_bc,  z_bc)
+>         call gradient(this%decomp, this%der, w, dwdx, dwdy, dwdz,  x_bc,  y_bc, -z_bc)
+792c788
+<         call gradient(this%decomp,this%der,x,y,z,this%G11,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
+---
+>         call gradient(this%decomp, this%der, this%G11, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
+797c793
+<         call gradient(this%decomp,this%der,x,y,z,this%G12,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,-x_bc,-y_bc,z_bc)
+---
+>         call gradient(this%decomp, this%der, this%G12, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3),-x_bc,-y_bc, z_bc)
+802c798
+<         call gradient(this%decomp,this%der,x,y,z,this%G13,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,-x_bc,y_bc,-z_bc)
+---
+>         call gradient(this%decomp, this%der, this%G13, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3),-x_bc, y_bc,-z_bc)
+809c805
+<         call gradient(this%decomp,this%der,x,y,z,this%G22,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
+---
+>         call gradient(this%decomp, this%der, this%G22, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
+814c810
+<         call gradient(this%decomp,this%der,x,y,z,this%G23,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,x_bc,-y_bc,-z_bc)
+---
+>         call gradient(this%decomp, this%der, this%G23, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc,-y_bc,-z_bc)
+822c818
+<         call gradient(this%decomp,this%der,x,y,z,this%G33,gradG(:,:,:,1),gradG(:,:,:,2),gradG(:,:,:,3),coordsys,x_bc,y_bc,z_bc)
+---
+>         call gradient(this%decomp, this%der, this%G33, gradG(:,:,:,1), gradG(:,:,:,2), gradG(:,:,:,3), x_bc, y_bc, z_bc)
+879c875
+<     subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc,coordsys)
+---
+>     subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,x_bc,y_bc,z_bc)
+884c880,881
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z,rho,u,v,w
+---
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+886d882
+<         integer,               intent(in) :: coordsys
+890c886
+<         call this%getRHS_Ys(rho,u,v,w,x,y,z,rhsYs,x_bc,y_bc,z_bc,coordsys)
+---
+>         call this%getRHS_Ys(rho,u,v,w,rhsYs,x_bc,y_bc,z_bc)
+896a893,895
+> !print *, 'rhs Ys:', rhsYs(89,1,1), rho(89,1,1), this%Ys(89,1,1)
+> !print *, 'Ji:    ', this%Ji(89,1,1,1), this%Ji(89,1,1,2), this%Ji(89,1,1,3)
+> !print *, 'cns Ys:', this%consrv(89,1,1,1)
+899c898
+<     subroutine getRHS_Ys(this,rho,u,v,w,x,y,z,rhsYs,x_bc,y_bc,z_bc,coordsys)
+---
+>     subroutine getRHS_Ys(this,rho,u,v,w,rhsYs,x_bc,y_bc,z_bc)
+902c901
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,x,y,z
+---
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+905d903
+<         integer,               intent(in) :: coordsys
+914c912
+<         call divergence(this%decomp,this%der,x,y,z,tmp1,tmp2,tmp3,rhsYs,coordsys,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+---
+>         call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+918c916
+<     subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc,coordsys)
+---
+>     subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
+923c921,922
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,x,y,z,divu,viscwork,src
+---
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,viscwork,src
+926d924
+<         integer,               intent(in) :: coordsys
+934c932
+<         call this%getRHS_eh(rho,u,v,w,x,y,z,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc,coordsys)
+---
+>         call this%getRHS_eh(rho,u,v,w,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc)
+944,945c942,943
+<     subroutine getRHS_eh(this,rho,u,v,w,x,y,z,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc,coordsys)
+<         use operators, only: divergence
+---
+>     subroutine getRHS_eh(this,rho,u,v,w,divu,viscwork,src,taustar,rhseh,x_bc,y_bc,z_bc)
+>         use operators, only: gradient, divergence
+947c945
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,x,y,z
+---
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w
+952d949
+<         integer,               intent(in) :: coordsys
+978c975
+<         call divergence(this%decomp,this%der,x,y,z,tmp1,tmp2,tmp3,rhseh,coordsys,-x_bc,-y_bc,-z_bc)     ! energy has to be anti-symmetric
+---
+>         call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhseh,-x_bc,-y_bc,-z_bc)     ! energy has to be anti-symmetric
+990c987
+<     subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc,coordsys)
+---
+>     subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
+996c993,994
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,x,y,z,divu,src
+---
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,src
+998d995
+<         integer,               intent(in) :: coordsys
+1006c1003
+<         call this%getRHS_VF(other,rho,u,v,w,x,y,z,divu,src,rhsVF,x_bc,y_bc,z_bc,coordsys)
+---
+>         call this%getRHS_VF(other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
+1016c1013
+<     subroutine getRHS_VF(this,other,rho,u,v,w,x,y,z,divu,src,rhsVF,x_bc,y_bc,z_bc,coordsys)
+---
+>     subroutine getRHS_VF(this,other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
+1021c1018
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,x,y,z,divu,src
+---
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,divu,src
+1024d1020
+<         integer,               intent(in) :: coordsys
+1030c1026
+<         call divergence(this%decomp,this%der,x,y,z,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,coordsys,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+---
+>         call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+1038c1034
+<         call gradient(this%decomp,this%der,x,y,z,-this%VF,tmp1,tmp2,tmp3,coordsys,x_bc,y_bc,z_bc)
+---
+>         call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
+1139c1135
+<         call this%hydro%get_enthalpy(this%T,this%eh,this%p,this%rhom,enthalpy)
+---
+>         call this%hydro%get_enthalpy(this%T,enthalpy)
+1188c1184
+<     subroutine get_primitive(this,rho,u,v,w,x,y,z,coordsys)
+---
+>     subroutine get_primitive(this,rho,u,v,w)
+1191,1193c1187,1188
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,x,y,z
+<         integer,                                              intent(in) :: coordsys
+<         real(rkind), dimension(this%nxp,this%nyp,this%nzp)               :: rhom
+---
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+>         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
+1210c1205
+<         call gradient(this%decomp,this%der,x,y,z,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),coordsys)
+---
+>         call gradient(this%decomp,this%der,this%Ys,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3))
