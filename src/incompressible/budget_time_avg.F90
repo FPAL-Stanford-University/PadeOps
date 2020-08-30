@@ -100,6 +100,8 @@ module budgets_time_avg_mod
    ! BUDGET_4_ij term indices: 
    ! <incomplete/not-needed for now>
 
+   ! Enable time-averaging of ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1) 
+
    type :: budgets_time_avg
         private
         integer :: budgetType = 1, run_id, nz
@@ -109,10 +111,11 @@ module budgets_time_avg_mod
         type(igrid), pointer :: igrid_sim 
         
         real(rkind), dimension(:,:,:,:), allocatable :: budget_0, budget_1, budget_2, budget_3
+        real(rkind), dimension(:,:,:  ), allocatable :: z0varstats
         integer :: counter
         character(len=clen) :: budgets_dir
 
-        logical :: useWindTurbines, isStratified
+        logical :: useWindTurbines, isStratified, is_z0_varying
         real(rkind), allocatable, dimension(:) :: runningSum_sc, runningSum_sc_turb, runningSum_turb
         logical :: HaveScalars
         integer :: tidx_dump 
@@ -262,6 +265,11 @@ contains
             call igrid_sim%spectC%alloc_r2c_out(this%vcor)
             call igrid_sim%spectE%alloc_r2c_out(this%wcor)
             call igrid_sim%spectE%alloc_r2c_out(this%wb)
+
+            this%is_z0_varying = igrid_sim%sgsmodel%get_is_z0_varying()
+            if(this%is_z0_varying) then
+                allocate(this%z0varstats(igrid_sim%gpC%xsz(1),igrid_sim%gpC%xsz(2),igrid_sim%gpC%xsz(3)))
+            endif
 
             ! STEP 3: Now instrument igrid 
             call igrid_sim%instrumentForBudgets_TimeAvg(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
@@ -925,18 +933,26 @@ contains
     subroutine AssembleScalarStats(this)
         use decomp_2d_io
         class(budgets_time_avg), intent(inout) :: this
+        integer :: iind_max
 
-        ! horizontally-averaged surface quantities and turbine statistics
-        this%igrid_sim%inst_horz_avg(1) = this%igrid_sim%sgsmodel%get_ustar()
-        this%igrid_sim%inst_horz_avg(2) = this%igrid_sim%sgsmodel%get_uw_surf()
-        this%igrid_sim%inst_horz_avg(3) = this%igrid_sim%sgsmodel%get_vw_surf()
-        if(this%isStratified) then
-            this%igrid_sim%inst_horz_avg(4) = this%igrid_sim%sgsmodel%get_InvObLength()
-            this%igrid_sim%inst_horz_avg(5) = this%igrid_sim%wTh_surf
-        endif
-        this%runningSum_sc = this%runningSum_sc + this%igrid_sim%inst_horz_avg
-        if(this%useWindTurbines) then
-            this%runningSum_sc_turb = this%runningSum_sc_turb + this%igrid_sim%inst_horz_avg_turb
+        if(this%is_z0_varying) then
+            ! time-averaged quntities related to varying z0
+            iind_max = 4     ! ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1) 
+            call this%igrid_sim%sgsmodel%get_z0varstats(this%igrid_sim%rbuffxC(:,:,:,1))
+            this%z0varstats(:,:,1:iind_max) = this%z0varstats(:,:,1:iind_max) + this%igrid_sim%rbuffxC(:,:,1:iind_max,1)
+        else
+            ! horizontally-averaged surface quantities and turbine statistics
+            this%igrid_sim%inst_horz_avg(1) = this%igrid_sim%sgsmodel%get_ustar()
+            this%igrid_sim%inst_horz_avg(2) = this%igrid_sim%sgsmodel%get_uw_surf()
+            this%igrid_sim%inst_horz_avg(3) = this%igrid_sim%sgsmodel%get_vw_surf()
+            if(this%isStratified) then
+                this%igrid_sim%inst_horz_avg(4) = this%igrid_sim%sgsmodel%get_InvObLength()
+                this%igrid_sim%inst_horz_avg(5) = this%igrid_sim%wTh_surf
+            endif
+            this%runningSum_sc = this%runningSum_sc + this%igrid_sim%inst_horz_avg
+            if(this%useWindTurbines) then
+                this%runningSum_sc_turb = this%runningSum_sc_turb + this%igrid_sim%inst_horz_avg_turb
+            endif
         endif
 
     end subroutine 
@@ -967,6 +983,12 @@ contains
             endif
             close(771)
         end if
+
+        if(this%is_z0_varying) then
+            write(tempname,"(A3,I2.2,A7,I1.1,A5,I2.2,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_z0varstats_t",this%igrid_sim%step,"_n",this%counter,".s3D"
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            call decomp_2d_write_one(1, this%z0varstats, fname, this%igrid_sim%gpC)
+        endif
     
     end subroutine 
 
@@ -1019,6 +1041,9 @@ contains
         if(this%useWindTurbines) then
             deallocate(this%runningSum_sc_turb)
             deallocate(this%runningSum_turb)
+        endif
+        if(this%is_z0_varying) then
+            deallocate(this%z0varstats)
         endif
 
     end subroutine 

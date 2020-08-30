@@ -165,3 +165,24 @@ subroutine populate_tauij_E_to_C(this)
     this%uw_surf = uwglob(1)*this%meanfact
     this%vw_surf = uwglob(2)*this%meanfact
 end subroutine 
+
+subroutine get_z0varstats(this, fout)
+    use mpi
+    use kind_parameters, only: mpirkind
+    class(sgs_igrid), intent(in) :: this
+    real(rkind), dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)) :: fout
+
+    fout(:,:,1) = this%ustarsqvar
+    fout(:,:,2) = this%Uxvar
+    fout(:,:,3) = this%Uyvar
+    fout(:,:,4) = this%filteredSpeedSq(:,:,1)
+
+end subroutine 
+
+pure function get_is_z0_varying(this) result(val)
+   class(sgs_igrid), intent(in) :: this
+   logical                      :: val
+   
+   val = this%is_z0_varying
+end function
+

@@ -56,22 +56,27 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
       call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
 
-   case (2) ! Bou-zeid Wall model 
-      this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) - this%PsiM))**2 
+   case (2) ! Bou-zeid Wall model
       call this%getfilteredSpeedSqAtWall(uhat, vhat)
-      
-      call this%spectC%fft(this%filteredSpeedSq, cbuffy)
-      call transpose_y_to_z(cbuffy, cbuffz, this%sp_gpC)
-      
-      ! tau_13
-      this%tauijWMhat_inZ(:,:,1,1) = (this%WallMFactor*this%umn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
-      call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,1), this%tauijWMhat_inY(:,:,:,1), this%sp_gpE)
-      call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,1), this%tauijWM(:,:,:,1))
-      
-      ! tau_23
-      this%tauijWMhat_inZ(:,:,1,2) = (this%WallMFactor*this%vmn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
-      call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
-      call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
+      if(this%is_z0_varying) then
+          this%WallMFactorvar = -(kappa/(log(this%dz/(two*this%z0var)) - this%PsiM))**2 
+          call this%BouZeidLocalModel()
+      else 
+          this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) - this%PsiM))**2 
+          
+          call this%spectC%fft(this%filteredSpeedSq, cbuffy)
+          call transpose_y_to_z(cbuffy, cbuffz, this%sp_gpC)
+          
+          ! tau_13
+          this%tauijWMhat_inZ(:,:,1,1) = (this%WallMFactor*this%umn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
+          call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,1), this%tauijWMhat_inY(:,:,:,1), this%sp_gpE)
+          call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,1), this%tauijWM(:,:,:,1))
+          
+          ! tau_23
+          this%tauijWMhat_inZ(:,:,1,2) = (this%WallMFactor*this%vmn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
+          call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
+          call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
+      endif
    end select
 
 end subroutine
@@ -133,15 +138,50 @@ subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
     call this%getSurfaceQuantities() 
 end subroutine
 
+subroutine BouZeidLocalModel(this)
+    class(sgs_igrid), intent(inout), target :: this
+    real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2, rbuffx3
+
+    rbuffx1 => this%rbuffxC(:,:,:,1);    rbuffx2 => this%rbuffxC(:,:,:,2)
+    rbuffx3 => this%rbuffxC(:,:,:,3);
+
+    rbuffx3(:,:,1) = sqrt(this%filteredSpeedSq(:,:,1))
+
+    ! tau_13
+    rbuffx1(:,:,1) = this%WallmFactorvar * this%Uxvar * rbuffx3(:,:,1)
+    call transpose_x_to_y(rbuffx1, this%rbuffyC(:,:,:,1), this%gpC)
+    call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+
+    this%rbuffzE = 0.0d0;    this%rbuffzE(:,:,1,1) = this%rbuffzC(:,:,1,1)
+    call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+    call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%tauijWM(:,:,:,1), this%gpE)
+
+    ! tau_23
+    rbuffx2(:,:,1) = this%WallmFactorvar * this%Uyvar * rbuffx3(:,:,1)
+    call transpose_x_to_y(rbuffx2, this%rbuffyC(:,:,:,1), this%gpC)
+    call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+
+    this%rbuffzE = 0.0d0;    this%rbuffzE(:,:,1,1) = this%rbuffzC(:,:,1,1)
+    call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+    call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%tauijWM(:,:,:,2), this%gpE)
+
+    this%ustarsqvar = this%WallMFactorvar * this%filteredSpeedSq(:,:,1)
+
+    ! NOTE:: tauijWMhat_inY and tauijWMhat_inZ are not populated. Are they
+    ! required ????
+
+end subroutine
+
 subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)
     class(sgs_igrid), intent(inout), target :: this
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC
 
-    real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2
+    real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2, rbuffx3
     complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
 
     cbuffy => this%cbuffyC(:,:,:,1); tauWallH => this%cbuffzC(:,:,:,1)     
-    rbuffx1 => this%filteredSpeedSq; rbuffx2 => this%rbuffxC(:,:,:,1)
+    rbuffx3 => this%filteredSpeedSq; rbuffx1 => this%rbuffxC(:,:,:,1)
+    rbuffx2 => this%rbuffxC(:,:,:,2)
 
     call transpose_y_to_z(uhatC,tauWallH,this%sp_gpC)
     call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
@@ -153,9 +193,14 @@ subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)
     call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
     call this%spectC%ifft(cbuffy,rbuffx2)
 
+    if(this%is_z0_varying) then
+        this%Uxvar = rbuffx1(:,:,1)
+        this%Uyvar = rbuffx2(:,:,1)
+    endif
+
     rbuffx1 = rbuffx1*rbuffx1
     rbuffx2 = rbuffx2*rbuffx2
-    rbuffx1 = rbuffx1 + rbuffx2
+    rbuffx3 = rbuffx1 + rbuffx2
 
 end subroutine  
 
@@ -238,10 +283,14 @@ subroutine getSurfaceQuantities(this)
           this%Tsurf = this%Tmn + wTh*(at-PsiH)/(ustar*kappa)
           this%PsiM = PsiM
       end select
-   else
+    else
+      if(this%is_z0_varying) then
+          ! computed in BouZeidLocalModel
+      else
           this%ustar = this%Uspmn*kappa/(log(hwm/this%z0))
-          this%invObLength = zero
-          this%wTh_surf = zero
-          this%PsiM = zero
+      endif
+      this%invObLength = zero
+      this%wTh_surf = zero
+      this%PsiM = zero
     end if 
 end subroutine

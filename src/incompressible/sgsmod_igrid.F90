@@ -69,6 +69,10 @@ module sgsmod_igrid
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
         integer :: WM_matchingIndex
 
+        ! for varying z0
+        real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar
+        logical :: is_z0_varying = .false.
+
         ! for dynamic procedures - all are at edges
         type(gaussian) :: gaussianTestFilterZ
         real(rkind), dimension(:,:,:,:), allocatable :: Lij, Sij_Filt
@@ -109,6 +113,7 @@ module sgsmod_igrid
             procedure, private :: computeWall_PotTFlux
             procedure, private :: embed_WM_stress
             procedure, private :: embed_WM_PotTFlux
+            procedure, private :: BouZeidLocalModel
             
 
             !! ALL DYNAMIC PROCEDURE SUBROUTINES
@@ -154,6 +159,8 @@ module sgsmod_igrid
             procedure          :: get_wTh_surf
             procedure          :: get_uw_surf
             procedure          :: get_vw_surf
+            procedure          :: get_z0varstats
+            procedure          :: get_is_z0_varying
             procedure          :: getMax_DynSmagConst
             procedure          :: getMax_DynPrandtl
             procedure          :: usingDynProc
