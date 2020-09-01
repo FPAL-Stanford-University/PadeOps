@@ -2,6 +2,9 @@ module DerivativesMod
     use kind_parameters, only: rkind, clen
     use cd10stuff, only: cd10
     use cd06stuff, only: cd06
+    use d02stuff, only: d02
+    use d04stuff, only: d04
+    use d06stuff, only: d06
     use fftstuff, only: ffts
     use dctstuff, only: dcts
     use exits,    only: gracefulExit, message
@@ -16,11 +19,14 @@ module DerivativesMod
        
         
         ! Available Methods: Specific to each direction
-        ! 1: "CD10", 2: "CD06", 3: "FOUR", 4: "CHEB"
+        ! 1: "CD10", 2: "CD06", 3: "FOUR", 4: "CHEB", 5: "D02", 6: "D04", 7: "D06"
         integer                :: xmethod, ymethod, zmethod 
 
         type(cd10), allocatable :: xcd10, ycd10, zcd10 
         type(cd06), allocatable :: xcd06, ycd06, zcd06 
+        type(d02),  allocatable :: xd02, yd02, zd02 
+        type(d04),  allocatable :: xd04, yd04, zd04 
+        type(d06),  allocatable :: xd06, yd06, zd06 
         type(ffts), allocatable :: xfour, yfour, zfour
         type(dcts), allocatable :: xcheb, ycheb, zcheb 
        
@@ -100,6 +106,12 @@ contains
             m = "four"
         case (4)
             m = "cheb"
+        case (5)
+            m = "d02"
+        case (6)
+            m = "d04"
+        case (7)
+            m = "d06"
         end select 
 
     end function
@@ -116,6 +128,12 @@ contains
             m = "four"
         case (4)
             m = "cheb"
+        case (5)
+            m = "d02"
+        case (6)
+            m = "d04"
+        case (7)
+            m = "d06"
         end select 
 
     end function
@@ -132,6 +150,12 @@ contains
             m = "four"
         case (4)
             m = "cheb"
+        case (5)
+            m = "d02"
+        case (6)
+            m = "d04"
+        case (7)
+            m = "d06"
         end select 
 
     end function
@@ -322,6 +346,27 @@ contains
                 call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in X ",14)
             end if 
             this%xmethod = 4 
+        case ("d02")
+            allocate(this%xd02)
+            ierr = this % xd02%init( this%xsz(1), dx, periodic_x, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing d02 failed in X ",12)
+            end if 
+            this%xmethod = 5 
+        case ("d04")
+            allocate(this%xd04)
+            ierr = this % xd04%init( this%xsz(1), dx, periodic_x, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing d04 failed in X ",12)
+            end if 
+            this%xmethod = 6 
+        case ("d06")
+            allocate(this%xd06)
+            ierr = this % xd06%init( this%xsz(1), dx, periodic_x, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing d06 failed in X ",12)
+            end if 
+            this%xmethod = 7 
         case default 
             call GracefulExit("Invalid method selected in x direction ",01)
         end select
@@ -356,6 +401,27 @@ contains
                 call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Y",14)
             end if 
             this%ymethod = 4 
+        case ("d02")
+            allocate(this%yd02)
+            ierr = this % yd02%init( this%ysz(2), dy, periodic_y, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing d02 failed in Y ",12)
+            end if 
+            this%ymethod = 5 
+        case ("d04")
+            allocate(this%yd04)
+            ierr = this % yd04%init( this%ysz(2), dy, periodic_y, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing d04 failed in Y ",12)
+            end if 
+            this%ymethod = 6 
+        case ("d06")
+            allocate(this%yd06)
+            ierr = this % yd06%init( this%ysz(2), dy, periodic_y, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing d06 failed in Y ",12)
+            end if 
+            this%ymethod = 7 
         case default 
             call GracefulExit("Invalid method selected in y direction",01)
         end select
@@ -391,6 +457,27 @@ contains
                 call GracefulExit("Initializing Chebyshev Collocation (CHEB) failed in Z",14)
             end if 
             this%zmethod = 4 
+        case ("d02")
+            allocate(this%zd02)
+            ierr = this % zd02%init( this%zsz(3), dz, periodic_z, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing d02 failed in Z ",12)
+            end if 
+            this%zmethod = 5 
+        case ("d04")
+            allocate(this%zd04)
+            ierr = this % zd04%init( this%zsz(3), dz, periodic_z, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing d04 failed in Z ",12)
+            end if 
+            this%zmethod = 6 
+        case ("d06")
+            allocate(this%zd06)
+            ierr = this % zd06%init( this%zsz(3), dz, periodic_z, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing d06 failed in Z ",12)
+            end if 
+            this%zmethod = 7 
         case default 
             call GracefulExit("Invalid method selected in z direction",01)
         end select
@@ -414,6 +501,15 @@ contains
         case (4)
             call this%xcheb%destroy
             deallocate(this%xcheb)
+        case (5)
+            call this%xd02%destroy
+            deallocate(this%xd02)
+        case (6)
+            call this%xd04%destroy
+            deallocate(this%xd04)
+        case (7)
+            call this%xd06%destroy
+            deallocate(this%xd06)
         end select 
         
         select case (this%ymethod) 
@@ -429,6 +525,15 @@ contains
         case (4)
             call this%ycheb%destroy
             deallocate(this%ycheb)
+        case (5)
+            call this%yd02%destroy
+            deallocate(this%yd02)
+        case (6)
+            call this%yd04%destroy
+            deallocate(this%yd04)
+        case (7)
+            call this%yd06%destroy
+            deallocate(this%yd06)
         end select 
 
         select case (this%zmethod) 
@@ -444,6 +549,15 @@ contains
         case (4)
             call this%zcheb%destroy
             deallocate(this%zcheb)
+        case (5)
+            call this%zd02%destroy
+            deallocate(this%zd02)
+        case (6)
+            call this%zd04%destroy
+            deallocate(this%zd04)
+        case (7)
+            call this%zd06%destroy
+            deallocate(this%zd06)
         end select
 
         this%xmetric = .false. 
@@ -472,6 +586,24 @@ contains
             call this%xfour % dd1(f,dfdx)
         case (4)
             call GracefulExit("Chebychev is incomplete right now",21)
+        case (5)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%xd02 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
+                call this%xd02 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+            end if
+        case (6)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%xd04 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
+                call this%xd04 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+            end if
+        case (7)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%xd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
+                call this%xd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+            end if
         end select 
 
     end subroutine 
@@ -495,6 +627,24 @@ contains
             call this%yfour % dd2(f,dfdx)
         case (4)
             call GracefulExit("Chebychev is incomplete right now",21)
+        case (5)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%yd02 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
+                call this%yd02 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+            end if
+        case (6)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%yd04 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
+                call this%yd04 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+            end if
+        case (7)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%yd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
+                call this%yd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+            end if
         end select 
 
     end subroutine 
@@ -518,6 +668,24 @@ contains
             call this%zfour % dd3(f,dfdx)
         case (4)
             call GracefulExit("Chebychev is incomplete right now",21)
+        case (5)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%zd02 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            else
+                call this%zd02 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+            end if
+        case (6)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%zd04 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            else
+                call this%zd04 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+            end if
+        case (7)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%zd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            else
+                call this%zd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+            end if
         end select 
     end subroutine 
 
@@ -536,6 +704,12 @@ contains
             call this%xfour % d2d1(f,d2fdx2)
         case (4)
             call GracefulExit("Chebychev is incomplete right now",21)
+        case (5)
+            call this%xd02 % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3),bc1,bcn)
+        case (6)
+            call this%xd04 % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3),bc1,bcn)
+        case (7)
+            call this%xd06 % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3),bc1,bcn)
         end select 
 
     end subroutine 
@@ -555,6 +729,12 @@ contains
             call this%yfour % d2d2(f,d2fdx2)
         case (4)
             call GracefulExit("Chebychev is incomplete right now",21)
+        case (5)
+            call this%yd02 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
+        case (6)
+            call this%yd04 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
+        case (7)
+            call this%yd06 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
         end select 
 
     end subroutine
@@ -574,6 +754,12 @@ contains
             call this%zfour % d2d3(f,d2fdx2)
         case (4)
             call GracefulExit("Chebychev is incomplete right now",21)
+        case (5)
+            call this%zd02 % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2),bc1,bcn)
+        case (6)
+            call this%zd04 % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2),bc1,bcn)
+        case (7)
+            call this%zd06 % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2),bc1,bcn)
         end select 
     end subroutine 
 
