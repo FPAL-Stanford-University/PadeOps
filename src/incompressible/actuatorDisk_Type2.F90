@@ -22,7 +22,7 @@ module actuatorDisk_T2mod
         integer, dimension(:,:), allocatable :: tag_face 
         real(rkind) :: yaw, tilt, Cp=0.3
         real(rkind) :: xLoc, yLoc, zLoc
-        real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
+        real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq, OneByDelSq_yz, OneByDelSq_x
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
         integer :: totPointsOnFace, tInd
         real(rkind), dimension(:,:,:), allocatable :: eta_delta, dsq
@@ -30,10 +30,11 @@ module actuatorDisk_T2mod
         real(rkind), dimension(:), allocatable :: xs, ys, zs
         integer, dimension(:,:), allocatable :: startEnds
         real(rkind), dimension(:,:), allocatable :: powerTime
+        logical :: smear_xsep
 
         ! Grid Info
         integer :: nxLoc, nyLoc, nzLoc 
-        real(rkind) :: delta ! Smearing size
+        real(rkind) :: delta, delta_x, delta_yz ! Smearing size
         real(rkind) :: alpha_tau = 1.d0! Smoothing parameter (set to 1 for initialization) 
         real(rkind), dimension(:,:), allocatable :: rbuff
         real(rkind), dimension(:), allocatable :: dline, xline, yline, zline
@@ -64,6 +65,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     integer :: ioUnit, tmpSum, totSum
     real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0, diam=0.08d0, cT=0.65d0
     real(rkind) :: yaw=0.d0, tilt=0.d0, epsFact = 1.5d0, dx, dy, dz
+    real(rkind) :: epsFact_yz, epsFact_x
     real(rkind), dimension(:,:), allocatable :: tmp
     integer, dimension(:,:), allocatable :: tmp_tag
     integer :: j, locator(1)
@@ -71,8 +73,9 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
     integer  :: ntry = 100
     real(rkind) :: time2initialize = 0, correction_factor = 1.0d0, normfact_p
+    logical :: smear_xsep = .false.
 
-    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
+    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt, smear_xsep, epsFact, epsFact_x, epsFact_yz
     
     ! Read input file for this turbine    
     write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_", ActuatorDisk_T2ID, "_input.inp"
@@ -88,8 +91,19 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     dx=xG(2,1,1)-xG(1,1,1); dy=yG(1,2,1)-yG(1,1,1); dz=zG(1,1,2)-zG(1,1,1)
     this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
 
-    this%delta = epsFact * (dx*dy*dz)**(1.d0/3.d0)
-    this%OneByDelSq = 1.d0/(this%delta**2)
+    this%smear_xsep = smear_xsep
+    if(this%smear_xsep) then
+        this%delta_yz = epsFact_yz * sqrt(dy*dz)
+        this%delta_x  = epsFact_x  * dx
+        this%oneByDelSq_yz = 1.d0/(this%delta_yz**2)
+        this%oneByDelSq_x  = 1.d0/(this%delta_x **2)
+        this%pfactor = one/((this%delta_yz**2*this%delta_x)*(pi**(3.d0/2.d0)))
+    else
+        this%delta = epsFact * (dx*dy*dz)**(1.d0/3.d0)
+        this%OneByDelSq = 1.d0/(this%delta**2)
+        this%pfactor = one/((this%delta**3)*(pi**(3.d0/2.d0)))
+    endif
+
     this%tInd = 1
 
     allocate(tmp(size(xG,2),size(xG,3)))
@@ -137,8 +151,6 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
 
     tmpSum = sum(this%tag_face)
     this%totPointsOnface = p_sum(tmpSum)
-
-    this%pfactor = one/((this%delta**3)*(pi**(3.d0/2.d0)))
 
     if (this%Am_I_Split) then
         call MPI_COMM_SPLIT(mpi_comm_world, this%color, nrank, this%mycomm, ierr)
@@ -193,6 +205,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     this%normfactor = normfact_p
     correction_factor = p_sum(this%smearing_base)*dx*dy*dz*this%pfactor*this%normfactor
     call message(2, "correction factor = ", correction_factor)
+    call message(2, "pfactor = ", this%pfactor)
     !write(*,'(a,i4,e19.12,1x,e19.12)') '--', nrank, correction_factor, this%normfactor
     this%smearing_base = this%smearing_base/correction_factor
     if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
@@ -306,19 +319,32 @@ subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource, xst, xen, yst
     real(rkind), intent(in) :: xC, yC, zC, valSource
     integer, intent(in) :: xst, xen, yst, yen, zst, zen, xlen!, ylen, zlen
     integer :: jj, kk
+    real(rkind) :: rsq_yz, factor_yz
 
     if (this%Am_I_Active) then
-        do kk = zst,zen
-            do jj = yst,yen
-                this%dline(1:xlen) = (this%xG(xst:xen,jj,kk) - xC)**2 &
-                                   + (this%yG(xst:xen,jj,kk) - yC)**2 & 
-                                   + (this%zG(xst:xen,jj,kk) - zC)**2
-                this%dline(1:xlen) = -this%dline(1:xlen)*this%oneBydelSq
-                rhsfield(xst:xen,jj,kk) = rhsfield(xst:xen,jj,kk) + &
-                                          valSource*exp(this%dline)
-
-            end do 
-        end do  
+        if(this%smear_xsep) then
+            do kk = zst,zen
+                do jj = yst,yen
+                    rsq_yz = (this%yG(xst,jj,kk) - yC)**2 + (this%zG(xst,jj,kk) - zC)**2
+                    factor_yz = exp(-rsq_yz*this%oneByDelSq_yz)
+                    this%dline(1:xlen) = (this%xG(xst:xen,jj,kk) - xC)**2
+                    this%dline(1:xlen) = -this%dline(1:xlen)*this%oneBydelSq_x
+                    rhsfield(xst:xen,jj,kk) = rhsfield(xst:xen,jj,kk) + &
+                                              valSource*factor_yz*exp(this%dline)
+                end do 
+            end do  
+        else
+            do kk = zst,zen
+                do jj = yst,yen
+                    this%dline(1:xlen) = (this%xG(xst:xen,jj,kk) - xC)**2 &
+                                       + (this%yG(xst:xen,jj,kk) - yC)**2 & 
+                                       + (this%zG(xst:xen,jj,kk) - zC)**2
+                    this%dline(1:xlen) = -this%dline(1:xlen)*this%oneBydelSq
+                    rhsfield(xst:xen,jj,kk) = rhsfield(xst:xen,jj,kk) + &
+                                              valSource*exp(this%dline)
+                end do 
+            end do  
+        end if 
     end if 
 
 end subroutine 
