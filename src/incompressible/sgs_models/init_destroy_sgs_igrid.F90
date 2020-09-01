@@ -12,6 +12,10 @@ subroutine destroy(this)
   end select
   nullify(this%tau_11, this%tau_12, this%tau_22, this%tau_33)
   deallocate(this%tau_13, this%tau_23)
+  if(this%is_z0_varying) then
+      deallocate(this%ustarsqvar, this%z0var, this%Uxvar, this%Uyvar, this%WallMFactorvar)
+  endif
+
 end subroutine
 
 
@@ -43,14 +47,14 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
    end if
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, xMesh, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
-  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re
+  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re, Lx, Ly
   real(rkind), intent(in), target :: Tsurf, wTh_surf
   character(len=*), intent(in) :: inputfile
-  real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
+  real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC, xMesh
   real(rkind), dimension(:,:,:), intent(in), target :: fBody_x, fBody_y, fBody_z
   logical, intent(out) :: computeFbody
   real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE, rbuffyC, rbuffzC
@@ -68,8 +72,11 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
   logical :: usePrSGS = .false. 
-  integer :: ierr, WM_matchingIndex = 1
+  integer :: ierr, WM_matchingIndex = 1, i, j
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 
+  logical :: is_z0_varying = .false.
+  real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod
+  integer :: spnumx, spnumy
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
@@ -77,7 +84,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  DomainAveraged_DynProc, SGSDynamicRestartFile, &
                  explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
-                 useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex 
+                 useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, &
+                 is_z0_varying 
 
   this%gpC => gpC
   this%gpE => gpE
@@ -173,6 +181,43 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   else
       this%useWallModel = .false. 
   end if
+
+  this%is_z0_varying  = is_z0_varying
+  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r
+  if(this%is_z0_varying) then
+    ! read more stuff from the input file
+    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+    read(unit=123, NML=Z0VARYING)
+    close(123)
+
+    if((abs(spy-Ly)>1.0d-9) .or. (abs(rpy-Ly)>1.0d-9)) then
+        call GracefulExit("Only stripe heterogeneity allowed. Change spy.", 11)
+    endif
+
+    if((abs(spnumx*(spx+spy)-Lx)>1.0d-9)) then
+        call GracefulExit("Inconsistent spx, rpx, spnumx and Lx. Check details.", 11)
+    endif
+
+    allocate(this%z0var(this%gpC%xsz(1), this%gpC%xsz(2)))
+    allocate(this%ustarsqvar(this%gpC%xsz(1), this%gpC%xsz(2)))
+    allocate(this%Uxvar(this%gpC%xsz(1), this%gpC%xsz(2)))
+    allocate(this%Uyvar(this%gpC%xsz(1), this%gpC%xsz(2)))
+    allocate(this%WallMFactorvar(this%gpC%xsz(1), this%gpC%xsz(2)))
+
+    totpx = spx+ rpx
+    do j = 1, this%gpC%xsz(2)
+      do i = 1, this%gpC%xsz(1)
+        xl = xMesh(i)
+        xlmod = mod(xl, totpx)
+        if(xlmod < spx) then
+            this%z0var(i,j) = z0s
+        else
+            this%z0var(i,j) = z0r
+        endif
+      enddo
+    enddo
+
+  endif
 
   allocate(this%cmodelC(size(zMeshC)))
   allocate(this%cmodelE(size(zMeshE)))

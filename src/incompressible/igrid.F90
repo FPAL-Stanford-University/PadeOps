@@ -412,7 +412,7 @@ contains
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false., ComputeRapidSlowPressure = .false.
-        real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0, HITForceTimeScale = 10.d0
+        real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0, HITForceTimeScale = 10.d0, Lx, Ly
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false., useControl = .false., useHITRealSpaceLinearForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
@@ -851,7 +851,10 @@ contains
             else
                sgsmod_stratified = .false. 
             end if 
+            Ly = p_maxval(this%mesh(:,:,:,2)) + this%dy
+            Lx = maxval(this%mesh(:,:,:,1)) + this%dx
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
+                                    Lx, Ly, this%mesh(:,1,1,1), &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
