@@ -87,6 +87,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, &
                  is_z0_varying 
 
+  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r
+
   this%gpC => gpC
   this%gpE => gpE
   this%spectC => spectC
@@ -183,7 +185,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   end if
 
   this%is_z0_varying  = is_z0_varying
-  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r
   if(this%is_z0_varying) then
     ! read more stuff from the input file
     open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -194,7 +195,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
         call GracefulExit("Only stripe heterogeneity allowed. Change spy.", 11)
     endif
 
-    if((abs(spnumx*(spx+spy)-Lx)>1.0d-9)) then
+    if((abs(spnumx*(spx+rpx)-Lx)>1.0d-9)) then
         call GracefulExit("Inconsistent spx, rpx, spnumx and Lx. Check details.", 11)
     endif
 

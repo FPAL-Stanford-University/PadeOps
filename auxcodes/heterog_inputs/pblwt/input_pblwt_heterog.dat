@@ -1,0 +1,257 @@
+&INPUT
+inputdir              = "/hpc/home/nghaisas/runs/heterog/pblwt"   ! Directory for any input files
+outputdir             = "/hpc/home/nghaisas/runs/heterog/pblwt"   ! Directory for all output files
+nx                    = 96          ! Number of points in X
+ny                    = 96         ! Number of points in Y
+nz                    = 96         ! Number of points in Z
+tstop                 = 50.D0      ! Physical time to stop the simulation
+dt                    = -0.0001D0   ! Fixed time step value (only used if CFL is set to negative)
+CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
+restartFile_TID       = 20000      ! TimeID of the restart file being used
+restartFile_RID       = 1          ! RunID of the restart file being used
+nsteps                = 999999
+CviscDT               = 1.0d0
+/
+/
+&NUMERICS
+TimeSteppingScheme    = 1           ! 0: Adams-Bashforth, 1: TVD-RK3 (use this)
+AdvectionTerm         = 1           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
+NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06)
+ComputeStokesPressure = .TRUE.      ! Set this to FALSE if using Compact Scheme / High Reynolds numbers
+useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
+t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproject if needed.
+InitSpinUp            = .false.     ! Do you want to use stratfication for initialization
+useExhaustiveFFT      = .false.     ! Set this to true for best performance of FFTW
+dealiasFact           = 0.66666666666667d0 ! Should be equal to 2.0/3.0 in double precision
+scheme_xy             = "FOUR"      ! Fourier because xy is periodic
+donot_dealias         = .false.     ! Almost never set this to .true.
+dealiasType           = 0           ! 0 :: 2/3rd rule; 1 :: ????
+/
+/
+&IO
+RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 10000        ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 10000        ! Data dumping frequency (# of timesteps)
+ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
+dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
+t_planeDump           = 12500         ! Plane dumping frequency (# of timesteps)
+t_start_planeDump     = 1           ! When do you want to start dumping planes?
+t_stop_planeDump      = 500000        ! When do you want to stop dumping planes?
+vizDump_Schedule      = 0           ! 0 :: t_dataDump is used; 1 :: deltaT_dump is used
+deltaT_dump           = 1.0d0       ! Dump interval if vizDump_Schedule == 1
+dump_NU_SGS           = .false.     ! Do you want to dump eddy viscosity?
+dump_KAPPA_SGS        = .false.     ! Do you want to dump scalar eddy diffusivity?
+useProbes             = .false.     ! Do you want to use point probes?
+t_start_pointProbe    = 10000       ! When do you want to start collecting probe data?
+t_stop_pointProbe     = 1           ! When do you want to stop collecting probe data?
+t_pointProbe          = 10000       ! ?????
+/
+/
+&STATS
+tid_StatsDump         = 10000        ! Dumping Frequency for Statistics file (# of time steps)
+tid_compStats         = 10           ! Frequency of Computing Statistics
+tSimStartStats        = 20.d0        ! Simulation time for starting stats calculations 
+normStatsByUstar      = .FALSE.      ! Normalize Statistics by ustar at each instant
+computeSpectra        = .FALSE.      ! Do you want to compute y- and time-averaged x-spectra?
+timeAvgFullFields     = .FALSE.      ! Do you want to save time-averaged 3D fields?
+computeVorticity      = .FALSE.      ! Do you want to compute vorticity stats?
+/
+/
+&OS_INTERACTIONS
+useSystemInteractions = .TRUE.       ! Do you wish to interact with the program while its running
+tSystemInteractions   = 100          ! Check for interactions commands after these many time steps
+controlDir            = "null"       ! Check in this directory for command files (NULL = Check in output directory)
+deleteInstructions    = .TRUE.       ! Do you want to delete instruction files after instruction is executed once?
+/
+/
+&PHYSICS
+isInviscid            = .TRUE.          ! Is this a viscous simulation?
+useCoriolis           = .FALSE.         ! Activate the coriolis term? 
+useExtraForcing       = .TRUE.          ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useGeostrophicForcing = .FALSE.         ! This is true if forcing is provided using the coriolis term  
+isStratified          = .FALSE.         ! Use Stratification / active scalar in momentum
+Pr                    = 0.6D0           ! Turbulent Prandtl Number; used when 
+Ro                    = 1.D10           ! Rossby Number used when Coriolis is ON
+Re                    = 1.D10           ! Reynolds Number; used when isInvisid is FALSE
+Fr                    = 1.D10           ! Froude number; used when isStratified is TRUE
+Ra = 1.0d14                             ! Rayleigh number used when BuoyancyTermType == 3
+PrandtlFluid = 1.0d0                    ! Prandtl number of the fluid
+BulkRichardson = 0.0d0                  ! Richardson number used when BuoyancyTermType == 2
+G_geostrophic         = 1.D0            ! Geostrophic wind magnitude; used if useGeostrophicForcing is ON
+G_alpha               = 0.D0            ! Geostrophic wind direction with x axis; used if useGeostrophicForcing is ON
+dpFdx                 = 1.0d0           ! Additional Acceleration in X; used if useExtraForcing is ON
+dpFdy                 = 0.D0            ! Additional Acceleration in Y; used if useExtraForcing is ON
+dpFdz                 = 0.D0            ! Additional Acceleration in Z; used if useExtraForcing is ON
+useSGS                = .TRUE.          ! Do you want to use the SGS model?  
+BuoyancyTermType = 0                    ! 1 :: (Fr, ThetaRef); 2 :: (BulkRichardson); 3 :: (Re, Ra)
+buoyancyDirection = 3                   ! How is the gravity vector oriented?
+assume_fplane = .true.                  ! Ignore horizontal component of earth's rotation?
+latitude = 90.0d0                       ! Where is the pbl located?
+frameAngle = 0.0d0                      ! How is the pbl oriented?
+useHITForcing = .false.                 ! Do you want to add HIT forcing?
+useScalars = .false.                    ! Do you want to calculate passive scalars?
+useMoisture = .false.                   ! Do you want to calculate moisture transport?
+useforcedStratification = .false.       ! Forcing the buoyancy term similar to HIT forcing??
+useHITRealSpaceLinearForcing = .false.  ! Some HIT forcing flag
+HITForceTimeScale = 10.0d0              ! Some HIT forcing parameter
+/
+/
+&PRESSURE_CALC
+fastCalcPressure         = .TRUE.       ! Compute and store pressure at every time step using the faster algorithm?
+storePressure            = .TRUE.       ! Would you like to compute and store pressure?
+P_dumpFreq               = 10000        ! How often (timesteps) do you want to dump pressure?
+P_compFreq               = 10           ! How often (timesteps) do you want to compute pressure? 
+computeDNSPressure       = .false.      ! Different pressure definitions. Turn off unless necessary.
+computeTurbinePressure   = .false.      
+computeFringePressure    = .false.      
+ComputeRapidSlowPressure = .false.      
+/
+/
+&BCs
+PeriodicInZ           = .false.           ! Is the domain periodic in vertical?
+topWall               = 2                 ! no_slip = 1, slip = 2, wall model = 3
+botWall               = 3                 ! no_slip = 1, slip = 2, wall model = 3
+botBC_Temp            = 1                 ! Dirichlet = 0, Neumann = 1, Inhomog. Neumann = 2, ??? = 3
+topBC_Temp            = 0                 ! Dirichlet = 0, Neumann = 1, Inhomog. Neumann = 2, ??? = 3
+useSpongeLayer        = .FALSE.           ! Use a sponge layer at the top 
+zstSponge             = 0.8d0             ! Height above which the sponge layer is active
+SpongeTscale          = 50.d0             ! e-folding time to dt ratio (somewhere between 10 - 50) 
+sponge_type           = 1                 ! Which sponge type do you want to use?
+useTopAndBottomSymmetricSponge = .false.  ! Is the sponge symmetric in vertical?
+useFringe             = .false.           ! This is false if simulation is periodic. 
+usedoublefringex      = .false.           ! Do you want to use two fringes in x?
+useControl            = .false.           ! Do you want to dynamically change the frame angle?
+/
+/
+&SGS_MODEL
+DynamicProcedureType        = 0           ! 0 :: No dynamic procedure
+SGSModelID                  = 2           ! 0: smagorinsky, 1: sigma, 2: AMD
+z0                          = 1.0d-4      ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
+z0t                         = 1.d-4       ! Roughness length scale (CAREFUL: This is a non-dimensionalized number)
+useWallDamping              = .FALSE.     ! Use the Wall Damping Function 
+ncWall                      = 3.d0        ! Wall Damping Function Exponent
+Csgs                        = 1.0d0       ! Asymptotic model constant (wall damping function)
+wallModelType               = 2           ! 1: Moeng's original model, 2: Bou-Zeid's fully local model
+explicitCalcEdgeEddyViscosity = .true.    ! Explicitely compute eddy viscosity at edges? or interpolate? 
+DynProcFreq                 = 10          ! How frequently is the coefficient updated?
+useSGSDynamicRestart        = .FALSE.     ! Use restart files for dynamic procedure
+useVerticalTfilter          = .FALSE.     ! Test filter in the vertical direction? Used for Dynamic Procedure
+SGSDynamicRestartFile       = "null"      ! Restart file for SGS dynamic procedure
+usePrSGS                    = .false.     ! Constant PrSGS?
+DomainAveraged_DynProc      = .false.     ! Domain averaged dynamic procedure?
+UseDynamicProcedureScalar   = .false.     ! Dynamic procedure for scalar?
+deltaRatio                  = 2.0d0       ! Test filter to grid filter ratio
+turbPrandtl                 = 0.4d0       ! turbulent Prandtl number
+useScalarBounding           = .false.     ! Do you want to bound scalar?
+Cy                          = 100.d0      ! Coefficient of penalty term in scalar equation
+lowbound                    = 0.0d0       ! lower bound for scalar
+highbound                   = 1.0d0       ! upper bound for scalar
+WM_matchingIndex            = 1           ! Matching index
+is_z0_varying               = .true.      ! Is the lower boundary heterogeneous?
+/
+/
+&WINDTURBINES
+useWindTurbines       = .FALSE.
+num_turbines          = 2
+ADM                   = .TRUE.
+turbInfoDir           = "/home1/05294/mhowland/PadeOps/problems/turbines/debug_files/turbInfo_yaw/6x1array_yaw"
+ADM_Type              = 4
+powerDumpDir          = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_debug/modelDumps"
+useDynamicYaw         = .TRUE.
+yawUpdateInterval     = 10000
+inputDirDyaw           = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_debug/modelDumps"
+/
+/
+&FRINGE
+apply_x_fringe        = .false.
+apply_y_fringe        = .false.
+Fringe_xst            = 0.75d0         
+Fringe_xen            = 1.00d0
+Fringe_delta_st_x     = 0.20d0
+Fringe_delta_en_x     = 0.05d0
+Fringe_yst            = 0.75d0         
+Fringe_yen            = 1.00d0
+Fringe_delta_st_y     = 0.20d0
+Fringe_delta_en_y     = 0.05d0
+LambdaFact            = 0.75d0
+useShiftedPeriodicBC  = .true.
+shift_distance        = 0.5d0
+Lxeff                 = 0.5d0
+/
+/
+&BUDGET_TIME_AVG
+budgetType          = 3
+budgets_dir         = "null"
+restart_budgets     = .false.
+restart_rid         = 1
+restart_tid         = 100
+restart_counter     = 100
+tidx_dump           = 3000
+tidx_compute        = 10
+do_budgets          = .true.
+time_budget_start   = 20.d0
+/
+/
+&BUDGET_XY_AVG
+budgetType          = 2
+budgets_dir         = "null"
+restart_budgets     = .false.
+restart_rid         = 1
+restart_tid         = 100
+restart_counter     = 100
+tidx_dump           = 10000
+tidx_compute        = 10
+do_budgets          = .true.
+do_spectra          = .true.
+do_autocorrel       = .true.
+time_budget_start   = 20.0d0
+/
+/
+&KSPREPROCESS
+PreprocessForKS       = .FALSE.        ! Do you want to generate preprocessing files for KS? 
+KSoutputDir           = "SomeLocation" ! Directory where KS files are dumped.
+KSRunID               = 99             ! RunID tag for KS files
+t_dumpKSprep          = 10             ! Dumping Frequency for KS files
+KSinitType            = 0              ! All except 0 are temporarily suspended
+KSFilFact             = 4.0d0          ! How big should the KS filter be?
+KSdoZfilter           = .true.         ! Do you want to filter in Z for KS?
+nKSvertFilt           = 1              ! Number of times to filter in Z for KS
+/
+/
+&SCALARS
+num_scalars           = 1              ! How many passive scalars do you want to compute?
+scalar_info_dir       = "NULL"         ! Where is the input file for scalars located?
+/
+/
+&TURB_PRESSURE
+MeanTIDx              = 1              ! TID for computing rapid-slow pressure split  
+MeanRID               = 1              ! RID for computing rapid-slow pressure split  
+MeanFilesDir          = "NULL"         ! Where are mean files located for computing rapid-slow pressure split?
+/
+/
+&MOISTURE
+moistureFactor        = 0.61d0         ! converts g/Kg to Kelvin
+moisture_info_dir     = "NULL"         ! Where is input file for moisture located?
+/
+/
+&Z0VARYING
+spx        = 1.570796326794896d0
+spy        = 6.283185307179586d0
+rpx        = 1.570796326794896d0
+rpy        = 6.283185307179586d0
+spnumx     = 2
+spnumy     = 1
+z0s        = 2.5d-5
+z0r        = 2.5d-4
+/
+/
+&PBLINPUT
+Lx                    = 6.283185307179586d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                    = 6.283185307179586d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lz                    = 1.0d0               ! Domain Height (appropriate dimesnions/non-dimensionalized)
+z0init                = 1.0d-4              ! Roughness scale used to initialize the profile
+ustarinit             = 1.0d0               ! Roughness scale used to initialize the profile
+/

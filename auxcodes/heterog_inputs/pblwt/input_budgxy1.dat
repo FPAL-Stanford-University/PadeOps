@@ -1,0 +1,14 @@
+&BUDGET_XY_AVG
+budgetType          = 2
+budgets_dir         = "null"
+restart_budgets     = .false.
+restart_rid         = 1
+restart_tid         = 100
+restart_counter     = 100
+tidx_dump           = 10000
+tidx_compute        = 10
+do_budgets          = .false.
+do_spectra          = .true.
+do_autocorrel       = .true.
+time_budget_start   = 20.0d0
+/

@@ -985,7 +985,7 @@ contains
         end if
 
         if(this%is_z0_varying) then
-            write(tempname,"(A3,I2.2,A7,I1.1,A5,I2.2,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_z0varstats_t",this%igrid_sim%step,"_n",this%counter,".s3D"
+            write(tempname,"(A3,I2.2,A13,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_z0varstats_t",this%igrid_sim%step,"_n",this%counter,".s3D"
             fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
             call decomp_2d_write_one(1, this%z0varstats, fname, this%igrid_sim%gpC)
         endif
