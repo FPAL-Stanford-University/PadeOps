@@ -3,8 +3,8 @@ module DerivativesStaggeredMod
     use cd10stuff, only: cd10
     use cd06stuff, only: cd06
     use d02Staggstuff, only: d02Stagg
+    use d06Staggstuff, only: d06Stagg
     use d04stuff, only: d04
-    use d06stuff, only: d06
     use fftstuff, only: ffts
     use dctstuff, only: dcts
     use exits,    only: gracefulExit, message
@@ -26,7 +26,7 @@ module DerivativesStaggeredMod
         type(cd06), allocatable :: xcd06, ycd06, zcd06 
         type(d02Stagg),  allocatable :: xd02, yd02, zd02 
         type(d04),  allocatable :: xd04, yd04, zd04 
-        type(d06),  allocatable :: xd06, yd06, zd06 
+        type(d06Stagg),  allocatable :: xd06, yd06, zd06 
         type(ffts), allocatable :: xfour, yfour, zfour
         type(dcts), allocatable :: xcheb, ycheb, zcheb 
        
@@ -600,9 +600,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%xd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+                call this%xd06 % dd1N2F(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
             else
-                call this%xd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+                call this%xd06 % dd1N2F(f,dfdx,this%xsz(2),this%xsz(3))
             end if
         end select 
 
@@ -641,9 +641,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%yd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+                call this%yd06 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
             else
-                call this%yd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+                call this%yd06 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3))
             end if
         end select 
 
@@ -682,9 +682,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%zd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+                call this%zd06 % dd3N2F(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
             else
-                call this%zd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+                call this%zd06 % dd3N2F(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         end select 
     end subroutine 
@@ -722,9 +722,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%xd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+                call this%xd06 % dd1F2N(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
             else
-                call this%xd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+                call this%xd06 % dd1F2N(f,dfdx,this%xsz(2),this%xsz(3))
             end if
         end select 
 
@@ -763,9 +763,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%yd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+                call this%yd06 % dd2F2N(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
             else
-                call this%yd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+                call this%yd06 % dd2F2N(f,dfdx,this%ysz(1),this%ysz(3))
             end if
         end select 
 
@@ -804,9 +804,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%zd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+                call this%zd06 % dd3F2N(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
             else
-                call this%zd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+                call this%zd06 % dd3F2N(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         end select 
     end subroutine 
