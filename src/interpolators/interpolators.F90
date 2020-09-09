@@ -5,8 +5,8 @@ module InterpolatorsMod
     use cd10stuff, only: cd10 !-> ci10
     use cd06stuff, only: cd06 !-> ci06
     use ei02stuff, only: ei02 !explicit interpolator, 2nd order
-    use d04stuff, only: d04 !-> ei04
-    use d06stuff, only: d06 !-> ei06
+    use d04stuff,  only: d04 !-> ei04
+    use ei06stuff, only: ei06
 
     use exits,    only: gracefulExit, message
     use decomp_2d, only: decomp_info, nrank
@@ -32,7 +32,7 @@ module InterpolatorsMod
         type(cd06), allocatable :: xcd06, ycd06, zcd06 
         type(ei02),  allocatable :: xei02, yei02, zei02 
         type(d04),  allocatable :: xd04, yd04, zd04 
-        type(d06),  allocatable :: xd06, yd06, zd06 
+        type(ei06),  allocatable :: xei06, yei06, zei06 
     
         logical                        :: curvilinear = .false. 
         logical                        :: xmetric = .false.
@@ -114,7 +114,7 @@ contains
         case (6)
             m = "d04"
         case (7)
-            m = "d06"
+            m = "ei06"
         end select 
 
     end function
@@ -136,7 +136,7 @@ contains
         case (6)
             m = "d04"
         case (7)
-            m = "d06"
+            m = "ei06"
         end select 
 
     end function
@@ -158,7 +158,7 @@ contains
         case (6)
             m = "d04"
         case (7)
-            m = "d06"
+            m = "ei06"
         end select 
 
     end function
@@ -349,11 +349,11 @@ contains
                 call GracefulExit("Initializing d04 failed in X ",12)
             end if 
             this%xmethod = 6 
-        case ("d06")
-            allocate(this%xd06)
-            ierr = this % xd06%init( this%xsz(1), dx, periodic_x, 0, 0)
+        case ("ei06")
+            allocate(this%xei06)
+            ierr = this % xei06%init( this%xsz(1), dx, periodic_x, 0, 0)
             if (ierr .ne. 0) then
-                call GracefulExit("Initializing d06 failed in X ",12)
+                call GracefulExit("Initializing ei06 failed in X ",12)
             end if 
             this%xmethod = 7 
         case default 
@@ -390,11 +390,11 @@ contains
                 call GracefulExit("Initializing d04 failed in Y ",12)
             end if 
             this%ymethod = 6 
-        case ("d06")
-            allocate(this%yd06)
-            ierr = this % yd06%init( this%ysz(2), dy, periodic_y, 0, 0)
+        case ("ei06")
+            allocate(this%yei06)
+            ierr = this % yei06%init( this%ysz(2), dy, periodic_y, 0, 0)
             if (ierr .ne. 0) then
-                call GracefulExit("Initializing d06 failed in Y ",12)
+                call GracefulExit("Initializing ei06 failed in Y ",12)
             end if 
             this%ymethod = 7 
         case default 
@@ -432,11 +432,11 @@ contains
                 call GracefulExit("Initializing d04 failed in Z ",12)
             end if 
             this%zmethod = 6 
-        case ("d06")
-            allocate(this%zd06)
-            ierr = this % zd06%init( this%zsz(3), dz, periodic_z, 0, 0)
+        case ("ei06")
+            allocate(this%zei06)
+            ierr = this % zei06%init( this%zsz(3), dz, periodic_z, 0, 0)
             if (ierr .ne. 0) then
-                call GracefulExit("Initializing d06 failed in Z ",12)
+                call GracefulExit("Initializing ei06 failed in Z ",12)
             end if 
             this%zmethod = 7 
         case default 
@@ -467,8 +467,8 @@ contains
             call this%xd04%destroy
             deallocate(this%xd04)
         case (7)
-            call this%xd06%destroy
-            deallocate(this%xd06)
+            call this%xei06%destroy
+            deallocate(this%xei06)
         end select 
         
         select case (this%ymethod) 
@@ -489,8 +489,8 @@ contains
             call this%yd04%destroy
             deallocate(this%yd04)
         case (7)
-            call this%yd06%destroy
-            deallocate(this%yd06)
+            call this%yei06%destroy
+            deallocate(this%yei06)
         end select 
 
         select case (this%zmethod) 
@@ -511,8 +511,8 @@ contains
             call this%zd04%destroy
             deallocate(this%zd04)
         case (7)
-            call this%zd06%destroy
-            deallocate(this%zd06)
+            call this%zei06%destroy
+            deallocate(this%zei06)
         end select
 
         this%xmetric = .false. 
@@ -555,9 +555,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%xd06 % dd1(fN,fF,this%xsz(2),this%xsz(3),bc1,bcn)
+                call this%xei06 % iN2F1(fN,fF,this%xsz(2),this%xsz(3),bc1,bcn)
             else
-                call this%xd06 % dd1(fN,fF,this%xsz(2),this%xsz(3))
+                call this%xei06 % iN2F1(fN,fF,this%xsz(2),this%xsz(3))
             end if
         end select 
 
@@ -596,9 +596,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%yd06 % dd2(fN,fF,this%ysz(1),this%ysz(3),bc1,bcn)
+                call this%yei06 % iN2F2(fN,fF,this%ysz(1),this%ysz(3),bc1,bcn)
             else
-                call this%yd06 % dd2(fN,fF,this%ysz(1),this%ysz(3))
+                call this%yei06 % iN2F2(fN,fF,this%ysz(1),this%ysz(3))
             end if
         end select 
 
@@ -637,9 +637,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%zd06 % dd3(fN,fF,this%zsz(1),this%zsz(2),bc1,bcn)
+                call this%zei06 % iN2F3(fN,fF,this%zsz(1),this%zsz(2),bc1,bcn)
             else
-                call this%zd06 % dd3(fN,fF,this%zsz(1),this%zsz(2))
+                call this%zei06 % iN2F3(fN,fF,this%zsz(1),this%zsz(2))
             end if
         end select 
     end subroutine 
@@ -677,9 +677,9 @@ contains
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%xd06 % dd1(fF,fN,this%xsz(2),this%xsz(3),bc1,bcn)
+                call this%xei06 % iF2N1(fF,fN,this%xsz(2),this%xsz(3),bc1,bcn)
             else
-                call this%xd06 % dd1(fF,fN,this%xsz(2),this%xsz(3))
+                call this%xei06 % iF2N1(fF,fN,this%xsz(2),this%xsz(3))
             end if
         end select 
 
@@ -694,12 +694,12 @@ contains
         select case (this%ymethod)
         case (1)
             if (present(bc1) .AND. present(bcn)) then
-                call this%ycd10 % dd1(fF,fN,this%ysz(2),this%ysz(3),bc1,bcn)
+                call this%ycd10 % dd2(fF,fN,this%ysz(2),this%ysz(3),bc1,bcn)
             else
-                call this%ycd10 % dd1(fF,fN,this%ysz(2),this%ysz(3))
+                call this%ycd10 % dd2(fF,fN,this%ysz(2),this%ysz(3))
             end if
         case (2)
-            call this%ycd06 % dd1(fF,fN,this%ysz(2),this%ysz(3))
+            call this%ycd06 % dd2(fF,fN,this%ysz(2),this%ysz(3))
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -712,15 +712,15 @@ contains
             end if
         case (6)
             if (present(bc1) .AND. present(bcn)) then
-                call this%yd04 % dd1(fF,fN,this%ysz(2),this%ysz(3),bc1,bcn)
+                call this%yd04 % dd2(fF,fN,this%ysz(2),this%ysz(3),bc1,bcn)
             else
-                call this%yd04 % dd1(fF,fN,this%ysz(2),this%ysz(3))
+                call this%yd04 % dd2(fF,fN,this%ysz(2),this%ysz(3))
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%yd06 % dd1(fF,fN,this%ysz(2),this%ysz(3),bc1,bcn)
+                call this%yei06 % iF2N2(fF,fN,this%ysz(2),this%ysz(3),bc1,bcn)
             else
-                call this%yd06 % dd1(fF,fN,this%ysz(2),this%ysz(3))
+                call this%yei06 % iF2N2(fF,fN,this%ysz(2),this%ysz(3))
             end if
         end select 
 
@@ -735,12 +735,12 @@ contains
         select case (this%zmethod)
         case (1)
             if (present(bc1) .AND. present(bcn)) then
-                call this%zcd10 % dd1(fF,fN,this%zsz(2),this%zsz(3),bc1,bcn)
+                call this%zcd10 % dd3(fF,fN,this%zsz(2),this%zsz(3),bc1,bcn)
             else
-                call this%zcd10 % dd1(fF,fN,this%zsz(2),this%zsz(3))
+                call this%zcd10 % dd3(fF,fN,this%zsz(2),this%zsz(3))
             end if
         case (2)
-            call this%zcd06 % dd1(fF,fN,this%zsz(2),this%zsz(3))
+            call this%zcd06 % dd3(fF,fN,this%zsz(2),this%zsz(3))
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -753,15 +753,15 @@ contains
             end if
         case (6)
             if (present(bc1) .AND. present(bcn)) then
-                call this%zd04 % dd1(fF,fN,this%zsz(2),this%zsz(3),bc1,bcn)
+                call this%zd04 % dd3(fF,fN,this%zsz(2),this%zsz(3),bc1,bcn)
             else
-                call this%zd04 % dd1(fF,fN,this%zsz(2),this%zsz(3))
+                call this%zd04 % dd3(fF,fN,this%zsz(2),this%zsz(3))
             end if
         case (7)
             if (present(bc1) .AND. present(bcn)) then
-                call this%zd06 % dd1(fF,fN,this%zsz(2),this%zsz(3),bc1,bcn)
+                call this%zei06 % iF2N3(fF,fN,this%zsz(2),this%zsz(3),bc1,bcn)
             else
-                call this%zd06 % dd1(fF,fN,this%zsz(2),this%zsz(3))
+                call this%zei06 % iF2N3(fF,fN,this%zsz(2),this%zsz(3))
             end if
         end select 
 

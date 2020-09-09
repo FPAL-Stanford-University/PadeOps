@@ -9,9 +9,10 @@ program test_interpolators
     integer :: n_vec(4) 
     real(rkind) :: error
     real(rkind) :: ei02_N2F_error(4,3), ei02_F2N_error(4,3)
+    real(rkind) :: ei06_N2F_error(4,3), ei06_F2N_error(4,3)
     real(rkind) :: ratio(3)
 
-    type( interpolators ) ::method3
+    type( interpolators ) ::method3, method5
     real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,fF, fN
     real(rkind), dimension(:,:,:), allocatable :: xF,yF,zF, fFx_exact, fFy_exact, fFz_exact
     real(rkind) :: dx, dy, dz
@@ -106,10 +107,15 @@ program test_interpolators
                                 .true., .true., .true., &
                                    "ei02", "ei02", "ei02" )
          
+        call method5%init(          nx,     ny,    nz, &
+                                    dx,     dy,    dz, &
+                                .true., .true., .true., &
+                                   "ei06", "ei06", "ei06" )
+         
         print*, "Initialized all methods"
   
         print*, "==========================================="
-        print*, "Now trying METHOD 3: D02"
+        print*, "Now trying METHOD 3: EI02 (N2F)"
         print*, "==========================================="
         call method3 % iN2Fx(f,fF)
         error = MAXVAL( ABS(fF - fFx_exact))
@@ -126,6 +132,9 @@ program test_interpolators
         print*, "Maximum error = ", error
         ei02_N2F_error(ind,3) = error
         
+        print*, "==========================================="
+        print*, "Now trying METHOD 3: EI02 (F2N)"
+        print*, "==========================================="
         call method3 % iF2Nx(fFx_exact,fN)
         error = MAXVAL( ABS(f - fN))
         print*, "Maximum error = ", error
@@ -140,6 +149,43 @@ program test_interpolators
         error = MAXVAL( ABS(f - fN))
         print*, "Maximum error = ", error
         ei02_F2N_error(ind,3) = error
+
+        print*, "==========================================="
+        print*, "Now trying METHOD 5: EI06 (N2F)"
+        print*, "==========================================="
+        call method5 % iN2Fx(f,fF)
+        error = MAXVAL( ABS(fF - fFx_exact))
+        print*, "Maximum error = ", error
+        ei06_N2F_error(ind,1) = error
+
+        call method5 % iN2Fy(f,fF)
+        error = MAXVAL( ABS(fF - fFy_exact))
+        print*, "Maximum error = ", error
+        ei06_N2F_error(ind,2) = error
+
+        call method5 % iN2Fz(f,fF)
+        error = MAXVAL( ABS(fF - fFz_exact))
+        print*, "Maximum error = ", error
+        ei06_N2F_error(ind,3) = error
+        
+        print*, "==========================================="
+        print*, "Now trying METHOD 5: EI06 (F2N)"
+        print*, "==========================================="
+        call method5 % iF2Nx(fFx_exact,fN)
+        error = MAXVAL( ABS(f - fN))
+        print*, "Maximum error = ", error
+        ei06_F2N_error(ind,1) = error
+
+        call method5 % iF2Ny(fFy_exact,fN)
+        error = MAXVAL( ABS(f - fN))
+        print*, "Maximum error = ", error
+        ei06_F2N_error(ind,2) = error
+
+        call method5 % iF2Nz(fFz_exact,fN)
+        error = MAXVAL( ABS(f - fN))
+        print*, "Maximum error = ", error
+        ei06_F2N_error(ind,3) = error
+
 
 
         print*, "---------------------------------------------"
@@ -157,13 +203,16 @@ program test_interpolators
         deallocate( fF )
         deallocate( fN )
         call method3%destroy
+        call method5%destroy
 
     enddo
 
-    print*, "=========================================="
-    print*, "====Midpoint interpolation from Nodes to Faces (N2F) Results================"
-    print*, "=========================================="
-    print*, "=========================================="
+    print*, "==============================================================="
+    print*, "====Midpoint interpolation from Nodes to Faces (N2F) Results==="
+    print*, "==============================================================="
+    print*, "==============================================================="
+    print*, "=======================2nd Order Explicit======================"
+    print*, "==============================================================="
     ratio = ei02_N2F_error(1:3,1)/ei02_N2F_error(2:4,1) 
     print *, "X Interp Order of Convergence (x)"
     print *,  log(ratio) / log(2.0)
@@ -173,12 +222,26 @@ program test_interpolators
     ratio = ei02_N2F_error(1:3,3)/ei02_N2F_error(2:4,3) 
     print *, "Z Interp Order of Convergence (z)"
     print *,  log(ratio) / log(2.0)
-    print*, "=========================================="
+    print*, "==============================================================="
+    print*, "=======================6nd Order Explicit======================"
+    print*, "==============================================================="
+    ratio = ei06_N2F_error(1:3,1)/ei06_N2F_error(2:4,1) 
+    print *, "X Interp Order of Convergence (x)"
+    print *,  log(ratio) / log(2.0)
+    ratio = ei06_N2F_error(1:3,2)/ei06_N2F_error(2:4,2) 
+    print *, "Y Interp Order of Convergence (y)"
+    print *,  log(ratio) / log(2.0)
+    ratio = ei06_N2F_error(1:3,3)/ei06_N2F_error(2:4,3) 
+    print *, "Z Interp Order of Convergence (z)"
+    print *,  log(ratio) / log(2.0)
+    print*, "==============================================================="
 
-    print*, "=========================================="
-    print*, "====Midpoint interpolation from Nodes to Faces (F2N) Results================"
-    print*, "=========================================="
-    print*, "=========================================="
+    print*, "==============================================================="
+    print*, "====Midpoint interpolation from Nodes to Faces (F2N) Results==="
+    print*, "==============================================================="
+    print*, "==============================================================="
+    print*, "=======================2nd Order Explicit======================"
+    print*, "==============================================================="
     ratio = ei02_F2N_error(1:3,1)/ei02_F2N_error(2:4,1) 
     print *, "X Interp Order of Convergence (x)"
     print *,  log(ratio) / log(2.0)
@@ -188,6 +251,18 @@ program test_interpolators
     ratio = ei02_F2N_error(1:3,3)/ei02_F2N_error(2:4,3) 
     print *, "Z Interp Order of Convergence (z)"
     print *,  log(ratio) / log(2.0)
-    print*, "=========================================="
+    print*, "==============================================================="
+    print*, "=======================6nd Order Explicit======================"
+    print*, "==============================================================="
+    ratio = ei06_F2N_error(1:3,1)/ei06_F2N_error(2:4,1) 
+    print *, "X Interp Order of Convergence (x)"
+    print *,  log(ratio) / log(2.0)
+    ratio = ei06_F2N_error(1:3,2)/ei06_F2N_error(2:4,2) 
+    print *, "Y Interp Order of Convergence (y)"
+    print *,  log(ratio) / log(2.0)
+    ratio = ei06_F2N_error(1:3,3)/ei06_F2N_error(2:4,3) 
+    print *, "Z Interp Order of Convergence (z)"
+    print *,  log(ratio) / log(2.0)
+    print*, "==============================================================="
 
 end program
