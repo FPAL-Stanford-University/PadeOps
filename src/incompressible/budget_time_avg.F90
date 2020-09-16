@@ -879,7 +879,8 @@ contains
         this%budget_3(:,:,:,1) = -this%budget_2(:,:,:,1)
 
         ! 2. convective transport        (B)
-        buff2 = half*(R11*R11 + R22*R22 + R33*R33)
+        !buff2 = half*(R11*R11 + R22*R22 + R33*R33)
+        buff2 = half*(R11 + R22 + R33)
         call this%ddx_R2R(buff2,buff); this%budget_3(:,:,:,2) = -Umn*buff
         call this%ddy_R2R(buff2,buff); this%budget_3(:,:,:,2) = this%budget_3(:,:,:,2) - Vmn*buff
         call this%ddz_R2R(buff2,buff); this%budget_3(:,:,:,2) = this%budget_3(:,:,:,2) - Wmn*buff
