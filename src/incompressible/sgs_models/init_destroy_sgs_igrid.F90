@@ -73,9 +73,10 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
   logical :: usePrSGS = .false. 
   integer :: ierr, WM_matchingIndex = 1, i, j
-  real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 
+  real(rkind) :: lowbound = 0.d0 , highbound = 1.d0, xpos = 0.0_rkind
+  real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2
   logical :: is_z0_varying = .false.
-  real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod
+  real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, spx_delta = 1.0d0, spy_delta = 1.0d0
   integer :: spnumx, spnumy
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
@@ -87,7 +88,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, &
                  is_z0_varying 
 
-  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r
+  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, spx_delta, spy_delta
 
   this%gpC => gpC
   this%gpE => gpE
@@ -205,18 +206,50 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     allocate(this%Uyvar(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%WallMFactorvar(this%gpC%xsz(1), this%gpC%xsz(2)))
 
-    totpx = spx+ rpx
-    do j = 1, this%gpC%xsz(2)
-      do i = 1, this%gpC%xsz(1)
-        xl = xMesh(i)
-        xlmod = mod(xl, totpx)
-        if(xlmod < spx) then
-            this%z0var(i,j) = z0s
-        else
-            this%z0var(i,j) = z0r
-        endif
-      enddo
+    !totpx = spx+ rpx
+    !do j = 1, this%gpC%xsz(2)
+    !  do i = 1, this%gpC%xsz(1)
+    !    xl = xMesh(i)
+    !    xlmod = mod(xl, totpx)
+    !    if(xlmod < spx) then
+    !        this%z0var(i,j) = z0s
+    !    else
+    !        this%z0var(i,j) = z0r
+    !    endif
+    !  enddo
+    !enddo
+
+
+    xpos = 0.0_rkind; sp_map = 0.0_rkind
+
+    ! handle xpos = 0 separately
+    xpos = 0.0_rkind; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+    call S_fringe(x1, S1)
+    sp_map = 1.0_rkind-S1
+
+    ! then calculate map for all stripes
+    do i = 1, spnumx
+      xpos = xpos + spx; x1 = (xMesh - (xpos - 0.5_rkind*spx_delta))/spx_delta
+      xpos = xpos + rpx; x2 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+      call S_fringe(x1, S1)
+      call S_fringe(x2, S2)
+      sp_map = sp_map + S1 - S2
     enddo
+
+    do j = 1, this%gpC%xsz(2)
+      this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
+    enddo
+
+    call message(1, "Printing debug info about heterog ")
+    if(nrank==0) then
+      print *, 'nx = ', this%gpC%xsz(1)
+      open(10, file='debug_heterog.dat',action='write',status='unknown')
+      do i=1,this%gpC%xsz(1)
+        write(10,'(3(e19.12,1x))') xMesh(i), sp_map(i), this%z0var(i,1)
+      enddo
+      close(10)
+    endif
+    call message(1, "Done printing debug info about heterog ")
 
   endif
 
@@ -271,6 +304,26 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   if ((this%mid .ne. 0) .and. (UseDynamicProcedureScalar)) then
       call gracefulExit("Dynamic procedure for scalar  only supported for smagorinsky",312)
   end if
+
+end subroutine
+
+pure subroutine S_fringe(x, output)
+   real(rkind), dimension(:), intent(in)    :: x
+   real(rkind), dimension(:), intent(out)   :: output
+   integer :: i
+   real(rkind) :: exparg
+
+   do i = 1,size(x)
+     if (x(i) .le. 0.d0) then
+        output(i) = 0.d0
+     else if (x(i) .ge. 1.d0) then
+        output(i) = 1.d0
+     else
+        exparg = 1.d0/(x(i) - 1.d0 + 1.0D-32) + 1.d0/(x(i) + 1.0D-32)
+        exparg = min(exparg,708.0d0) ! overflows if exparg > 709. need a better fix for this
+        output(i) = 1.d0/(1.d0 + exp(exparg))
+     end if
+   end do
 
 end subroutine
 
