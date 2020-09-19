@@ -445,27 +445,33 @@ contains
         diss_S_num_int = P_SUM(diss_S_num)*this%dx*this%dy*this%dz
 
         ! Get production
+        call message("Production...")
         call this%get_production(rho_f, u_ff, v_ff, w_ff, turb_stress, duidxj_ff, production)
         production_int = P_SUM(production)*this%dx*this%dy*this%dz
 
         ! Get sub-filter mass flux
+        call message("Mass flux...")
         call this%get_mass_flux(rho, rho_f, u, v, w, mass_flux)
 
         ! Get baropycnal work
+        call message("Baropycnal...")
         call this%get_baropycnal(rho_f, p_f, mass_flux, baropycnal)
         baropycnal_int = P_SUM(baropycnal)*this%dx*this%dy*this%dz
 
         ! Get large and small scale pressure-dilatation
+        call message("Pressure-dilatation...")
         call this%get_pressure_dilatation(p, p_f, u, v, w, pdil_L, pdil_S)
         pdil_L_int = P_SUM(pdil_L)*this%dx*this%dy*this%dz
         pdil_S_int = P_SUM(pdil_S)*this%dx*this%dy*this%dz
 
         ! Get large and small scale dissipation
+        call message("Dissipation...")
         call this%get_dissipation(u, v, w, duidxj_ff, tauij, diss_L, diss_S)
         diss_L_int = P_SUM(diss_L)*this%dx*this%dy*this%dz
         diss_S_int = P_SUM(diss_S)*this%dx*this%dy*this%dz
 
         ! Write out data to output file
+        call message("Writing...")
         call this%tke_viz%start_viz(tsim)
         call this%tke_viz%write_attribute(1, [dt], 'dt', '/')
 

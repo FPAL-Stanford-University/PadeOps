@@ -118,8 +118,6 @@ module CompressibleGrid
             procedure, private :: write_viz
             procedure, private :: write_restart
             procedure          :: read_restart
-            procedure          :: seed_turb 
-            procedure          :: setup_postprocessing
     end type
 
 contains
@@ -1992,56 +1990,9 @@ contains
 
         ! Get primitive variables from conserved
         call this%get_primitive()
+
     end subroutine
     
-    subroutine seed_turb(this, seed)
-        use exits, only: message
-        use timer, only: tic, toc
-        class(cgrid), intent(inout) :: this,seed
-        character(len=clen) :: charout
-        real(rkind) :: cputime
-        integer :: i,vizcount=0
-        real(rkind), dimension(seed%decomp%xsz(1),seed%decomp%xsz(2),seed%decomp%xsz(3)) :: tmpx
-        real(rkind), dimension(seed%decomp%zsz(1),seed%decomp%zsz(2),seed%decomp%zsz(3)) :: tmpz
-
-        ! Start reading restart file from seed
-        call seed%restart%start_reading(vizcount)
-        call tic()
-
-        write(charout,'(A,A)') "Reading restart dump from ", adjustl(trim(seed%restart%filename))
-        call message(charout)
-
-        ! Read conserved variables from seed
-        if (this%mix%ns > 1) then
-            do i = 1,this%mix%ns
-                write(charout,'(I4.4)') i
-                !call seed%restart%read_dataset(this%Wcnsrv(:,:,:,i), 'rhoY_'//adjustl(trim(charout)) )
-                call seed%restart%read_dataset(tmpx, 'rhoY_'//adjustl(trim(charout)) )
-            end do
-        else
-            call seed%restart%read_dataset(this%Wcnsrv(:,:,:,mass_index), 'rho' )
-        end if
-        call seed%restart%read_dataset(this%Wcnsrv(:,:,:,mom_index  ), 'rhou')
-        call seed%restart%read_dataset(this%Wcnsrv(:,:,:,mom_index+1), 'rhov')
-        call seed%restart%read_dataset(this%Wcnsrv(:,:,:,mom_index+2), 'rhow')
-        call seed%restart%read_dataset(this%Wcnsrv(:,:,:, TE_index  ), 'TE')
-
-
-        ! Reset steps, time, nsteps 
-        this%step = 1
-        this%nsteps = this%step + this%nsteps
-        this%tsim = 0.D0
-
-        ! End visualization dump
-        call seed%restart%end_reading()
-        call toc(cputime)
-        write(charout,'(A,ES11.3,A)') "Finished seeding in ", cputime, "s"
-        call message(charout)
-
-        ! Get primitive variables from conserved
-        call this%get_primitive()
-    end subroutine
-
     subroutine setup_postprocessing(this, nrestarts)
         use mpi
         class(cgrid), intent(inout) :: this

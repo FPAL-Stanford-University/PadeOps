@@ -42,15 +42,12 @@ module TKEBudgetMod
         procedure          :: get_reynolds_stress
         procedure          :: get_duidxj_avg
         procedure          :: get_gradp_avg
-        
+        procedure          :: get_div_tau_avg
         procedure          :: get_production
+        procedure          :: get_p_dil
         procedure          :: get_dissipation
         procedure          :: get_transport
-        procedure          :: get_p_dil
-        procedure          :: get_mass_flux
-        procedure          :: get_baropycnal
         procedure          :: tke_budget
-        
         procedure          :: get_rhoPsi_bar
         procedure          :: mixing_budget
         final              :: destructor
@@ -63,6 +60,7 @@ module TKEBudgetMod
 
 contains
 
+    ! function init(gp, der, mesh, dx, dy, dz, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision) result(this)
     subroutine init(this, gp, der, mesh, dx, dy, dz, ns, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision)
         ! type(tkeBudget)                             :: this
         class(tkeBudget)                            :: this
@@ -186,8 +184,12 @@ contains
             ! Write the coordinates of subdomain out
             call this%mix_viz%write_coords(mesh)
         end if
+
+
+    ! end function
     end subroutine
 
+    ! impure elemental subroutine destructor(this)
     subroutine destructor(this)
         type(tkeBudget), intent(inout) :: this
 
@@ -196,6 +198,7 @@ contains
 
         call this%tke_viz%destroy()
         call this%mix_viz%destroy()
+
     end subroutine
 
     subroutine reynolds_avg(this, f, f_bar)
@@ -204,6 +207,7 @@ contains
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)), intent(out)   :: f_bar
 
         call this%avg%get_average(f, f_bar)
+
     end subroutine
 
     subroutine reynolds_avg_and_fluct(this, f, f_bar, f_prime)
@@ -214,6 +218,7 @@ contains
 
         call this%reynolds_avg(f, f_bar)
         call this%avg%get_fluctuations(f, f_bar, f_prime)
+
     end subroutine
 
     subroutine favre_avg(this, rho, f, f_tilde)
@@ -222,6 +227,7 @@ contains
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)), intent(out)   :: f_tilde
 
         call this%avg%get_weighted_average(rho, f, f_tilde)
+
     end subroutine
 
     subroutine favre_avg_and_fluct(this, rho, f, f_tilde, f_pprime)
@@ -232,6 +238,7 @@ contains
 
         call this%favre_avg(rho, f, f_tilde)
         call this%avg%get_fluctuations(f, f_tilde, f_pprime)
+
     end subroutine
 
     subroutine get_tke(this, rho, u, v, w, tke)
@@ -257,6 +264,7 @@ contains
         call this%favre_avg(rho, tke3d, tke)
 
         tke = half*rho_bar*tke
+
     end subroutine
 
     subroutine get_reynolds_stress(this, rho, u_pprime, v_pprime, w_pprime, Rij)
@@ -292,6 +300,7 @@ contains
         ! R33
         tmp = w_pprime*w_pprime
         call this%favre_avg(rho, tmp, Rij(:,:,:,6))
+
     end subroutine
 
     subroutine get_duidxj_avg(this, u, v, w, duidxj_avg)
@@ -339,6 +348,7 @@ contains
             call this%der_avg%ddy(v,dvdy,-this%y_bc(1),-this%y_bc(2))
             call this%der_avg%ddy(w,dwdy, this%y_bc(1), this%y_bc(2))
         end if
+        
     end subroutine
 
     subroutine get_gradp_avg(this,p_avg,gradp_avg)
@@ -368,6 +378,75 @@ contains
         else
             call this%der_avg%ddy(p_avg,dpdy, this%y_bc(1), this%y_bc(2))
         end if
+        
+    end subroutine
+
+    subroutine get_div_tau_avg(this,tau_avg,tau_avg_div)
+        class(tkeBudget),                                                                                 intent(in)  :: this
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),6), target, intent(in)  :: tau_avg
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3), target, intent(out) :: tau_avg_div
+
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: tmp
+        real(rkind), dimension(this%gp_avg%nx,this%gp_avg%ay,1) :: xbuf1, xbuf2 !!! HACK !!! Only works for Z averaging
+        real(rkind), dimension(:,:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz, divx, divy, divz
+
+        tauxx => tau_avg(:,:,:,1); tauxy => tau_avg(:,:,:,2); tauxz => tau_avg(:,:,:,3);
+                                   tauyy => tau_avg(:,:,:,4); tauyz => tau_avg(:,:,:,5);
+                                                              tauzz => tau_avg(:,:,:,6);
+
+        divx => tau_avg_div(:,:,:,1); divy => tau_avg_div(:,:,:,2); divz => tau_avg_div(:,:,:,3);
+
+        ! \frac{ \partial \tau_{1j} }{ \partial x_j }
+        if (this%averaging_directions(1)) then
+            divx = zero
+        else
+            call this%gp_avg%transpose_y_to_x(tauxx(:,:,1),xbuf1(:,:,1))
+            call this%der_avg%ddx(xbuf1,xbuf2, this%x_bc(1), this%x_bc(2))
+            call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),divx(:,:,1))
+        end if
+        
+        if (this%averaging_directions(2)) then
+            tmp = zero
+        else
+            call this%der_avg%ddy(tauxy(:,:,1),tmp(:,:,1),-this%y_bc(1),-this%y_bc(2))
+        end if
+
+        divx = divx + tmp ! Z derivatives are zero
+        
+        ! \frac{ \partial \tau_{2j} }{ \partial x_j }
+        if (this%averaging_directions(1)) then
+            divy = zero
+        else
+            call this%gp_avg%transpose_y_to_x(tauxy(:,:,1),xbuf1(:,:,1))
+            call this%der_avg%ddx(xbuf1,xbuf2,-this%x_bc(1),-this%x_bc(2))
+            call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),divy(:,:,1))
+        end if
+        
+        if (this%averaging_directions(2)) then
+            tmp = zero
+        else
+            call this%der_avg%ddy(tauyy(:,:,1),tmp(:,:,1), this%y_bc(1), this%y_bc(2))
+        end if
+
+        divy = divy + tmp ! Z derivatives are zero
+        
+        ! \frac{ \partial \tau_{3j} }{ \partial x_j }
+        if (this%averaging_directions(1)) then
+            divz = zero
+        else
+            call this%gp_avg%transpose_y_to_x(tauxz(:,:,1),xbuf1(:,:,1))
+            call this%der_avg%ddx(xbuf1,xbuf2,-this%x_bc(1),-this%x_bc(2))
+            call this%gp_avg%transpose_x_to_y(xbuf2(:,:,1),divz(:,:,1))
+        end if
+        
+        if (this%averaging_directions(2)) then
+            tmp = zero
+        else
+            call this%der_avg%ddy(tauyz(:,:,1),tmp(:,:,1),-this%y_bc(1),-this%y_bc(2))
+        end if
+
+        divz = divz + tmp ! Z derivatives are zero
+        
     end subroutine
 
     subroutine get_production(this, rho_bar, Rij, grad_u_tilde, production)
@@ -394,152 +473,122 @@ contains
 
         production = -rho_bar * production
     end subroutine
-  
-    subroutine get_dissipation(this, tauij_prime, grad_u_pprime, dissipation)
+    
+    subroutine get_p_dil(this, p, p_prime, u_pprime_bar, grad_p_bar, grad_u_pprime, p_dil_fluct, baropycnal, fluct_p_dil)
         class(tkeBudget),                                                                                 intent(inout) :: this
-        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      6), target, intent(in)    :: tauij_prime
+        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3)),                 intent(in)    :: p, p_prime
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3),         intent(in)    :: u_pprime_bar
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3),         intent(in)    :: grad_p_bar
         real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      9), target, intent(in)    :: grad_u_pprime
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),           intent(out)   :: dissipation
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),           intent(out)   :: p_dil_fluct
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),           intent(out)   :: baropycnal
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),           intent(out)   :: fluct_p_dil
 
         real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3)) :: tmp
-        real(rkind), dimension(:,:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz
         real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz
 
-        ! Store the tauij_prime fluctutations
-        tauxx => tauij_prime(:,:,:,1); tauxy => tauij_prime(:,:,:,2); tauxz => tauij_prime(:,:,:,3);
-                                        tauyy => tauij_prime(:,:,:,4); tauyz => tauij_prime(:,:,:,5);
-                                                                        tauzz => tauij_prime(:,:,:,6);
-
-        ! Store ddxi_upprime
         dudx => grad_u_pprime(:,:,:,1); dudy => grad_u_pprime(:,:,:,2); dudz => grad_u_pprime(:,:,:,3);
         dvdx => grad_u_pprime(:,:,:,4); dvdy => grad_u_pprime(:,:,:,5); dvdz => grad_u_pprime(:,:,:,6);
         dwdx => grad_u_pprime(:,:,:,7); dwdy => grad_u_pprime(:,:,:,8); dwdz => grad_u_pprime(:,:,:,9);
 
-        ! Compute resolved dissipation
+        ! Pressure fluctuation-dilatation correlation \overline{ p \frac{\partial u_i^{\prime \prime}}{\partial x_i} }
+        tmp = p * (dudx + dvdy + dwdz)
+        call this%reynolds_avg(tmp, p_dil_fluct)
+
+        ! Fluctuating pressure fluctuation-dilatation correlation \overline{ p^\prime \frac{\partial u_i^{\prime \prime}}{\partial x_i} }
+        tmp = p_prime*(dudx + dvdy + dwdz)
+        call this%reynolds_avg(tmp, fluct_p_dil)
+        
+        ! Baropycnal term -\overline(u_i^{\prime\prime}) \frac{\partial \overline{p}}{\partial x_i}
+        baropycnal = - ( u_pprime_bar(:,:,:,1)*grad_p_bar(:,:,:,1) &
+                       + u_pprime_bar(:,:,:,2)*grad_p_bar(:,:,:,2) &
+                       + u_pprime_bar(:,:,:,3)*grad_p_bar(:,:,:,3) )
+    end subroutine
+
+    subroutine get_dissipation(this, tauij, tau_bar, tau_prime, u_pprime_bar, grad_u_pprime, dissipation, diss_mass_flux, diss_fluct)
+        class(tkeBudget),                                                                                 intent(inout) :: this
+        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      6), target, intent(in)    :: tauij, tau_prime
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),6), target, intent(in)    :: tau_bar
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3),         intent(in)    :: u_pprime_bar
+        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      9), target, intent(in)    :: grad_u_pprime
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),           intent(out)   :: dissipation
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),           intent(out)   :: diss_mass_flux
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),           intent(out)   :: diss_fluct
+
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3)) :: tmp
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3) :: tau_bar_div
+        real(rkind), dimension(:,:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz
+        real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz
+
+        tauxx => tauij(:,:,:,1); tauxy => tauij(:,:,:,2); tauxz => tauij(:,:,:,3);
+                                 tauyy => tauij(:,:,:,4); tauyz => tauij(:,:,:,5);
+                                                          tauzz => tauij(:,:,:,6);
+
+        dudx => grad_u_pprime(:,:,:,1); dudy => grad_u_pprime(:,:,:,2); dudz => grad_u_pprime(:,:,:,3);
+        dvdx => grad_u_pprime(:,:,:,4); dvdy => grad_u_pprime(:,:,:,5); dvdz => grad_u_pprime(:,:,:,6);
+        dwdx => grad_u_pprime(:,:,:,7); dwdy => grad_u_pprime(:,:,:,8); dwdz => grad_u_pprime(:,:,:,9);
+
         tmp = tauxx*dudx + tauxy*dudy + tauxz*dudz &
             + tauxy*dvdx + tauyy*dvdy + tauyz*dvdz &
             + tauxz*dwdx + tauyz*dwdy + tauzz*dwdz
-        call this%reynolds_avg(-tmp, dissipation)
-    end subroutine
+        call this%reynolds_avg(tmp, dissipation)
 
-    subroutine get_transport(this, rho, pp, up, vp, wp, upp, vpp, wpp, &
-            tauij_prime, tke, transport)
-        class(tkeBudget), intent(inout) :: this
-        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3)),& 
-            intent(in)    :: rho, pp, up, vp, wp, upp, vpp, wpp, tke
-        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3), 6),&
-            target, intent(in)  :: tauij_prime
-        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3)),& 
-            intent(out) :: transport
-        
-        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3)) &
-            :: tmp1, tmp2
-        real(rkind), dimension(:,:,:), pointer :: tauxy, tauyy, tauzy !primes
-
-        tauxy => tauij_prime(:,:,:,2); 
-        tauyy => tauij_prime(:,:,:,4); 
-        tauzy => tauij_prime(:,:,:,5); 
-        
-        ! x terms: set zero
-        !tmp1 = rho*tke*upp + pp*up - tauxx
-        !call this%gp_avg%transpose_y_to_x(tmp1,tmp2)
-        !call this%der_avg%ddx(tmp2,tmp1, this%x_bc(1), this%x_bc(2))
-        !call this%gp_avg%transpose_x_to_y(tmp1,tmp2)
-        !tmpsum = tmp2
-
-        ! y terms:
-        tmp1 = rho*tke*vpp + pp*vp - (tauxy*upp + tauyy*vpp + tauzy*wpp)
-        call this%der_avg%ddy(tmp1,tmp2, this%y_bc(1), this%y_bc(2))
-        
-        ! z terms: set to zero? 
-        !tmp1 = rho*tke*wpp + pp*wp - tauzz
-        !call this%gp_avg%transpose_y_to_z(tmp1,tmp2)
-        !call this%der_avg%ddz(tmp2,tmp1, this%z_bc(1), this%z_bc(2))
-        !call this%gp_avg%transpose_z_to_y(tmp1,tmp2)
-        !tmpsum = tmpsum + tmp2
-
-        call this%reynolds_avg(-tmp2, transport)
-    end subroutine
-
-    subroutine get_p_dil(this, p_prime, grad_u_pprime, p_dil )
-        class(tkeBudget),                                                                                 intent(inout) :: this
-        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3)),                 intent(in)    :: p_prime
-        real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3),      9), target, intent(in)    :: grad_u_pprime
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),           intent(out)   :: p_dil
-
-        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3)) :: tmp
-        real(rkind), dimension(:,:,:), pointer :: dudx, dvdy, dwdz
-
-        dudx => grad_u_pprime(:,:,:,1);
-        dvdy => grad_u_pprime(:,:,:,5);
-        dwdz => grad_u_pprime(:,:,:,9);
-
-        ! Pressure dilatation (pressure strain contracted)
-        tmp = p_prime*(dudx + dvdy + dwdz)
-        call this%reynolds_avg(tmp, p_dil)
-    end subroutine
-
-    subroutine get_mass_flux(this, tau_bar, u_pprime_bar, diss_mass_flux )
-        class(tkeBudget),                                                                                 intent(inout) :: this
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),6), target, intent(in)    :: tau_bar
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3), target, intent(in)    :: u_pprime_bar
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),           intent(out)   :: diss_mass_flux 
-
-        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3)) :: tmp1,tmp2,tmpsum
-        real(rkind), dimension(:,:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz, upp,vpp,wpp
-
-        upp => u_pprime_bar(:,:,:,1);
-        vpp => u_pprime_bar(:,:,:,2);
-        wpp => u_pprime_bar(:,:,:,3);
         tauxx => tau_bar(:,:,:,1); tauxy => tau_bar(:,:,:,2); tauxz => tau_bar(:,:,:,3);
                                    tauyy => tau_bar(:,:,:,4); tauyz => tau_bar(:,:,:,5);
                                                               tauzz => tau_bar(:,:,:,6);
-        ! x-direction     
-        tmpsum = 0.D0
-        !call this%gp_avg%transpose_y_to_x(tauxx,tmp2)
-        !call this%der_avg%ddx(tmp2,tmp1, this%x_bc(1), this%x_bc(2))
-        !call this%gp_avg%transpose_x_to_y(tmp1,tmp2)
-        !tmpsum = tmpsum + tmp2 ! ddx tauxx 
-        call this%der_avg%ddy(tauxy,tmp2, this%y_bc(1), this%y_bc(2))
-        tmpsum = tmpsum + tmp2 ! ddy tauxy
-        !call this%gp_avg%transpose_y_to_z(tauxz,tmp2)
-        !call this%der_avg%ddz(tmp2,tmp1, this%z_bc(1), this%z_bc(2))
-        !call this%gp_avg%transpose_z_to_y(tmp1,tmp2)
-        tmpsum = tmpsum + tmp2 ! ddz tauxz
-        diss_mass_flux = upp*tmpsum
-        
-        ! y-direction     
-        !call this%gp_avg%transpose_y_to_x(tauxy,tmp2)
-        !call this%der_avg%ddx(tmp2,tmp1, this%x_bc(1), this%x_bc(2))
-        !call this%gp_avg%transpose_x_to_y(tmp1,tmp2)
-        !tmpsum = tmpsum + tmp2 ! ddx tauyx 
-        call this%der_avg%ddy(tauyy,tmp2, this%y_bc(1), this%y_bc(2))
-        tmpsum = tmpsum + tmp2 ! ddy tauyy
-        diss_mass_flux = vpp*tmpsum
-        
-        ! z-direction     
-        !call this%gp_avg%transpose_y_to_x(tauxy,tmp2)
-        !call this%der_avg%ddx(tmp2,tmp1, this%x_bc(1), this%x_bc(2))
-        !call this%gp_avg%transpose_x_to_y(tmp1,tmp2)
-        !tmpsum = tmpsum + tmp2 ! ddx tauyx 
-        call this%der_avg%ddy(tauyz,tmp2, this%y_bc(1), this%y_bc(2))
-        tmpsum = tmpsum + tmp2 ! ddy tauyy
-        diss_mass_flux = wpp*tmpsum
+
+        ! Need to get tau_bar divergence
+        call this%get_div_tau_avg(tau_bar,tau_bar_div)
+
+        ! Mass flux term -\overline(u_i^{\prime\prime}) \frac{\partial \overline{\tau_{ij}}}{\partial x_j}
+        diss_mass_flux = ( u_pprime_bar(:,:,:,1)*tau_bar_div(:,:,:,1) &
+                         + u_pprime_bar(:,:,:,2)*tau_bar_div(:,:,:,2) &
+                         + u_pprime_bar(:,:,:,3)*tau_bar_div(:,:,:,3) )
+
+        tauxx => tau_prime(:,:,:,1); tauxy => tau_prime(:,:,:,2); tauxz => tau_prime(:,:,:,3);
+                                     tauyy => tau_prime(:,:,:,4); tauyz => tau_prime(:,:,:,5);
+                                                                  tauzz => tau_prime(:,:,:,6);
+
+        ! Fluctuating stress dissipation
+        tmp = tauxx*dudx + tauxy*dudy + tauxz*dudz &
+            + tauxy*dvdx + tauyy*dvdy + tauyz*dvdz &
+            + tauxz*dwdx + tauyz*dwdy + tauzz*dwdz
+        call this%reynolds_avg(tmp, diss_fluct)
+
     end subroutine
 
-    subroutine get_baropycnal(this, grad_p_bar, u_pprime_bar, baropycnal )
-        class(tkeBudget),                                                                         intent(inout) :: this
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3), intent(in)    :: grad_p_bar
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3), intent(in)    :: u_pprime_bar
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),   intent(out)   :: baropycnal 
-        
-        baropycnal = & 
-              u_pprime_bar(:,:,:,1)*grad_p_bar(:,:,:,1) &
-            + u_pprime_bar(:,:,:,2)*grad_p_bar(:,:,:,2) &
-            + u_pprime_bar(:,:,:,3)*grad_p_bar(:,:,:,3)
-        baropycnal = -baropycnal
-    end subroutine
+    subroutine get_transport(this, rho_bar, v_tilde, tke, rho,&
+        p_prime, u_pprime, v_pprime, w_pprime, tauij, trans_conv, trans_turb)
+        class(tkeBudget),                                                                      intent(inout) :: this
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),intent(in) :: rho_bar
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),intent(in) ::v_tilde
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3)), intent(in) :: tke, rho, u_pprime, v_pprime, w_pprime, p_prime
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3), 6), target, intent(in)    :: tauij
 
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),intent(out) :: trans_conv 
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)),intent(out) :: trans_turb 
+
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: tmpy1, tmpy2
+        real(rkind), dimension(:,:,:), pointer :: tauxx, tauxy, tauxz, tauyy, tauyz, tauzz
+        
+        tauxx => tauij(:,:,:,1); tauxy => tauij(:,:,:,2); tauxz => tauij(:,:,:,3);
+                                 tauyy => tauij(:,:,:,4); tauyz => tauij(:,:,:,5);
+                                                          tauzz => tauij(:,:,:,6);
+        ! Turb transport
+        call this%favre_avg(rho, tke*v_pprime, tmpy1 );
+        tmpy1 = -rho_bar*tmpy1
+        call this%reynolds_avg( - p_prime*v_pprime,tmpy2)
+        tmpy1 = tmpy1 + tmpy2
+        call this%reynolds_avg(tauxy*u_pprime + tauyy*v_pprime + tauyz*w_pprime,tmpy2 )
+        tmpy1 = tmpy1 + tmpy2
+        call this%der_avg%ddy( tmpy1, trans_turb, this%y_bc(1), this%y_bc(2))
+
+        ! Mean convective transport terms
+        call this%favre_avg(rho, tke, tmpy1 );
+        call this%der_avg%ddy( rho_bar*tmpy1*v_tilde, trans_conv, this%y_bc(1), this%y_bc(2))
+
+    end subroutine 
+    
     subroutine tke_budget(this, rho, u, v, w, p, tauij, tke_old, tke_prefilter, tke_postfilter, tsim, dt)
         use RKCoeffs, only: RK45_steps
         class(tkeBudget),                                                                                  intent(inout) :: this
@@ -552,13 +601,15 @@ contains
 
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: ddt_tke
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: production
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: p_dil
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: p_dil_fluct
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: fluct_p_dil
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: baropycnal
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: dissipation
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: diss_mass_flux
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: diss_fluct
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: dissipation_num
-        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: transport 
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: trans_conv 
+        real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)) :: trans_turb 
 
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3))   :: rho_bar, p_bar
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3))   :: u_tilde, v_tilde, w_tilde
@@ -569,7 +620,7 @@ contains
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3) :: grad_p_bar
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3),3) :: u_pprime_bar
 
-        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3))   :: u_pprime, v_pprime, w_pprime, p_prime, u_prime, v_prime, w_prime
+        real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3))   :: u_pprime, v_pprime, w_pprime, p_prime
         real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3),9) :: grad_u_pprime
         real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3),6) :: tau_prime
         real(rkind), dimension(this%avg%sz(1), this%avg%sz(2), this%avg%sz(3))   :: tmp
@@ -577,33 +628,44 @@ contains
         integer :: i
         character(len=clen) :: varname
 
+        ! Get density average
         call this%reynolds_avg(rho, rho_bar)
+
+        ! Get velocity favre average and fluctuations
         call this%favre_avg_and_fluct(rho, u, u_tilde, u_pprime)
         call this%favre_avg_and_fluct(rho, v, v_tilde, v_pprime)
         call this%favre_avg_and_fluct(rho, w, w_tilde, w_pprime)
-        
-        call this%reynolds_avg_and_fluct(u, tmp, u_prime)
-        call this%reynolds_avg_and_fluct(v, tmp, v_prime)
-        call this%reynolds_avg_and_fluct(w, tmp, w_prime)   
+
+        ! Get pressure average and fluctuations
         call this%reynolds_avg_and_fluct(p, p_bar, p_prime)
 
-        ! Get tke and rate of change
+        ! Get tke
         tmp = half*rho*( u_pprime*u_pprime + v_pprime*v_pprime + w_pprime*w_pprime )
         call this%reynolds_avg(tmp, tke)
+
+        ! Get tke rate of change
         ddt_tke = (tke - tke_old)/dt
+
+        ! Get numerical dissipation (from filtering)
+        dissipation_num = sum(tke_prefilter - tke_postfilter, 4)/dt
 
         ! Get Reynolds stresses
         call this%get_reynolds_stress(rho, u_pprime, v_pprime, w_pprime, Rij)
 
-        ! Get mean gradients
+        ! Get mean velocity gradients
         call this%get_duidxj_avg(u_tilde, v_tilde, w_tilde, grad_u_tilde)
+
+        ! Get production
+        call this%get_production(rho_bar, Rij, grad_u_tilde, production)
+
+        ! Get mean pressure gradients
         call this%get_gradp_avg(p_bar, grad_p_bar)
-        
+
         ! Get turbulent mass fluxes
         call this%reynolds_avg(u_pprime, u_pprime_bar(:,:,:,1))
         call this%reynolds_avg(v_pprime, u_pprime_bar(:,:,:,2))
         call this%reynolds_avg(w_pprime, u_pprime_bar(:,:,:,3))
-        
+
         ! Get fluctuating velocity gradients
         call gradient(this%gp, this%der, u_pprime, grad_u_pprime(:,:,:,1), grad_u_pprime(:,:,:,2), grad_u_pprime(:,:,:,3),&
                       -this%x_bc, this%y_bc, this%z_bc)
@@ -612,29 +674,24 @@ contains
         call gradient(this%gp, this%der, w_pprime, grad_u_pprime(:,:,:,7), grad_u_pprime(:,:,:,8), grad_u_pprime(:,:,:,9),&
                        this%x_bc, this%y_bc,-this%z_bc)
 
+
+        ! Get pressure dilatation correlation terms (includes baropycnal work term)
+        call this%get_p_dil(p, p_prime, u_pprime_bar, grad_p_bar, grad_u_pprime,&
+            p_dil_fluct, baropycnal, fluct_p_dil)
+
         ! Get mean and fluctuating shear stresses
         do i = 1, 6
             call this%reynolds_avg_and_fluct(tauij(:,:,:,i), tau_bar(:,:,:,i), tau_prime(:,:,:,i))
         end do
-        
-        !!!!!!!!!!!!!!!!!!!!!! TKE BUDGET TERMS !!!!!!!!!!!!!!!!!!!!!!!
 
-        call this%get_production(rho_bar, Rij, grad_u_tilde, production)
+        ! Get dissipation terms
+        call this%get_dissipation(tauij, tau_bar, tau_prime, u_pprime_bar, &
+            grad_u_pprime, dissipation, diss_mass_flux, diss_fluct)
+    
+        call this%get_transport(rho_bar, v_tilde, tmp, rho,&
+            p_prime, u_pprime, v_pprime, w_pprime, tauij, trans_conv, trans_turb)
 
-        call this%get_dissipation(tau_prime, grad_u_pprime, dissipation)
-        dissipation_num = sum(tke_prefilter - tke_postfilter, 4)/dt
-
-        call this%get_transport(rho, p_prime, u_prime, v_prime, w_prime, &
-                u_pprime, v_pprime, w_pprime, tau_prime, tmp, transport)
-
-        call this%get_p_dil( p_prime, grad_u_pprime, p_dil )
-       
-        call this%get_mass_flux(tau_bar, u_pprime_bar, diss_mass_flux )
-        
-        call this%get_baropycnal(grad_p_bar, u_pprime_bar, baropycnal )
-            
-        !!!!!!!!!!!!!!!!!!!!!! WRITE !!!!!!!!!!!!!!!!!!!!!!!
-        
+        ! Write out data to output file
         call this%tke_viz%start_viz(tsim)
         call this%tke_viz%write_attribute(1, [dt], 'dt', '/')
 
@@ -673,16 +730,19 @@ contains
 
         call this%tke_viz%write_variable(ddt_tke,         'TKE_rate')
         call this%tke_viz%write_variable(production,      'production')
-        call this%tke_viz%write_variable(dissipation,     'dissipation')
-        call this%tke_viz%write_variable(dissipation_num, 'dissipation_num')
-        call this%tke_viz%write_variable(transport,       'transport')
-        call this%tke_viz%write_variable(p_dil,           'p_dil')
-        call this%tke_viz%write_variable(diss_mass_flux,  'diss_mass_flux')
+        call this%tke_viz%write_variable(p_dil_fluct,     'p_dil_fluct')
+        call this%tke_viz%write_variable(fluct_p_dil,     'fluct_p_dil')
         call this%tke_viz%write_variable(baropycnal,      'baropycnal')
+        call this%tke_viz%write_variable(dissipation,     'dissipation')
+        call this%tke_viz%write_variable(diss_mass_flux,  'diss_mass_flux')
+        call this%tke_viz%write_variable(diss_fluct,      'diss_fluct')
+        call this%tke_viz%write_variable(dissipation_num, 'dissipation_num')
+        call this%tke_viz%write_variable(trans_conv,      'trans_conv')
+        call this%tke_viz%write_variable(trans_turb,      'trans_turb')
 
         call this%tke_viz%end_viz()
-    end subroutine
 
+    end subroutine
 
     subroutine get_rhoPsi_bar(this, rho, Ys, rhoPsi_bar)
         class(tkeBudget),                                                                                  intent(inout) :: this
@@ -696,8 +756,8 @@ contains
             ! Get rho*Psi average
             call this%reynolds_avg(rho*Ys(:,:,:,m)*(one-Ys(:,:,:,m)), rhoPsi_bar(:,:,:,m))
         end do
-    end subroutine
 
+    end subroutine
 
     subroutine mixing_budget(this, rho, u, v, w, Ys, diff, rhoPsi_old, rhoPsi_prefilter, rhoPsi_postfilter, tsim, dt)
         use RKCoeffs, only: RK45_steps
@@ -800,6 +860,7 @@ contains
         end do
 
         call this%mix_viz%end_viz()
+
     end subroutine
 
 
