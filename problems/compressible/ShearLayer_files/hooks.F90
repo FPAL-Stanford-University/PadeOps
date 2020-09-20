@@ -19,7 +19,7 @@ module ShearLayer_data
     real(rkind) :: rho_ratio = one          ! rho2/rho1
     real(rkind) :: dtheta0 = 1._rkind       ! Base profile thickness 
     real(rkind) :: noiseAmp = 1D-6          ! white noise amplitude
-    character(len=clen) :: fname_prefix
+    character(len=clen) :: fname_prefix,fname_profiles
     logical :: use_lstab = .true. 
     
     ! Parameters for the 2 materials
@@ -182,6 +182,17 @@ contains
 
         enddo
         enddo
+    end subroutine 
+    
+    subroutine read_profiles1D(gp,fname,profiles1D)
+        type(decomp_info), intent(in)   :: gp
+        character(len=*), intent(in)    :: fname
+        real(rkind), dimension(:,:), allocatable,intent(inout) :: profiles1D 
+    
+        ! Read mode info in x and y
+        call read_2d_ascii(profiles1D,trim(fname))
+        print *, "Profiles read in: ", size(profiles1D,1)
+        pause
 
     end subroutine 
 end module
@@ -240,7 +251,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 end subroutine
 
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz,profiles1D)
     use kind_parameters,             only: rkind, clen
     use constants,                   only: zero,half,one,two,four,five,pi,eight
     use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,&
@@ -267,6 +278,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
+    real(rkind), dimension(:), intent(inout)       :: profiles1D 
 
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
@@ -280,7 +292,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ratio, rho_ref, &
-                        noiseAmp, fname_prefix, use_lstab 
+                        noiseAmp, fname_prefix, use_lstab, fname_profiles 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -290,6 +302,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     nx = decomp%xsz(1) 
     ny = decomp%ysz(2) 
     nz = decomp%zsz(3)
+
+    ! Read profiles
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
@@ -564,6 +578,8 @@ end subroutine
 
 
 subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
+    use CompressibleGrid,   only: rho_index,u_index,v_index,w_index,e_index,&
+                                Ys_index, mom_index, TE_index
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
     use MixtureEOSMod,    only: mixture
@@ -577,5 +593,39 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-    real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
+    real(rkind), dimension(:,:), optional, intent(inout) ::rhsg
+    
+    integer :: j,ny, iy1, iyn ! global indices for each block
+    ! rhsg indices: tilde[Y1,Y2,rho,u,v,w,e] = 1,2,3,4,5,6
+    ! d/dxi[Y1,Y2,rho,u,v,w,e] = 7,8,9,10,11,12
+    ! d/dxi[rY1,rY2,ru,rv,rw,re] = 13,14,15,16,17,18
+
+    ! If base decomposition is in Y
+    iy1 = decomp%yst(2)
+    iyn = decomp%yen(2)
+    ny = decomp%ysz(2)
+    
+    ! Need to set x, y and z as well as  dx, dy and dz
+    associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
+                 v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
+                 e => fields(:,:,:,  e_index), &
+                Y1 => fields(:,:,:, Ys_index), Y2 => fields(:,:,:,Ys_index+1),&
+                ru => fields(:,:,:,mom_index), rv => fields(:,:,:,mom_index+1),&
+                rw => fields(:,:,:,mom_index+2), TE => fields(:,:,:,TE_index) )
+
+    do j=iy1,iyn ! Y1,Y2,ru,rv,rw,re
+        rhs(:,j,:,Ys_index)     = rhs(:,j,:,Ys_index)   + rhsg(j,13) &
+            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,1)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,7))
+        rhs(:,j,:,Ys_index+1)   = rhs(:,j,:,Ys_index+1) + rhsg(j,14) &
+            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,2)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,8))
+        rhs(:,j,:,mom_index)    = rhs(:,j,:,mom_index)  + rhsg(j,15) &
+            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,3)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,9))
+        rhs(:,j,:,mom_index+1)  = rhs(:,j,:,mom_index+1)+ rhsg(j,16) &
+            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,4)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,10))
+        rhs(:,j,:,mom_index+2)  = rhs(:,j,:,mom_index+2)+ rhsg(j,17) &
+            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,5)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,11))
+        rhs(:,j,:,TE_index)     = rhs(:,j,:,TE_index)   + rhsg(j,18) &
+            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,6)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,12))
+    end do
+    end associate
 end subroutine

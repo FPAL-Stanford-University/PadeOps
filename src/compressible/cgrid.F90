@@ -70,6 +70,7 @@ module CompressibleGrid
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
+        real(rkind), dimension(:,:), allocatable :: profiles1D 
        
         real(rkind) :: Cmu, Cbeta, Ckap, Cdiff, CY
 
@@ -302,8 +303,9 @@ contains
         this%nzp = this%decomp%ysz(3)
 
         ! Go to hooks if a different initialization is derired 
+        allocate(this%profiles1D(this%ny,18)) ! allocate to total y siz) ! allocate to total y sizee
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
+                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz, this%profiles1D)
         
         ! Check for correct initialization of the mixture object
         call this%mix%check_initialization()
@@ -1251,7 +1253,7 @@ contains
                                qz, Jz )
 
         ! Call problem source hook
-        call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
+        call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs, this%profiles1D)
 
     end subroutine
 

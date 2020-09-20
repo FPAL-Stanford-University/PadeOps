@@ -17,7 +17,7 @@ module cgrid_hooks
     end interface
 
     interface initfields
-        subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
+        subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz,profiles1D)
             import :: rkind
             import :: decomp_info
             import :: mixture
@@ -27,6 +27,7 @@ module cgrid_hooks
             character(len=*),                intent(in)    :: inputfile
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+            real(rkind), dimension(:,:),     intent(inout) :: profiles1D 
             real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
         end subroutine 
@@ -82,7 +83,7 @@ module cgrid_hooks
     end interface
 
     interface hook_source
-        subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
+        subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,profiles1D)
             import :: rkind
             import :: decomp_info
             import :: mixture
@@ -92,7 +93,8 @@ module cgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(in)    :: fields
             real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-            real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
+            real(rkind), dimension(:,:), optional, intent(inout) ::profiles1D
+            !real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
 
         end subroutine
     end interface
