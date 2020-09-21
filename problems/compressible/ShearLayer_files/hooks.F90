@@ -184,8 +184,7 @@ contains
         enddo
     end subroutine 
     
-    subroutine read_profiles1D(gp,fname,profiles1D)
-        type(decomp_info), intent(in)   :: gp
+    subroutine read_profiles1D(fname,profiles1D)
         character(len=*), intent(in)    :: fname
         real(rkind), dimension(:,:), allocatable,intent(inout) :: profiles1D 
     
@@ -212,8 +211,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
 
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
-                        T_ref, p_ref, rho_ref, rho_ratio,&
-                        noiseAmp, fname_prefix, use_lstab
+                        T_ref, p_ref, rho_ratio, rho_ref, &
+                        noiseAmp, fname_prefix, use_lstab, fname_profiles 
     ioUnit = 11
     open(unit=ioUnit, file='input.dat', form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -278,7 +277,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
-    real(rkind), dimension(:), intent(inout)       :: profiles1D 
+    real(rkind), dimension(:,:), allocatable, intent(inout) :: profiles1D 
 
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
@@ -304,6 +303,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     nz = decomp%zsz(3)
 
     ! Read profiles
+    call read_profiles1D(fname_profiles,profiles1D)
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
