@@ -19,6 +19,11 @@ program test_interpolators
     real(rkind), parameter :: omega = 2._rkind
 
     integer :: i,j,k, ind
+    logical :: periodic_x, periodic_y, periodic_z
+
+    periodic_x = .false. !.true.
+    periodic_y = .false. !.true.
+    periodic_z = .false. !.true.
     
     n_vec = (/16, 32, 64, 128/)
     !n_vec = (/256, 512, 1024, 2048/)
@@ -104,12 +109,12 @@ program test_interpolators
         !Note: periodicity is controlled by true/false statements
         call method3%init(          nx,     ny,    nz, &
                                     dx,     dy,    dz, &
-                                .true., .true., .true., &
+                     periodic_x,periodic_y,periodic_z, &
                                    "ei02", "ei02", "ei02" )
          
         call method5%init(          nx,     ny,    nz, &
                                     dx,     dy,    dz, &
-                                .true., .true., .true., &
+                     periodic_x,periodic_y,periodic_z, &
                                    "ei06", "ei06", "ei06" )
          
         print*, "Initialized all methods"
@@ -118,17 +123,29 @@ program test_interpolators
         print*, "Now trying METHOD 3: EI02 (N2F)"
         print*, "==========================================="
         call method3 % iN2Fx(f,fF)
-        error = MAXVAL( ABS(fF - fFx_exact))
+        if (periodic_x) then
+           error = MAXVAL( ABS(fF - fFx_exact))
+        else
+           error = MAXVAL( ABS(fF(1:nx-1,:,:) - fFx_exact(1:nx-1,:,:)))
+        endif
         print*, "Maximum error = ", error
         ei02_N2F_error(ind,1) = error
 
         call method3 % iN2Fy(f,fF)
-        error = MAXVAL( ABS(fF - fFy_exact))
+        if (periodic_y) then
+           error = MAXVAL( ABS(fF - fFy_exact))
+        else
+           error = MAXVAL( ABS(fF(:,1:ny-1,:) - fFy_exact(:,1:ny-1,:)))
+        endif
         print*, "Maximum error = ", error
         ei02_N2F_error(ind,2) = error
 
         call method3 % iN2Fz(f,fF)
-        error = MAXVAL( ABS(fF - fFz_exact))
+        if (periodic_z) then
+           error = MAXVAL( ABS(fF - fFz_exact))
+        else
+           error = MAXVAL( ABS(fF(:,:,1:nz-1) - fFz_exact(:,:,1:nz-1)))
+        endif
         print*, "Maximum error = ", error
         ei02_N2F_error(ind,3) = error
         
@@ -154,17 +171,29 @@ program test_interpolators
         print*, "Now trying METHOD 5: EI06 (N2F)"
         print*, "==========================================="
         call method5 % iN2Fx(f,fF)
-        error = MAXVAL( ABS(fF - fFx_exact))
+        if (periodic_x) then
+           error = MAXVAL( ABS(fF - fFx_exact))
+        else
+           error = MAXVAL( ABS(fF(1:nx-1,:,:) - fFx_exact(1:nx-1,:,:)))
+        endif
         print*, "Maximum error = ", error
         ei06_N2F_error(ind,1) = error
 
         call method5 % iN2Fy(f,fF)
-        error = MAXVAL( ABS(fF - fFy_exact))
+        if (periodic_y) then
+           error = MAXVAL( ABS(fF - fFy_exact))
+        else
+           error = MAXVAL( ABS(fF(:,1:ny-1,:) - fFy_exact(:,1:ny-1,:)))
+        endif
         print*, "Maximum error = ", error
         ei06_N2F_error(ind,2) = error
 
         call method5 % iN2Fz(f,fF)
-        error = MAXVAL( ABS(fF - fFz_exact))
+        if (periodic_z) then
+           error = MAXVAL( ABS(fF - fFz_exact))
+        else
+           error = MAXVAL( ABS(fF(:,:,1:nz-1) - fFz_exact(:,:,1:nz-1)))
+        endif
         print*, "Maximum error = ", error
         ei06_N2F_error(ind,3) = error
         

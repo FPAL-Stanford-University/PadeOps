@@ -22,6 +22,11 @@ program test_derivatives_staggered
     real(rkind), parameter :: omega = 2._rkind
 
     integer :: i,j,k, ind
+    logical :: periodic_x, periodic_y, periodic_z
+
+    periodic_x = .false.
+    periodic_y = .true.
+    periodic_z = .true.
     
     n_vec = (/16, 32, 64, 128/)
     !n_vec = (/256, 512, 1024, 2048/)
@@ -94,27 +99,27 @@ program test_derivatives_staggered
         !Note: periodicity is controlled by true/false statements
         call method1%init(          nx,     ny,    nz, &
                                     dx,     dy,    dz, &
-                                .true., .true., .true., &
+                     periodic_x,periodic_y,periodic_z, &
                                 "cd10", "cd10", "cd10" )
 
         call method2%init(          nx,     ny,    nz, &
                                     dx,     dy,    dz, &
-                                .true., .true., .true., &
+                     periodic_x,periodic_y,periodic_z, &
                                 "cd06", "cd06", "cd06" )
         
         call method3%init(          nx,     ny,    nz, &
                                     dx,     dy,    dz, &
-                                .true., .true., .true., &
+                     periodic_x,periodic_y,periodic_z, &
                                    "d02", "d02", "d02" )
          
         call method4%init(          nx,     ny,    nz, &
                                     dx,     dy,    dz, &
-                                .true., .true., .true., &
+                     periodic_x,periodic_y,periodic_z, &
                                    "d04", "d04", "d04" )
          
         call method5%init(          nx,     ny,    nz, &
                                     dx,     dy,    dz, &
-                                .true., .true., .true., &
+                     periodic_x,periodic_y,periodic_z, &
                                    "d06", "d06", "d06" )
          
 

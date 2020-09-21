@@ -15,6 +15,9 @@ module InterpolatorsMod
     !   N2F routine goes from Nodes to Faces (forward )
     !   F2N routine goes from Faces to Nodes (backward)
 
+    !With periodic boundary condtiions, the number of nodes and faces is equal
+    !With non-periodic BCs, the last index of the "face" arrays will be garbage
+
     implicit none
     private 
     public :: interpolators
