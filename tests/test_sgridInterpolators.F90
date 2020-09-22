@@ -15,8 +15,8 @@ program test_interpolators
     type( interpolators ) ::method3, method5
     real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,fF, fN
     real(rkind), dimension(:,:,:), allocatable :: xF,yF,zF, fFx_exact, fFy_exact, fFz_exact
-    real(rkind) :: dx, dy, dz
-    real(rkind), parameter :: omega = 2._rkind
+    real(rkind) :: dx, dy, dz, Lx, Ly, Lz
+    real(rkind), parameter :: omega = 2._rkind, phi = 1.73d0
 
     integer :: i,j,k, ind
     logical :: periodic_x, periodic_y, periodic_z
@@ -25,7 +25,8 @@ program test_interpolators
     periodic_y = .false. !.true.
     periodic_z = .false. !.true.
     
-    n_vec = (/16, 32, 64, 128/)
+    !n_vec = (/16, 32, 64, 128/)
+    n_vec = (/32, 64, 128, 256/)
     !n_vec = (/256, 512, 1024, 2048/)
     !n_vec = (/512, 1024, 2048, 4096/)
 
@@ -52,9 +53,26 @@ program test_interpolators
         allocate( fFy_exact(nx,ny,nz) )
         allocate( fFz_exact(nx,ny,nz) )
 
-        dx = two*pi/real(nx,rkind)
-        dy = two*pi/real(ny,rkind)
-        dz = two*pi/real(nz,rkind)
+        Lx = two * pi
+        Ly = two * pi
+        Lz = two * pi
+
+        !Grid spacing and placement depends on periodicity
+        if (periodic_x) then
+            dx = Lx/real(nx,rkind)
+        else
+            dx = Lx/real(nx-1,rkind)
+        endif
+        if (periodic_y) then
+            dy = Ly/real(ny,rkind)
+        else
+            dy = Ly/real(ny-1,rkind)
+        endif
+        if (periodic_z) then
+            dz = Lz/real(nz,rkind)
+        else
+            dz = Lz/real(nz-1,rkind)
+        endif
 
         do k=1,nz
         do j=1,ny
@@ -69,6 +87,10 @@ program test_interpolators
             fFx_exact(i,j,k) = sin(omega * xF(i,j,k)) + sin(omega * y(i,j,k))  + sin(omega * z(i,j,k))
             fFy_exact(i,j,k) = sin(omega * x(i,j,k))  + sin(omega * yF(i,j,k)) + sin(omega * z(i,j,k))
             fFz_exact(i,j,k) = sin(omega * x(i,j,k))  + sin(omega * y(i,j,k))  + sin(omega * zF(i,j,k))
+            f(i,j,k)         = 1.5d0 + sin(omega *  x(i,j,k)  + 1.1d0*phi) + cos(omega * y(i,j,k)  -1.2d0*phi) - sin(omega * z(i,j,k)  + 1.3d0*phi)
+            fFx_exact(i,j,k) = 1.5d0 + sin(omega *  xF(i,j,k) + 1.1d0*phi) + cos(omega * y(i,j,k)  -1.2d0*phi) - sin(omega * z(i,j,k)  + 1.3d0*phi)
+            fFy_exact(i,j,k) = 1.5d0 + sin(omega *  x(i,j,k)  + 1.1d0*phi) + cos(omega * yF(i,j,k) -1.2d0*phi) - sin(omega * z(i,j,k)  + 1.3d0*phi)
+            fFz_exact(i,j,k) = 1.5d0 + sin(omega *  x(i,j,k)  + 1.1d0*phi) + cos(omega * y(i,j,k)  -1.2d0*phi) - sin(omega * zF(i,j,k) + 1.3d0*phi)
         end do
         end do 
         end do 

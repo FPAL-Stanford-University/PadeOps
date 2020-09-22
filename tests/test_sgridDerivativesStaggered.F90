@@ -18,17 +18,18 @@ program test_derivatives_staggered
     type( derivativesStagg ) :: method1, method2, method3, method4, method5
     real(rkind), dimension(:,:,:), allocatable :: x, y, z, f, dfdx_exact, dfdy_exact, dfdz_exact, df
     real(rkind), dimension(:,:,:), allocatable :: xF,yF,zF,fF,dfdxF_exact,dfdyF_exact,dfdzF_exact
-    real(rkind) :: dx, dy, dz
-    real(rkind), parameter :: omega = 2._rkind
+    real(rkind) :: dx, dy, dz, Lx, Ly, Lz
+    real(rkind), parameter :: omega = 2._rkind, phi = 1.73d0
 
     integer :: i,j,k, ind
     logical :: periodic_x, periodic_y, periodic_z
 
-    periodic_x = .false.
-    periodic_y = .true.
-    periodic_z = .true.
+    periodic_x = .false. !.true.
+    periodic_y = .false. !.true.
+    periodic_z = .false. !.true.
     
-    n_vec = (/16, 32, 64, 128/)
+    !n_vec = (/16, 32, 64, 128/)
+    n_vec = (/32, 64, 128, 256/)
     !n_vec = (/256, 512, 1024, 2048/)
     !n_vec = (/512, 1024, 2048, 4096/)
 
@@ -59,9 +60,26 @@ program test_derivatives_staggered
         allocate( dfdyF_exact(nx,ny,nz) )
         allocate( dfdzF_exact(nx,ny,nz) )
 
-        dx = two*pi/real(nx,rkind)
-        dy = two*pi/real(ny,rkind)
-        dz = two*pi/real(nz,rkind)
+        Lx = two * pi
+        Ly = two * pi
+        Lz = two * pi
+
+        !Grid spacing and placement depends on periodicity
+        if (periodic_x) then
+            dx = Lx/real(nx,rkind)
+        else
+            dx = Lx/real(nx-1,rkind)
+        endif
+        if (periodic_y) then
+            dy = Ly/real(ny,rkind)
+        else
+            dy = Ly/real(ny-1,rkind)
+        endif
+        if (periodic_z) then
+            dz = Lz/real(nz,rkind)
+        else
+            dz = Lz/real(nz-1,rkind)
+        endif
 
         do k=1,nz
         do j=1,ny
@@ -69,17 +87,29 @@ program test_derivatives_staggered
             x(i,j,k) = real(i-1,rkind)*dx
             y(i,j,k) = real(j-1,rkind)*dy
             z(i,j,k) = real(k-1,rkind)*dz
-            xF(i,j,k) = MOD( x(i,j,k) + dx*half , two*pi ) 
-            yF(i,j,k) = MOD( y(i,j,k) + dy*half , two*pi )
-            zF(i,j,k) = MOD( z(i,j,k) + dz*half , two*pi )
-            f(i,j,k)  = sin(omega *  x(i,j,k)) + sin(omega *  y(i,j,k)) + sin(omega *  z(i,j,k))
-            fF(i,j,k) = sin(omega * xF(i,j,k)) + sin(omega * yF(i,j,k)) + sin(omega * zF(i,j,k))
-            dfdx_exact(i,j,k) = omega * cos( omega * x(i,j,k))
-            dfdy_exact(i,j,k) = omega * cos( omega * y(i,j,k)) 
-            dfdz_exact(i,j,k) = omega * cos( omega * z(i,j,k)) 
-            dfdxF_exact(i,j,k) = omega * cos( omega * xF(i,j,k))
-            dfdyF_exact(i,j,k) = omega * cos( omega * yF(i,j,k)) 
-            dfdzF_exact(i,j,k) = omega * cos( omega * zF(i,j,k)) 
+            if (periodic_x) then
+                xF(i,j,k) = MOD( x(i,j,k) + dx*half , Lx ) 
+            else
+                xF(i,j,k) = x(i,j,k) + dx*half
+            endif
+            if (periodic_y) then
+                yF(i,j,k) = MOD( y(i,j,k) + dy*half , Ly ) 
+            else
+                yF(i,j,k) = y(i,j,k) + dy*half
+            endif
+            if (periodic_z) then
+                zF(i,j,k) = MOD( z(i,j,k) + dz*half , Lz ) 
+            else
+                zF(i,j,k) = z(i,j,k) + dz*half
+            endif
+            f(i,j,k)  = 1.5d0 + sin(omega *  x(i,j,k) + 1.1d0*phi) + cos(omega *  y(i,j,k) -1.2d0*phi) - sin(omega *  z(i,j,k) + 1.3d0*phi)
+            fF(i,j,k) = 1.5d0 + sin(omega * xF(i,j,k) + 1.1d0*phi) + cos(omega * yF(i,j,k) -1.2d0*phi) - sin(omega * zF(i,j,k) + 1.3d0*phi)
+            dfdx_exact(i,j,k)  =  omega * cos( omega * x(i,j,k)  + 1.1d0*phi)
+            dfdy_exact(i,j,k)  = -omega * sin( omega * y(i,j,k)  - 1.2d0*phi) 
+            dfdz_exact(i,j,k)  = -omega * cos( omega * z(i,j,k)  + 1.3d0*phi) 
+            dfdxF_exact(i,j,k) =  omega * cos( omega * xF(i,j,k) + 1.1d0*phi)
+            dfdyF_exact(i,j,k) = -omega * sin( omega * yF(i,j,k) - 1.2d0*phi)  
+            dfdzF_exact(i,j,k) = -omega * cos( omega * zF(i,j,k) + 1.3d0*phi)  
         end do
         end do 
         end do 
@@ -131,17 +161,29 @@ program test_derivatives_staggered
         print*, "Now trying METHOD 1: CD10"
         print*, "==========================================="
         call method1 % ddxN2F(f,df)
-        error = MAXVAL( ABS(df - dfdxF_exact))
+        if (periodic_x) then
+           error = MAXVAL( ABS(df - dfdxF_exact))
+        else
+           error = MAXVAL( ABS(df(1:nx-1,:,:) - dfdxF_exact(1:nx-1,:,:)))
+        endif
         print*, "Maximum error = ", error
         cd10_N2F_error(ind,1) = error
 
         call method1 % ddyN2F(f,df)
-        error = MAXVAL( ABS(df - dfdyF_exact))
+        if (periodic_y) then
+           error = MAXVAL( ABS(df - dfdyF_exact))
+        else
+           error = MAXVAL( ABS(df(:,1:ny-1,:) - dfdyF_exact(:,1:ny-1,:)))
+        endif
         print*, "Maximum error = ", error
         cd10_N2F_error(ind,2) = error
 
         call method1 % ddzN2F(f,df)
-        error = MAXVAL( ABS(df - dfdzF_exact))
+        if (periodic_z) then
+           error = MAXVAL( ABS(df - dfdzF_exact))
+        else
+           error = MAXVAL( ABS(df(:,:,1:nz-1) - dfdzF_exact(:,:,1:nz-1)))
+        endif
         print*, "Maximum error = ", error
         cd10_N2F_error(ind,3) = error
 
@@ -150,17 +192,29 @@ program test_derivatives_staggered
         print*, "Now trying METHOD 2: CD06"
         print*, "==========================================="
         call method2 % ddxN2F(f,df)
-        error = MAXVAL( ABS(df - dfdxF_exact))
+        if (periodic_x) then
+           error = MAXVAL( ABS(df - dfdxF_exact))
+        else
+           error = MAXVAL( ABS(df(1:nx-1,:,:) - dfdxF_exact(1:nx-1,:,:)))
+        endif
         print*, "Maximum error = ", error
         cd06_N2F_error(ind,1) = error
 
         call method2 % ddyN2F(f,df)
-        error = MAXVAL( ABS(df - dfdyF_exact))
+        if (periodic_y) then
+           error = MAXVAL( ABS(df - dfdyF_exact))
+        else
+           error = MAXVAL( ABS(df(:,1:ny-1,:) - dfdyF_exact(:,1:ny-1,:)))
+        endif
         print*, "Maximum error = ", error
         cd06_N2F_error(ind,2) = error
 
         call method2 % ddzN2F(f,df)
-        error = MAXVAL( ABS(df - dfdzF_exact))
+        if (periodic_z) then
+           error = MAXVAL( ABS(df - dfdzF_exact))
+        else
+           error = MAXVAL( ABS(df(:,:,1:nz-1) - dfdzF_exact(:,:,1:nz-1)))
+        endif
         print*, "Maximum error = ", error
         cd06_N2F_error(ind,3) = error
 
@@ -169,17 +223,29 @@ program test_derivatives_staggered
         print*, "Now trying METHOD 3: D02"
         print*, "==========================================="
         call method3 % ddxN2F(f,df)
-        error = MAXVAL( ABS(df - dfdxF_exact))
+        if (periodic_x) then
+           error = MAXVAL( ABS(df - dfdxF_exact))
+        else
+           error = MAXVAL( ABS(df(1:nx-1,:,:) - dfdxF_exact(1:nx-1,:,:)))
+        endif
         print*, "Maximum error = ", error
         d02_N2F_error(ind,1) = error
 
         call method3 % ddyN2F(f,df)
-        error = MAXVAL( ABS(df - dfdyF_exact))
+        if (periodic_y) then
+           error = MAXVAL( ABS(df - dfdyF_exact))
+        else
+           error = MAXVAL( ABS(df(:,1:ny-1,:) - dfdyF_exact(:,1:ny-1,:)))
+        endif
         print*, "Maximum error = ", error
         d02_N2F_error(ind,2) = error
 
         call method3 % ddzN2F(f,df)
-        error = MAXVAL( ABS(df - dfdzF_exact))
+        if (periodic_z) then
+           error = MAXVAL( ABS(df - dfdzF_exact))
+        else
+           error = MAXVAL( ABS(df(:,:,1:nz-1) - dfdzF_exact(:,:,1:nz-1)))
+        endif
         print*, "Maximum error = ", error
         d02_N2F_error(ind,3) = error
 
@@ -187,17 +253,29 @@ program test_derivatives_staggered
         print*, "Now trying METHOD 4: D04"
         print*, "==========================================="
         call method4 % ddxN2F(f,df)
-        error = MAXVAL( ABS(df - dfdxF_exact))
+        if (periodic_x) then
+           error = MAXVAL( ABS(df - dfdxF_exact))
+        else
+           error = MAXVAL( ABS(df(1:nx-1,:,:) - dfdxF_exact(1:nx-1,:,:)))
+        endif
         print*, "Maximum error = ", error
         d04_N2F_error(ind,1) = error
 
         call method4 % ddyN2F(f,df)
-        error = MAXVAL( ABS(df - dfdyF_exact))
+        if (periodic_y) then
+           error = MAXVAL( ABS(df - dfdyF_exact))
+        else
+           error = MAXVAL( ABS(df(:,1:ny-1,:) - dfdyF_exact(:,1:ny-1,:)))
+        endif
         print*, "Maximum error = ", error
         d04_N2F_error(ind,2) = error
 
         call method4 % ddzN2F(f,df)
-        error = MAXVAL( ABS(df - dfdzF_exact))
+        if (periodic_z) then
+           error = MAXVAL( ABS(df - dfdzF_exact))
+        else
+           error = MAXVAL( ABS(df(:,:,1:nz-1) - dfdzF_exact(:,:,1:nz-1)))
+        endif
         print*, "Maximum error = ", error
         d04_N2F_error(ind,3) = error
 
@@ -205,17 +283,29 @@ program test_derivatives_staggered
         print*, "Now trying METHOD 5: D06"
         print*, "==========================================="
         call method5 % ddxN2F(f,df)
-        error = MAXVAL( ABS(df - dfdxF_exact))
+        if (periodic_x) then
+           error = MAXVAL( ABS(df - dfdxF_exact))
+        else
+           error = MAXVAL( ABS(df(1:nx-1,:,:) - dfdxF_exact(1:nx-1,:,:)))
+        endif
         print*, "Maximum error = ", error
         d06_N2F_error(ind,1) = error
 
         call method5 % ddyN2F(f,df)
-        error = MAXVAL( ABS(df - dfdyF_exact))
+        if (periodic_y) then
+           error = MAXVAL( ABS(df - dfdyF_exact))
+        else
+           error = MAXVAL( ABS(df(:,1:ny-1,:) - dfdyF_exact(:,1:ny-1,:)))
+        endif
         print*, "Maximum error = ", error
         d06_N2F_error(ind,2) = error
 
         call method5 % ddzN2F(f,df)
-        error = MAXVAL( ABS(df - dfdzF_exact))
+        if (periodic_z) then
+           error = MAXVAL( ABS(df - dfdzF_exact))
+        else
+           error = MAXVAL( ABS(df(:,:,1:nz-1) - dfdzF_exact(:,:,1:nz-1)))
+        endif
         print*, "Maximum error = ", error
         d06_N2F_error(ind,3) = error
 
