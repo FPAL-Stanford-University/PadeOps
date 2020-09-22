@@ -127,7 +127,7 @@ contains
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
         character(len=*)  , intent(in)             :: dir
         integer, intent(in) :: bc1, bcn
-        real(rkind) :: a10, b10, c10
+        real(rkind) :: a10, b10, c10, a101, a102, a104, b104
         integer :: j,k
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_4
@@ -191,82 +191,51 @@ contains
                                                           + c10 * (f(2,       :,:) - f(this%n-3,  :,:))
             end select
         case (.FALSE.)
-            a10    = q_hat * this%onebydx  
-
-            a_np_4 = w4*q_ppp * this%onebydx  
+            a10 = aD06d1 * this%onebydx 
+            b10 = bD06d1 * this%onebydx * third
+            c10 = cD06d1 * this%onebydx * fifth
+            RHS = 0.0d0
             
-            a_np_3 = w3*q_pp * this%onebydx  
+            a102 = one * this%onebydx 
+            a101 = a102
 
-            a_np_2 = w2*q_p * this%onebydx
-            
-            a_np_1 = w1*( p * this%onebydx)
-            b_np_1 = w1*( q * this%onebydx)
-            c_np_1 = w1*( r * this%onebydx)
-            d_np_1 = w1*( s * this%onebydx)
+            a104 =  9.0d0/8.0d0  * this%onebydx
+            b104 = -1.0d0/24.0d0 * this%onebydx
 
-            do k = 1,n3
-                do j = 1,n2
-                    select case(bc1)
-                    case(0)
-                        RHS(1         ,j,k) =   a_np_1* f(1         ,j,k) +  b_np_1*f(2         ,j,k)   &
-                                            +   c_np_1* f(3         ,j,k) +  d_np_1*f(4         ,j,k) 
-                   
-                        RHS(2         ,j,k) =   a_np_2*(f(3         ,j,k) -         f(1         ,j,k))
-                        
-                        RHS(3         ,j,k) =   a_np_3*(f(4         ,j,k) -         f(2         ,j,k))
-                        
-                        RHS(4         ,j,k) =   a_np_4*(f(5         ,j,k) -         f(3         ,j,k))
-                    case(1)
-                        RHS(1,j,k) =   zero
-                   
-                        RHS(2,j,k) =   a10   *(f(3,j,k) - f(1,j,k))
-                        
-                        RHS(3,j,k) =   a10   *(f(4,j,k) - f(2,j,k))
-                    
-                        RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k))
-                    case(-1)
-                        RHS(1,j,k) =   a10   *(f(2,j,k) + f(2,j,k))
-                        
-                        RHS(2,j,k) =   a10   *(f(3,j,k) - f(1,j,k))
-                        
-                        RHS(3,j,k) =   a10   *(f(4,j,k) - f(2,j,k))
-                    
-                        RHS(4,j,k) =   a10   *(f(5,j,k) - f(3,j,k))
-                    end select
-                    
-                    RHS(5:this%n-4,j,k) =   a10   *(f(6:this%n-3,j,k) -         f(4:this%n-5,j,k))
-                    
-                    select case(bcn)
-                    case(0)
-                        RHS(this%n-3  ,j,k) =   a_np_4*(f(this%n-2  ,j,k) -         f(this%n-4  ,j,k))
-        
-                        RHS(this%n-2  ,j,k) =   a_np_3*(f(this%n-1  ,j,k) -         f(this%n-3  ,j,k))
-                        
-                        RHS(this%n-1  ,j,k) =   a_np_2*(f(this%n    ,j,k) -         f(this%n-2  ,j,k))
+            select case (dir)
+                case ("N2F")!TODO: implement better non-periodic BC: currently 2466...6642
+                    !interior    
+                    RHS(3:this%n-3,:,:) = RHS(3:this%n-3,:,:) + a10 * (f(4:this%n-2,:,:) - f(3:this%n-3,:,:)) &
+                                                              + b10 * (f(5:this%n-1,:,:) - f(2:this%n-4,:,:)) &
+                                                              + c10 * (f(6:this%n,  :,:) - f(1:this%n-5,:,:))
 
-                        RHS(this%n    ,j,k) =  -a_np_1* f(this%n    ,j,k) -  b_np_1*f(this%n-1  ,j,k)   &
-                                            -   c_np_1* f(this%n-2  ,j,k) -  d_np_1*f(this%n-3  ,j,k)
-                    case(1)
-                        RHS(this%n-3,j,k) =   a10   *( f(this%n-2,j,k) - f(this%n-4,j,k))
+                    !left boundary (1:2)
+                    RHS(1,:,:) = RHS(1,:,:) + a102 * (f(2,:,:) - f(1,       :,:))   !2nd order
+                    RHS(2,:,:) = RHS(2,:,:) + a104 * (f(3,:,:) - f(2,       :,:)) & !4th order
+                                            + b104 * (f(4,:,:) - f(1,       :,:)) 
+                    !right boundary (n-2:n-1)
+                    RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a104 * (f(this%n-1,:,:) - f(this%n-2,  :,:)) & !4th order
+                                                          + b104 * (f(this%n,  :,:) - f(this%n-3,  :,:))   
+                    RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a102 * (f(this%n,  :,:) - f(this%n-1,  :,:))   !2nd order
 
-                        RHS(this%n-2,j,k) =   a10   *( f(this%n-1,j,k) - f(this%n-3,j,k))
+                case ("F2N")!TODO: implement better non-periodic BC: currently 12466...66421
+                    !interior    
+                    RHS(4:this%n-3,:,:) = RHS(4:this%n-3,:,:) + a10 * (f(4:this%n-3,:,:) - f(3:this%n-4,:,:)) &
+                                                              + b10 * (f(5:this%n-2,:,:) - f(2:this%n-5,:,:)) &
+                                                              + c10 * (f(6:this%n-1,:,:) - f(1:this%n-6,:,:))
 
-                        RHS(this%n-1,j,k) =   a10   *( f(this%n  ,j,k) - f(this%n-2,j,k))
+                    ! left boundary (1:3)
+                    RHS(1,:,:) = RHS(1,:,:) + a101 * (f(2,:,:) - f(1,:,:)) !1st order
+                    RHS(2,:,:) = RHS(2,:,:) + a102 * (f(2,:,:) - f(1,:,:)) 
+                    RHS(3,:,:) = RHS(3,:,:) + a104 * (f(3,:,:) - f(2,:,:)) &
+                                            + b104 * (f(4,:,:) - f(1,:,:)) 
+                    !right boundary (n-2:n)
+                    RHS(this%n,:,:)   = RHS(this%n  ,:,:) + a101 * (f(this%n-1,:,:) - f(this%n-2,:,:))                   
+                    RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a102 * (f(this%n-1,:,:) - f(this%n-2,:,:)) 
+                    RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a104 * (f(this%n-2,:,:) - f(this%n-3,:,:)) &
+                                                          + b104 * (f(this%n-1,:,:) - f(this%n-4,:,:)) 
+            end select
 
-                        RHS(this%n  ,j,k) =   zero
-
-                    case(-1)
-                        RHS(this%n-3,j,k) =   a10   *( f(this%n-2,j,k) - f(this%n-4,j,k))
-
-                        RHS(this%n-2,j,k) =   a10   *( f(this%n-1,j,k) - f(this%n-3,j,k))
-
-                        RHS(this%n-1,j,k) =   a10   *( f(this%n  ,j,k) - f(this%n-2,j,k))
-
-                        RHS(this%n  ,j,k) =   a10   *(-f(this%n-1,j,k) - f(this%n-1,j,k))
-
-                    end select
-               end do 
-            end do 
         end select
     
     end subroutine
@@ -279,7 +248,7 @@ contains
         real(rkind), dimension(n1,this%n,n3), intent(out) :: RHS
         character(len=*)  , intent(in)             :: dir
         integer, intent(in) :: bc1, bcn
-        real(rkind) :: a10, b10, c10
+        real(rkind) :: a10, b10, c10, a101, a102, a104, b104
         integer :: k
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_4
@@ -344,79 +313,49 @@ contains
                                                           + c10 * (f(:,2,       :) - f(:,this%n-3,  :))
             end select
         case (.FALSE.)
-            a10    = q_hat * this%onebydx  
-
-            a_np_4 = w4*q_ppp * this%onebydx  
+            a10 = aD06d1 * this%onebydx 
+            b10 = bD06d1 * this%onebydx * third
+            c10 = cD06d1 * this%onebydx * fifth
+            RHS = 0.0d0
             
-            a_np_3 = w3*q_pp * this%onebydx  
+            a102 = one * this%onebydx 
+            a101 = a102
 
-            a_np_2 = w2*q_p * this%onebydx
-            
-            a_np_1 = w1*( p * this%onebydx)
-            b_np_1 = w1*( q * this%onebydx)
-            c_np_1 = w1*( r * this%onebydx)
-            d_np_1 = w1*( s * this%onebydx)
+            a104 =  9.0d0/8.0d0  * this%onebydx
+            b104 = -1.0d0/24.0d0 * this%onebydx
+            select case (dir)
+                case ("N2F")!TODO: implement better non-periodic BC: currently 2466...6642
+                    !interior    
+                    RHS(:,3:this%n-3,:) = RHS(:,3:this%n-3,:) + a10 * (f(:,4:this%n-2,:) - f(:,3:this%n-3,:)) &
+                                                              + b10 * (f(:,5:this%n-1,:) - f(:,2:this%n-4,:)) &
+                                                              + c10 * (f(:,6:this%n,  :) - f(:,1:this%n-5,:))
 
-            do k = 1,n3
+                    !left boundary (1:2)
+                    RHS(:,1,:) = RHS(:,1,:) + a102 * (f(:,2,:) - f(:,1,       :))   !2nd order
+                    RHS(:,2,:) = RHS(:,2,:) + a104 * (f(:,3,:) - f(:,2,       :)) & !4th order
+                                            + b104 * (f(:,4,:) - f(:,1,       :)) 
+                    !right boundary (n-2:n-1)
+                    RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a104 * (f(:,this%n-1,:) - f(:,this%n-2,  :)) & !4th order
+                                                          + b104 * (f(:,this%n,  :) - f(:,this%n-3,  :))   
+                    RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a102 * (f(:,this%n,  :) - f(:,this%n-1,  :))   !2nd order
 
-                select case(bc1)
-                case(0)    
-                    RHS(:,1         ,k) =   a_np_1* f(:,1         ,k) +  b_np_1*f(:,2         ,k)   &
-                                        +   c_np_1* f(:,3         ,k) +  d_np_1*f(:,4         ,k) 
-                    
-                    RHS(:,2         ,k) =   a_np_2*(f(:,3         ,k) -         f(:,1         ,k))
-                    
-                    RHS(:,3         ,k) =   a_np_3*(f(:,4         ,k) -         f(:,2         ,k))
-                    
-                    RHS(:,4         ,k) =   a_np_4*(f(:,5         ,k) -         f(:,3         ,k))
-                case(1)
-                    RHS(:,1,k) =   zero
-                   
-                    RHS(:,2,k) =   a10   *(f(:,3,k) - f(:,1,k))
-                    
-                    RHS(:,3,k) =   a10   *(f(:,4,k) - f(:,2,k))
-                    
-                    RHS(:,4,k) =   a10   *(f(:,5,k) - f(:,3,k))
-                case(-1)
-                    RHS(:,1,k) =   a10   *(f(:,2,k) + f(:,2,k))
-                    
-                    RHS(:,2,k) =   a10   *(f(:,3,k) - f(:,1,k))
-                    
-                    RHS(:,3,k) =   a10   *(f(:,4,k) - f(:,2,k))
-                    
-                    RHS(:,4,k) =   a10   *(f(:,5,k) - f(:,3,k))
-                end select
-                
-                RHS(:,5:this%n-4,k) =   a10   *(f(:,6:this%n-3,k) -         f(:,4:this%n-5,k))
-                
-                select case(bcn)
-                case(0)    
-                    RHS(:,this%n-3  ,k) =   a_np_4*(f(:,this%n-2  ,k) -         f(:,this%n-4  ,k))
-        
-                    RHS(:,this%n-2  ,k) =   a_np_3*(f(:,this%n-1  ,k) -         f(:,this%n-3  ,k))
-                    
-                    RHS(:,this%n-1  ,k) =   a_np_2*(f(:,this%n    ,k) -         f(:,this%n-2  ,k))
+                case ("F2N")!TODO: implement better non-periodic BC: currently 12466...66421
+                    !interior    
+                    RHS(:,4:this%n-3,:) = RHS(:,4:this%n-3,:) + a10 * (f(:,4:this%n-3,:) - f(:,3:this%n-4,:)) &
+                                                              + b10 * (f(:,5:this%n-2,:) - f(:,2:this%n-5,:)) &
+                                                              + c10 * (f(:,6:this%n-1,:) - f(:,1:this%n-6,:))
 
-                    RHS(:,this%n    ,k) =  -a_np_1* f(:,this%n    ,k) -  b_np_1*f(:,this%n-1  ,k)   &
-                                        -   c_np_1* f(:,this%n-2  ,k) -  d_np_1*f(:,this%n-3  ,k)
-                case(1)
-                    RHS(:,this%n-3,k) =   a10   *( f(:,this%n-2,k) - f(:,this%n-4,k))
-
-                    RHS(:,this%n-2,k) =   a10   *( f(:,this%n-1,k) - f(:,this%n-3,k))
-
-                    RHS(:,this%n-1,k) =   a10   *( f(:,this%n  ,k) - f(:,this%n-2,k))
-
-                    RHS(:,this%n  ,k) =   zero
-                case(-1)
-                    RHS(:,this%n-3,k) =   a10   *( f(:,this%n-2,k) - f(:,this%n-4,k))
-
-                    RHS(:,this%n-2,k) =   a10   *( f(:,this%n-1,k) - f(:,this%n-3,k))
-
-                    RHS(:,this%n-1,k) =   a10   *( f(:,this%n  ,k) - f(:,this%n-2,k))
-
-                    RHS(:,this%n  ,k) =   a10   *(-f(:,this%n-1,k) - f(:,this%n-1,k))
-                end select
-            end do 
+                    ! left boundary (1:3)
+                    RHS(:,1,:) = RHS(:,1,:) + a101 * (f(:,2,:) - f(:,1,:))
+                    RHS(:,2,:) = RHS(:,2,:) + a102 * (f(:,2,:) - f(:,1,:)) 
+                    RHS(:,3,:) = RHS(:,3,:) + a104 * (f(:,3,:) - f(:,2,:)) &
+                                            + b104 * (f(:,4,:) - f(:,1,:)) 
+                    !right boundary (n-2:n)
+                    RHS(:,this%n  ,:) = RHS(:,this%n  ,:) + a101 * (f(:,this%n-1,:) - f(:,this%n-2,:))
+                    RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a102 * (f(:,this%n-1,:) - f(:,this%n-2,:)) 
+                    RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a104 * (f(:,this%n-2,:) - f(:,this%n-3,:)) &
+                                                          + b104 * (f(:,this%n-1,:) - f(:,this%n-4,:)) 
+            end select
         end select
     
     end subroutine
@@ -430,7 +369,7 @@ contains
         real(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
         character(len=*)  , intent(in)             :: dir
         integer, intent(in) :: bc1, bcn
-        real(rkind) :: a10, b10, c10
+        real(rkind) :: a10, b10, c10, a101, a102, a104, b104
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_4
         real(rkind) :: a_np_3
@@ -494,78 +433,50 @@ contains
                                                           + c10 * (f(:,:,2       ) - f(:,:,this%n-3))
             end select
         case (.FALSE.)
-            a10    = q_hat * this%onebydx  
-
-            a_np_4 = w4*q_ppp * this%onebydx  
+            a10 = aD06d1 * this%onebydx 
+            b10 = bD06d1 * this%onebydx * third
+            c10 = cD06d1 * this%onebydx * fifth
+            RHS = 0.0d0
             
-            a_np_3 = w3*q_pp * this%onebydx  
+            a102 = one * this%onebydx 
+            a101 = a102
 
-            a_np_2 = w2*q_p * this%onebydx
+            a104 =  9.0d0/8.0d0  * this%onebydx
+            b104 = -1.0d0/24.0d0 * this%onebydx
             
-            a_np_1 = w1*( p * this%onebydx)
-            b_np_1 = w1*( q * this%onebydx)
-            c_np_1 = w1*( r * this%onebydx)
-            d_np_1 = w1*( s * this%onebydx)
+            select case (dir)
+                case ("N2F")!TODO: implement better non-periodic BC: currently 2466...6642
+                    !interior    
+                    RHS(:,:,3:this%n-3) = RHS(:,:,3:this%n-3) + a10 * (f(:,:,4:this%n-2) - f(:,:,3:this%n-3)) &
+                                                              + b10 * (f(:,:,5:this%n-1) - f(:,:,2:this%n-4)) &
+                                                              + c10 * (f(:,:,6:this%n  ) - f(:,:,1:this%n-5))
 
-                    
-            select case(bc1)
-            case(0)    
-                RHS(:,:,1         ) =   a_np_1* f(:,:,1         ) +  b_np_1*f(:,:,2         )   &
-                                    +   c_np_1* f(:,:,3         ) +  d_np_1*f(:,:,4         ) 
-                
-                RHS(:,:,2         ) =   a_np_2*(f(:,:,3         ) -         f(:,:,1         ))
-                
-                RHS(:,:,3         ) =   a_np_3*(f(:,:,4         ) -         f(:,:,2         ))
-                
-                RHS(:,:,4         ) =   a_np_4*(f(:,:,5         ) -         f(:,:,3         ))
-            case(1)
-                RHS(:,:,1) =   zero
-                
-                RHS(:,:,2) =   a10   *(f(:,:,3) - f(:,:,1))
-                
-                RHS(:,:,3) =   a10   *(f(:,:,4) - f(:,:,2))
-                
-                RHS(:,:,4) =   a10   *(f(:,:,5) - f(:,:,3))
-            case(-1)
-                RHS(:,:,1) =   a10   *(f(:,:,2) + f(:,:,2))
-                
-                RHS(:,:,2) =   a10   *(f(:,:,3) - f(:,:,1))
-                
-                RHS(:,:,3) =   a10   *(f(:,:,4) - f(:,:,2))
-                
-                RHS(:,:,4) =   a10   *(f(:,:,5) - f(:,:,3))
+                    !left boundary (1:2)
+                    RHS(:,:,1) = RHS(:,:,1) + a102 * (f(:,:,2) - f(:,:,1))   !2nd order
+                    RHS(:,:,2) = RHS(:,:,2) + a104 * (f(:,:,3) - f(:,:,2)) & !4th order
+                                            + b104 * (f(:,:,4) - f(:,:,1)) 
+                    !right boundary (n-2:n-1)
+                    RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a104 * (f(:,:,this%n-1) - f(:,:,this%n-2)) & !4th order
+                                                          + b104 * (f(:,:,this%n  ) - f(:,:,this%n-3))   
+                    RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a102 * (f(:,:,this%n  ) - f(:,:,this%n-1))   !2nd order
+
+                case ("F2N")!TODO: implement better non-periodic BC: currently 12466...66421
+                    !interior    
+                    RHS(:,:,4:this%n-3) = RHS(:,:,4:this%n-3) + a10 * (f(:,:,4:this%n-3) - f(:,:,3:this%n-4)) &
+                                                              + b10 * (f(:,:,5:this%n-2) - f(:,:,2:this%n-5)) &
+                                                              + c10 * (f(:,:,6:this%n-1) - f(:,:,1:this%n-6))
+
+                    ! left boundary (1:3)
+                    RHS(:,:,1) = RHS(:,:,1) + a101 * (f(:,:,2) - f(:,:,1))
+                    RHS(:,:,2) = RHS(:,:,2) + a102 * (f(:,:,2) - f(:,:,1)) 
+                    RHS(:,:,3) = RHS(:,:,3) + a104 * (f(:,:,3) - f(:,:,2)) &
+                                            + b104 * (f(:,:,4) - f(:,:,1)) 
+                    !right boundary (n-2:n)
+                    RHS(:,:,this%n  ) = RHS(:,:,this%n  ) + a101 * (f(:,:,this%n-1) - f(:,:,this%n-2))   
+                    RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a102 * (f(:,:,this%n-1) - f(:,:,this%n-2)) 
+                    RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a104 * (f(:,:,this%n-2) - f(:,:,this%n-3)) &
+                                                          + b104 * (f(:,:,this%n-1) - f(:,:,this%n-4)) 
             end select
-            
-            RHS(:,:,5:this%n-4) =   a10   *(f(:,:,6:this%n-3) -         f(:,:,4:this%n-5))
-            
-            select case(bcn)
-            case(0)    
-                RHS(:,:,this%n-3  ) =   a_np_4*(f(:,:,this%n-2  ) -         f(:,:,this%n-4  ))
-        
-                RHS(:,:,this%n-2  ) =   a_np_3*(f(:,:,this%n-1  ) -         f(:,:,this%n-3  ))
-                
-                RHS(:,:,this%n-1  ) =   a_np_2*(f(:,:,this%n    ) -         f(:,:,this%n-2  ))
-
-                RHS(:,:,this%n    ) =  -a_np_1* f(:,:,this%n    ) -  b_np_1*f(:,:,this%n-1  )   &
-                                    -   c_np_1* f(:,:,this%n-2  ) -  d_np_1*f(:,:,this%n-3  )
-            case(1)
-                RHS(:,:,this%n-3) =   a10   *( f(:,:,this%n-2) - f(:,:,this%n-4))
-
-                RHS(:,:,this%n-2) =   a10   *( f(:,:,this%n-1) - f(:,:,this%n-3))
-
-                RHS(:,:,this%n-1) =   a10   *( f(:,:,this%n  ) - f(:,:,this%n-2))
-
-                RHS(:,:,this%n  ) =   zero
-            case(-1)
-                RHS(:,:,this%n-3) =   a10   *( f(:,:,this%n-2) - f(:,:,this%n-4))
-
-                RHS(:,:,this%n-2) =   a10   *( f(:,:,this%n-1) - f(:,:,this%n-3))
-
-                RHS(:,:,this%n-1) =   a10   *( f(:,:,this%n  ) - f(:,:,this%n-2))
-
-                RHS(:,:,this%n  ) =   a10   *(-f(:,:,this%n-1) - f(:,:,this%n-1))
-            end select
-            
         end select
     
     end subroutine
