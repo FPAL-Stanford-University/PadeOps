@@ -1,6 +1,6 @@
 program test_interpolators
 
-    use kind_parameters, only: rkind
+    use kind_parameters, only: rkind, clen
     use constants,       only: two, pi, half
     use InterpolatorsMod,  only: interpolators
     implicit none
@@ -20,11 +20,23 @@ program test_interpolators
 
     integer :: i,j,k, ind
     logical :: periodic_x, periodic_y, periodic_z
+    integer :: bc1_x, bcn_x, bc1_y, bcn_y, bc1_z, bcn_z
+    character(len=clen) :: inputfile
+    integer :: ierr, ioUnit 
 
-    periodic_x = .false. !.true.
-    periodic_y = .false. !.true.
-    periodic_z = .false. !.true.
-    
+    ! Start MPI
+    call MPI_Init(ierr)
+
+    ! Get file location 
+    call GETARG(1,inputfile)
+
+    namelist /TEST/ bc1_x, bcn_x, bc1_y, bcn_y, bc1_z, bcn_z,  &
+                    periodic_x, periodic_y, periodic_z
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=TEST)
+
     !n_vec = (/16, 32, 64, 128/)
     n_vec = (/32, 64, 128, 256/)
     !n_vec = (/256, 512, 1024, 2048/)
@@ -144,7 +156,7 @@ program test_interpolators
         print*, "==========================================="
         print*, "Now trying METHOD 3: EI02 (N2F)"
         print*, "==========================================="
-        call method3 % iN2Fx(f,fF)
+        call method3 % iN2Fx(f,fF,bc1_x,bcn_x)
         if (periodic_x) then
            error = MAXVAL( ABS(fF - fFx_exact))
         else
@@ -153,7 +165,7 @@ program test_interpolators
         print*, "Maximum error = ", error
         ei02_N2F_error(ind,1) = error
 
-        call method3 % iN2Fy(f,fF)
+        call method3 % iN2Fy(f,fF,bc1_y,bcn_y)
         if (periodic_y) then
            error = MAXVAL( ABS(fF - fFy_exact))
         else
@@ -162,7 +174,7 @@ program test_interpolators
         print*, "Maximum error = ", error
         ei02_N2F_error(ind,2) = error
 
-        call method3 % iN2Fz(f,fF)
+        call method3 % iN2Fz(f,fF,bc1_z,bcn_z)
         if (periodic_z) then
            error = MAXVAL( ABS(fF - fFz_exact))
         else
@@ -174,17 +186,17 @@ program test_interpolators
         print*, "==========================================="
         print*, "Now trying METHOD 3: EI02 (F2N)"
         print*, "==========================================="
-        call method3 % iF2Nx(fFx_exact,fN)
+        call method3 % iF2Nx(fFx_exact,fN,bc1_x,bcn_x)
         error = MAXVAL( ABS(f - fN))
         print*, "Maximum error = ", error
         ei02_F2N_error(ind,1) = error
 
-        call method3 % iF2Ny(fFy_exact,fN)
+        call method3 % iF2Ny(fFy_exact,fN,bc1_y,bcn_y)
         error = MAXVAL( ABS(f - fN))
         print*, "Maximum error = ", error
         ei02_F2N_error(ind,2) = error
 
-        call method3 % iF2Nz(fFz_exact,fN)
+        call method3 % iF2Nz(fFz_exact,fN,bc1_z,bcn_z)
         error = MAXVAL( ABS(f - fN))
         print*, "Maximum error = ", error
         ei02_F2N_error(ind,3) = error
@@ -192,7 +204,7 @@ program test_interpolators
         print*, "==========================================="
         print*, "Now trying METHOD 5: EI06 (N2F)"
         print*, "==========================================="
-        call method5 % iN2Fx(f,fF)
+        call method5 % iN2Fx(f,fF,bc1_x,bcn_x)
         if (periodic_x) then
            error = MAXVAL( ABS(fF - fFx_exact))
         else
@@ -201,7 +213,7 @@ program test_interpolators
         print*, "Maximum error = ", error
         ei06_N2F_error(ind,1) = error
 
-        call method5 % iN2Fy(f,fF)
+        call method5 % iN2Fy(f,fF,bc1_y,bcn_y)
         if (periodic_y) then
            error = MAXVAL( ABS(fF - fFy_exact))
         else
@@ -210,7 +222,7 @@ program test_interpolators
         print*, "Maximum error = ", error
         ei06_N2F_error(ind,2) = error
 
-        call method5 % iN2Fz(f,fF)
+        call method5 % iN2Fz(f,fF,bc1_z,bcn_z)
         if (periodic_z) then
            error = MAXVAL( ABS(fF - fFz_exact))
         else
@@ -222,17 +234,17 @@ program test_interpolators
         print*, "==========================================="
         print*, "Now trying METHOD 5: EI06 (F2N)"
         print*, "==========================================="
-        call method5 % iF2Nx(fFx_exact,fN)
+        call method5 % iF2Nx(fFx_exact,fN,bc1_x,bcn_x)
         error = MAXVAL( ABS(f - fN))
         print*, "Maximum error = ", error
         ei06_F2N_error(ind,1) = error
 
-        call method5 % iF2Ny(fFy_exact,fN)
+        call method5 % iF2Ny(fFy_exact,fN,bc1_y,bcn_y)
         error = MAXVAL( ABS(f - fN))
         print*, "Maximum error = ", error
         ei06_F2N_error(ind,2) = error
 
-        call method5 % iF2Nz(fFz_exact,fN)
+        call method5 % iF2Nz(fFz_exact,fN,bc1_z,bcn_z)
         error = MAXVAL( ABS(f - fN))
         print*, "Maximum error = ", error
         ei06_F2N_error(ind,3) = error
@@ -315,5 +327,8 @@ program test_interpolators
     print *, "Z Interp Order of Convergence (z)"
     print *,  log(ratio) / log(2.0)
     print*, "==============================================================="
+
+    ! End the run
+    call MPI_Finalize(ierr)
 
 end program

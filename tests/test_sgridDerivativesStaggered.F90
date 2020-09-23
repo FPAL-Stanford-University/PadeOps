@@ -1,6 +1,6 @@
 program test_derivatives_staggered
 
-    use kind_parameters,          only: rkind
+    use kind_parameters, only: rkind, clen
     use constants,                only: half,two,pi
     use DerivativesStaggeredMod,  only: derivativesStagg
     implicit none
@@ -23,11 +23,23 @@ program test_derivatives_staggered
 
     integer :: i,j,k, ind
     logical :: periodic_x, periodic_y, periodic_z
+    integer :: bc1_x, bcn_x, bc1_y, bcn_y, bc1_z, bcn_z
+    character(len=clen) :: inputfile
+    integer :: ierr, ioUnit 
 
-    periodic_x = .false. !.true.
-    periodic_y = .false. !.true.
-    periodic_z = .false. !.true.
-    
+    ! Start MPI
+    call MPI_Init(ierr)
+
+    ! Get file location 
+    call GETARG(1,inputfile)
+
+    namelist /TEST/ bc1_x, bcn_x, bc1_y, bcn_y, bc1_z, bcn_z,  &
+                    periodic_x, periodic_y, periodic_z
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=TEST)
+
     !n_vec = (/16, 32, 64, 128/)
     n_vec = (/32, 64, 128, 256/)
     !n_vec = (/256, 512, 1024, 2048/)
@@ -160,7 +172,7 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 1: CD10"
         print*, "==========================================="
-        call method1 % ddxN2F(f,df)
+        call method1 % ddxN2F(f,df,bc1_x,bcn_x)
         if (periodic_x) then
            error = MAXVAL( ABS(df - dfdxF_exact))
         else
@@ -169,7 +181,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         cd10_N2F_error(ind,1) = error
 
-        call method1 % ddyN2F(f,df)
+        call method1 % ddyN2F(f,df,bc1_y,bcn_y)
         if (periodic_y) then
            error = MAXVAL( ABS(df - dfdyF_exact))
         else
@@ -178,7 +190,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         cd10_N2F_error(ind,2) = error
 
-        call method1 % ddzN2F(f,df)
+        call method1 % ddzN2F(f,df,bc1_z,bcn_z)
         if (periodic_z) then
            error = MAXVAL( ABS(df - dfdzF_exact))
         else
@@ -191,7 +203,7 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 2: CD06"
         print*, "==========================================="
-        call method2 % ddxN2F(f,df)
+        call method2 % ddxN2F(f,df,bc1_x,bcn_x)
         if (periodic_x) then
            error = MAXVAL( ABS(df - dfdxF_exact))
         else
@@ -200,7 +212,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         cd06_N2F_error(ind,1) = error
 
-        call method2 % ddyN2F(f,df)
+        call method2 % ddyN2F(f,df,bc1_y,bcn_y)
         if (periodic_y) then
            error = MAXVAL( ABS(df - dfdyF_exact))
         else
@@ -209,7 +221,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         cd06_N2F_error(ind,2) = error
 
-        call method2 % ddzN2F(f,df)
+        call method2 % ddzN2F(f,df,bc1_z,bcn_z)
         if (periodic_z) then
            error = MAXVAL( ABS(df - dfdzF_exact))
         else
@@ -222,7 +234,7 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 3: D02"
         print*, "==========================================="
-        call method3 % ddxN2F(f,df)
+        call method3 % ddxN2F(f,df,bc1_x,bcn_x)
         if (periodic_x) then
            error = MAXVAL( ABS(df - dfdxF_exact))
         else
@@ -231,7 +243,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         d02_N2F_error(ind,1) = error
 
-        call method3 % ddyN2F(f,df)
+        call method3 % ddyN2F(f,df,bc1_y,bcn_y)
         if (periodic_y) then
            error = MAXVAL( ABS(df - dfdyF_exact))
         else
@@ -240,7 +252,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         d02_N2F_error(ind,2) = error
 
-        call method3 % ddzN2F(f,df)
+        call method3 % ddzN2F(f,df,bc1_z,bcn_z)
         if (periodic_z) then
            error = MAXVAL( ABS(df - dfdzF_exact))
         else
@@ -252,7 +264,7 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 4: D04"
         print*, "==========================================="
-        call method4 % ddxN2F(f,df)
+        call method4 % ddxN2F(f,df,bc1_x,bcn_x)
         if (periodic_x) then
            error = MAXVAL( ABS(df - dfdxF_exact))
         else
@@ -261,7 +273,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         d04_N2F_error(ind,1) = error
 
-        call method4 % ddyN2F(f,df)
+        call method4 % ddyN2F(f,df,bc1_y,bcn_y)
         if (periodic_y) then
            error = MAXVAL( ABS(df - dfdyF_exact))
         else
@@ -270,7 +282,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         d04_N2F_error(ind,2) = error
 
-        call method4 % ddzN2F(f,df)
+        call method4 % ddzN2F(f,df,bc1_z,bcn_z)
         if (periodic_z) then
            error = MAXVAL( ABS(df - dfdzF_exact))
         else
@@ -282,7 +294,7 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 5: D06"
         print*, "==========================================="
-        call method5 % ddxN2F(f,df)
+        call method5 % ddxN2F(f,df,bc1_x,bcn_x)
         if (periodic_x) then
            error = MAXVAL( ABS(df - dfdxF_exact))
         else
@@ -291,7 +303,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         d06_N2F_error(ind,1) = error
 
-        call method5 % ddyN2F(f,df)
+        call method5 % ddyN2F(f,df,bc1_y,bcn_y)
         if (periodic_y) then
            error = MAXVAL( ABS(df - dfdyF_exact))
         else
@@ -300,7 +312,7 @@ program test_derivatives_staggered
         print*, "Maximum error = ", error
         d06_N2F_error(ind,2) = error
 
-        call method5 % ddzN2F(f,df)
+        call method5 % ddzN2F(f,df,bc1_z,bcn_z)
         if (periodic_z) then
            error = MAXVAL( ABS(df - dfdzF_exact))
         else
@@ -318,17 +330,17 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 1: CD10"
         print*, "==========================================="
-        call method1 % ddxF2N(fF,df)
+        call method1 % ddxF2N(fF,df,bc1_x,bcn_x)
         error = MAXVAL( ABS(df - dfdx_exact))
         print*, "Maximum error = ", error
         cd10_F2N_error(ind,1) = error
 
-        call method1 % ddyF2N(fF,df)
+        call method1 % ddyF2N(fF,df,bc1_y,bcn_y)
         error = MAXVAL( ABS(df - dfdy_exact))
         print*, "Maximum error = ", error
         cd10_F2N_error(ind,2) = error
 
-        call method1 % ddzF2N(fF,df)
+        call method1 % ddzF2N(fF,df,bc1_z,bcn_z)
         error = MAXVAL( ABS(df - dfdz_exact))
         print*, "Maximum error = ", error
         cd10_F2N_error(ind,3) = error
@@ -337,17 +349,17 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 2: CD06"
         print*, "==========================================="
-        call method2 % ddxF2N(fF,df)
+        call method2 % ddxF2N(fF,df,bc1_x,bcn_x)
         error = MAXVAL( ABS(df - dfdx_exact))
         print*, "Maximum error = ", error
         cd06_F2N_error(ind,1) = error
 
-        call method2 % ddyF2N(fF,df)
+        call method2 % ddyF2N(fF,df,bc1_y,bcn_y)
         error = MAXVAL( ABS(df - dfdy_exact))
         print*, "Maximum error = ", error
         cd06_F2N_error(ind,2) = error
 
-        call method2 % ddzF2N(fF,df)
+        call method2 % ddzF2N(fF,df,bc1_z,bcn_z)
         error = MAXVAL( ABS(df - dfdz_exact))
         print*, "Maximum error = ", error
         cd06_F2N_error(ind,3) = error
@@ -356,17 +368,17 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 3: D02"
         print*, "==========================================="
-        call method3 % ddxF2N(fF,df)
+        call method3 % ddxF2N(fF,df,bc1_x,bcn_x)
         error = MAXVAL( ABS(df - dfdx_exact))
         print*, "Maximum error = ", error
         d02_F2N_error(ind,1) = error
 
-        call method3 % ddyF2N(fF,df)
+        call method3 % ddyF2N(fF,df,bc1_y,bcn_y)
         error = MAXVAL( ABS(df - dfdy_exact))
         print*, "Maximum error = ", error
         d02_F2N_error(ind,2) = error
 
-        call method3 % ddzF2N(fF,df)
+        call method3 % ddzF2N(fF,df,bc1_z,bcn_z)
         error = MAXVAL( ABS(df - dfdz_exact))
         print*, "Maximum error = ", error
         d02_F2N_error(ind,3) = error
@@ -374,17 +386,17 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 4: D04"
         print*, "==========================================="
-        call method4 % ddxF2N(fF,df)
+        call method4 % ddxF2N(fF,df,bc1_x,bcn_x)
         error = MAXVAL( ABS(df - dfdx_exact))
         print*, "Maximum error = ", error
         d04_F2N_error(ind,1) = error
 
-        call method4 % ddyF2N(fF,df)
+        call method4 % ddyF2N(fF,df,bc1_y,bcn_y)
         error = MAXVAL( ABS(df - dfdy_exact))
         print*, "Maximum error = ", error
         d04_F2N_error(ind,2) = error
 
-        call method4 % ddzF2N(fF,df)
+        call method4 % ddzF2N(fF,df,bc1_z,bcn_z)
         error = MAXVAL( ABS(df - dfdz_exact))
         print*, "Maximum error = ", error
         d04_F2N_error(ind,3) = error
@@ -392,17 +404,17 @@ program test_derivatives_staggered
         print*, "==========================================="
         print*, "Now trying METHOD 5: D06"
         print*, "==========================================="
-        call method5 % ddxF2N(fF,df)
+        call method5 % ddxF2N(fF,df,bc1_x,bcn_x)
         error = MAXVAL( ABS(df - dfdx_exact))
         print*, "Maximum error = ", error
         d06_F2N_error(ind,1) = error
 
-        call method5 % ddyF2N(fF,df)
+        call method5 % ddyF2N(fF,df,bc1_y,bcn_y)
         error = MAXVAL( ABS(df - dfdy_exact))
         print*, "Maximum error = ", error
         d06_F2N_error(ind,2) = error
 
-        call method5 % ddzF2N(fF,df)
+        call method5 % ddzF2N(fF,df,bc1_z,bcn_z)
         error = MAXVAL( ABS(df - dfdz_exact))
         print*, "Maximum error = ", error
         d06_F2N_error(ind,3) = error
