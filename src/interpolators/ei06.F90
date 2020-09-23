@@ -494,9 +494,6 @@ contains
         
         if (present(bc1_)) then
             bc1 = bc1_
-            if ( (bc1 .eq. 1) .OR. (bc1 .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
             end if
@@ -506,9 +503,6 @@ contains
 
         if (present(bcn_)) then
             bcn = bcn_
-            if ( (bcn .eq. 1) .OR. (bcn .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
             end if
@@ -620,9 +614,6 @@ contains
         
         if (present(bc1_)) then
             bc1 = bc1_
-            if ( (bc1 .eq. 1) .OR. (bc1 .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
             end if
@@ -632,9 +623,6 @@ contains
 
         if (present(bcn_)) then
             bcn = bcn_
-            if ( (bcn .eq. 1) .OR. (bcn .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
             end if

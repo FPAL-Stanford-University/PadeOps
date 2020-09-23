@@ -13,10 +13,10 @@ program test_interpolators
     real(rkind) :: ratio(3)
 
     type( interpolators ) ::method3, method5
-    real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,fF, fN
+    real(rkind), dimension(:,:,:), allocatable :: x,y,z,fx,fy,fz,fF, fN
     real(rkind), dimension(:,:,:), allocatable :: xF,yF,zF, fFx_exact, fFy_exact, fFz_exact
     real(rkind) :: dx, dy, dz, Lx, Ly, Lz
-    real(rkind), parameter :: omega = 2._rkind, phi = 1.73d0
+    real(rkind) :: omega_x, omega_y, omega_z, phi_x, phi_y, phi_z
 
     integer :: i,j,k, ind
     logical :: periodic_x, periodic_y, periodic_z
@@ -36,6 +36,110 @@ program test_interpolators
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=TEST)
+
+    !set phi and omega to achieve desired BCs    
+    if (periodic_x) then
+        phi_x = 2.345d0
+        omega_x = 4.0d0
+    else
+        if (bc1_x .eq. 1) then           !1: symmetric
+            phi_x = half * pi              
+            if (bcn_x .eq. 1) then       !n: symmetric
+                omega_x = 2.0d0        
+            else if (bcn_x .eq. -1) then !n: anti-symmetric
+                omega_x = 2.25d0           
+            else                         !n: general
+                omega_x = 2.34d0          
+            endif
+            
+        else if (bc1_x .eq. -1) then
+            phi_x = 0.0d0                !1: anti-symmetric
+            if (bcn_x .eq. 1) then       !n: symmetric
+                omega_x = 2.25d0        
+            else if (bcn_x .eq. -1) then !n: anti-symmetric
+                omega_x = 2.0d0           
+            else                         !n: general
+                omega_x = 2.113d0          
+            endif
+        else
+            phi_x = 2.374d0          
+            if (bcn_x .eq. 1) then       !n: symmetric
+                omega_x = (5.0d0*half*pi - phi_x) / (2.0d0 * pi)
+            else if (bcn_x .eq. -1) then !n: anti-symmetric
+                omega_x = (2.0d0*pi - phi_x) / (2.0d0 * pi)
+            else                         !n: general
+                omega_x = 2.213d0          
+            endif
+        endif
+    endif
+    if (periodic_y) then
+        phi_y = 2.345d0
+        omega_y = 4.0d0
+    else
+        if (bc1_y .eq. 1) then           !1: symmetric
+            phi_y = half * pi              
+            if (bcn_y .eq. 1) then       !n: symmetric
+                omega_y = 2.0d0        
+            else if (bcn_y .eq. -1) then !n: anti-symmetric
+                omega_y = 2.25d0           
+            else                         !n: general
+                omega_y = 2.34d0          
+            endif
+            
+        else if (bc1_y .eq. -1) then
+            phi_y = 0.0d0                !1: anti-symmetric
+            if (bcn_y .eq. 1) then       !n: symmetric
+                omega_y = 2.25d0        
+            else if (bcn_y .eq. -1) then !n: anti-symmetric
+                omega_y = 2.0d0           
+            else                         !n: general
+                omega_y = 2.113d0          
+            endif
+        else
+            phi_y = 2.374d0          
+            if (bcn_y .eq. 1) then       !n: symmetric
+                omega_y = (5.0d0*half*pi - phi_y) / (2.0d0 * pi)
+            else if (bcn_y .eq. -1) then !n: anti-symmetric
+                omega_y = (2.0d0*pi - phi_y) / (2.0d0 * pi)
+            else                         !n: general
+                omega_y = 2.213d0          
+            endif
+        endif
+    endif
+    if (periodic_z) then
+        phi_z = 2.345d0
+        omega_z = 4.0d0
+    else
+        if (bc1_z .eq. 1) then           !1: symmetric
+            phi_z = half * pi              
+            if (bcn_z .eq. 1) then       !n: symmetric
+                omega_z = 2.0d0        
+            else if (bcn_z .eq. -1) then !n: anti-symmetric
+                omega_z = 2.25d0           
+            else                         !n: general
+                omega_z = 2.34d0          
+            endif
+            
+        else if (bc1_z .eq. -1) then
+            phi_z = 0.0d0                !1: anti-symmetric
+            if (bcn_z .eq. 1) then       !n: symmetric
+                omega_z = 2.25d0        
+            else if (bcn_z .eq. -1) then !n: anti-symmetric
+                omega_z = 2.0d0           
+            else                         !n: general
+                omega_z = 2.113d0          
+            endif
+        else
+            phi_z = 2.374d0          
+            if (bcn_z .eq. 1) then       !n: symmetric
+                omega_z = (5.0d0*half*pi - phi_z) / (2.0d0 * pi)
+            else if (bcn_z .eq. -1) then !n: anti-symmetric
+                omega_z = (2.0d0*pi - phi_z) / (2.0d0 * pi)
+            else                         !n: general
+                omega_z = 2.213d0          
+            endif
+        endif
+    endif
 
     !n_vec = (/16, 32, 64, 128/)
     n_vec = (/32, 64, 128, 256/)
@@ -60,7 +164,9 @@ program test_interpolators
         allocate( xF(nx,ny,nz) )
         allocate( yF(nx,ny,nz) )
         allocate( zF(nx,ny,nz) )
-        allocate( f(nx,ny,nz) )
+        allocate( fx(nx,ny,nz) )
+        allocate( fy(nx,ny,nz) )
+        allocate( fz(nx,ny,nz) )
         allocate( fFx_exact(nx,ny,nz) )
         allocate( fFy_exact(nx,ny,nz) )
         allocate( fFz_exact(nx,ny,nz) )
@@ -95,17 +201,20 @@ program test_interpolators
             xF(i,j,k) = MOD( x(i,j,k) + dx*half , two*pi ) 
             yF(i,j,k) = MOD( y(i,j,k) + dy*half , two*pi )
             zF(i,j,k) = MOD( z(i,j,k) + dz*half , two*pi )
-            f(i,j,k) = sin(omega * x(i,j,k)) + sin(omega * y(i,j,k)) + sin(omega * z(i,j,k))
-            fFx_exact(i,j,k) = sin(omega * xF(i,j,k)) + sin(omega * y(i,j,k))  + sin(omega * z(i,j,k))
-            fFy_exact(i,j,k) = sin(omega * x(i,j,k))  + sin(omega * yF(i,j,k)) + sin(omega * z(i,j,k))
-            fFz_exact(i,j,k) = sin(omega * x(i,j,k))  + sin(omega * y(i,j,k))  + sin(omega * zF(i,j,k))
-            f(i,j,k)         = 1.5d0 + sin(omega *  x(i,j,k)  + 1.1d0*phi) + cos(omega * y(i,j,k)  -1.2d0*phi) - sin(omega * z(i,j,k)  + 1.3d0*phi)
-            fFx_exact(i,j,k) = 1.5d0 + sin(omega *  xF(i,j,k) + 1.1d0*phi) + cos(omega * y(i,j,k)  -1.2d0*phi) - sin(omega * z(i,j,k)  + 1.3d0*phi)
-            fFy_exact(i,j,k) = 1.5d0 + sin(omega *  x(i,j,k)  + 1.1d0*phi) + cos(omega * yF(i,j,k) -1.2d0*phi) - sin(omega * z(i,j,k)  + 1.3d0*phi)
-            fFz_exact(i,j,k) = 1.5d0 + sin(omega *  x(i,j,k)  + 1.1d0*phi) + cos(omega * y(i,j,k)  -1.2d0*phi) - sin(omega * zF(i,j,k) + 1.3d0*phi)
+            fx(i,j,k)        = sin(omega_x * x(i,j,k)  + phi_x)
+            fy(i,j,k)        = sin(omega_y * y(i,j,k)  + phi_y)
+            fz(i,j,k)        = sin(omega_z * z(i,j,k)  + phi_z)
+            fFx_exact(i,j,k) = sin(omega_x * xF(i,j,k) + phi_x)
+            fFy_exact(i,j,k) = sin(omega_y * yF(i,j,k) + phi_y) 
+            fFz_exact(i,j,k) = sin(omega_z * zF(i,j,k) + phi_z)
         end do
         end do 
         end do 
+
+        if (ind .eq. 1) then
+            print *, y(1,:,1)
+            print *, fy(1,:,1)
+        endif
 
         !TODO: delete below comments once done, these are nice for checking that
         !grid is concstructed correctly
@@ -149,14 +258,16 @@ program test_interpolators
         call method5%init(          nx,     ny,    nz, &
                                     dx,     dy,    dz, &
                      periodic_x,periodic_y,periodic_z, &
-                                   "ei06", "ei06", "ei06" )
+                                   "ei02", "ei02", "ei02" )
+                print *, "Warning: overriding ei06 init until BCs implemented"
+!                                   "ei06", "ei06", "ei06" )
          
         print*, "Initialized all methods"
   
         print*, "==========================================="
         print*, "Now trying METHOD 3: EI02 (N2F)"
         print*, "==========================================="
-        call method3 % iN2Fx(f,fF,bc1_x,bcn_x)
+        call method3 % iN2Fx(fx,fF,bc1_x,bcn_x)
         if (periodic_x) then
            error = MAXVAL( ABS(fF - fFx_exact))
         else
@@ -165,7 +276,7 @@ program test_interpolators
         print*, "Maximum error = ", error
         ei02_N2F_error(ind,1) = error
 
-        call method3 % iN2Fy(f,fF,bc1_y,bcn_y)
+        call method3 % iN2Fy(fy,fF,bc1_y,bcn_y)
         if (periodic_y) then
            error = MAXVAL( ABS(fF - fFy_exact))
         else
@@ -174,7 +285,7 @@ program test_interpolators
         print*, "Maximum error = ", error
         ei02_N2F_error(ind,2) = error
 
-        call method3 % iN2Fz(f,fF,bc1_z,bcn_z)
+        call method3 % iN2Fz(fz,fF,bc1_z,bcn_z)
         if (periodic_z) then
            error = MAXVAL( ABS(fF - fFz_exact))
         else
@@ -187,24 +298,24 @@ program test_interpolators
         print*, "Now trying METHOD 3: EI02 (F2N)"
         print*, "==========================================="
         call method3 % iF2Nx(fFx_exact,fN,bc1_x,bcn_x)
-        error = MAXVAL( ABS(f - fN))
+        error = MAXVAL( ABS(fx - fN))
         print*, "Maximum error = ", error
         ei02_F2N_error(ind,1) = error
 
         call method3 % iF2Ny(fFy_exact,fN,bc1_y,bcn_y)
-        error = MAXVAL( ABS(f - fN))
+        error = MAXVAL( ABS(fy - fN))
         print*, "Maximum error = ", error
         ei02_F2N_error(ind,2) = error
 
         call method3 % iF2Nz(fFz_exact,fN,bc1_z,bcn_z)
-        error = MAXVAL( ABS(f - fN))
+        error = MAXVAL( ABS(fz - fN))
         print*, "Maximum error = ", error
         ei02_F2N_error(ind,3) = error
 
         print*, "==========================================="
         print*, "Now trying METHOD 5: EI06 (N2F)"
         print*, "==========================================="
-        call method5 % iN2Fx(f,fF,bc1_x,bcn_x)
+        call method5 % iN2Fx(fx,fF,bc1_x,bcn_x)
         if (periodic_x) then
            error = MAXVAL( ABS(fF - fFx_exact))
         else
@@ -213,7 +324,7 @@ program test_interpolators
         print*, "Maximum error = ", error
         ei06_N2F_error(ind,1) = error
 
-        call method5 % iN2Fy(f,fF,bc1_y,bcn_y)
+        call method5 % iN2Fy(fy,fF,bc1_y,bcn_y)
         if (periodic_y) then
            error = MAXVAL( ABS(fF - fFy_exact))
         else
@@ -222,7 +333,7 @@ program test_interpolators
         print*, "Maximum error = ", error
         ei06_N2F_error(ind,2) = error
 
-        call method5 % iN2Fz(f,fF,bc1_z,bcn_z)
+        call method5 % iN2Fz(fz,fF,bc1_z,bcn_z)
         if (periodic_z) then
            error = MAXVAL( ABS(fF - fFz_exact))
         else
@@ -235,17 +346,17 @@ program test_interpolators
         print*, "Now trying METHOD 5: EI06 (F2N)"
         print*, "==========================================="
         call method5 % iF2Nx(fFx_exact,fN,bc1_x,bcn_x)
-        error = MAXVAL( ABS(f - fN))
+        error = MAXVAL( ABS(fx - fN))
         print*, "Maximum error = ", error
         ei06_F2N_error(ind,1) = error
 
         call method5 % iF2Ny(fFy_exact,fN,bc1_y,bcn_y)
-        error = MAXVAL( ABS(f - fN))
+        error = MAXVAL( ABS(fy - fN))
         print*, "Maximum error = ", error
         ei06_F2N_error(ind,2) = error
 
         call method5 % iF2Nz(fFz_exact,fN,bc1_z,bcn_z)
-        error = MAXVAL( ABS(f - fN))
+        error = MAXVAL( ABS(fz - fN))
         print*, "Maximum error = ", error
         ei06_F2N_error(ind,3) = error
 
@@ -259,7 +370,9 @@ program test_interpolators
         print*, " Destroying everything"
         print*, "=========================================="
 
-        deallocate( f )
+        deallocate( fx )
+        deallocate( fy )
+        deallocate( fz )
         deallocate( fFx_exact )
         deallocate( fFy_exact )
         deallocate( fFz_exact )
