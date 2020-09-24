@@ -172,7 +172,7 @@ contains
         integer     :: vizramp = 5
         logical     :: compute_tke_budget = .false.
         logical     :: compute_scale_decomposition = .false.
-
+        integer :: ios
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
                                       periodicx, periodicy, periodicz, &
@@ -187,7 +187,12 @@ contains
 
 
         ioUnit = 11
-        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+        !call message(0, "Attempting to open: ",trim(inputfile))
+        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED',IOSTAT=ios)
+        !if (ios .NE. 0) then
+        !    call message(0, "IOSTAT=",ios)
+        !    call GracefulExit("Error opening input file.",4568)
+        !endif
         read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=CINPUT)
         close(ioUnit)
@@ -303,7 +308,7 @@ contains
         this%nzp = this%decomp%ysz(3)
 
         ! Go to hooks if a different initialization is derired 
-        allocate(this%profiles1D(this%ny,18)) ! allocate to total y siz) ! allocate to total y sizee
+        allocate(this%profiles1D(this%ny,21))
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tsim, this%tstop, this%dtfixed, tviz, this%profiles1D)
         
@@ -927,6 +932,7 @@ contains
             end if
         end if
 
+        !call message("Starting RK45 steps")
         do isub = 1,RK45_steps
             call this%get_conserved()
 
@@ -938,10 +944,17 @@ contains
             end if
 
             call this%getRHS(rhs)
+            !call message("Done getting RHS")
             Qtmp = this%dt*rhs + RK45_A(isub)*Qtmp
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
+            if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
+                call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
+                write(charout,'(A,I0,A,I0,A,4(I0,A))') "NaN encountered in solution at substep ", isub, " of step ", this%step+1, " at Wcnsrv(",i,",",j,",",k,",",l,")"
+                print *, charout
+                call GracefulExit(trim(charout), 999)
+            end if
 
             ! if ( (vizcond) .and. (this%compute_tke_budget) .and. (isub == RK45_steps) ) then
             if ( (vizcond) .and. ((this%compute_tke_budget) .or. (this%compute_scale_decomposition)) ) then
@@ -960,6 +973,13 @@ contains
                 ! dt_tke = RK45_B(isub)*Qtmpt
             end if
 
+            !call message("Filter conservatives")
+            if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
+                call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
+                write(charout,'(A,I0,A,I0,A,4(I0,A))') "NaN encountered in solution at substep ", isub, " of step ", this%step+1, " at Wcnsrv(",i,",",j,",",k,",",l,")"
+                print *, charout
+                call GracefulExit(trim(charout), 999)
+            end if
             ! Filter the conserved variables
             do i = 1,this%mix%ns
                 call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
@@ -969,6 +989,7 @@ contains
             call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
             call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
             
+            !call message("Apply BCs")
             call this%get_primitive()
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
@@ -1185,6 +1206,8 @@ contains
     end subroutine
 
     subroutine getRHS(this, rhs)
+        use exits,      only: message,nancheck,GracefulExit
+        use reductions, only: P_MAXVAL, P_MINVAL
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj

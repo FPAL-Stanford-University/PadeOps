@@ -99,100 +99,13 @@ contains
         deallocate(qhat_real,qhat_imag,qhat)
     end subroutine 
     
-    subroutine make_pert(gp,x,y,z,Lx,Lz,q,maskWidth,maxAmp,nmodes,Mc)
-        type(decomp_info), intent(in)               :: gp
-        real(rkind), dimension(:,:,:), intent(in)   :: x,y,z ! a 3D grid
-        real(rkind), intent(in)                     :: Lx,Lz  ! grid length
-        real(rkind), intent(in)                     :: maskWidth,maxAmp 
-        integer, intent(in)                         :: nmodes 
-        real(rkind), intent(in)                     :: Mc ! should we use supersonic modes? 
-        real(rkind), dimension(:,:,:), intent(inout) :: q !the primitive var
-
-        real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: tmp 
-        complex(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: e 
-        real(rkind) :: kx, kz, k, ph, qmax_local, qmax
-        integer(rkind) :: j, m, mx, mz, mpi_ierr
-
-        ! Add modes to field q
-        do m = 3,3+nmodes 
-            kx = two*pi/Lx * m
-            kz = two*pi/Lz * m
-            k  = (kx**two+kz**two)**half
-            call random_number(ph)
-            call mpi_bcast(ph,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-            e = exp(imi*(kx*x + kz*z)+ph*2*pi)
-            q = q + real(k**(-5._rkind/3._rkind)*e,rkind) 
-        enddo
-
-        ! Get maxval and scale
-        qmax_local = maxval(q)
-        call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD)
-        tmp = maxAmp*exp(-abs(y)/maskWidth)
-        q = q/qmax * tmp
-
-        ! We also need more oscillatory modes at higher Mc
-        if (Mc > 0.8) then
-            tmp = 0.D0
-            do mx = 3,6
-            do mz = 3,6
-                kx = two*pi/Lx * mx
-                kz = two*pi/Lz * mz
-                call random_number(ph)
-                call mpi_bcast(ph,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-                e = exp(imi*(kx*x + kz*z)+ph*2*pi)
-                tmp = tmp + real(e,rkind) 
-            enddo
-            enddo
-
-            ! Get maxval and scale. Make oscillatory mask
-            qmax_local = maxval(tmp)
-            call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD)
-            q = q + tmp/qmax * 0.5*maxAmp*exp(-abs(y)/maxval(y))*sin(y*2.D0*pi/maskWidth/2)
-        endif
-
-    end subroutine 
-    
-    subroutine perturb_potential(gp,x,y,z,Lx,Lz,u,v,w)
-        type(decomp_info), intent(in)               :: gp
-        real(rkind), dimension(:,:,:), intent(in)   :: x,y,z
-        real(rkind), dimension(:,:,:), intent(inout):: u,v,w 
-        real(rkind), intent(in)                     :: Lx,Lz
-
-        real(rkind) :: kx, kz, phx, phz, A, eps=0.15, sigma=5.D0
-        integer(rkind) :: i,j, m, mx, mz, nmodes=75, mpi_ierr
-
-        do i = 1, nmodes 
-        do j = 1, nmodes
-
-            kx = two*pi/Lx * i 
-            kz = two*pi/Lx * j
-            call random_number(phx)
-            call random_number(phz)
-            call mpi_bcast(phx,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-            call mpi_bcast(phz,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-
-            A = eps/(four*pi**2*kx*kz)
-            u = u + A * kx*sin(kx*x+phx*two*pi) * cos(kz*z+phz*two*pi) *&
-                exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) )
-            w = w + A * cos(kx*x+phx*two*pi) * kz*sin(kz*z+phz*two*pi) *&
-                exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) )
-            v = v + A * cos(kx*x+phx*two*pi) * kz*sin(kz*z+phz*two*pi) *&
-                ( -two*sigma*y*exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) ) + &
-                exp(-(sigma*y**2))*( cos(y) - 2*sigma*y*sin(y) ) )
-
-        enddo
-        enddo
-    end subroutine 
-    
     subroutine read_profiles1D(fname,profiles1D)
         character(len=*), intent(in)    :: fname
         real(rkind), dimension(:,:), allocatable,intent(inout) :: profiles1D 
     
         ! Read mode info in x and y
         call read_2d_ascii(profiles1D,trim(fname))
-        print *, "Profiles read in: ", size(profiles1D,1)
-        pause
-
+        !print *, "Profiles read in: ", size(profiles1D,1)
     end subroutine 
 end module
 
@@ -303,7 +216,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     nz = decomp%zsz(3)
 
     ! Read profiles
-    call read_profiles1D(fname_profiles,profiles1D)
+    if (len(trim(fname_profiles)) .gt. 0) then
+        call message(0,"Reading forcing profiles")
+        call read_profiles1D(fname_profiles,profiles1D)
+    else
+        call message(0,"No forcing profiles read in")
+    endif
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
@@ -348,7 +266,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call lstab_pert(decomp,x,z,fname_prefix,w,4)
             call lstab_pert(decomp,x,z,fname_prefix,rho,1)
         else
-            call perturb_potential(decomp,x,y,z,Lx,Lz,u,v,w)
+            !print *, "Perturbations not implemented"
+            !call perturb_potential(decomp,x,y,z,Lx,Lz,u,v,w)
             !maskWidth = two*dtheta0
             !maxAmp = 1.D-3*du
             !nModes = 10 
@@ -579,11 +498,12 @@ end subroutine
 
 subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     use CompressibleGrid,   only: rho_index,u_index,v_index,w_index,e_index,&
-                                Ys_index, mom_index, TE_index
+                                Ys_index, mom_index, TE_index, mass_index
     use kind_parameters, only: rkind
     use decomp_2d,       only: decomp_info
     use MixtureEOSMod,    only: mixture
-
+    use exits,          only: message    
+    use reductions, only: P_MINVAL,P_MAXVAL
     use ShearLayer_data
 
     implicit none
@@ -596,10 +516,16 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     real(rkind), dimension(:,:), optional, intent(inout) ::rhsg
     
     integer :: j,ny, iy1, iyn ! global indices for each block
-    ! rhsg indices: tilde[Y1,Y2,rho,u,v,w,e] = 1,2,3,4,5,6
-    ! d/dxi[Y1,Y2,rho,u,v,w,e] = 7,8,9,10,11,12
-    ! d/dxi[rY1,rY2,ru,rv,rw,re] = 13,14,15,16,17,18
-
+    ! rhsg indices: tilde[Y1,Y2,rho,u,v,w,e] = 1,2,3,4,5,6,7
+    ! d/dxi[Y1,Y2,rho,u,v,w,e] = 8,9,10,11,12,13,14
+    ! d/dxi[rY1,rY2,ru,rv,rw,re] = 15,16,17,18,19,20,21
+    
+    if (len(trim(fname_profiles)) .gt. 0) then
+    !call message("Before hook_source min/max vals:")
+    !call message(2,"max rv rhs",P_MAXVAL(rhs(:,:,:,mom_index+1)))
+    !call message(2,"max z0",maxval(rhsg(:,18)))
+    !if (nrank .eq. 0) print *
+    
     ! If base decomposition is in Y
     iy1 = decomp%yst(2)
     iyn = decomp%yen(2)
@@ -612,20 +538,24 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
                 Y1 => fields(:,:,:, Ys_index), Y2 => fields(:,:,:,Ys_index+1),&
                 ru => fields(:,:,:,mom_index), rv => fields(:,:,:,mom_index+1),&
                 rw => fields(:,:,:,mom_index+2), TE => fields(:,:,:,TE_index) )
-
+    
     do j=iy1,iyn ! Y1,Y2,ru,rv,rw,re
-        rhs(:,j,:,Ys_index)     = rhs(:,j,:,Ys_index)   + rhsg(j,13) &
-            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,1)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,7))
-        rhs(:,j,:,Ys_index+1)   = rhs(:,j,:,Ys_index+1) + rhsg(j,14) &
-            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,2)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,8))
-        rhs(:,j,:,mom_index)    = rhs(:,j,:,mom_index)  + rhsg(j,15) &
-            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,3)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,9))
-        rhs(:,j,:,mom_index+1)  = rhs(:,j,:,mom_index+1)+ rhsg(j,16) &
-            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,4)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,10))
-        rhs(:,j,:,mom_index+2)  = rhs(:,j,:,mom_index+2)+ rhsg(j,17) &
-            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,5)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,11))
-        rhs(:,j,:,TE_index)     = rhs(:,j,:,TE_index)   + rhsg(j,18) &
-            + rhsg(j,9)*(Y1(:,j,:)-rhsg(j,6)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,12))
+        rhs(:,j,:,mass_index)   = rhs(:,j,:,mass_index)  + rhsg(j,15) &  
+            + rhsg(j,10)*(Y1(:,j,:)-rhsg(j,1)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,8))
+        rhs(:,j,:,mass_index+1) = rhs(:,j,:,mass_index+1)+ rhsg(j,16) &
+            + rhsg(j,10)*(Y2(:,j,:)-rhsg(j,2)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,9))
+        rhs(:,j,:,mom_index)    = rhs(:,j,:,mom_index)  + rhsg(j,18) & 
+            + rhsg(j,10)*(ru(:,j,:)-rhsg(j,4)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,11))
+        rhs(:,j,:,mom_index+1)  = rhs(:,j,:,mom_index+1)+ rhsg(j,19) &
+            + rhsg(j,10)*(rv(:,j,:)-rhsg(j,5)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,12))
+        rhs(:,j,:,mom_index+2)  = rhs(:,j,:,mom_index+2)+ rhsg(j,20) &
+            + rhsg(j,10)*(rw(:,j,:)-rhsg(j,6)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,13))
+        rhs(:,j,:,TE_index)     = rhs(:,j,:,TE_index)   + rhsg(j,21) &
+            + rhsg(j,10)*(TE(:,j,:)-rhsg(j,7)) + (rho(:,j,:)-rhsg(j,3))*(rhsg(j,14))
     end do
     end associate
+    
+    endif
+    !call message(2,"max rv rhs",P_MAXVAL(rhs(:,:,:,mom_index+1)))
+    !call message("")
 end subroutine
