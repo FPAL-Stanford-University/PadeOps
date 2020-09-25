@@ -208,15 +208,49 @@ contains
                     RHS(3:this%n-3,:,:) = RHS(3:this%n-3,:,:) + a10 * (f(4:this%n-2,:,:) + f(3:this%n-3,:,:)) &
                                                               + b10 * (f(5:this%n-1,:,:) + f(2:this%n-4,:,:)) &
                                                               + c10 * (f(6:this%n,  :,:) + f(1:this%n-5,:,:))
+                    select case(bc1)
+                        !left boundary (1:2)
+                        case(1) !symm
+                            RHS(1,:,:) = RHS(1,:,:) + a10 * (f(2,:,:) + f(1,:,:)) &
+                                                    + b10 * (f(3,:,:) + f(2,:,:)) &
+                                                    + c10 * (f(4,:,:) + f(3,:,:))
+                            RHS(2,:,:) = RHS(2,:,:) + a10 * (f(3,:,:) + f(2,:,:)) &
+                                                    + b10 * (f(4,:,:) + f(1,:,:)) &
+                                                    + c10 * (f(5,:,:) + f(2,:,:))
+                        case(-1) !anti-symm
+                            RHS(1,:,:) = RHS(1,:,:) + a10 * (f(2,:,:) + f(1,:,:)) &
+                                                    + b10 * (f(3,:,:) - f(2,:,:)) &
+                                                    + c10 * (f(4,:,:) - f(3,:,:))
+                            RHS(2,:,:) = RHS(2,:,:) + a10 * (f(3,:,:) + f(2,:,:)) &
+                                                    + b10 * (f(4,:,:) + f(1,:,:)) &
+                                                    + c10 * (f(5,:,:) - f(2,:,:))
+                        case(0)
+                            RHS(1,:,:) = RHS(1,:,:) + a102 * (f(2,:,:) + f(1,:,:))   !2nd order
+                            RHS(2,:,:) = RHS(2,:,:) + a104 * (f(3,:,:) + f(2,:,:)) & !4th order
+                                                    + b104 * (f(4,:,:) + f(1,:,:)) 
+                    end select
 
-                    !left boundary (1:2)
-                    RHS(1,:,:) = RHS(1,:,:) + a102 * (f(2,:,:) + f(1,       :,:))   !2nd order
-                    RHS(2,:,:) = RHS(2,:,:) + a104 * (f(3,:,:) + f(2,       :,:)) & !4th order
-                                            + b104 * (f(4,:,:) + f(1,       :,:)) 
-                    !right boundary (n-2:n-1)
-                    RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a104 * (f(this%n-1,:,:) + f(this%n-2,  :,:)) & !4th order
-                                                          + b104 * (f(this%n,  :,:) + f(this%n-3,  :,:))   
-                    RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a102 * (f(this%n,  :,:) + f(this%n-1,  :,:))   !2nd order
+                    select case(bcn)
+                        !right boundary (n-2:n-1)
+                        case(1)
+                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a10 * (f(this%n-1,:,:) + f(this%n-2,:,:)) &
+                                                                  + b10 * (f(this%n  ,:,:) + f(this%n-3,:,:)) &
+                                                                  + c10 * (f(this%n-1,:,:) + f(this%n-4,:,:))
+                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a10 * (f(this%n  ,:,:) + f(this%n-1,:,:)) &
+                                                                  + b10 * (f(this%n-1,:,:) + f(this%n-2,:,:)) &
+                                                                  + c10 * (f(this%n-2,:,:) + f(this%n-3,:,:))
+                        case(-1)
+                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a10 * ( f(this%n-1,:,:) + f(this%n-2,:,:)) &
+                                                                  + b10 * ( f(this%n  ,:,:) + f(this%n-3,:,:)) &
+                                                                  + c10 * (-f(this%n-1,:,:) + f(this%n-4,:,:))
+                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a10 * ( f(this%n  ,:,:) + f(this%n-1,:,:)) &
+                                                                  + b10 * (-f(this%n-1,:,:) + f(this%n-2,:,:)) &
+                                                                  + c10 * (-f(this%n-2,:,:) + f(this%n-3,:,:))
+                        case(0)
+                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a104 * (f(this%n-1,:,:) + f(this%n-2,  :,:)) & !4th order
+                                                                  + b104 * (f(this%n,  :,:) + f(this%n-3,  :,:))   
+                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a102 * (f(this%n,  :,:) + f(this%n-1,  :,:))   !2nd order
+                    end select
 
                 case ("F2N")!TODO: implement better non-periodic BC: currently 12466...66421
                     !interior    
@@ -224,16 +258,64 @@ contains
                                                               + b10 * (f(5:this%n-2,:,:) + f(2:this%n-5,:,:)) &
                                                               + c10 * (f(6:this%n-1,:,:) + f(1:this%n-6,:,:))
 
-                    ! left boundary (1:3)
-                    RHS(1,:,:) = RHS(1,:,:) + a101 * (f(1,:,:)           )
-                    RHS(2,:,:) = RHS(2,:,:) + a102 * (f(2,:,:) + f(1,:,:)) 
-                    RHS(3,:,:) = RHS(3,:,:) + a104 * (f(3,:,:) + f(2,:,:)) &
-                                            + b104 * (f(4,:,:) + f(1,:,:)) 
-                    !right boundary (n-2:n)
-                    RHS(this%n,:,:)   = RHS(this%n  ,:,:) + a101 * (f(this%n-1,:,:)                  )
-                    RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a102 * (f(this%n-1,:,:) + f(this%n-2,:,:)) 
-                    RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a104 * (f(this%n-2,:,:) + f(this%n-3,:,:)) &
-                                                          + b104 * (f(this%n-1,:,:) + f(this%n-4,:,:)) 
+                    select case(bc1)
+                        ! left boundary (1:3)
+                        case(1)
+                            RHS(3,:,:) = RHS(3,:,:) + a10 * (f(3,:,:) + f(2,:,:)) &
+                                                    + b10 * (f(4,:,:) + f(1,:,:)) &
+                                                    + c10 * (f(5,:,:) + f(1,:,:))
+                            RHS(2,:,:) = RHS(2,:,:) + a10 * (f(2,:,:) + f(1,:,:)) &
+                                                    + b10 * (f(3,:,:) + f(1,:,:)) &
+                                                    + c10 * (f(4,:,:) + f(2,:,:))
+                            RHS(1,:,:) = RHS(1,:,:) + a10 * (f(1,:,:) + f(1,:,:)) &
+                                                    + b10 * (f(2,:,:) + f(2,:,:)) &
+                                                    + c10 * (f(3,:,:) + f(3,:,:))
+                        case(-1)
+                            RHS(3,:,:) = RHS(3,:,:) + a10 * (f(3,:,:) + f(2,:,:)) &
+                                                    + b10 * (f(4,:,:) + f(1,:,:)) &
+                                                    + c10 * (f(5,:,:) - f(1,:,:))
+                            RHS(2,:,:) = RHS(2,:,:) + a10 * (f(2,:,:) + f(1,:,:)) &
+                                                    + b10 * (f(3,:,:) - f(1,:,:)) &
+                                                    + c10 * (f(4,:,:) - f(2,:,:))
+                            RHS(1,:,:) = RHS(1,:,:) + a10 * (f(1,:,:) - f(1,:,:)) &
+                                                    + b10 * (f(2,:,:) - f(2,:,:)) &
+                                                    + c10 * (f(3,:,:) - f(3,:,:))
+                        case(0)
+                            RHS(1,:,:) = RHS(1,:,:) + a101 * (f(1,:,:)           )
+                            RHS(2,:,:) = RHS(2,:,:) + a102 * (f(2,:,:) + f(1,:,:)) 
+                            RHS(3,:,:) = RHS(3,:,:) + a104 * (f(3,:,:) + f(2,:,:)) &
+                                                    + b104 * (f(4,:,:) + f(1,:,:)) 
+                    end select
+
+                    select case(bcn)
+                        !right boundary (n-2:n)
+                        case(1)
+                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a10 * (f(this%n-2,:,:) + f(this%n-3,:,:)) &
+                                                                  + b10 * (f(this%n-1,:,:) + f(this%n-4,:,:)) &
+                                                                  + c10 * (f(this%n-1,:,:) + f(this%n-5,:,:))
+                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a10 * (f(this%n-1,:,:) + f(this%n-2,:,:)) &
+                                                                  + b10 * (f(this%n-1,:,:) + f(this%n-3,:,:)) &
+                                                                  + c10 * (f(this%n-2,:,:) + f(this%n-4,:,:))
+                            RHS(this%n,:,:) = RHS(this%n,:,:)     + a10 * (f(this%n-1,:,:) + f(this%n-1,:,:)) &
+                                                                  + b10 * (f(this%n-2,:,:) + f(this%n-2,:,:)) &
+                                                                  + c10 * (f(this%n-3,:,:) + f(this%n-3,:,:))
+                        case(-1)
+                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a10 * ( f(this%n-2,:,:) + f(this%n-3,:,:)) &
+                                                                  + b10 * ( f(this%n-1,:,:) + f(this%n-4,:,:)) &
+                                                                  + c10 * (-f(this%n-1,:,:) + f(this%n-5,:,:))
+                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a10 * ( f(this%n-1,:,:) + f(this%n-2,:,:)) &
+                                                                  + b10 * (-f(this%n-1,:,:) + f(this%n-3,:,:)) &
+                                                                  + c10 * (-f(this%n-2,:,:) + f(this%n-4,:,:))
+                            RHS(this%n,:,:) = RHS(this%n,:,:)     + a10 * (-f(this%n-1,:,:) + f(this%n-1,:,:)) &
+                                                                  + b10 * (-f(this%n-2,:,:) + f(this%n-2,:,:)) &
+                                                                  + c10 * (-f(this%n-3,:,:) + f(this%n-3,:,:))
+                        case(0)
+                            RHS(this%n,:,:)   = RHS(this%n  ,:,:) + a101 * (f(this%n-1,:,:)                  )
+                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a102 * (f(this%n-1,:,:) + f(this%n-2,:,:)) 
+                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a104 * (f(this%n-2,:,:) + f(this%n-3,:,:)) &
+                                                                  + b104 * (f(this%n-1,:,:) + f(this%n-4,:,:)) 
+                    end select
+
             end select
 
         end select
@@ -327,16 +409,50 @@ contains
                     !interior    
                     RHS(:,3:this%n-3,:) = RHS(:,3:this%n-3,:) + a10 * (f(:,4:this%n-2,:) + f(:,3:this%n-3,:)) &
                                                               + b10 * (f(:,5:this%n-1,:) + f(:,2:this%n-4,:)) &
-                                                              + c10 * (f(:,6:this%n,  :) + f(:,1:this%n-5,:))
+                                                              + c10 * (f(:,6:this%n  ,:) + f(:,1:this%n-5,:))
+                    select case(bc1)
+                        !left boundary (1:2)
+                        case(1) !symm
+                            RHS(:,1,:) = RHS(:,1,:) + a10 * (f(:,2,:) + f(:,1,:)) &
+                                                    + b10 * (f(:,3,:) + f(:,2,:)) &
+                                                    + c10 * (f(:,4,:) + f(:,3,:))
+                            RHS(:,2,:) = RHS(:,2,:) + a10 * (f(:,3,:) + f(:,2,:)) &
+                                                    + b10 * (f(:,4,:) + f(:,1,:)) &
+                                                    + c10 * (f(:,5,:) + f(:,2,:))
+                        case(-1) !anti-symm
+                            RHS(:,1,:) = RHS(:,1,:) + a10 * (f(:,2,:) + f(:,1,:)) &
+                                                    + b10 * (f(:,3,:) - f(:,2,:)) &
+                                                    + c10 * (f(:,4,:) - f(:,3,:))
+                            RHS(:,2,:) = RHS(:,2,:) + a10 * (f(:,3,:) + f(:,2,:)) &
+                                                    + b10 * (f(:,4,:) + f(:,1,:)) &
+                                                    + c10 * (f(:,5,:) - f(:,2,:))
+                        case(0)
+                            RHS(:,1,:) = RHS(:,1,:) + a102 * (f(:,2,:) + f(:,1,:))   !2nd order
+                            RHS(:,2,:) = RHS(:,2,:) + a104 * (f(:,3,:) + f(:,2,:)) & !4th order
+                                                    + b104 * (f(:,4,:) + f(:,1,:)) 
+                    end select
 
-                    !left boundary (1:2)
-                    RHS(:,1,:) = RHS(:,1,:) + a102 * (f(:,2,:) + f(:,1,       :))   !2nd order
-                    RHS(:,2,:) = RHS(:,2,:) + a104 * (f(:,3,:) + f(:,2,       :)) & !4th order
-                                        + b104 * (f(:,4,:) + f(:,1,       :)) 
-                    !right boundary (n-2:n-1)
-                    RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a104 * (f(:,this%n-1,:) + f(:,this%n-2,  :)) & !4th order
-                                                          + b104 * (f(:,this%n,  :) + f(:,this%n-3,  :))   
-                    RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a102 * (f(:,this%n,  :) + f(:,this%n-1,  :))   !2nd order
+                    select case(bcn)
+                        !right boundary (n-2:n-1)
+                        case(1)
+                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a10 * (f(:,this%n-1,:) + f(:,this%n-2,:)) &
+                                                                  + b10 * (f(:,this%n  ,:) + f(:,this%n-3,:)) &
+                                                                  + c10 * (f(:,this%n-1,:) + f(:,this%n-4,:))
+                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a10 * (f(:,this%n  ,:) + f(:,this%n-1,:)) &
+                                                                  + b10 * (f(:,this%n-1,:) + f(:,this%n-2,:)) &
+                                                                  + c10 * (f(:,this%n-2,:) + f(:,this%n-3,:))
+                        case(-1)
+                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a10 * ( f(:,this%n-1,:) + f(:,this%n-2,:)) &
+                                                                  + b10 * ( f(:,this%n  ,:) + f(:,this%n-3,:)) &
+                                                                  + c10 * (-f(:,this%n-1,:) + f(:,this%n-4,:))
+                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a10 * ( f(:,this%n  ,:) + f(:,this%n-1,:)) &
+                                                                  + b10 * (-f(:,this%n-1,:) + f(:,this%n-2,:)) &
+                                                                  + c10 * (-f(:,this%n-2,:) + f(:,this%n-3,:))
+                        case(0)
+                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a104 * (f(:,this%n-1,:) + f(:,this%n-2,  :)) & !4th order
+                                                                  + b104 * (f(:,this%n,  :) + f(:,this%n-3,  :))   
+                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a102 * (f(:,this%n,  :) + f(:,this%n-1,  :))   !2nd order
+                    end select
 
                 case ("F2N")!TODO: implement better non-periodic BC: currently 12466...66421
                     !interior    
@@ -344,16 +460,64 @@ contains
                                                               + b10 * (f(:,5:this%n-2,:) + f(:,2:this%n-5,:)) &
                                                               + c10 * (f(:,6:this%n-1,:) + f(:,1:this%n-6,:))
 
-                    ! left boundary (1:3)
-                    RHS(:,1,:) = RHS(:,1,:) + a101 * (f(:,1,:)           )
-                    RHS(:,2,:) = RHS(:,2,:) + a102 * (f(:,2,:) + f(:,1,:)) 
-                    RHS(:,3,:) = RHS(:,3,:) + a104 * (f(:,3,:) + f(:,2,:)) &
-                                            + b104 * (f(:,4,:) + f(:,1,:)) 
-                    !right boundary (n-2:n)
-                    RHS(:,this%n  ,:) = RHS(:,this%n  ,:) + a101 * (f(:,this%n-1,:)                 )
-                    RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a102 * (f(:,this%n-1,:) + f(:,this%n-2,:)) 
-                    RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a104 * (f(:,this%n-2,:) + f(:,this%n-3,:)) &
-                                                          + b104 * (f(:,this%n-1,:) + f(:,this%n-4,:)) 
+                    select case(bc1)
+                        ! left boundary (1:3)
+                        case(1)
+                            RHS(:,3,:) = RHS(:,3,:) + a10 * (f(:,3,:) + f(:,2,:)) &
+                                                    + b10 * (f(:,4,:) + f(:,1,:)) &
+                                                    + c10 * (f(:,5,:) + f(:,1,:))
+                            RHS(:,2,:) = RHS(:,2,:) + a10 * (f(:,2,:) + f(:,1,:)) &
+                                                    + b10 * (f(:,3,:) + f(:,1,:)) &
+                                                    + c10 * (f(:,4,:) + f(:,2,:))
+                            RHS(:,1,:) = RHS(:,1,:) + a10 * (f(:,1,:) + f(:,1,:)) &
+                                                    + b10 * (f(:,2,:) + f(:,2,:)) &
+                                                    + c10 * (f(:,3,:) + f(:,3,:))
+                        case(-1)
+                            RHS(:,3,:) = RHS(:,3,:) + a10 * (f(:,3,:) + f(:,2,:)) &
+                                                    + b10 * (f(:,4,:) + f(:,1,:)) &
+                                                    + c10 * (f(:,5,:) - f(:,1,:))
+                            RHS(:,2,:) = RHS(:,2,:) + a10 * (f(:,2,:) + f(:,1,:)) &
+                                                    + b10 * (f(:,3,:) - f(:,1,:)) &
+                                                    + c10 * (f(:,4,:) - f(:,2,:))
+                            RHS(:,1,:) = RHS(:,1,:) + a10 * (f(:,1,:) - f(:,1,:)) &
+                                                    + b10 * (f(:,2,:) - f(:,2,:)) &
+                                                    + c10 * (f(:,3,:) - f(:,3,:))
+                        case(0)
+                            RHS(:,1,:) = RHS(:,1,:) + a101 * (f(:,1,:)           )
+                            RHS(:,2,:) = RHS(:,2,:) + a102 * (f(:,2,:) + f(:,1,:)) 
+                            RHS(:,3,:) = RHS(:,3,:) + a104 * (f(:,3,:) + f(:,2,:)) &
+                                                    + b104 * (f(:,4,:) + f(:,1,:)) 
+                    end select
+
+                    select case(bcn)
+                        !right boundary (n-2:n)
+                        case(1)
+                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a10 * (f(:,this%n-2,:) + f(:,this%n-3,:)) &
+                                                                  + b10 * (f(:,this%n-1,:) + f(:,this%n-4,:)) &
+                                                                  + c10 * (f(:,this%n-1,:) + f(:,this%n-5,:))
+                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a10 * (f(:,this%n-1,:) + f(:,this%n-2,:)) &
+                                                                  + b10 * (f(:,this%n-1,:) + f(:,this%n-3,:)) &
+                                                                  + c10 * (f(:,this%n-2,:) + f(:,this%n-4,:))
+                            RHS(:,this%n,:) = RHS(:,this%n,:)     + a10 * (f(:,this%n-1,:) + f(:,this%n-1,:)) &
+                                                                  + b10 * (f(:,this%n-2,:) + f(:,this%n-2,:)) &
+                                                                  + c10 * (f(:,this%n-3,:) + f(:,this%n-3,:))
+                        case(-1)
+                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a10 * ( f(:,this%n-2,:) + f(:,this%n-3,:)) &
+                                                                  + b10 * ( f(:,this%n-1,:) + f(:,this%n-4,:)) &
+                                                                  + c10 * (-f(:,this%n-1,:) + f(:,this%n-5,:))
+                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a10 * ( f(:,this%n-1,:) + f(:,this%n-2,:)) &
+                                                                  + b10 * (-f(:,this%n-1,:) + f(:,this%n-3,:)) &
+                                                                  + c10 * (-f(:,this%n-2,:) + f(:,this%n-4,:))
+                            RHS(:,this%n,:) = RHS(:,this%n,:)     + a10 * (-f(:,this%n-1,:) + f(:,this%n-1,:)) &
+                                                                  + b10 * (-f(:,this%n-2,:) + f(:,this%n-2,:)) &
+                                                                  + c10 * (-f(:,this%n-3,:) + f(:,this%n-3,:))
+                        case(0)
+                            RHS(:,this%n,:)   = RHS(:,this%n  ,:) + a101 * (f(:,this%n-1,:)                  )
+                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a102 * (f(:,this%n-1,:) + f(:,this%n-2,:)) 
+                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a104 * (f(:,this%n-2,:) + f(:,this%n-3,:)) &
+                                                                  + b104 * (f(:,this%n-1,:) + f(:,this%n-4,:)) 
+                    end select
+
             end select
         end select
     
@@ -447,15 +611,49 @@ contains
                     RHS(:,:,3:this%n-3) = RHS(:,:,3:this%n-3) + a10 * (f(:,:,4:this%n-2) + f(:,:,3:this%n-3)) &
                                                               + b10 * (f(:,:,5:this%n-1) + f(:,:,2:this%n-4)) &
                                                               + c10 * (f(:,:,6:this%n  ) + f(:,:,1:this%n-5))
+                    select case(bc1)
+                        !left boundary (1:2)
+                        case(1) !symm
+                            RHS(:,:,1) = RHS(:,:,1) + a10 * (f(:,:,2) + f(:,:,1)) &
+                                                    + b10 * (f(:,:,3) + f(:,:,2)) &
+                                                    + c10 * (f(:,:,4) + f(:,:,3))
+                            RHS(:,:,2) = RHS(:,:,2) + a10 * (f(:,:,3) + f(:,:,2)) &
+                                                    + b10 * (f(:,:,4) + f(:,:,1)) &
+                                                    + c10 * (f(:,:,5) + f(:,:,2))
+                        case(-1) !anti-symm
+                            RHS(:,:,1) = RHS(:,:,1) + a10 * (f(:,:,2) + f(:,:,1)) &
+                                                    + b10 * (f(:,:,3) - f(:,:,2)) &
+                                                    + c10 * (f(:,:,4) - f(:,:,3))
+                            RHS(:,:,2) = RHS(:,:,2) + a10 * (f(:,:,3) + f(:,:,2)) &
+                                                    + b10 * (f(:,:,4) + f(:,:,1)) &
+                                                    + c10 * (f(:,:,5) - f(:,:,2))
+                        case(0)
+                            RHS(:,:,1) = RHS(:,:,1) + a102 * (f(:,:,2) + f(:,:,1))   !2nd order
+                            RHS(:,:,2) = RHS(:,:,2) + a104 * (f(:,:,3) + f(:,:,2)) & !4th order
+                                                    + b104 * (f(:,:,4) + f(:,:,1)) 
+                    end select
 
-                    !left boundary (1:2)
-                    RHS(:,:,1) = RHS(:,:,1) + a102 * (f(:,:,2) + f(:,:,1))   !2nd order
-                    RHS(:,:,2) = RHS(:,:,2) + a104 * (f(:,:,3) + f(:,:,2)) & !4th order
-                                            + b104 * (f(:,:,4) + f(:,:,1)) 
-                    !right boundary (n-2:n-1)
-                    RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a104 * (f(:,:,this%n-1) + f(:,:,this%n-2)) & !4th order
-                                                          + b104 * (f(:,:,this%n  ) + f(:,:,this%n-3))   
-                    RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a102 * (f(:,:,this%n  ) + f(:,:,this%n-1))   !2nd order
+                    select case(bcn)
+                        !right boundary (n-2:n-1)
+                        case(1)
+                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a10 * (f(:,:,this%n-1) + f(:,:,this%n-2)) &
+                                                                  + b10 * (f(:,:,this%n  ) + f(:,:,this%n-3)) &
+                                                                  + c10 * (f(:,:,this%n-1) + f(:,:,this%n-4))
+                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a10 * (f(:,:,this%n  ) + f(:,:,this%n-1)) &
+                                                                  + b10 * (f(:,:,this%n-1) + f(:,:,this%n-2)) &
+                                                                  + c10 * (f(:,:,this%n-2) + f(:,:,this%n-3))
+                        case(-1)
+                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a10 * ( f(:,:,this%n-1) + f(:,:,this%n-2)) &
+                                                                  + b10 * ( f(:,:,this%n  ) + f(:,:,this%n-3)) &
+                                                                  + c10 * (-f(:,:,this%n-1) + f(:,:,this%n-4))
+                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a10 * ( f(:,:,this%n  ) + f(:,:,this%n-1)) &
+                                                                  + b10 * (-f(:,:,this%n-1) + f(:,:,this%n-2)) &
+                                                                  + c10 * (-f(:,:,this%n-2) + f(:,:,this%n-3))
+                        case(0)
+                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a104 * (f(:,:,this%n-1) + f(:,:,this%n-2)) & !4th order
+                                                                  + b104 * (f(:,:,this%n) + f(:,:,this%n-3))   
+                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a102 * (f(:,:,this%n) + f(:,:,this%n-1))   !2nd order
+                    end select
 
                 case ("F2N")!TODO: implement better non-periodic BC: currently 12466...66421
                     !interior    
@@ -463,16 +661,64 @@ contains
                                                               + b10 * (f(:,:,5:this%n-2) + f(:,:,2:this%n-5)) &
                                                               + c10 * (f(:,:,6:this%n-1) + f(:,:,1:this%n-6))
 
-                    ! left boundary (1:3)
-                    RHS(:,:,1) = RHS(:,:,1) + a101 * (f(:,:,1)           )
-                    RHS(:,:,2) = RHS(:,:,2) + a102 * (f(:,:,2) + f(:,:,1)) 
-                    RHS(:,:,3) = RHS(:,:,3) + a104 * (f(:,:,3) + f(:,:,2)) &
-                                            + b104 * (f(:,:,4) + f(:,:,1)) 
-                    !right boundary (n-2:n)
-                    RHS(:,:,this%n  ) = RHS(:,:,this%n  ) + a101 * (f(:,:,this%n-1)                  )
-                    RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a102 * (f(:,:,this%n-1) + f(:,:,this%n-2)) 
-                    RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a104 * (f(:,:,this%n-2) + f(:,:,this%n-3)) &
-                                                          + b104 * (f(:,:,this%n-1) + f(:,:,this%n-4)) 
+                    select case(bc1)
+                        ! left boundary (1:3)
+                        case(1)
+                            RHS(:,:,3) = RHS(:,:,3) + a10 * (f(:,:,3) + f(:,:,2)) &
+                                                    + b10 * (f(:,:,4) + f(:,:,1)) &
+                                                    + c10 * (f(:,:,5) + f(:,:,1))
+                            RHS(:,:,2) = RHS(:,:,2) + a10 * (f(:,:,2) + f(:,:,1)) &
+                                                    + b10 * (f(:,:,3) + f(:,:,1)) &
+                                                    + c10 * (f(:,:,4) + f(:,:,2))
+                            RHS(:,:,1) = RHS(:,:,1) + a10 * (f(:,:,1) + f(:,:,1)) &
+                                                    + b10 * (f(:,:,2) + f(:,:,2)) &
+                                                    + c10 * (f(:,:,3) + f(:,:,3))
+                        case(-1)
+                            RHS(:,:,3) = RHS(:,:,3) + a10 * (f(:,:,3) + f(:,:,2)) &
+                                                    + b10 * (f(:,:,4) + f(:,:,1)) &
+                                                    + c10 * (f(:,:,5) - f(:,:,1))
+                            RHS(:,:,2) = RHS(:,:,2) + a10 * (f(:,:,2) + f(:,:,1)) &
+                                                    + b10 * (f(:,:,3) - f(:,:,1)) &
+                                                    + c10 * (f(:,:,4) - f(:,:,2))
+                            RHS(:,:,1) = RHS(:,:,1) + a10 * (f(:,:,1) - f(:,:,1)) &
+                                                    + b10 * (f(:,:,2) - f(:,:,2)) &
+                                                    + c10 * (f(:,:,3) - f(:,:,3))
+                        case(0)
+                            RHS(:,:,1) = RHS(:,:,1) + a101 * (f(:,:,1)           )
+                            RHS(:,:,2) = RHS(:,:,2) + a102 * (f(:,:,2) + f(:,:,1)) 
+                            RHS(:,:,3) = RHS(:,:,3) + a104 * (f(:,:,3) + f(:,:,2)) &
+                                                    + b104 * (f(:,:,4) + f(:,:,1)) 
+                    end select
+
+                    select case(bcn)
+                        !right boundary (n-2:n)
+                        case(1)
+                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a10 * (f(:,:,this%n-2) + f(:,:,this%n-3)) &
+                                                                  + b10 * (f(:,:,this%n-1) + f(:,:,this%n-4)) &
+                                                                  + c10 * (f(:,:,this%n-1) + f(:,:,this%n-5))
+                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a10 * (f(:,:,this%n-1) + f(:,:,this%n-2)) &
+                                                                  + b10 * (f(:,:,this%n-1) + f(:,:,this%n-3)) &
+                                                                  + c10 * (f(:,:,this%n-2) + f(:,:,this%n-4))
+                            RHS(:,:,this%n) = RHS(:,:,this%n)     + a10 * (f(:,:,this%n-1) + f(:,:,this%n-1)) &
+                                                                  + b10 * (f(:,:,this%n-2) + f(:,:,this%n-2)) &
+                                                                  + c10 * (f(:,:,this%n-3) + f(:,:,this%n-3))
+                        case(-1)
+                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a10 * ( f(:,:,this%n-2) + f(:,:,this%n-3)) &
+                                                                  + b10 * ( f(:,:,this%n-1) + f(:,:,this%n-4)) &
+                                                                  + c10 * (-f(:,:,this%n-1) + f(:,:,this%n-5))
+                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a10 * ( f(:,:,this%n-1) + f(:,:,this%n-2)) &
+                                                                  + b10 * (-f(:,:,this%n-1) + f(:,:,this%n-3)) &
+                                                                  + c10 * (-f(:,:,this%n-2) + f(:,:,this%n-4))
+                            RHS(:,:,this%n) = RHS(:,:,this%n)     + a10 * (-f(:,:,this%n-1) + f(:,:,this%n-1)) &
+                                                                  + b10 * (-f(:,:,this%n-2) + f(:,:,this%n-2)) &
+                                                                  + c10 * (-f(:,:,this%n-3) + f(:,:,this%n-3))
+                        case(0)
+                            RHS(:,:,this%n)   = RHS(:,:,this%n  ) + a101 * (f(:,:,this%n-1)                  )
+                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a102 * (f(:,:,this%n-1) + f(:,:,this%n-2)) 
+                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a104 * (f(:,:,this%n-2) + f(:,:,this%n-3)) &
+                                                                  + b104 * (f(:,:,this%n-1) + f(:,:,this%n-4)) 
+                    end select
+
             end select
         end select
     
@@ -530,9 +776,6 @@ contains
         
         if (present(bc1_)) then
             bc1 = bc1_
-            if ( (bc1 .eq. 1) .OR. (bc1 .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
             end if
@@ -542,9 +785,6 @@ contains
 
         if (present(bcn_)) then
             bcn = bcn_
-            if ( (bcn .eq. 1) .OR. (bcn .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
             end if
@@ -572,9 +812,6 @@ contains
         
         if (present(bc1_)) then
             bc1 = bc1_
-            if ( (bc1 .eq. 1) .OR. (bc1 .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
             end if
@@ -584,9 +821,6 @@ contains
 
         if (present(bcn_)) then
             bcn = bcn_
-            if ( (bcn .eq. 1) .OR. (bcn .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
             end if
@@ -650,9 +884,6 @@ contains
         
         if (present(bc1_)) then
             bc1 = bc1_
-            if ( (bc1 .eq. 1) .OR. (bc1 .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
             end if
@@ -662,9 +893,6 @@ contains
 
         if (present(bcn_)) then
             bcn = bcn_
-            if ( (bcn .eq. 1) .OR. (bcn .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
             end if
@@ -692,9 +920,6 @@ contains
         
         if (present(bc1_)) then
             bc1 = bc1_
-            if ( (bc1 .eq. 1) .OR. (bc1 .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
             end if
@@ -704,9 +929,6 @@ contains
 
         if (present(bcn_)) then
             bcn = bcn_
-            if ( (bcn .eq. 1) .OR. (bcn .eq. -1) ) then
-                call GracefulExit("Symmetric/Antisymmetric BC not yet implemented for staggered scheme", 324)
-            endif
             if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
                 call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
             end if

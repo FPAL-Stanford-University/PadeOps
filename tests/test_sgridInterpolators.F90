@@ -258,9 +258,7 @@ program test_interpolators
         call method5%init(          nx,     ny,    nz, &
                                     dx,     dy,    dz, &
                      periodic_x,periodic_y,periodic_z, &
-                                   "ei02", "ei02", "ei02" )
-                print *, "Warning: overriding ei06 init until BCs implemented"
-!                                   "ei06", "ei06", "ei06" )
+                                   "ei06", "ei06", "ei06" )
          
         print*, "Initialized all methods"
   
