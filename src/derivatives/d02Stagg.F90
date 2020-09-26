@@ -117,7 +117,6 @@ contains
 
 
     pure subroutine ComputeXD1RHS(this, f, RHS, dir, n2, n3, bc1, bcn)   !TODO add an extra argument to account for forward or backward
-    
         class( d02Stagg ), intent(in) :: this
         integer, intent(in) :: n2, n3
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f

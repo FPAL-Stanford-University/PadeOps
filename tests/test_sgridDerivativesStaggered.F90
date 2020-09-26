@@ -483,7 +483,9 @@ program test_derivatives_staggered
         print*, "Now trying METHOD 3: D02"
         print*, "==========================================="
         call method3 % ddxF2N(fFx_exact,df,bc1_x,bcn_x)
+        print *, "B"
         error = MAXVAL( ABS(df - dfdx_exact))
+        print *, "C"
         print*, "Maximum error = ", error
         d02_F2N_error(ind,1) = error
 
