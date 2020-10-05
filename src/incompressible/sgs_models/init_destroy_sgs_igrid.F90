@@ -206,35 +206,35 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     allocate(this%Uyvar(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%WallMFactorvar(this%gpC%xsz(1), this%gpC%xsz(2)))
 
-    !totpx = spx+ rpx
-    !do j = 1, this%gpC%xsz(2)
-    !  do i = 1, this%gpC%xsz(1)
-    !    xl = xMesh(i)
-    !    xlmod = mod(xl, totpx)
-    !    if(xlmod < spx) then
-    !        this%z0var(i,j) = z0s
-    !    else
-    !        this%z0var(i,j) = z0r
-    !    endif
-    !  enddo
-    !enddo
 
+    if(spx_delta < 1.0d-6) then
+        totpx = spx+ rpx
+        do i = 1, this%gpC%xsz(1)
+          xl = xMesh(i)
+          xlmod = mod(xl, totpx)
+          if(xlmod < spx) then
+              sp_map(i) = 0.0_rkind !this%z0var(i,j) = z0s
+          else
+              sp_map(i) = 1.0_rkind !this%z0var(i,j) = z0r
+          endif
+        enddo
+    else
+        xpos = 0.0_rkind; sp_map = 0.0_rkind
 
-    xpos = 0.0_rkind; sp_map = 0.0_rkind
+        ! handle xpos = 0 separately
+        xpos = 0.0_rkind; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+        call S_fringe(x1, S1)
+        sp_map = 1.0_rkind-S1
 
-    ! handle xpos = 0 separately
-    xpos = 0.0_rkind; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
-    call S_fringe(x1, S1)
-    sp_map = 1.0_rkind-S1
-
-    ! then calculate map for all stripes
-    do i = 1, spnumx
-      xpos = xpos + spx; x1 = (xMesh - (xpos - 0.5_rkind*spx_delta))/spx_delta
-      xpos = xpos + rpx; x2 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
-      call S_fringe(x1, S1)
-      call S_fringe(x2, S2)
-      sp_map = sp_map + S1 - S2
-    enddo
+        ! then calculate map for all stripes
+        do i = 1, spnumx
+          xpos = xpos + spx; x1 = (xMesh - (xpos - 0.5_rkind*spx_delta))/spx_delta
+          xpos = xpos + rpx; x2 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+          call S_fringe(x1, S1)
+          call S_fringe(x2, S2)
+          sp_map = sp_map + S1 - S2
+        enddo
+    endif
 
     do j = 1, this%gpC%xsz(2)
       this%z0var(:,j) = z0s + sp_map * (z0r - z0s)

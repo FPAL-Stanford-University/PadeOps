@@ -77,6 +77,16 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
           call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
           call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
       endif
+
+   case (3) ! Abkar-PA (2012) heterogeneous model
+      !this%kaplnzfac = this%kappa/(half*this%dz/this%z0s)
+      !call this%getSpanAvgVelAtWall(uhat, vhat)
+      !where(this%lamfact < (1.0d0-1.0d-5) )
+      !    this%ustarsqvar = this%SpanAvgSpeed - this%lamfact*ust1fac
+      !    this%ustarsqvar = this%ustarsqvar/(one - this%lamfact) * kaplnzfac
+      !else
+      !    this%ustarsqvar = this%SpanAvgSpeed * kaplnzfac
+      !end where
    end select
 
 end subroutine
@@ -169,6 +179,17 @@ subroutine BouZeidLocalModel(this)
 
     ! NOTE:: tauijWMhat_inY and tauijWMhat_inZ are not populated. Are they
     ! required ????
+
+end subroutine
+
+subroutine getSpanAvgVelAtWall(this, uhatC, vhatC)
+    class(sgs_igrid), intent(inout), target :: this
+    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC
+
+    real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2, rbuffx3
+    complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
+
+    cbuffy => this%cbuffyC(:,:,:,1); tauWallH => this%cbuffzC(:,:,:,1)     
 
 end subroutine
 
