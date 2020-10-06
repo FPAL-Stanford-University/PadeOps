@@ -100,6 +100,10 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: syy
         real(rkind), dimension(:,:,:), pointer :: syz
         real(rkind), dimension(:,:,:), pointer :: szz
+
+        real(rkind) :: phys_mu1, phys_mu2
+        real(rkind) :: phys_bulk1, phys_bulk2
+        real(rkind) :: phys_kap1, phys_kap2
         
         contains
             procedure          :: init
@@ -166,6 +170,9 @@ contains
         logical     :: use_gTg = .FALSE., useOneG = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009, "Simple and efficient relaxation methods for interfaces separating compressible fluids, cavitating flows and shocks in multiphase mixtures")
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
+        real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0
+        real(rkind) :: phys_bulk1 = 0.0d0, phys_bulk2 =0.0d0
+        real(rkind) :: phys_kap1 = 0.0d0, phys_kap2 =0.0d0
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
@@ -176,7 +183,8 @@ contains
                                                          SkewSymm  
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
                            PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, ns, Cmu, Cbeta, Ckap, Cdiff, CY, &
-                           x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
+                           x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
+                           phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -187,6 +195,13 @@ contains
         this%nx = nx
         this%ny = ny
         this%nz = nz
+
+        this%phys_mu1   = phys_mu1
+        this%phys_mu2   = phys_mu2
+        this%phys_bulk1 = phys_bulk1
+        this%phys_bulk2 = phys_bulk2
+        this%phys_kap1 = phys_kap1
+        this%phys_kap2 = phys_kap2
 
         this%tsim = zero
         this%tstop = tstop
@@ -1184,12 +1199,30 @@ contains
     end subroutine
    
     subroutine getPhysicalProperties(this)
+        use exits,      only: GracefulExit
         class(sgrid), intent(inout) :: this
+        integer :: m
+
+        if (this%mix%ns > 2) then
+            call GracefulExit("Number of species must be 1 or 2. for current &
+                               implementation of getPhysicalProperties",928)
+        endif
 
         ! If inviscid set everything to zero (otherwise use a model)
-        this%mu = zero
-        this%bulk = zero
-        if(this%PTeqb) this%kap = zero
+        this%mu   = this%phys_mu1   * this%mix%material(1)%VF
+        this%bulk = this%phys_bulk1 * this%mix%material(1)%VF
+
+        if (this%mix%ns .eq. 2) then
+            this%mu   = this%mu   + this%phys_mu2   * this%mix%material(2)%VF
+            this%bulk = this%bulk + this%phys_bulk2 * this%mix%material(2)%VF
+        endif
+
+        if (this%PTeqb) then
+            this%kap  = this%phys_kap1  * this%mix%material(1)%VF
+            if (this%mix%ns .eq. 2) then
+                this%kap  = this%kap  + this%phys_kap2  * this%mix%material(2)%VF
+            endif
+        endif
 
     end subroutine  
 
