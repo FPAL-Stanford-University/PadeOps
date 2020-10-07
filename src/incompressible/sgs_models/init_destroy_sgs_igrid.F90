@@ -77,7 +77,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2
   logical :: is_z0_varying = .false.
   real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
-  real(rkind) :: Mfactor, dele, deli
+  real(rkind) :: Mfactor, dele, deli, alpfac
   integer :: spnumx, spnumy
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
@@ -242,6 +242,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     !!! determine lamfact
     !!! smooth patch before rpstart and after fringe. Rough between these.
     Mfactor = 0.75_rkind-0.03_rkind*log(this%z0r/this%z0s)
+    alpfac = 0.027_rkind
     do j = 1, this%gpC%xsz(2)
       do i = 1, this%gpC%xsz(1)
         if(xMesh(i) < rpstart) then
@@ -251,8 +252,10 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
             ! downstream rough or smooth region
             xl = xMesh(i) - rpstart
             deli = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind
-            dele = 0.027_rkind*deli
-            this%lamfact(i,j) = log(half*this%dz/dele) / log(deli/dele)
+            this%lamfact(i,j) = -log(half*this%dz/(deli*alpfac+1.0d-18)) / log(alpfac)
+            this%lamfact(i,j) = min(this%lamfact(i,j), one)     ! note :: must be here, not outside the loop
+            this%lamfact(i,j) = max(this%lamfact(i,j), zero)    ! note :: must be here, not outside the loop
+            !write(100+nrank,'(2(i5,1x),7(e19.12,1x))') i, j, deli, half*this%dz, half*this%dz/(deli*alpfac+1.0d-18), -log(alpfac), this%lamfact(i,j)
         endif
       enddo
     enddo
@@ -260,10 +263,10 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
 
     call message(1, "Printing debug info about heterog ")
     if(nrank==0) then
-      print *, 'nx = ', this%gpC%xsz(1)
+      !print *, 'nx = ', this%gpC%xsz(1)
       open(10, file='debug_heterog.dat',action='write',status='unknown')
       do i=1,this%gpC%xsz(1)
-        write(10,'(3(e19.12,1x))') xMesh(i), sp_map(i), this%z0var(i,1)
+        write(10,'(4(e19.12,1x))') xMesh(i), sp_map(i), this%z0var(i,1), this%lamfact(i,1)
       enddo
       close(10)
     endif
