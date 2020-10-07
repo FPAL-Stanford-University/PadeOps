@@ -13,7 +13,7 @@ subroutine destroy(this)
   nullify(this%tau_11, this%tau_12, this%tau_22, this%tau_33)
   deallocate(this%tau_13, this%tau_23)
   if(this%is_z0_varying) then
-      deallocate(this%ustarsqvar, this%z0var, this%Uxvar, this%Uyvar, this%WallMFactorvar)
+      deallocate(this%ustarsqvar, this%z0var, this%Uxvar, this%Uyvar, this%WallMFactorvar, this%lamfact)
   endif
 
 end subroutine
@@ -73,10 +73,11 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
   logical :: usePrSGS = .false. 
   integer :: ierr, WM_matchingIndex = 1, i, j
-  real(rkind) :: lowbound = 0.d0 , highbound = 1.d0, xpos = 0.0_rkind
+  real(rkind) :: lowbound = 0.d0 , highbound = 1.d0, xpos = 0.0_rkind, epssmall = 1.0d-6
   real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2
   logical :: is_z0_varying = .false.
-  real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, spx_delta = 1.0d0, spy_delta = 1.0d0
+  real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
+  real(rkind) :: Mfactor, dele, deli
   integer :: spnumx, spnumy
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
@@ -88,7 +89,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, &
                  is_z0_varying 
 
-  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, spx_delta, spy_delta
+  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, rpstart, spx_delta, spy_delta
 
   this%gpC => gpC
   this%gpE => gpE
@@ -173,18 +174,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   
   this%isInviscid = isInviscid
 
-  this%WallModel  = WallModelType
-  this%WM_matchingIndex = WM_matchingIndex
-  if (this%WallModel .ne. 0) then
-      if (this%PadeDer%isPeriodic) then
-         call GracefulExit("You cannot use a wall model if the problem is periodic in Z",12)
-      else
-         call this%initWallModel()
-      end if 
-  else
-      this%useWallModel = .false. 
-  end if
-
   this%is_z0_varying  = is_z0_varying
   if(this%is_z0_varying) then
     ! read more stuff from the input file
@@ -205,26 +194,35 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     allocate(this%Uxvar(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%Uyvar(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%WallMFactorvar(this%gpC%xsz(1), this%gpC%xsz(2)))
+    allocate(this%lamfact(this%gpC%xsz(1), this%gpC%xsz(2)))
 
+    this%z0s = z0s; this%z0r = z0r
+    totpx = spx + rpx
+    if(rpstart < zero) then
+        ! overwrite rough patch start with length of smooth patch
+        rpstart = spx
+    elseif(rpstart > totpx) then
+        !call message(1, "!!!!!WARNING!!!!! rpstart is larger than totpx. Ensure this is a developing case.")
+        call GracefulExit("rpstart is larger than totpx. Check details.", 11)
+    endif
 
-    if(spx_delta < 1.0d-6) then
-        totpx = spx+ rpx
+    if(spx_delta < epssmall) then
         do i = 1, this%gpC%xsz(1)
           xl = xMesh(i)
           xlmod = mod(xl, totpx)
-          if(xlmod < spx) then
+          if((xlmod >= (rpstart+rpx)) .or. (xlmod < rpstart)) then
               sp_map(i) = 0.0_rkind !this%z0var(i,j) = z0s
           else
               sp_map(i) = 1.0_rkind !this%z0var(i,j) = z0r
           endif
         enddo
     else
-        xpos = 0.0_rkind; sp_map = 0.0_rkind
-
-        ! handle xpos = 0 separately
-        xpos = 0.0_rkind; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+        ! handle xpos = (rpstart-spx) separately
+        xpos = rpstart-spx; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
         call S_fringe(x1, S1)
         sp_map = 1.0_rkind-S1
+
+        !xpos = rpstart - spx; sp_map = 0.0_rkind
 
         ! then calculate map for all stripes
         do i = 1, spnumx
@@ -240,6 +238,26 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
       this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
     enddo
 
+    !!! only for Abkar-PA model. Think where to put this later
+    !!! determine lamfact
+    !!! smooth patch before rpstart and after fringe. Rough between these.
+    Mfactor = 0.75_rkind-0.03_rkind*log(this%z0r/this%z0s)
+    do j = 1, this%gpC%xsz(2)
+      do i = 1, this%gpC%xsz(1)
+        if(xMesh(i) < rpstart) then
+            ! upstream smooth patch
+            this%lamfact(i,j) = 1.1d0 ! set some number above 1.0
+        else
+            ! downstream rough or smooth region
+            xl = xMesh(i) - rpstart
+            deli = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind
+            dele = 0.027_rkind*deli
+            this%lamfact(i,j) = log(half*this%dz/dele) / log(deli/dele)
+        endif
+      enddo
+    enddo
+
+
     call message(1, "Printing debug info about heterog ")
     if(nrank==0) then
       print *, 'nx = ', this%gpC%xsz(1)
@@ -252,6 +270,19 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     call message(1, "Done printing debug info about heterog ")
 
   endif
+
+  this%WallModel  = WallModelType
+  this%WM_matchingIndex = WM_matchingIndex
+  if (this%WallModel .ne. 0) then
+      if (this%PadeDer%isPeriodic) then
+         call GracefulExit("You cannot use a wall model if the problem is periodic in Z",12)
+      else
+         call this%initWallModel()
+      end if 
+  else
+      this%useWallModel = .false. 
+  end if
+
 
   allocate(this%cmodelC(size(zMeshC)))
   allocate(this%cmodelE(size(zMeshE)))

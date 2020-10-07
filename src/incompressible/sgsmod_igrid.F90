@@ -70,7 +70,8 @@ module sgsmod_igrid
         integer :: WM_matchingIndex
 
         ! for varying z0
-        real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar
+        real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, lamfact, mask_upstream
+        real(rkind) :: kaplnzfac_s, kaplnzfac_r, z0s, z0r
         logical :: is_z0_varying = .false.
 
         ! for dynamic procedures - all are at edges
@@ -114,6 +115,8 @@ module sgsmod_igrid
             procedure, private :: embed_WM_stress
             procedure, private :: embed_WM_PotTFlux
             procedure, private :: BouZeidLocalModel
+            procedure, private :: get_ustar_upstreampart
+            procedure, private :: set_tauijWM
             
 
             !! ALL DYNAMIC PROCEDURE SUBROUTINES
