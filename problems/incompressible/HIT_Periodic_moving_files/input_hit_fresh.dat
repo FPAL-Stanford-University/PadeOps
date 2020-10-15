@@ -1,11 +1,11 @@
 &INPUT
-inputdir              = "/scratch/04076/tg833754/HIT_Interact/output/hit_tests"   ! Directory for any input files
-outputdir             = "/scratch/04076/tg833754/HIT_Interact/output/hit_tests"   ! Directory for all output files
+inputdir              = "/scratch/04076/tg833754/hit_LES/linear_forcing/256/test_runs"   ! Directory for any input files
+outputdir             = "/scratch/04076/tg833754/hit_LES/linear_forcing/256/test_runs"   ! Directory for all output files
 nx                    = 256          ! Number of points in X
 ny                    = 256          ! Number of points in Y
 nz                    = 256          ! Number of points in Z
 tstop                 = 12800.D0    ! Physical time to stop the simulation
-CFL                   = -1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL                   = 0.8D0        ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -159,6 +159,17 @@ turbInfoDir                   = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_
 ADM_Type                      = 2         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
 /
 /
+&BUDGET_VOL_AVG
+budgetType                    = 3 
+budgets_dir                   = "/scratch/04076/tg833754/hit_LES/linear_forcing/256/test_runs"
+restart_budgets               = .false. 
+tidx_dump                     = 50
+tidx_compute                  = 10
+time_budget_start             = 5.d0 
+do_spectra                    = .false. 
+do_autocorrel                 = .false. 
+/
+/
 &KSPREPROCESS
 PreprocessForKS       = .FALSE.        ! Do you want to generate preprocessing files for KS? 
 KSoutputDir           = "SomeLocation" ! Directory where KS files are dumped.
@@ -177,6 +188,8 @@ kmax = 2.d0
 EpsAmplitude = 0.00225d0
 RandSeedToAdd = 1234
 DomAspectRatioZ = 1
+useLinearForcing = .true. 
+filtfact_linForcing = 0.05d0
 /
 /
 &HIT_PeriodicINPUT

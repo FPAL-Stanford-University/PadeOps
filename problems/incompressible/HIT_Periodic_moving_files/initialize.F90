@@ -155,39 +155,40 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
        !v = zero;
        !w = zero;
 
-       ! Interpolate wC to w
-       allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
-       allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
-
-       allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
-       allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
-      
-       nz = decompC%zsz(3)
-       nzE = nz + 1
-
-       call transpose_x_to_y(wC,ybuffC,decompC)
-       call transpose_y_to_z(ybuffC,zbuffC,decompC)
-       zbuffE = zero
-       allocate(der)
-       call der%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
-                                isTopSided = .false., isBotSided = .false.)
-       call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
-       deallocate(der)
-       call transpose_z_to_y(zbuffE,ybuffE,decompE)
-       call transpose_y_to_x(ybuffE,w,decompE) 
-      
-
-       deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
     else
 
-        call uniform_random(u,-5.d0,5.d0,seed+1234*nrank+54321)
-        call uniform_random(v,-5.d0,5.d0,seed+25634*nrank+54321)
-        call uniform_random(w,-5.d0,5.d0,seed+32454*nrank+54321)
+        call uniform_random(u ,-5.d0,5.d0,seed+1234*nrank+54321)
+        call uniform_random(v ,-5.d0,5.d0,seed+25634*nrank+54321)
+        call uniform_random(wC,-5.d0,5.d0,seed+32454*nrank+54321)
         
         u = u - p_sum(u)/(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3))
         v = v - p_sum(v)/(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3))
-        w = w - p_sum(w)/(decompE%xsz(1)*decompE%ysz(2)*decompE%zsz(3))
+        wC = wC - p_sum(wC)/(decompE%xsz(1)*decompE%ysz(2)*decompE%zsz(3))
+    
     end if 
+    ! Interpolate wC to w
+    allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+    allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
+
+    allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+    allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+    
+    nz = decompC%zsz(3)
+    nzE = nz + 1
+
+    call transpose_x_to_y(wC,ybuffC,decompC)
+    call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    zbuffE = zero
+    allocate(der)
+    call der%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
+                             isTopSided = .false., isBotSided = .false.)
+    call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
+    deallocate(der)
+    call transpose_z_to_y(zbuffE,ybuffE,decompE)
+    call transpose_y_to_x(ybuffE,w,decompE) 
+    
+
+    deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
       
     nullify(u,v,w,x,y,z)
    
