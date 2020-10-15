@@ -136,6 +136,13 @@ module budgets_time_avg_mod
         procedure, private  :: DumpBudget
         procedure, private  :: restartBudget
         procedure, private  :: dump_budget_field 
+
+        procedure, private  :: read_budget_field 
+        procedure, private  :: readbudget0 
+        procedure, private  :: readbudget1 
+        procedure, private  :: readbudget2 
+        procedure, private  :: readbudget3 
+        procedure, private  :: readScalarStats
         
         procedure, private  :: AssembleBudget0
         procedure, private  :: DumpBudget0 
@@ -997,6 +1004,20 @@ contains
 
 
     ! ----------------------supproting subroutines ------------------------
+    subroutine read_budget_field(this, field, fieldID, BudgetID)
+        use decomp_2d_io
+        class(budgets_time_avg), intent(inout) :: this
+        real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: field
+        integer, intent(in)  :: fieldID, BudgetID
+        character(len=clen) :: fname, tempname 
+
+        write(tempname,"(A3,I2.2,A7,I1.1,A5,I2.2,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget",BudgetID,"_term",fieldID,"_t",this%igrid_sim%step,"_n",this%counter,".s3D"
+        fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+
+        call decomp_2d_read_one(1,field,fname, this%igrid_sim%gpC)
+
+    end subroutine 
+    
     subroutine dump_budget_field(this, field, fieldID, BudgetID)
         use decomp_2d_io
         class(budgets_time_avg), intent(inout) :: this
@@ -1018,8 +1039,185 @@ contains
 
         this%counter = cid
 
+        ! Budget 0: 
+        call this%readbudget0()
+
+        ! Budget 1: 
+        if (this%budgetType>0) then
+            call this%readbudget1()
+        else
+            this%budget_1 = zero
+        end if 
+        
+        ! Budget 2: 
+        if (this%budgetType>1) then
+            call this%readbudget2()
+        else
+            this%budget_2 = zero
+        end if 
+
+        ! Budget 3: 
+        if (this%budgetType>2) then
+            call this%readbudget3()
+        else
+            this%budget_3 = zero
+        end if 
+
+        ! Scalar and Turbine Stats
+        call this%readScalarStats()
+
         ! << Incomplete for now - write after completing dumpbudget and look at
         ! budget_xy_avg for reference. >>
+    end subroutine 
+    
+    subroutine readScalarStats(this)
+        class(budgets_time_avg), intent(inout) :: this
+        integer :: idx    
+    
+        ! Step 1: Read the full budget 
+        do idx = 1,size(this%budget_3,4)
+            call this%read_budget_field(this%budget_0(:,:,:,idx),idx,3)
+        end do 
+       
+    end subroutine 
+    
+    subroutine readbudget3(this)
+        class(budgets_time_avg), intent(inout), target :: this
+        integer :: idx    
+        real(rkind), dimension(:,:,:), pointer :: Umn, Vmn, Wmn, R11, R12, R13, R22, R23, R33
+        real(rkind), dimension(:,:,:), pointer :: Pmn, tau11, tau12, tau13, tau22, tau23, tau33
+        real(rkind), dimension(:,:,:), pointer :: buff, buff2
+    
+        ! Get the average from sum
+        this%budget_0 = this%budget_0/(real(this%counter,rkind) + 1.d-18)
+        this%budget_0(:,:,:,4)  = this%budget_0(:,:,:,4)  - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,1) ! R11
+        this%budget_0(:,:,:,5)  = this%budget_0(:,:,:,5)  - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,2) ! R12
+        this%budget_0(:,:,:,6)  = this%budget_0(:,:,:,6)  - this%budget_0(:,:,:,1)*this%budget_0(:,:,:,3) ! R13
+        this%budget_0(:,:,:,7)  = this%budget_0(:,:,:,7)  - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,2) ! R22
+        this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  - this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
+        this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  - this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
+        this%budget_1 = this%budget_1/(real(this%counter,rkind) + 1.d-18)
+
+        Umn => this%budget_0(:,:,:,1);    Vmn => this%budget_0(:,:,:,2);      Wmn => this%budget_0(:,:,:,3);
+        R11 => this%budget_0(:,:,:,4);    R12 => this%budget_0(:,:,:,5);      R13 => this%budget_0(:,:,:,6)
+        R22 => this%budget_0(:,:,:,7);    R23 => this%budget_0(:,:,:,8);      R33 => this%budget_0(:,:,:,9)
+        Pmn => this%budget_0(:,:,:,10);   tau11 => this%budget_0(:,:,:,11);   tau12 => this%budget_0(:,:,:,12)
+        tau13 => this%budget_0(:,:,:,13); tau22 => this%budget_0(:,:,:,14);   tau23 => this%budget_0(:,:,:,15)
+        tau33 => this%budget_0(:,:,:,16); buff => this%igrid_sim%rbuffxC(:,:,:,1); buff2 => this%igrid_sim%rbuffxC(:,:,:,2)
+
+        ! Step 1: Read the full budget 
+        do idx = 1,size(this%budget_3,4)
+            call this%read_budget_field(this%budget_3(:,:,:,idx),idx,3)
+        end do 
+
+        ! Revert arrays to the correct state for Assemble (Order is very
+        ! important throughout this subroutine, particularly indices 5 and 6)
+        this%budget_3(:,:,:,7) = this%budget_3(:,:,:,7) + Umn*this%budget_1(:,:,:,4)
+        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%budget_2(:,:,:,6)
+        this%budget_3(:,:,:,5) = this%budget_3(:,:,:,5) + this%budget_3(:,:,:,6) + this%budget_2(:,:,:,5) + this%budget_2(:,:,:,6)
+        this%budget_3(:,:,:,4) = this%budget_3(:,:,:,4) + this%budget_2(:,:,:,4)
+        this%budget_3(:,:,:,3) = this%budget_3(:,:,:,3) + this%budget_3(:,:,:,2) + this%budget_2(:,:,:,2) + this%budget_2(:,:,:,3)
+        
+
+        nullify(Umn,Vmn,Wmn,R11,R12,R13,R22,R23,R33,Pmn,tau11,tau12,tau13,tau22,tau23,tau33,buff,buff2)
+
+        ! Go back to sum
+        this%budget_3 = this%budget_3*(real(this%counter,rkind) + 1.d-18)
+        this%budget_1 = this%budget_1*(real(this%counter,rkind) + 1.d-18)
+        this%budget_0(:,:,:,4)  = this%budget_0(:,:,:,4)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,1) ! R11
+        this%budget_0(:,:,:,5)  = this%budget_0(:,:,:,5)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,2) ! R12
+        this%budget_0(:,:,:,6)  = this%budget_0(:,:,:,6)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,3) ! R13
+        this%budget_0(:,:,:,7)  = this%budget_0(:,:,:,7)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,2) ! R22
+        this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
+        this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
+        this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
+
+    end subroutine 
+    
+    subroutine readbudget2(this)
+        class(budgets_time_avg), intent(inout) :: this
+        integer :: idx    
+    
+        ! Step 1: Read the full budget 
+        do idx = 1,size(this%budget_2,4)
+            call this%read_budget_field(this%budget_2(:,:,:,idx),idx,2)
+        end do 
+       
+    end subroutine 
+    
+    subroutine readbudget1(this)
+        class(budgets_time_avg), intent(inout) :: this
+        integer :: idx    
+    
+        ! Step 1: Read the full budget 
+        do idx = 1,size(this%budget_1,4)
+            call this%read_budget_field(this%budget_1(:,:,:,idx),idx,1)
+        end do 
+       
+        ! Step 2: Go back to summing instead of averaging
+        this%budget_1 = this%budget_1*(real(this%counter,rkind) + 1.d-18)
+
+    end subroutine 
+    
+    subroutine readbudget0(this)
+        class(budgets_time_avg), intent(inout) :: this
+        integer :: idx    
+    
+        ! Step 1: Read the full budget 
+        do idx = 1,size(this%budget_0,4)
+            call this%read_budget_field(this%budget_0(:,:,:,idx),idx,0)
+        end do 
+       
+        ! Step 2: Go back to summing
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%budget_0(:,:,:,13)*this%budget_0(:,:,:,1)
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%budget_0(:,:,:,15)*this%budget_0(:,:,:,2)
+        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%budget_0(:,:,:,16)*this%budget_0(:,:,:,3)
+
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%budget_0(:,:,:,12)*this%budget_0(:,:,:,1)
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%budget_0(:,:,:,14)*this%budget_0(:,:,:,2)
+        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%budget_0(:,:,:,15)*this%budget_0(:,:,:,3)
+
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%budget_0(:,:,:,11)*this%budget_0(:,:,:,1)
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%budget_0(:,:,:,12)*this%budget_0(:,:,:,2)
+        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%budget_0(:,:,:,13)*this%budget_0(:,:,:,3)
+
+        this%igrid_sim%rbuffxC(:,:,:,1) = half*(this%budget_0(:,:,:,4) + this%budget_0(:,:,:,7) + this%budget_0(:,:,:,9))
+        this%budget_0(:,:,:,22) = this%budget_0(:,:,:,22) + this%budget_0(:,:,:,3)*this%igrid_sim%rbuffxC(:,:,:,1)
+        this%budget_0(:,:,:,21) = this%budget_0(:,:,:,21) + this%budget_0(:,:,:,2)*this%igrid_sim%rbuffxC(:,:,:,1)
+        this%budget_0(:,:,:,20) = this%budget_0(:,:,:,20) + this%budget_0(:,:,:,1)*this%igrid_sim%rbuffxC(:,:,:,1)
+
+        this%budget_0(:,:,:,19) = this%budget_0(:,:,:,19) + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,10)
+        this%budget_0(:,:,:,18) = this%budget_0(:,:,:,18) + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,10)
+        this%budget_0(:,:,:,17) = this%budget_0(:,:,:,17) + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,10)
+ 
+        ! Step 3: Go back to <ui uj> from <Rij>
+        this%budget_0(:,:,:,4)  = this%budget_0(:,:,:,4)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,1) ! R11
+        this%budget_0(:,:,:,5)  = this%budget_0(:,:,:,5)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,2) ! R12
+        this%budget_0(:,:,:,6)  = this%budget_0(:,:,:,6)  + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,3) ! R13
+        this%budget_0(:,:,:,7)  = this%budget_0(:,:,:,7)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,2) ! R22
+        this%budget_0(:,:,:,8)  = this%budget_0(:,:,:,8)  + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,3) ! R23
+        this%budget_0(:,:,:,9)  = this%budget_0(:,:,:,9)  + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,3) ! R33
+        
+        ! STEP 4a: Potential temperature terms for stratified flow
+        if (this%isStratified) then
+            this%budget_0(:,:,:,27) = this%budget_0(:,:,:,27) + this%budget_0(:,:,:,1)*this%budget_0(:,:,:,26)
+            this%budget_0(:,:,:,28) = this%budget_0(:,:,:,28) + this%budget_0(:,:,:,2)*this%budget_0(:,:,:,26)
+            this%budget_0(:,:,:,29) = this%budget_0(:,:,:,29) + this%budget_0(:,:,:,3)*this%budget_0(:,:,:,26)
+            this%budget_0(:,:,:,30) = this%budget_0(:,:,:,30) + this%budget_0(:,:,:,26)*this%budget_0(:,:,:,26)
+        end if 
+        
+        ! Step 4b: Scalar variances
+        if (this%HaveScalars) then
+            do idx = 1,this%igrid_sim%n_scalars
+                this%budget_0(:,:,:,30+this%igrid_sim%n_scalars+idx) = &
+                    this%budget_0(:,:,:,30+this%igrid_sim%n_scalars+idx) + & 
+                    this%budget_0(:,:,:,30+idx)*this%budget_0(:,:,:,30+idx)
+            end do 
+        end if
+        
+        ! Step 5: Go back to summing instead of averaging
+        this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
+
     end subroutine 
     
     subroutine ResetBudget(this)
