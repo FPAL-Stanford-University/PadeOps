@@ -25,8 +25,11 @@ subroutine initWallModel(this)
       if(.not. this%is_z0_varying) then
           call GracefulExit("You cannot use Abkar-PA wall model for a homogeneous problem", 111)
       endif
-      this%kaplnzfac_s = (kappa/(half*this%dz/this%z0s))**2
-      this%kaplnzfac_r = (kappa/(half*this%dz/this%z0r))**2
+      this%kaplnzfac_s = (kappa/log(half*this%dz/this%z0s))**2
+      !if(nrank==0) then
+      !   write(*,'(a,5(1x,e19.12))') 'kaplnzfac_s:= ', kappa, this%dz, this%z0s, this%kaplnzfac_s
+      !endif
+      this%kaplnzfac_r = (kappa/log(half*this%dz/this%z0r))**2
       allocate(this%mask_upstream(this%gpC%xsz(1), this%gpC%xsz(2)))
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
       where(this%lamfact > (one-epssmall))
@@ -34,6 +37,7 @@ subroutine initWallModel(this)
       elsewhere
           this%mask_upstream = zero
       endwhere
+      this%mask_normfac = p_sum(sum(this%mask_upstream))
    case default
       call gracefulExit("Invalid choice of Wallmodel.",324)
    end select
@@ -131,9 +135,11 @@ end subroutine
 subroutine get_ustar_upstreampart(this, ustar1)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), intent(out) :: ustar1
+   real(rkind) :: usqfiltavg
 
-   ustar1 = p_sum(sum(this%filteredSpeedSq(:,:,1))*this%mask_upstream)
-   ustar1 = sqrt(ustar1)*this%kaplnzfac_s
+   usqfiltavg = p_sum(sum(this%filteredSpeedSq(:,:,1)*this%mask_upstream))/this%mask_normfac
+   ustar1 = sqrt(usqfiltavg*this%kaplnzfac_s)
+   if(nrank==0) print '(a,3(e19.12,1x))', "ustar1:= ", ustar1, this%kaplnzfac_s, usqfiltavg
 
 end subroutine
 

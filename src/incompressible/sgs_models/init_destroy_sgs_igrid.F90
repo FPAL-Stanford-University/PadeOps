@@ -245,7 +245,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     alpfac = 0.027_rkind
     do j = 1, this%gpC%xsz(2)
       do i = 1, this%gpC%xsz(1)
-        if(xMesh(i) < rpstart) then
+        if((xMesh(i) < rpstart) .or. (xMesh(i) > rpstart+spx)) then
             ! upstream smooth patch
             this%lamfact(i,j) = 1.1d0 ! set some number above 1.0
         else

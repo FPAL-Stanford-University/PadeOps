@@ -71,7 +71,7 @@ module sgsmod_igrid
 
         ! for varying z0
         real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, lamfact, mask_upstream
-        real(rkind) :: kaplnzfac_s, kaplnzfac_r, z0s, z0r
+        real(rkind) :: kaplnzfac_s, kaplnzfac_r, z0s, z0r, mask_normfac
         logical :: is_z0_varying = .false.
 
         ! for dynamic procedures - all are at edges
