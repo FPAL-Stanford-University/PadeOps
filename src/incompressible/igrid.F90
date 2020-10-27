@@ -68,9 +68,10 @@ module IncompressibleGrid
 
         ! Variables common to grid
         integer :: nx, ny, nz, t_datadump, t_restartdump
-        real(rkind) :: dt, tstop, CFL, CviscDT, dx, dy, dz, tsim
+        real(rkind) :: dt, tstop, CFL, CviscDT, dx, dy, dz, tsim, Lx, Ly, Lz
         character(len=clen) ::  outputdir
         real(rkind), dimension(:,:,:,:), allocatable :: mesh
+        real(rkind), dimension(:),       allocatable :: xline, yline, zline, zEline
         real(rkind) :: zBot, zTop, zMid
         character(len=clen) :: filter_x          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
         character(len=clen) :: filter_y          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
@@ -419,7 +420,7 @@ contains
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
-        integer :: ii, idx, temploc(1)
+        integer :: ii, idx, temploc(1), j, k
         logical, intent(in), optional :: initialize2decomp
         integer :: num_scalars = 0
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
@@ -593,12 +594,14 @@ contains
        this%zBot = p_minval(this%mesh(:,:,:,3)) - this%dz/2.d0
        this%zMid = half*(this%zTop + this%zBot)
        Lz = this%zTop - this%zBot
+       Ly = p_maxval(this%mesh(:,:,:,2)) + this%dy
+       Lx = maxval(this%mesh(:,:,:,1)) + this%dx
+       this%Lx = Lx; this%Ly = Ly; this%Lz = Lz
        call message(0,"Mesh generated:")
        call message(1,"dx:", this%dx)
        call message(1,"dy:", this%dy)
        call message(1,"dz:", this%dz)
        call message(1,"Lz:", Lz)
-
 
        ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
        allocate(this%spectC)
@@ -697,6 +700,28 @@ contains
        allocate(this%fbody_z(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
        this%storeFbody = .true. ! Cant think of a case where this will be false 
 
+       ! STEP 6x: populate xline, yline and zline
+       allocate(this%xline(this%nx), this%yline(this%ny), this%zline(this%nz), this%zEline(this%nz+1))
+       this%xline = this%mesh(:,1,1,1)
+
+       ! populate yline
+       zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
+       call transpose_x_to_y(this%mesh(:,:,:,2), this%rbuffyC(:,:,:,1), this%gpC)
+       do j = 1, this%gpC%ysz(2)
+           this%yline(j) = this%rbuffyC(1,j,1,1)
+       enddo
+
+       ! populate zline, zEline
+       zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
+       call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
+       call transpose_y_to_z(zinY,zinZ,this%gpC)
+       do k = 1, this%gpC%zsz(3)
+           this%zline(k) = zinZ(1,1,k)
+       enddo
+       do k = 1, this%gpC%zsz(3)
+           this%zEline(k) = this%zline(k) - half*this%dz
+       enddo
+       this%zEline(this%nz+1) = this%zline(this%nz) + half*this%dz
 
        ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
        allocate(this%padepoiss)
@@ -851,8 +876,6 @@ contains
             else
                sgsmod_stratified = .false. 
             end if 
-            Ly = p_maxval(this%mesh(:,:,:,2)) + this%dy
-            Lx = maxval(this%mesh(:,:,:,1)) + this%dx
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
                                     Lx, Ly, this%mesh(:,1,1,1), &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
@@ -1403,6 +1426,7 @@ contains
           call this%sgsModel%destroy()
           deallocate(this%sgsModel)
        end if
+       deallocate(this%xline, this%yline, this%zline, this%zEline)
 
        if (allocated(this%scalars)) then
            do idx = 1,this%n_scalars

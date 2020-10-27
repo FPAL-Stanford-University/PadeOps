@@ -1,7 +1,7 @@
 module interpolatorMod
-    use kind_parameters, only: rkind
+    use kind_parameters, only: rkind, clen 
     use decomp_2d
-    use exits, only: GracefulExit 
+    use exits, only: GracefulExit, message
 
     implicit none 
     private 
@@ -22,10 +22,13 @@ module interpolatorMod
 
 contains 
 
-subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest)
+subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest, filenameIn)
+    use constants, only: eps
     class(interpolator), intent(inout) :: this
     type(decomp_info), intent(in), target :: gpSource, gpDest 
     real(rkind), dimension(:), intent(in) :: xSource, ySource, zSource, xDest, yDest, zDest
+    character(len=*), intent(in) :: filenameIn
+    character(len=clen)             :: fname
     integer :: nxS, nyS, nzS, nxD, nyD, nzD, idx 
     real(rkind) :: delta, start
 
@@ -34,22 +37,26 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
 
     ! Safeguards
     if (xSource(1) > xDest(1)) then
-        call GracefulExit("Low bound of x-axis in out of bounds (interpolator)",34)
+        call GracefulExit("Low bound of x-axis is out of bounds (interpolator)",34)
     end if
     if (xSource(size(xSource)) < xDest(size(xDest))) then
-        call GracefulExit("High bound of x-axis in out of bounds (interpolator)",34)
+        call GracefulExit("High bound of x-axis is out of bounds (interpolator)",34)
     end if  
     if (ySource(1) > yDest(1)) then
-        call GracefulExit("Low bound of y-axis in out of bounds (interpolator)",34)
+        call message("ySource(1):", ySource(1))
+        call message("yDest(1):",   yDest(1))
+        call GracefulExit("Low bound of y-axis is out of bounds (interpolator)",34)
     end if
     if (ySource(size(ySource)) < yDest(size(yDest))) then
-        call GracefulExit("High bound of y-axis in out of bounds (interpolator)",34)
+        call GracefulExit("High bound of y-axis is out of bounds (interpolator)",34)
     end if  
     if (zSource(1) > zDest(1)) then
-        call GracefulExit("Low bound of z-axis in out of bounds (interpolator)",34)
+        !call GracefulExit("Low bound of z-axis is out of bounds (interpolator)",34)
+        call message("!!!WARNING!!!: Low bound of z-axis is out of bounds (interpolator)",34)
     end if
     if (zSource(size(zSource)) < zDest(size(zDest))) then
-        call GracefulExit("High bound of z-axis in out of bounds (interpolator)",34)
+        !call GracefulExit("High bound of z-axis is out of bounds (interpolator)",34)
+        call message("!!!WARNING!!!: High bound of z-axis is out of bounds (interpolator)",34)
     end if  
 
     allocate(this%xInd(size(xDest)))
@@ -69,19 +76,22 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
     nyD = gpDest%ysz(2)
     nzD = gpDest%zsz(3)
     
-   
     ! Get interpolation indices and weights
     delta = xSource(2) - xSource(1)
     start = xSource(1)
     do idx = 1,size(this%wx)
         this%xInd(idx) = ceiling((xDest(idx) - start)/delta)
+        this%xInd(idx) = max(this%xInd(idx), 1)
+        this%xInd(idx) = min(this%xInd(idx), size(xSource)-1)
         this%wx(idx) = (xSource(this%xInd(idx) + 1) - xDest(idx))/delta 
     end do 
 
     delta = ySource(2) - ySource(1)
     start = ySource(1)
     do idx = 1,size(this%wy)
-        this%yInd(idx) = ceiling((yDest(idx) - start)/delta)
+        this%yInd(idx) = ceiling((yDest(idx)-start)/delta)
+        this%yInd(idx) = max(this%yInd(idx), 1)
+        this%yInd(idx) = min(this%yInd(idx), size(ySource)-1)
         this%wy(idx) = (ySource(this%yInd(idx) + 1) - yDest(idx))/delta 
     end do 
 
@@ -89,8 +99,38 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
     start = zSource(1)
     do idx = 1,size(this%wz)
         this%zInd(idx) = ceiling((zDest(idx) - start)/delta)
+        this%zInd(idx) = max(this%zInd(idx), 1)
+        this%zInd(idx) = min(this%zInd(idx), size(zSource)-1)
         this%wz(idx) = (zSource(this%zInd(idx) + 1) - zDest(idx))/delta 
     end do 
+
+    if(nrank==0) then
+      fname = filenameIn(:len_trim(filenameIn))//"_x.dat"
+      open(10,file=fname,status='unknown',action='write')
+      delta = xSource(2) - xSource(1)
+      start = xSource(1)
+      do idx = 1,size(this%wx)
+        write(10,'(i4,1x,3(e19.12,1x),i4,1x,e19.12)') idx, xDest(idx), start, delta, this%xInd(idx), this%wx(idx)
+      enddo
+
+      fname = filenameIn(:len_trim(filenameIn))//"_y.dat"
+      open(10,file=fname,status='unknown',action='write')
+      delta = ySource(2) - ySource(1)
+      start = ySource(1)
+      do idx = 1,size(this%wy)
+        write(10,'(i4,1x,3(e19.12,1x),i4,1x,e19.12)') idx, yDest(idx), start, delta, this%yInd(idx), this%wy(idx)
+      enddo
+
+      fname = filenameIn(:len_trim(filenameIn))//"_z.dat"
+      open(10,file=fname,status='unknown',action='write')
+      delta = zSource(2) - zSource(1)
+      start = zSource(1)
+      do idx = 1,size(this%wz)
+        write(10,'(i4,1x,3(e19.12,1x),i4,1x,e19.12)') idx, zDest(idx), start, delta, this%zInd(idx), this%wz(idx)
+      enddo
+
+      close(10)
+    endif
 
     ! Create 2 intermediate transposers and buffer arrays    
     call decomp_info_init(nxD,nyS,nzS,this%gpSX)

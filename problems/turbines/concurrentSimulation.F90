@@ -9,21 +9,26 @@ program concurrentSimulation
     use IncompressibleGrid, only: igrid
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
-    use exits, only: message
+    use exits, only: message, GracefulExit
     use budgets_time_avg_mod, only: budgets_time_avg  
     use budgets_xy_avg_mod, only: budgets_xy_avg  
     use decomp_2d, only: nrank
+    use interpolatorMod, only: interpolator 
+    use constants, only: zero, half
 
     implicit none
 
     type(igrid), allocatable, target :: igp, prec
     character(len=clen) :: inputfile, precInputFile, mainInputFile
     integer :: ierr
-    !real(rkind), dimension(:,:,:), allocatable :: utarget, vtarget, wtarget
     integer :: ioUnit, prec_ixen_2
+    type(interpolator) :: interpC, interpE
     type(budgets_time_avg) :: budg_tavg
     type(budgets_xy_avg) :: budg_xyavg
-    namelist /concurrent/ precInputFile, mainInputFile
+    logical :: useInterpolator = .false.
+    real(rkind) :: srcxst, srcyst, srczst
+    real(rkind), allocatable, dimension(:,:,:), target :: utarget, vtarget, wtarget, Ttarget
+    namelist /concurrent/ precInputFile, mainInputFile, useInterpolator, srcxst, srcyst, srczst
 
     call MPI_Init(ierr)                                                 !<-- Begin MPI
     call GETARG(1,inputfile)                                            !<-- Get the location of the input file
@@ -51,8 +56,55 @@ program concurrentSimulation
     call igp%printDivergence()
 
     ! Fringe associations for non-periodic BCs in x
-    prec_ixen_2 = prec%fringe_x%get_ixen_2()
-    call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w, xen_targ=prec_ixen_2) !<-- Link the target velocity array to igp 
+    if(useInterpolator) then
+        ! Safeguards
+        if( srcxst + igp%Lx > prec%Lx) then
+            call GracefulExit("Precursor is not long enough. Check details.", 11)
+        endif
+        if( srcyst + igp%Ly > prec%Ly) then
+            call GracefulExit("Precursor is not wide enough. Check details.", 11)
+        endif
+        if( srczst + igp%Lz > prec%Lz) then
+            call GracefulExit("Precursor is not tall enough. Check details.", 11)
+        endif
+        if( abs(srczst) > zero) then
+            call GracefulExit("srczst must be zero. Check details.", 11)
+        endif
+        if(.not. igp%useFringe) then
+            call GracefulExit("If interpolator is being used, igp%useFringe must be true.", 11)
+        endif
+        !if( abs(srcyst+igp%Ly-prec%Ly) > 1.0d-12 ) then
+        !  !if(.not. igp%fringe_x%Apply_y_fringe) then
+        !  !    call GracefulExit("If part of the domain in y is being forced, igp%fringe_x%Apply_y_fringe must be true.", 11)
+        !  !endif
+        !endif
+
+        ! Create the interpolator 
+        write(*,*) "srcyst = ", srcyst
+        write(*,*) "igp%yline(1) = ", igp%yline(1:3)
+        call interpC%init(prec%gpC,igp%gpC,prec%xline,prec%yline,prec%zline, igp%xline+srcxst,igp%yline+srcyst,igp%zline +srczst, 'interpC_debug')
+        call interpE%init(prec%gpE,igp%gpE,prec%xline,prec%yline,prec%zEline,igp%xline+srcxst,igp%yline+srcyst,igp%zEline+srczst,' interpE_debug')
+
+        ! allocate memory
+        allocate(utarget(igp%gpC%xsz(1),igp%gpC%xsz(2),igp%gpC%xsz(3)))
+        allocate(vtarget(igp%gpC%xsz(1),igp%gpC%xsz(2),igp%gpC%xsz(3)))
+        allocate(wtarget(igp%gpE%xsz(1),igp%gpE%xsz(2),igp%gpE%xsz(3)))
+        if(igp%isStratified) then
+            allocate(Ttarget(igp%gpE%xsz(1),igp%gpE%xsz(2),igp%gpE%xsz(3)))
+        endif
+
+        ! associate memory with pointers in igp%fringe_x
+        if(igp%isStratified) then
+            call igp%fringe_x%associateFringeTargets(utarget, vtarget, wtarget, Ttarget)
+        else
+            call igp%fringe_x%associateFringeTargets(utarget, vtarget, wtarget)
+        endif
+
+    else
+        ! Link the target velocity array to igp 
+        prec_ixen_2 = prec%fringe_x%get_ixen_2()
+        call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w, xen_targ=prec_ixen_2)
+    endif
 
     call budg_xyavg%init(precInputFile, prec)   !<-- Budget class initialization 
 
@@ -65,6 +117,16 @@ program concurrentSimulation
     call tic() 
     do while (igp%tsim < igp%tstop) 
        call prec%timeAdvance()                                           !<- Time stepping scheme + Pressure Proj. (see igrid.F90)
+
+       if(useInterpolator) then
+           call interpC%LinInterp3D(prec%u, utarget)
+           call interpC%LinInterp3D(prec%v, vtarget)
+           call interpE%LinInterp3D(prec%w, wtarget)
+           if(igp%isStratified) then
+               call interpC%LinInterp3D(prec%T, Ttarget)
+           endif
+       endif
+
        call igp%timeAdvance(prec%get_dt())                               !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
        call budg_xyavg%doBudgets()       
        call budg_tavg%doBudgets()       
@@ -84,6 +146,10 @@ program concurrentSimulation
     call prec%destroy()                                                  !<-- Destroy the IGRID derived type 
     call igp%destroy()                                                   !<-- Destroy the IGRID derived type 
    
+    deallocate(utarget, vtarget, wtarget)
+    if(allocated(Ttarget)) deallocate(Ttarget)
+    call interpE%destroy()
+    call interpC%destroy()
 
     deallocate(prec)                                                     !<-- Deallocate all the memory associated with scalar defaults
     deallocate(igp)                                                      !<-- Deallocate all the memory associated with scalar defaults
