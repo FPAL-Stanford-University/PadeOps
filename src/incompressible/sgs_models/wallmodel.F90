@@ -25,8 +25,11 @@ subroutine initWallModel(this)
       if(.not. this%is_z0_varying) then
           call GracefulExit("You cannot use Abkar-PA wall model for a homogeneous problem", 111)
       endif
-      this%kaplnzfac_s = (kappa/(half*this%dz/this%z0s))**2
-      this%kaplnzfac_r = (kappa/(half*this%dz/this%z0r))**2
+      this%kaplnzfac_s = (kappa/log(half*this%dz/this%z0s))**2
+      !if(nrank==0) then
+      !   write(*,'(a,5(1x,e19.12))') 'kaplnzfac_s:= ', kappa, this%dz, this%z0s, this%kaplnzfac_s
+      !endif
+      this%kaplnzfac_r = (kappa/log(half*this%dz/this%z0r))**2
       allocate(this%mask_upstream(this%gpC%xsz(1), this%gpC%xsz(2)))
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
       where(this%lamfact > (one-epssmall))
@@ -34,6 +37,7 @@ subroutine initWallModel(this)
       elsewhere
           this%mask_upstream = zero
       endwhere
+      this%mask_normfac = p_sum(sum(this%mask_upstream))
    case default
       call gracefulExit("Invalid choice of Wallmodel.",324)
    end select
@@ -51,6 +55,8 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v
    complex(rkind), dimension(:,:,:), pointer :: cbuffz, cbuffy
    real(rkind) :: ust1fac, ustar1, epssmall = 1.0d-6
+   integer, dimension(this%gpC%xsz(1), this%gpC%xsz(2)) :: modelregion
+   integer :: i
 
    cbuffz => this%cbuffzC(:,:,:,1)
    cbuffy => this%cbuffyC(:,:,:,1)
@@ -101,20 +107,34 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
       ! type 2 :: BZ-local method (twice-filtered)
       call this%getfilteredSpeedSqAtWall(uhat, vhat)
+      call this%getSpanAvgVelAtWall()
       this%rbuffxC(:,:,1,2) = sqrt(this%filteredSpeedSq(:,:,1))
 
       ! using this%filteredSpeedSq in the upstream region, estimate ustar1
       call this%get_ustar_upstreampart(ustar1)
       ust1fac = ustar1/sqrt(this%kaplnzfac_s)
-      
+     
+
+      !modelregion = 0; 
       where(this%lamfact > (one-epssmall))
           this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)
+          !modelregion = 1
       elsewhere (this%lamfact > epssmall)
           this%ustarsqvar = (this%rbuffxC(:,:,1,2) - this%lamfact*ust1fac) / (one - this%lamfact)
           this%ustarsqvar = this%kaplnzfac_r*this%ustarsqvar*this%ustarsqvar
+          !modelregion = 2
       elsewhere
           this%ustarsqvar = this%kaplnzfac_r*this%filteredSpeedSq(:,:,1)
+          !modelregion = 3
       endwhere
+
+      !if(nrank==0) then
+      !  !do i=1,this%gpC%xsz(1)
+      !  !  write(*,*) this%lamfact(i,1), modelregion(i,1)
+      !  !enddo
+      !  i = 34
+      !  write(*,'(a,e19.12,x,i4.4,1x,4(e19.12,1x))') '---i=34: ', this%lamfact(i,1), modelregion(i,1), this%rbuffxC(i,1,1,2), ust1fac, this%ustarsqvar(i,1), this%kaplnzfac_r
+      !endif
 
       ! tau_13
       this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uxvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
@@ -131,9 +151,11 @@ end subroutine
 subroutine get_ustar_upstreampart(this, ustar1)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), intent(out) :: ustar1
+   real(rkind) :: usqfiltavg
 
-   ustar1 = p_sum(sum(this%filteredSpeedSq(:,:,1))*this%mask_upstream)
-   ustar1 = sqrt(ustar1)*this%kaplnzfac_s
+   usqfiltavg = p_sum(sum(this%filteredSpeedSq(:,:,1)*this%mask_upstream))/this%mask_normfac
+   ustar1 = sqrt(usqfiltavg*this%kaplnzfac_s)
+   !if(nrank==0) print '(a,3(e19.12,1x))', "ustar1:= ", ustar1, this%kaplnzfac_s, usqfiltavg
 
 end subroutine
 
@@ -242,15 +264,28 @@ subroutine BouZeidLocalModel(this)
 
 end subroutine
 
-subroutine getSpanAvgVelAtWall(this, uhatC, vhatC)
+subroutine getSpanAvgVelAtWall(this)
     class(sgs_igrid), intent(inout), target :: this
-    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC
+    integer :: j, k
 
-    real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2, rbuffx3
-    complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
+    ! copmute span-avg of Uxvar, Uyvar, filteresSpeedSqAtWall
+    this%filteredSpeedSq(:,:,2) = this%Uxvar(:,:)
+    this%filteredSpeedSq(:,:,3) = this%Uyvar(:,:)
+    call transpose_x_to_y(this%filteredSpeedSq, this%rbuffyC(:,:,:,1), this%gpC)
 
-    cbuffy => this%cbuffyC(:,:,:,1); tauWallH => this%cbuffzC(:,:,:,1)     
+    this%rbuffyC(:,1,1,1) = sum(this%rbuffyC(:,:,1,1),2)/real(this%gpC%ysz(2), rkind)
+    this%rbuffyC(:,1,2,1) = sum(this%rbuffyC(:,:,2,1),2)/real(this%gpC%ysz(2), rkind)
+    this%rbuffyC(:,1,3,1) = sum(this%rbuffyC(:,:,3,1),2)/real(this%gpC%ysz(2), rkind)
+    do k=1,3
+      do j=2,this%gpC%ysz(2)
+          this%rbuffyC(:,j,k,1) = this%rbuffyC(:,1,k,1)
+      enddo
+    enddo
 
+    call transpose_y_to_x(this%rbuffyC(:,:,:,1), this%filteredSpeedSq, this%gpC)
+    this%Uxvar(:,:) = this%filteredSpeedSq(:,:,2)
+    this%Uyvar(:,:) = this%filteredSpeedSq(:,:,3)
+    
 end subroutine
 
 subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)
