@@ -55,6 +55,8 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v
    complex(rkind), dimension(:,:,:), pointer :: cbuffz, cbuffy
    real(rkind) :: ust1fac, ustar1, epssmall = 1.0d-6
+   integer, dimension(this%gpC%xsz(1), this%gpC%xsz(2)) :: modelregion
+   integer :: i
 
    cbuffz => this%cbuffzC(:,:,:,1)
    cbuffy => this%cbuffyC(:,:,:,1)
@@ -105,20 +107,34 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
       ! type 2 :: BZ-local method (twice-filtered)
       call this%getfilteredSpeedSqAtWall(uhat, vhat)
+      call this%getSpanAvgVelAtWall()
       this%rbuffxC(:,:,1,2) = sqrt(this%filteredSpeedSq(:,:,1))
 
       ! using this%filteredSpeedSq in the upstream region, estimate ustar1
       call this%get_ustar_upstreampart(ustar1)
       ust1fac = ustar1/sqrt(this%kaplnzfac_s)
-      
+     
+
+      !modelregion = 0; 
       where(this%lamfact > (one-epssmall))
           this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)
+          !modelregion = 1
       elsewhere (this%lamfact > epssmall)
           this%ustarsqvar = (this%rbuffxC(:,:,1,2) - this%lamfact*ust1fac) / (one - this%lamfact)
           this%ustarsqvar = this%kaplnzfac_r*this%ustarsqvar*this%ustarsqvar
+          !modelregion = 2
       elsewhere
           this%ustarsqvar = this%kaplnzfac_r*this%filteredSpeedSq(:,:,1)
+          !modelregion = 3
       endwhere
+
+      !if(nrank==0) then
+      !  !do i=1,this%gpC%xsz(1)
+      !  !  write(*,*) this%lamfact(i,1), modelregion(i,1)
+      !  !enddo
+      !  i = 34
+      !  write(*,'(a,e19.12,x,i4.4,1x,4(e19.12,1x))') '---i=34: ', this%lamfact(i,1), modelregion(i,1), this%rbuffxC(i,1,1,2), ust1fac, this%ustarsqvar(i,1), this%kaplnzfac_r
+      !endif
 
       ! tau_13
       this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uxvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
@@ -139,7 +155,7 @@ subroutine get_ustar_upstreampart(this, ustar1)
 
    usqfiltavg = p_sum(sum(this%filteredSpeedSq(:,:,1)*this%mask_upstream))/this%mask_normfac
    ustar1 = sqrt(usqfiltavg*this%kaplnzfac_s)
-   if(nrank==0) print '(a,3(e19.12,1x))', "ustar1:= ", ustar1, this%kaplnzfac_s, usqfiltavg
+   !if(nrank==0) print '(a,3(e19.12,1x))', "ustar1:= ", ustar1, this%kaplnzfac_s, usqfiltavg
 
 end subroutine
 
@@ -248,15 +264,28 @@ subroutine BouZeidLocalModel(this)
 
 end subroutine
 
-subroutine getSpanAvgVelAtWall(this, uhatC, vhatC)
+subroutine getSpanAvgVelAtWall(this)
     class(sgs_igrid), intent(inout), target :: this
-    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC
+    integer :: j, k
 
-    real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2, rbuffx3
-    complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
+    ! copmute span-avg of Uxvar, Uyvar, filteresSpeedSqAtWall
+    this%filteredSpeedSq(:,:,2) = this%Uxvar(:,:)
+    this%filteredSpeedSq(:,:,3) = this%Uyvar(:,:)
+    call transpose_x_to_y(this%filteredSpeedSq, this%rbuffyC(:,:,:,1), this%gpC)
 
-    cbuffy => this%cbuffyC(:,:,:,1); tauWallH => this%cbuffzC(:,:,:,1)     
+    this%rbuffyC(:,1,1,1) = sum(this%rbuffyC(:,:,1,1),2)/real(this%gpC%ysz(2), rkind)
+    this%rbuffyC(:,1,2,1) = sum(this%rbuffyC(:,:,2,1),2)/real(this%gpC%ysz(2), rkind)
+    this%rbuffyC(:,1,3,1) = sum(this%rbuffyC(:,:,3,1),2)/real(this%gpC%ysz(2), rkind)
+    do k=1,3
+      do j=2,this%gpC%ysz(2)
+          this%rbuffyC(:,j,k,1) = this%rbuffyC(:,1,k,1)
+      enddo
+    enddo
 
+    call transpose_y_to_x(this%rbuffyC(:,:,:,1), this%filteredSpeedSq, this%gpC)
+    this%Uxvar(:,:) = this%filteredSpeedSq(:,:,2)
+    this%Uyvar(:,:) = this%filteredSpeedSq(:,:,3)
+    
 end subroutine
 
 subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)

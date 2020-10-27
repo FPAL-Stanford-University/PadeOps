@@ -116,6 +116,7 @@ module sgsmod_igrid
             procedure, private :: embed_WM_PotTFlux
             procedure, private :: BouZeidLocalModel
             procedure, private :: get_ustar_upstreampart
+            procedure, private :: getSpanAvgVelAtWall
             procedure, private :: set_tauijWM
             
 

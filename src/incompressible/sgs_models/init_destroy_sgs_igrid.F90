@@ -74,10 +74,10 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   logical :: usePrSGS = .false. 
   integer :: ierr, WM_matchingIndex = 1, i, j
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0, xpos = 0.0_rkind, epssmall = 1.0d-6
-  real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2
+  real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2, deli
   logical :: is_z0_varying = .false.
   real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
-  real(rkind) :: Mfactor, dele, deli, alpfac
+  real(rkind) :: Mfactor, dele, alpfac
   integer :: spnumx, spnumy
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
@@ -243,6 +243,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     !!! smooth patch before rpstart and after fringe. Rough between these.
     Mfactor = 0.75_rkind-0.03_rkind*log(this%z0r/this%z0s)
     alpfac = 0.027_rkind
+    deli = 0.0_rkind
     do j = 1, this%gpC%xsz(2)
       do i = 1, this%gpC%xsz(1)
         if((xMesh(i) < rpstart) .or. (xMesh(i) > rpstart+spx)) then
@@ -251,8 +252,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
         else
             ! downstream rough or smooth region
             xl = xMesh(i) - rpstart
-            deli = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind
-            this%lamfact(i,j) = -log(half*this%dz/(deli*alpfac+1.0d-18)) / log(alpfac)
+            deli(i) = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind
+            this%lamfact(i,j) = -log(half*this%dz/(deli(i)*alpfac+1.0d-18)) / log(alpfac)
             this%lamfact(i,j) = min(this%lamfact(i,j), one)     ! note :: must be here, not outside the loop
             this%lamfact(i,j) = max(this%lamfact(i,j), zero)    ! note :: must be here, not outside the loop
             !write(100+nrank,'(2(i5,1x),7(e19.12,1x))') i, j, deli, half*this%dz, half*this%dz/(deli*alpfac+1.0d-18), -log(alpfac), this%lamfact(i,j)
@@ -266,7 +267,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
       !print *, 'nx = ', this%gpC%xsz(1)
       open(10, file='debug_heterog.dat',action='write',status='unknown')
       do i=1,this%gpC%xsz(1)
-        write(10,'(4(e19.12,1x))') xMesh(i), sp_map(i), this%z0var(i,1), this%lamfact(i,1)
+        write(10,'(5(e19.12,1x))') xMesh(i), sp_map(i), this%z0var(i,1), this%lamfact(i,1), deli(i)
       enddo
       close(10)
     endif
