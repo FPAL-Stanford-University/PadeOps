@@ -66,12 +66,22 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(Tpurt(decompC%xsz(1),decompC%xsz(2),decompC%xsz(3)))
     ztmp = z*xDim
     do k = 1, decompC%xsz(3)
-      if(ztmp(1,1,k) < 937.d0) then
+      ! Abkar-Moin (BLM 2017) setup
+      !if(ztmp(1,1,k) < 937.d0) then
+      !  T(:,:,k) = 300.d0
+      !elseif(ztmp(1,1,k) < 1063.d0) then
+      !  T(:,:,k) = 300.0d0 + (ztmp(1,1,k)-937.d0)*8.0d0/126.d0
+      !else
+      !  T(:,:,k) = 308.0d0 + (ztmp(1,1,k)-1063.d0)*0.003d0
+      !endif
+
+      ! Bou-Zeid (BLM 2017) setup
+      if(ztmp(1,1,k) < 1000.d0) then
         T(:,:,k) = 300.d0
-      elseif(ztmp(1,1,k) < 1063.d0) then
-        T(:,:,k) = 300.0d0 + (ztmp(1,1,k)-937.d0)*8.0d0/126.d0
+      elseif(ztmp(1,1,k) < 1100.d0) then
+        T(:,:,k) = 300.0d0 + (ztmp(1,1,k)-1000.d0)*8.0d0/100.d0
       else
-        T(:,:,k) = 308.0d0 + (ztmp(1,1,k)-1063.d0)*0.003d0
+        T(:,:,k) = 308.0d0 + (ztmp(1,1,k)-1100.d0)*0.003d0
       endif
     enddo
 
@@ -162,9 +172,9 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [256]
+    xplanes = [32]
+    yplanes = [32]
+    zplanes = [32]
 
 end subroutine
 
