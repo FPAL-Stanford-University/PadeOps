@@ -14,7 +14,7 @@ module HIT_Periodic_parameters
     real(rkind) :: k_bp_left, k_bp_right, uadvect = 10.0, x_shift 
     real(rkind), dimension(:,:,:), allocatable :: uTarget, vTarget, wTarget
 
-    real(rkind) :: useRealSpaceLinearForcing = .false.
+    logical :: useRealSpaceLinearForcing = .false.
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)

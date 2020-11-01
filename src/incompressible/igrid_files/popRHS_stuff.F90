@@ -68,7 +68,7 @@
            ! IMPORTANT: If SGS model is used, the viscous term is evaluated
            ! as part of the SGS stress tensor. 
            if (.not. this%isInviscid) then
-               call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
+               call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
            end if
        end if
 
@@ -190,7 +190,7 @@
            ! IMPORTANT: If SGS model is used, the viscous term is evaluated
            ! as part of the SGS stress tensor. 
            if ((.not. this%isInviscid)) then
-               call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
+               call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
            end if
        end if
 

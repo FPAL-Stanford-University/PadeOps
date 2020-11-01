@@ -413,12 +413,13 @@
 
    end subroutine 
 
-   subroutine addViscousTerm(this, u_rhs, v_rhs, w_rhs)
+   subroutine addViscousTerm(this, u_rhs, v_rhs, w_rhs, T_rhs)
        class(igrid), intent(inout) :: this
        integer :: i, j, k
        real(rkind) :: oneByRe, molecularDiff
        complex(rkind) :: tmp1, tmp2
        complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: u_rhs, v_rhs
+       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout), optional :: T_rhs
        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: w_rhs
 
        oneByRe = one/this%Re
@@ -448,14 +449,14 @@
            end do
         end do
 
-        if (this%isStratified) then
+        if (this%isStratified .and. present(T_rhs)) then
            molecularDiff = one/(this%Re*this%PrandtlFluid)
            do k = 1,size(this%T_rhs,3)
               do j = 1,size(this%T_rhs,2)
                  !$omp simd
                  do i = 1,size(this%T_rhs,1)
                     tmp1 = -this%spectC%kabs_sq(i,j,k)*this%That(i,j,k) + this%d2Tdz2hatC(i,j,k) 
-                    this%T_rhs(i,j,k) = this%T_rhs(i,j,k) + molecularDiff*tmp1
+                    T_rhs(i,j,k) = T_rhs(i,j,k) + molecularDiff*tmp1
                  end do 
               end do 
            end do 

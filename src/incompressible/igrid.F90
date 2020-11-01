@@ -158,7 +158,7 @@ module IncompressibleGrid
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
-        real(rkind) :: latitude, max_nuSGS, invObLength, Tsurf0, Tsurf, dTsurf_dt, ThetaRef
+        real(rkind) :: latitude, max_nuSGS, invObLength, Tsurf0, Tsurf, dTsurf_dt, ThetaRef, TsurfTop, dTsurfTop_dt
 
         real(rkind) :: dtOld, dtRat, Tmn, wTh_surf
         real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
@@ -736,7 +736,12 @@ contains
                call GraceFulExit("Only Dirichlet, Homog. Neumann or Inhomog. Neumann BCs supported for Temperature at &
                    & this time. Set botBC_Temp = 0 or 1 or 2",341)        
            end if
-       end if 
+           if (topBC_Temp == 0) then
+               call setDirichletBC_Temp(inputfile, this%TsurfTop, this%dTsurfTop_dt)
+               this%Tsurf0 = this%TsurfTop
+               this%TsurfTop = this%Tsurf0 + this%dTsurfTop_dt*this%tsim
+           end if 
+        end if 
 
        if (this%initspinup) then
           if (this%isStratified) then
@@ -1202,7 +1207,7 @@ contains
                                 & calculation term uses")
               call message(2,"Bulk Richardson number:", this%BulkRichardson)
            case (3) 
-              this%BuoyancyFact = this%Ra/this%Re   
+              this%BuoyancyFact = this%Ra/(this%PrandtlFluid*this%Re*this%Re) 
               call message(1,"Buoyancy term type 3 selected. Buoyancy term &
                                 & calculation term uses")
               call message(2,"Rayleigh number:", this%Ra)
@@ -1255,10 +1260,10 @@ contains
            end if 
        end if 
        
-       ! STEP 24: Compute pressure  
-       if ((this%storePressure) .or. (this%fastCalcPressure)) then
-           call this%ComputePressure()
-       end if 
+       ! STEP 24: Compute pressure (REDACTED) 
+       !if ((this%storePressure) .or. (this%fastCalcPressure)) then
+       !    call this%ComputePressure()
+       !end if 
 
        ! STEP 25: Schedule time dumps
        this%vizDump_Schedule = vizDump_Schedule
