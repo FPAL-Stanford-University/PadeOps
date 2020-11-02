@@ -106,7 +106,13 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       !call this%get_ustar_upstreampart(ustar1)
 
       ! type 2 :: BZ-local method (twice-filtered)
-      call this%getfilteredSpeedSqAtWall(uhat, vhat)
+      if(this%filter_for_heterog) then
+          call this%getfilteredSpeedSqAtWall(uhat, vhat)
+      else
+          this%Uxvar = u(:,:,1)
+          this%Uyvar = v(:,:,1)
+          this%filteredSpeedSq = u*u + v*v
+      endif
       call this%getSpanAvgVelAtWall()
       this%rbuffxC(:,:,1,2) = sqrt(this%filteredSpeedSq(:,:,1))
 

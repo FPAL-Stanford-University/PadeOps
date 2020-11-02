@@ -75,7 +75,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   integer :: ierr, WM_matchingIndex = 1, i, j
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0, xpos = 0.0_rkind, epssmall = 1.0d-6
   real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2, deli
-  logical :: is_z0_varying = .false.
+  logical :: is_z0_varying = .false., filter_for_heterog = .true.
   real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
   real(rkind) :: Mfactor, dele, alpfac
   integer :: spnumx, spnumy
@@ -87,9 +87,9 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
                  explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, &
-                 is_z0_varying 
+                 is_z0_varying
 
-  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, rpstart, spx_delta, spy_delta
+  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, rpstart, spx_delta, spy_delta, filter_for_heterog
 
   this%gpC => gpC
   this%gpE => gpE
@@ -197,6 +197,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     allocate(this%lamfact(this%gpC%xsz(1), this%gpC%xsz(2)))
 
     this%z0s = z0s; this%z0r = z0r
+    this%filter_for_heterog = filter_for_heterog
     totpx = spx + rpx
     if(rpstart < zero) then
         ! overwrite rough patch start with length of smooth patch
