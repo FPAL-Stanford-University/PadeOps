@@ -124,8 +124,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     type(cd06stagg), allocatable :: derW
     integer :: ProblemMode = 1
     character(len=clen) :: fname
+    real(rkind) :: T_top, T_bottom
     real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
     namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta
+    namelist /TEMPERATURE_BC/ T_bottom, T_top
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -152,7 +154,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
          u  = 1.d0 - 4.d0*z*z 
          v  = zero 
          wC = zero
-         T  = -z 
+         T  = T_bottom * (0.5 - z) + T_top * (z + 0.5) 
 
 
          allocate(upurt(size(u ,1),size(u ,2),size(u ,3)))
