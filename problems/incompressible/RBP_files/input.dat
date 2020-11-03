@@ -1,12 +1,12 @@
 &INPUT
-inputdir              = "/home/aditya90/Codes/PadeOps/data/ekman/"   ! Directory for any input files
-outputdir             = "/home/aditya90/Codes/PadeOps/data/ekman/"   ! Directory for all output files
-nx                    = 64          ! Number of points in X
+inputdir              = "/scratch/05298/tg845973/RBP_data"   ! Directory for any input files
+outputdir             = "/scratch/05298/tg845973/RBP_data"   ! Directory for all output files
+nx                    = 1024        ! Number of points in X
 ny                    = 64          ! Number of points in Y
-nz                    = 128          ! Number of points in Z
-tstop                 = 2000.D0       ! Physical time to stop the simulation
-CFL                   = 0.25D0       ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 5.D-5     ! Fixed time step value (only used if CFL is set to negative)
+nz                    = 128         ! Number of points in Z
+tstop                 = 2000.D0     ! Physical time to stop the simulation
+CFL                   = 0.25D0      ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 5.D-5       ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
@@ -24,9 +24,9 @@ t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproj
 /
 /
 &IO
-RunID                 = 5          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 5           ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 2000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 500        ! Data dumping frequency (# of timesteps)
+t_dataDump            = 500         ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 100         ! Plane dumping frequency (# of timesteps)
@@ -35,9 +35,9 @@ t_stop_planeDump      = 5000        ! When do you want to stop dumping planes?
 /
 /
 &STATS
-tid_StatsDump         = 20000        ! Dumping Frequency for Statistics file (# of time steps)
-tid_compStats         = 10         ! Frequency of Computing Statistics
-tSimStartStats        = 2000.d0       ! Simulation time for starting stats calculations 
+tid_StatsDump         = 20000       ! Dumping Frequency for Statistics file (# of time steps)
+tid_compStats         = 10          ! Frequency of Computing Statistics
+tSimStartStats        = 2000.d0     ! Simulation time for starting stats calculations 
 normStatsByUstar      = .TRUE.      ! Normalize Statistics by ustar at each instant
 computeSpectra        = .FALSE.     ! Compute and time average x - spectra on the run
 timeAvgFullFields     = .FALSE.     ! Time average and store fields on the run
@@ -46,38 +46,34 @@ timeAvgFullFields     = .FALSE.     ! Time average and store fields on the run
 &OS_INTERACTIONS
 useSystemInteractions = .TRUE.      ! Do you wish to interact with the program while its running
 tSystemInteractions   = 10          ! Check for interactions commands after these many time steps
-controlDir            = "null"          ! Check in this directory for command files (NULL = Check in output directory)
+controlDir            = "null"      ! Check in this directory for command files (NULL = Check in output directory)
 /
 /
 &PHYSICS
-isInviscid            = .FALSE.      ! Is this an inviscid simulation?
-useCoriolis           = .TRUE.     ! Activate the coriolis term? 
-assume_fplane         = .FALSE.            ! make the f-plane assumption while computing the coriolis term
-latitude              = 90.d0            ! Latittude of the domain in degrees 
-useExtraForcing       = .FALSE.      ! Is an extra forcing term being used? (non-Geostrophic forcing only)
-useGeostrophicForcing = .TRUE.     ! This is true if forcing is provided using the coriolis term  
+isInviscid            = .FALSE.     ! Is this an inviscid simulation?
+useCoriolis           = .FALSE.     ! Activate the coriolis term? 
+assume_fplane         = .FALSE.     ! make the f-plane assumption while computing the coriolis term
+latitude              =  90.d0      ! Latittude of the domain in degrees 
+useExtraForcing       = .FALSE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useGeostrophicForcing = .FALSE.      ! This is true if forcing is provided using the coriolis term  
 isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
-Pr                    = 0.6D0       ! Turbulent Prandtl Number; used when 
-Ro                    = 100.D0       ! Rossby Number used when Coriolis is ON
-Re                    = 100.D0       ! Reynolds Number; used when isInvisid is FALSE
-Fr                    = 1.D10       ! Froude number; used when isStratified is TRUE
-Gx                    = 1.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gy                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gz                    = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-dPfdx                 = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
-dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
-dPfdz                 = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
+Pr                    = 0.6D0       ! NOT PHYSICAL PRANDTL NUMBER Turbulent Prandtl Number; used when 
+Ro                    = 100.D0      ! Rossby Number used when Coriolis is ON
+PrandtlFluid          = 1.0         ! Prandlt number (fluid property)
+Ra                    = 1.0         ! Rayleigh number
+BuoyancyTermType      = 3           ! Formulate with Ra and Pr
+Re                    = 100.D0      ! Reynolds Number; used when isInvisid is FALSE
 /
 /
 &PRESSURE_CALC
-fastCalcPressure      = .FALSE.      ! Compute and store pressure at every time step using the faster algorithm?
+fastCalcPressure      = .FALSE.     ! Compute and store pressure at every time step using the faster algorithm?
 storePressure         = .FALSE.     ! Would you like to compute and store pressure?
 P_dumpFreq            = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq            = 10          ! How often (timesteps) do you want to compute pressure? 
 /
 /
 &BCs
-topWall               = 2           ! no_slip = 1, slip = 2
+topWall               = 1           ! no_slip = 1, slip = 2
 botWall               = 1           ! no_slip = 1, slip = 2
 useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
 zstSponge             = 0.8d0       ! Height above which the sponge layer is active
@@ -85,13 +81,13 @@ SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere betw
 /
 /
 &LES
-useSGS                = .FALSE.      ! Use a subgrid scale model? 
+useSGS                = .FALSE.     ! Use a subgrid scale model? 
 SGSModelID            = 0           ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
 useDynamicProcedure   = .FALSE.     ! Use the standard dynamic procedure 
 useSGSClipping        = .TRUE.      ! Clip the constant values when they are negative
 useVerticalTfilter    = .FALSE.     ! Test filter in the vertical direction? Used for Dynamic Procedure
 useWallDamping        = .TRUE.      ! Use the Wall Damping Function 
-ncWall                = 3.d0      ! Wall Damping Function Exponent
+ncWall                = 3.d0        ! Wall Damping Function Exponent
 Cs                    = 0.14d0      ! Asymptotic model constant (wall damping function)
 /
 /
@@ -121,4 +117,16 @@ Lz                    = 20.d0                ! Domain Height (appropriate dimesn
 zpeak                 = 0.05d0
 epsnd                 = 4.d0          
 randscale             = 0.1d0
+/
+/
+&RBPinstability
+Lx                    = 3.1415926535897932384626433832795d1
+Ly                    = 3.1415926535897932384626433832795d0
+Noise_Amp             = 0.0d0
+Pert_Amp              = 1.0d-4
+alpha                 = 10.0d
+phase                 = 0.0d0
+x0                    = 2.0d0
+delta                 = 0.5d0
+/
 /

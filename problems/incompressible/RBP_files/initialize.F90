@@ -52,7 +52,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=clen) :: fname
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Noise_Amp 
     integer :: ProblemMode = 1
-    namelist /RBPinstability/ Lx, Ly, Noise_Amp, ProblemMode
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -96,7 +97,7 @@ end subroutine
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use RBP_parameters
     use kind_parameters,    only: rkind, clen
-    use constants,          only: zero, one, two, pi, half
+    use constants,          only: zero, one, two, pi, half, imi
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
@@ -118,13 +119,13 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     character(len=clen) :: InitFileTag, InitFileDirectory
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
-    real(rkind), dimension(:,:,:), allocatable :: upurt, vpurt, wpurt, Tpurt
-    real(rkind) :: Noise_Amp = 1.d-6, Lx, Ly, Pert_Amp = 1.d-4
+    real(rkind), dimension(:,:,:), allocatable :: upurt, vpurt, wpurt, Tpurt, xs, mask
+    real(rkind) :: Noise_Amp = 0.d0, Lx, Ly
     type(cd06stagg), allocatable :: derW
     integer :: ProblemMode = 1
     character(len=clen) :: fname
-
-    namelist /RBPinstability/ Lx, Ly, Noise_Amp, ProblemMode
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -158,19 +159,25 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
          allocate(vpurt(size(v ,1),size(v ,2),size(v ,3)))
          allocate(wpurt(size(wC,1),size(wC,2),size(wC,3)))
          allocate(Tpurt(size(T ,1),size(T ,2),size(T ,3)))
+         allocate(xs   (size(x ,1),size(x ,2),size(x ,3)))
+         allocate(mask (size(x ,1),size(x ,2),size(x ,3)))
 
          ! Set perturbation (wavepacket)
-         upurt = 0.d0
+         xs = (x - x0) / delta
+         mask = 0.5 - sign(0.5, abs(xs)-0.5)
          vpurt = 0.d0 
-         wpurt = 0.d0 
          Tpurt = 0.d0
+         !upurt = (-0.25*imi*sqrt(pi)*delta) * exp(-0.25*alpha*(alpha*delta*delta + 4*imi*x0)) * (64.0*z*(z*z-0.25)) * exp(-imi*phase) * erf(-0.5*imi*alpha*delta - xs) - exp(2.0*imi*alpha*x0+imi*phase) * erf(0.5*imi*alpha*delta - xs)
+         !wpurt = (16.0_rkind * (z*z - 0.25_rkind) ** 2_rkind) * exp(-xs*xs) * sin(alpha*x+phase)
+         wpurt = (16.0_rkind * (z*z - 0.25_rkind) ** 2_rkind) * (0.5 + 0.5 * cos(2.0*pi*xs)) * sin(alpha*x+phase)
+         upurt = (64.0_rkind * z * (z*z - 0.25_rkind)) * (0.25*delta/(2.0*pi-alpha*delta) * cos(alpha*x+phase-2.0*pi*xs) - 0.25*delta/(2.0*pi+alpha*delta) * cos(alpha*x+phase+2.0*pi*xs)) - 0.5/alpha * cos(alpha*x+phase)
 
-         u  = u  + Pert_Amp*upurt
-         v  = v  + Pert_Amp*vpurt
-         wC = wC + Pert_Amp*wpurt
-         T  = T  + Pert_Amp*Tpurt 
+         u  = u  + Pert_Amp*upurt*mask
+         v  = v  + Pert_Amp*vpurt*mask
+         wC = wC + Pert_Amp*wpurt*mask
+         T  = T  + Pert_Amp*Tpurt*mask 
 
-         deallocate(upurt, vpurt, wpurt, Tpurt)
+         deallocate(upurt, vpurt, wpurt, Tpurt, xs, mask)
          allocate(randArr(size(wC,1),size(wC,2),size(wC,3)))
          
          call gaussian_random(randArr,zero,one,seedu + 100*nrank)
