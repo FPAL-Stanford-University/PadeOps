@@ -25,11 +25,8 @@ contains
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=TEMPERATURE_BC)
         close(ioUnit)    
-        
-        igp%Tsurf    = T_bottom
-        igp%TsurfTop = T_top
-        igp%dTsurf_dt    = 0.d0 
-        igp%dTsurfTop_dt = 0.d0 
+       
+        call igp%ResetTemperatureBCs(T_top,T_bottom)
     end subroutine 
     
 end module     
@@ -132,7 +129,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=RBPinstability)
+    read(unit=ioUnit, NML=TEMPERATURE_BC)
     close(ioUnit)    
+    
 
 
     u  => fieldsC(:,:,:,1)
@@ -155,7 +154,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
          v  = zero 
          wC = zero
          T  = T_bottom * (0.5 - z) + T_top * (z + 0.5) 
-
 
          allocate(upurt(size(u ,1),size(u ,2),size(u ,3)))
          allocate(vpurt(size(v ,1),size(v ,2),size(v ,3)))

@@ -53,7 +53,7 @@
            end if   
        end if
 
-       
+      
        ! Step 6a: SGS and viscous stress Terms
        if (this%useSGS) then
            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &

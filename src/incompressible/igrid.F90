@@ -314,6 +314,7 @@ module IncompressibleGrid
             procedure          :: finalize_io
             procedure          :: get_dt
             procedure          :: interpolate_cellField_to_edgeField 
+            procedure          :: ResetTemperatureBCs
             !procedure, private :: init_stats
             procedure, private :: init_stats3D
             procedure, private :: AdamsBashforth
@@ -713,7 +714,8 @@ contains
            this%tsim = zero
            !call this%dumpRestartfile()
        end if 
-   
+  
+
        if (this%isStratified) then
            if (BuoyancyTermType == 1) then
                call set_Reference_Temperature(inputfile,this%ThetaRef)

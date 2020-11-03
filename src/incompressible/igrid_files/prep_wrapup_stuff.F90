@@ -499,6 +499,22 @@ subroutine compute_vorticity(this)
 
 end subroutine 
 
+subroutine ResetTemperatureBCs(this, t_top, t_bottom)
+     class(igrid), intent(inout) :: this
+     real(rkind), intent(in) :: t_top, t_bottom
+
+     this%Tsurf    = T_bottom
+     this%TsurfTop = T_top
+     this%dTsurf_dt    = 0.d0 
+     this%dTsurfTop_dt = 0.d0 
+     
+     call this%interp_PrimitiveVars()
+     call this%compute_dTdxi() 
+
+end subroutine 
+
+
+
 subroutine compute_duidxj(this)
     class(igrid), intent(inout), target :: this
     complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2

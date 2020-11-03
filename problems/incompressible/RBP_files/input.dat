@@ -21,7 +21,6 @@ NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact
 ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special circumstances.  
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
 t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproject if needed.
-useExhaustiveFFT      = .TRUE.
 /
 /
 &IO
@@ -57,7 +56,7 @@ assume_fplane         = .FALSE.     ! make the f-plane assumption while computin
 latitude              =  90.d0      ! Latittude of the domain in degrees 
 useExtraForcing       = .TRUE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 useGeostrophicForcing = .FALSE.      ! This is true if forcing is provided using the coriolis term  
-isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
+isStratified          = .TRUE.     ! Use Stratification / active scalar in momentum
 Pr                    = 0.6D0       ! NOT PHYSICAL PRANDTL NUMBER Turbulent Prandtl Number; used when 
 Ro                    = 100.D0      ! Rossby Number used when Coriolis is ON
 PrandtlFluid          = 1.0         ! Prandlt number (fluid property)
