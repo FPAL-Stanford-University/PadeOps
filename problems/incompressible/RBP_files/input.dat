@@ -130,3 +130,8 @@ x0                    = 2.0d0
 delta                 = 0.5d0
 /
 /
+&TEMPERATURE_BC
+T_bottom              = -1.0d0
+T_top                 =  1.0d0
+/
+/
