@@ -164,7 +164,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
 
          ! Set perturbation (wavepacket)
          xs = (x - x0) / delta
-         mask = 0.5 - sign(0.5, abs(xs)-0.5)
+         mask = 0.5d0 - sign(0.5d0, abs(xs)-0.5d0)
          vpurt = 0.d0 
          Tpurt = 0.d0
          !upurt = (-0.25*imi*sqrt(pi)*delta) * exp(-0.25*alpha*(alpha*delta*delta + 4*imi*x0)) * (64.0*z*(z*z-0.25)) * exp(-imi*phase) * erf(-0.5*imi*alpha*delta - xs) - exp(2.0*imi*alpha*x0+imi*phase) * erf(0.5*imi*alpha*delta - xs)
@@ -279,7 +279,8 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     real(rkind) :: Noise_Amp = 1.d-6 
     integer :: ProblemMode = 1
-    namelist /RBPinstability/ Lx, Ly , Noise_Amp, ProblemMode
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -299,7 +300,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     integer :: iounit
     real(rkind) :: Noise_Amp = 1.d-6
     integer :: ProblemMode = 1
-    namelist /RBPinstability/ Lx, Ly , Noise_Amp, ProblemMode
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
 
@@ -321,8 +323,9 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     integer :: iounit
     real(rkind) :: Noise_Amp = 1.d-6
     integer :: ProblemMode = 1
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
     
-    namelist /RBPinstability/ Lx, Ly , Noise_Amp, ProblemMode
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

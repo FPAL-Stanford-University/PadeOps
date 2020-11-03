@@ -53,6 +53,7 @@
            end if   
        end if
 
+       
        ! Step 6a: SGS and viscous stress Terms
        if (this%useSGS) then
            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
@@ -71,7 +72,8 @@
                call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
            end if
        end if
-
+       
+    
 
        call this%populate_RHS_extraTerms(copyFringeRHS, .false.)
 

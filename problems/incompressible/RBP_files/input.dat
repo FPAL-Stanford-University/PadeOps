@@ -1,9 +1,9 @@
 &INPUT
-inputdir              = "/scratch/05298/tg845973/RBP_data"   ! Directory for any input files
-outputdir             = "/scratch/05298/tg845973/RBP_data"   ! Directory for all output files
-nx                    = 1024        ! Number of points in X
-ny                    = 64          ! Number of points in Y
-nz                    = 128         ! Number of points in Z
+inputdir              = "/u/wk/aghate/Codes/PadeOps/build/problems/incompressible/"   ! Directory for any input files
+outputdir             = "/u/wk/aghate/Codes/PadeOps/build/problems/incompressible"   ! Directory for all output files
+nx                    = 16        ! Number of points in X
+ny                    = 16          ! Number of points in Y
+nz                    = 32         ! Number of points in Z
 tstop                 = 2000.D0     ! Physical time to stop the simulation
 CFL                   = 0.25D0      ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-5       ! Fixed time step value (only used if CFL is set to negative)
@@ -21,6 +21,7 @@ NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact
 ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special circumstances.  
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
 t_DivergenceCheck     = 100         ! Check divergence every $ timesteps. Reproject if needed.
+useExhaustiveFFT      = .TRUE.
 /
 /
 &IO
@@ -54,7 +55,7 @@ isInviscid            = .FALSE.     ! Is this an inviscid simulation?
 useCoriolis           = .FALSE.     ! Activate the coriolis term? 
 assume_fplane         = .FALSE.     ! make the f-plane assumption while computing the coriolis term
 latitude              =  90.d0      ! Latittude of the domain in degrees 
-useExtraForcing       = .FALSE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
+useExtraForcing       = .TRUE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 useGeostrophicForcing = .FALSE.      ! This is true if forcing is provided using the coriolis term  
 isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
 Pr                    = 0.6D0       ! NOT PHYSICAL PRANDTL NUMBER Turbulent Prandtl Number; used when 
@@ -63,6 +64,7 @@ PrandtlFluid          = 1.0         ! Prandlt number (fluid property)
 Ra                    = 1.0         ! Rayleigh number
 BuoyancyTermType      = 3           ! Formulate with Ra and Pr
 Re                    = 100.D0      ! Reynolds Number; used when isInvisid is FALSE
+dpFdx                 = 0.08d0      ! Body force in X
 /
 /
 &PRESSURE_CALC
@@ -73,11 +75,12 @@ P_compFreq            = 10          ! How often (timesteps) do you want to compu
 /
 /
 &BCs
+PeriodicInZ           = .FALSE.
 topWall               = 1           ! no_slip = 1, slip = 2
 botWall               = 1           ! no_slip = 1, slip = 2
 useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
-zstSponge             = 0.8d0       ! Height above which the sponge layer is active
-SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
+BotBC_Temp            = 0           ! Dirichlet: 0 
+TopBC_Temp            = 0           ! Dirichlet: 0 
 /
 /
 &LES
@@ -110,23 +113,19 @@ KSRunID               = 99             ! RunID tag for KS files
 t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 /
 /
-&EkmanDNSINPUT
-Lx                    = 36.d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                    = 36.d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
-Lz                    = 20.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
-zpeak                 = 0.05d0
-epsnd                 = 4.d0          
-randscale             = 0.1d0
-/
-/
 &RBPinstability
 Lx                    = 3.1415926535897932384626433832795d1
 Ly                    = 3.1415926535897932384626433832795d0
 Noise_Amp             = 0.0d0
-Pert_Amp              = 1.0d-4
-alpha                 = 10.0d
+Pert_Amp              = 1.0d-15
+alpha                 = 10.0d0
 phase                 = 0.0d0
 x0                    = 2.0d0
 delta                 = 0.5d0
+/
+/
+&TEMPERATURE_BC
+T_bottom = -0.5d0
+T_top    =  0.5d0
 /
 /
