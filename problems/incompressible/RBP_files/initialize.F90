@@ -152,7 +152,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
          ! Laminar profile
 
          ! Base State
-         u  = 1.d0 - 4.d0*z*z 
+         !u  = 1.d0 - 4.d0*z*z 
+         u  = zero
          v  = zero 
          wC = zero
          T  = T_bottom * (0.5 - z) + T_top * (z + 0.5) 
