@@ -1,16 +1,16 @@
 &INPUT
 inputdir              = "/scratch/05298/tg845973/RBP_data/perturb"   ! Directory for any input files
 outputdir             = "/scratch/05298/tg845973/RBP_data/perturb"   ! Directory for all output files
-nx                    = 1024        ! Number of points in X
+nx                    = 256        ! Number of points in X
 ny                    = 64          ! Number of points in Y
 nz                    = 64          ! Number of points in Z
 tstop                 = 1.0D01      ! Physical time to stop the simulation
 CFL                   =-0.50D0      ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 1.D-4       ! Fixed time step value (only used if CFL is set to negative)
+dt                    = 5.D-5       ! Fixed time step value (only used if CFL is set to negative)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 1400        ! TimeID of the restart file being used
+restartFile_TID       = 8000        ! TimeID of the restart file being used
 restartFile_RID       = 1           ! RunID of the restart file being used
 /
 /
@@ -28,7 +28,7 @@ RunID                 = 1           ! Run Label (All output files will be tagged
 !vizDump_Schedule      = 1           ! Data dumping based on time difference
 !deltaT_dump           = 1.0D-2      ! Data dumping time interval
 t_restartDump         = 2000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 1000        ! Data dumping frequency (# of timesteps)
+t_dataDump            = 2000        ! Data dumping frequency (# of timesteps)
 ioType                = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 100         ! Plane dumping frequency (# of timesteps)
@@ -62,10 +62,10 @@ isStratified          = .TRUE.      ! Use Stratification / active scalar in mome
 Pr                    = 0.6D0       ! NOT PHYSICAL PRANDTL NUMBER Turbulent Prandtl Number; used when 
 Ro                    = 100.D0      ! Rossby Number used when Coriolis is ON
 PrandtlFluid          = 1.0         ! Prandlt number (fluid property)
-Ra                    = 3.0D3       ! Rayleigh number
+Ra                    = 2.5D3       ! Rayleigh number
 BuoyancyTermType      = 3           ! Formulate with Ra and Pr
 Re                    = 1.0D0       ! Reynolds Number; used when isInvisid is FALSE
-dpFdx                 = 0.0D0       ! Body force in X
+dpFdx                 = 8.0D0       ! Body force in X
 /
 /
 &PRESSURE_CALC
@@ -115,15 +115,17 @@ t_dumpKSprep          = 10             ! Dumping Frequency for KS files
 /
 /
 &RBPinstability
-Lx                    = 3.1415926535897932384626433832795d1
+!Lx                    = 3.1415926535897932384626433832795d1
+Lx                    = 6.28318530717958623199592693708837d0
 Ly                    = 3.1415926535897932384626433832795d0
-localize_perturb      = .FALSE.
+R                     = 1.0d0
+localize_perturb      = .TRUE.
 Noise_Amp             = 0.0d0
 Pert_Amp              = 1.0d-4
-alpha                 = 2.0d0
+alpha                 = 3.0d0
 phase                 = 0.0d0
-x0                    = 8.0d0
-delta                 = 8.0d0
+x0                    = 3.0d0
+delta                 = 4.0d0
 /
 /
 &TEMPERATURE_BC

@@ -49,9 +49,9 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=clen) :: fname
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Noise_Amp 
     integer :: ProblemMode = 1
-    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4, R = 0.0d0
     logical :: localize_perturb = .TRUE.
-    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb, R
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -123,9 +123,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     integer :: ProblemMode = 1
     character(len=clen) :: fname
     real(rkind) :: T_top, T_bottom
-    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4, R = 0.0d0
     logical :: localize_perturb = .TRUE.
-    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb, R
     namelist /TEMPERATURE_BC/ T_bottom, T_top
 
     ioUnit = 11
@@ -152,8 +152,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
          ! Laminar profile
 
          ! Base State
-         !u  = 1.d0 - 4.d0*z*z 
-         u  = zero
+         u  = R * (1.d0 - 4.d0*z*z)
          v  = zero 
          wC = zero
          T  = T_bottom * (0.5 - z) + T_top * (z + 0.5) 
@@ -166,7 +165,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
          allocate(mask (size(x ,1),size(x ,2),size(x ,3)))
 
          ! Set perturbation (wavepacket)
+         upurt = 0.d0 
          vpurt = 0.d0 
+         wpurt = 0.d0 
          Tpurt = 0.d0
          IF (localize_perturb) THEN
              xs = (x - x0) / delta
@@ -178,6 +179,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
              ! Sine/Cosine
              wpurt = (0.5 + 0.5*cos(2.0d0*pi*z)) * (0.5 + 0.5 * cos(2.0*pi*xs)) * sin(alpha*x+phase)
              upurt = (pi * sin(2.0d0*pi*z)) * (0.25*delta/(2.0*pi-alpha*delta) * cos(alpha*x+phase-2.0*pi*xs) - 0.25*delta/(2.0*pi+alpha*delta) * cos(alpha*x+phase+2.0*pi*xs) - 0.5/alpha * cos(alpha*x+phase))
+             Tpurt = (0.5 + 0.5*cos(2.0d0*pi*z)) * (0.5 + 0.5 * cos(2.0*pi*xs)) * sin(alpha*x+phase)
 
              ! Gaussian shape
              ! wpurt = exp(-150.0d0 * z*z) * sin(alpha*x+phase)
@@ -190,6 +192,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
          ELSE
              wpurt = (0.5 + 0.5*cos(2.0d0*pi*z)) * sin(alpha*x+phase)
              upurt = (-pi * sin(2.0d0*pi*z)) *  0.5/alpha * cos(alpha*x+phase)
+             Tpurt = (0.5 + 0.5*cos(2.0d0*pi*z)) * sin(alpha*x+phase)
              u  = u  + Pert_Amp*upurt
              v  = v  + Pert_Amp*vpurt
              wC = wC + Pert_Amp*wpurt
@@ -298,9 +301,9 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     real(rkind) :: Noise_Amp = 1.d-6 
     integer :: ProblemMode = 1
-    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4, R = 0.0d0
     logical :: localize_perturb = .TRUE.
-    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb, R
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -320,9 +323,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     integer :: iounit
     real(rkind) :: Noise_Amp = 1.d-6
     integer :: ProblemMode = 1
-    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4, R = 0.0d0
     logical :: localize_perturb = .TRUE.
-    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb, R
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
 
@@ -344,10 +347,10 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     integer :: iounit
     real(rkind) :: Noise_Amp = 1.d-6
     integer :: ProblemMode = 1
-    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4
+    real(rkind) :: alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4, R = 0.0d0
     
     logical :: localize_perturb = .TRUE.
-    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb
+    namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb, R
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
