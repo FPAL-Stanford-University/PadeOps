@@ -5,12 +5,12 @@
 
 program RBPGrowth
     use mpi
-    use kind_parameters,  only: clen
+    use kind_parameters,  only: clen, rkind
     use IncompressibleGrid, only: igrid
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message
-    use RBP_parameters, only: SetTemperatureBC_RBP
+    use RBP_parameters
     implicit none
 
     type(igrid), allocatable, target :: igp
@@ -29,7 +29,20 @@ program RBPGrowth
     call igp%start_io(.true.)         !<-- Start I/O by creating a header file (see io.F90)
 
     call igp%printDivergence()
-  
+   
+    ! Allocate memory for fringe 
+    call igp%fringe_x%allocateTargetArray_Cells(utarget0)                
+    call igp%fringe_x%allocateTargetArray_Cells(vtarget0)                
+    call igp%fringe_x%allocateTargetArray_Edges(wtarget0)                
+    call igp%fringe_x%allocateTargetArray_Cells(Ttarget0)                
+ 
+    ! Base state at fringe
+    call setBaseState(igp%mesh(:,:,:,3),utarget0,vtarget0,wtarget0,Ttarget0,inputfile)
+
+    ! Link Fringe Targets
+    call igp%fringe_x%associateFringeTargets(utarget0, vtarget0, wtarget0) 
+    call igp%fringe_x%associateFringeTarget_scalar(Ttarget0)
+
     call tic() 
     do while (igp%tsim < igp%tstop) 
        

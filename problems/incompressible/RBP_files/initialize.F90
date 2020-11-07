@@ -12,6 +12,7 @@ module RBP_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
+    real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0, Ttarget0
     
 contains
     subroutine SetTemperatureBC_RBP(igp, inputfile)
@@ -28,7 +29,40 @@ contains
        
         call igp%ResetTemperatureBCs(T_top,T_bottom)
     end subroutine 
+  
+    function getPerturbationEnergy(igp) result(energy)
+        class(igrid), intent(inout) :: igp
+        real(rkind) :: energy  
+        igp%rbuffxC(:,:,:,1) = 0.5d0*((igp%u - utarget0)**2 + igp%v**2 + igp%wC**2)
+        
+        energy = p_sum(igp%rbuffxC(:,:,:,1))/(igp%nx*igp%ny*igp%nz)
+    end function 
     
+    subroutine SetBaseState(z, u, v, w, T, inputfile)
+        use constants, only: zero 
+        real(rkind), dimension(:,:,:), intent(in) :: z
+        real(rkind), dimension(:,:,:), intent(out) :: u, v, w, T
+        character(len=*),                intent(in)    :: inputfile
+        real(rkind) :: T_top, T_bottom
+        real(rkind) :: Lx, Ly, noise_amp,  alpha = 1.0d0, phase = 0.0d0, x0 = 2.0d0, delta = 3.0d0, Pert_Amp = 1.d-4, R = 0.0d0
+        logical :: localize_perturb = .TRUE.
+        integer :: ioUnit, ProblemMode 
+
+        namelist /RBPinstability/ Lx, Ly, Noise_Amp, Pert_Amp, ProblemMode, alpha, phase, x0, delta, localize_perturb, R
+        namelist /TEMPERATURE_BC/ T_bottom, T_top
+
+        ioUnit = 11
+        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+        read(unit=ioUnit, NML=RBPinstability)
+        read(unit=ioUnit, NML=TEMPERATURE_BC)
+        close(ioUnit)    
+        
+        u  = R * (1.d0 - 4.d0*z*z)
+        v  = zero 
+        w  = zero
+        T  = T_bottom * (0.5 - z) + T_top * (z + 0.5) 
+        
+    end subroutine 
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
@@ -91,6 +125,9 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     end associate
 
 end subroutine
+
+
+
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use RBP_parameters

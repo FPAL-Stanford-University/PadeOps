@@ -3,12 +3,12 @@ module temporalHook
     use IncompressibleGrid, only: igrid
     use reductions,         only: P_MAXVAL, p_minval
     use exits,              only: message, message_min_max
-    !use EkmanDNS_IO,           only: output_tecplot!dumpData4Matlab 
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
     use decomp_2d
     use reductions, only: p_sum
+    use RBP_parameters, only: getPerturbationEnergy  
 
     implicit none 
 
@@ -26,8 +26,8 @@ contains
 
     subroutine doTemporalStuff(igp)
         class(igrid), intent(inout) :: igp 
-        real(rkind) :: speedTop, um, vm, speedHub
-
+        real(rkind) :: pertEnergy
+        
         if (mod(igp%step,nt_print2screen) == 0) then
             maxDiv = maxval(igp%divergence)
             DomMaxDiv = p_maxval(maxDiv)
@@ -38,6 +38,11 @@ contains
             call message_min_max(1,"Bounds for v:", p_minval(minval(igp%v)),p_maxval(maxval(igp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(igp%w)),p_maxval(maxval(igp%w)))
             call message_min_max(1,"Bounds for T:", p_minval(minval(igp%T)),p_maxval(maxval(igp%T)))
+            call message("----------------------------------------------------------")
+            pertEnergy = getPerturbationEnergy(igp)
+            call message(1,"Perturbation Energy:",pertEnergy)
+            call message("..........................................................")
+
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if

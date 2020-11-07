@@ -82,6 +82,22 @@ botWall               = 1           ! no_slip = 1, slip = 2
 useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
 BotBC_Temp            = 0           ! Dirichlet: 0 
 TopBC_Temp            = 0           ! Dirichlet: 0 
+useFringe             = .TRUE.      ! True for non-periodic in x/y (inflow is base state) 
+/
+/
+&FRINGE
+Apply_x_fringe        = .TRUE.    ! Want to use a fringe in x?
+Apply_y_fringe        = .FALSE.   ! Want to use a fringe in y? 
+Fringe_xst            = 0.75d0    ! Start location (fraction of Lx)
+Fringe_xen            = 0.95d0    ! End location (fraction of Lx)
+Fringe_delta_st_x     = 0.05d0    ! Ramp up length (fraction of Lx)
+Fringe_delta_en_x     = 0.025d0   ! Ramp down length (fraction of Lx)
+Fringe_yst            = 0.75d0    ! Start location (fraction of Ly)
+Fringe_yen            = 0.95d0    ! End location (fraction of Ly)
+Fringe_delta_st_y     = 0.05d0    ! Ramp up length (fraction of Ly)
+Fringe_delta_en_y     = 0.025d0   ! Ramp down length (fraction of Ly)
+LambdaFact            = 2.25d0    ! Change this only if it blows up (contact Aditya) 
+LambdaFactPotTemp     = 2.25d0    ! Change this only if it blows up (contact Aditya) 
 /
 /
 &LES
