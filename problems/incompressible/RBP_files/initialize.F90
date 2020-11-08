@@ -120,6 +120,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
         y = y - dy
         z = z - dz 
         
+        ! shift y to be centered about zero
+        y = y - 0.5d0*Ly
         ! shift z to be centered about zero
         z = z - 0.5d0
     end associate
@@ -208,7 +210,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
          Tpurt = 0.d0
          IF (localize_perturb) THEN
              xs = (x - x0) / delta
-             mask = 0.5d0 - sign(0.5d0, abs(xs)-0.5d0)
+             mask = (0.5d0 - sign(0.5d0, abs(xs)-0.5d0)) * (0.5d0 - sign(0.5d0, abs(y/(1.0d0*pi))-0.5d0))
              ! Polynomial
              ! wpurt = (16.0d0 * (z*z - 0.25d0)**2.0d0) * (0.5 + 0.5 * cos(2.0*pi*xs)) * sin(alpha*x+phase)
              ! upurt = (-64.0d0 * z * (z*z - 0.25d0)) * (0.25*delta/(2.0*pi-alpha*delta) * cos(alpha*x+phase-2.0*pi*xs) - 0.25*delta/(2.0*pi+alpha*delta) * cos(alpha*x+phase+2.0*pi*xs) - 0.5/alpha * cos(alpha*x+phase))
@@ -221,6 +223,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
              ! Gaussian shape
              ! wpurt = exp(-150.0d0 * z*z) * sin(alpha*x+phase)
              ! upurt = -300.0d0 * z * exp(-150.d0 * z*z) * cos(alpha*x+phase) / alpha
+
+             wpurt = wpurt * (0.5d0 + 0.5d0*cos(2.0d0*y))
+             upurt = upurt * (0.5d0 + 0.5d0*cos(2.0d0*y))
+             Tpurt = Tpurt * (0.5d0 + 0.5d0*cos(2.0d0*y))
 
              u  = u  + Pert_Amp*upurt*mask
              v  = v  + Pert_Amp*vpurt*mask
