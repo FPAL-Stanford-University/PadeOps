@@ -2,7 +2,7 @@ subroutine destroyWallModel(this)
    class(sgs_igrid), intent(inout) :: this
    deallocate(this%tauijWM, this%tauijWMhat_inZ, this%tauijWMhat_inY)
    if (allocated(this%filteredSpeedSq)) deallocate(this%filteredSpeedSq)
-   if (allocated(this%mask_upstream)) deallocate(this%mask_upstream)
+   !if (allocated(this%mask_upstream)) deallocate(this%mask_upstream)
 end subroutine
 
 subroutine initWallModel(this)
@@ -21,6 +21,10 @@ subroutine initWallModel(this)
 
    case (2) ! Bou-Zeid Wall model
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+      if(this%is_z0_varying) then
+          this%kaplnzfac_s = (kappa/log(half*this%dz/this%z0s))**2
+          this%kaplnzfac_r = (kappa/log(half*this%dz/this%z0r))**2
+      endif
    case (3) ! Abkar-PA heterogeneous Wall model
       if(.not. this%is_z0_varying) then
           call GracefulExit("You cannot use Abkar-PA wall model for a homogeneous problem", 111)
@@ -30,14 +34,25 @@ subroutine initWallModel(this)
       !   write(*,'(a,5(1x,e19.12))') 'kaplnzfac_s:= ', kappa, this%dz, this%z0s, this%kaplnzfac_s
       !endif
       this%kaplnzfac_r = (kappa/log(half*this%dz/this%z0r))**2
-      allocate(this%mask_upstream(this%gpC%xsz(1), this%gpC%xsz(2)))
+      !allocate(this%mask_upstream(this%gpC%xsz(1), this%gpC%xsz(2)))
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
-      where(this%lamfact > (one-epssmall))
-          this%mask_upstream = one
-      elsewhere
-          this%mask_upstream = zero
-      endwhere
-      this%mask_normfac = p_sum(sum(this%mask_upstream))
+      !where(this%lamfact > (one-epssmall))
+      !    this%mask_upstream = one
+      !elsewhere
+      !    this%mask_upstream = zero
+      !endwhere
+      !this%mask_normfac = p_sum(sum(this%mask_upstream))
+   case (4) ! Our heterogeneous Wall model
+      this%kaplnzfac_s = (kappa/log(half*this%dz/this%z0s))**2
+      this%kaplnzfac_r = (kappa/log(half*this%dz/this%z0r))**2
+      !allocate(this%mask_upstream(this%gpC%xsz(1), this%gpC%xsz(2)))
+      allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+      ! condition mask_upstream on deli and not on lamfact
+      !where(this%deli < epssmall)
+      !    this%mask_upstream = one
+      !elsewhere
+      !    this%mask_upstream = one
+      !endwhere
    case default
       call gracefulExit("Invalid choice of Wallmodel.",324)
    end select
@@ -103,17 +118,25 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
    case (3) ! Abkar-PA (2012) heterogeneous model
       !! type 1 :: SG-local method (span averages)
       !call this%getSpanAvgVelAtWall(uhat, vhat)
-      !call this%get_ustar_upstreampart(ustar1)
+      !call this%compute_ustar_upstreampart(ustar1)
 
       ! type 2 :: BZ-local method (twice-filtered)
-      call this%getfilteredSpeedSqAtWall(uhat, vhat)
+      if(this%filter_for_heterog) then
+          call this%getfilteredSpeedSqAtWall(uhat, vhat)
+      else
+          if(this%gpC%xst(3)==1) then
+              this%Uxvar = u(:,:,1)
+              this%Uyvar = v(:,:,1)
+              this%filteredSpeedSq = u*u + v*v
+          endif
+      endif
       call this%getSpanAvgVelAtWall()
       this%rbuffxC(:,:,1,2) = sqrt(this%filteredSpeedSq(:,:,1))
 
       ! using this%filteredSpeedSq in the upstream region, estimate ustar1
-      call this%get_ustar_upstreampart(ustar1)
+      call this%compute_ustar_upstreampart(ustar1)
       ust1fac = ustar1/sqrt(this%kaplnzfac_s)
-     
+      this%ustar_upstream = ustar1
 
       !modelregion = 0; 
       where(this%lamfact > (one-epssmall))
@@ -144,18 +167,58 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uyvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
       call this%set_tauijWM(this%rbuffxC(:,:,:,1), 2)
 
+   case (4) ! Our heterogeneous model
+
+      ! how do we determine ustarsqvar??
+      if(this%filter_for_heterog) then
+          call this%getfilteredSpeedSqAtWall(uhat, vhat)
+      else
+          if(this%gpC%xst(3)==1) then
+              this%Uxvar = u(:,:,1)
+              this%Uyvar = v(:,:,1)
+              this%filteredSpeedSq = u*u + v*v
+          endif
+      endif
+      call this%getSpanAvgVelAtWall()
+      this%rbuffxC(:,:,1,2) = sqrt(this%filteredSpeedSq(:,:,1))
+
+      ! using this%filteredSpeedSq in the upstream region, estimate ustar1
+      call this%compute_ustar_upstreampart(ustar1)
+      ust1fac = ustar1/sqrt(this%kaplnzfac_s)
+     
+      where(this%deli < epssmall)
+          this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)
+      elsewhere !(this%lamfact > epssmall)
+          this%ustarsqvar = (this%rbuffxC(:,:,1,2) - this%lamfact*ust1fac) / (one - this%lamfact)
+          this%ustarsqvar = this%kaplnzfac_r*this%ustarsqvar*this%ustarsqvar
+      !elsewhere
+      !    this%ustarsqvar = this%kaplnzfac_r*this%filteredSpeedSq(:,:,1)
+      endwhere
+
+      ! tau_13
+      this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uxvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
+      call this%set_tauijWM(this%rbuffxC(:,:,:,1), 1)
+
+      ! tau_23
+      this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uyvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
+      call this%set_tauijWM(this%rbuffxC(:,:,:,1), 2)
+
    end select
 
 end subroutine
 
-subroutine get_ustar_upstreampart(this, ustar1)
+subroutine compute_ustar_upstreampart(this, ustar1)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), intent(out) :: ustar1
-   real(rkind) :: usqfiltavg
+   real(rkind) :: ufiltavg
 
-   usqfiltavg = p_sum(sum(this%filteredSpeedSq(:,:,1)*this%mask_upstream))/this%mask_normfac
-   ustar1 = sqrt(usqfiltavg*this%kaplnzfac_s)
-   !if(nrank==0) print '(a,3(e19.12,1x))', "ustar1:= ", ustar1, this%kaplnzfac_s, usqfiltavg
+   !ufiltavg = p_sum(sum(sqrt(this%filteredSpeedSq(:,:,1)*this%mask_upstream)))/this%mask_normfac
+   !ustar1 = ufiltavg*sqrt(this%kaplnzfac_s)
+
+   ufiltavg = p_sum(sum(this%filteredSpeedSq(:,:,1)*this%mask_upstream))/this%mask_normfac
+   ustar1 = sqrt(ufiltavg*this%kaplnzfac_s)
+   !if(nrank==0) 
+   !print '(a,3(e19.12,1x))', "ustar1:= ", ustar1, this%kaplnzfac_s, ufiltavg
 
 end subroutine
 
@@ -233,6 +296,7 @@ end subroutine
 subroutine BouZeidLocalModel(this)
     class(sgs_igrid), intent(inout), target :: this
     real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2, rbuffx3
+    real(rkind) :: ustar1
 
     rbuffx1 => this%rbuffxC(:,:,:,1);    rbuffx2 => this%rbuffxC(:,:,:,2)
     rbuffx3 => this%rbuffxC(:,:,:,3);
@@ -257,7 +321,11 @@ subroutine BouZeidLocalModel(this)
     call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
     call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%tauijWM(:,:,:,2), this%gpE)
 
-    this%ustarsqvar = this%WallMFactorvar * this%filteredSpeedSq(:,:,1)
+    this%ustarsqvar = -this%WallMFactorvar * this%filteredSpeedSq(:,:,1)
+
+    call this%compute_ustar_upstreampart(ustar1)
+    this%ustar_upstream = ustar1
+    !print *, 'ustar_upstream:= ',  this%ustar_upstream
 
     ! NOTE:: tauijWMhat_inY and tauijWMhat_inZ are not populated. Are they
     ! required ????
@@ -273,10 +341,10 @@ subroutine getSpanAvgVelAtWall(this)
     this%filteredSpeedSq(:,:,3) = this%Uyvar(:,:)
     call transpose_x_to_y(this%filteredSpeedSq, this%rbuffyC(:,:,:,1), this%gpC)
 
-    this%rbuffyC(:,1,1,1) = sum(this%rbuffyC(:,:,1,1),2)/real(this%gpC%ysz(2), rkind)
+    !this%rbuffyC(:,1,1,1) = sum(this%rbuffyC(:,:,1,1),2)/real(this%gpC%ysz(2), rkind)
     this%rbuffyC(:,1,2,1) = sum(this%rbuffyC(:,:,2,1),2)/real(this%gpC%ysz(2), rkind)
     this%rbuffyC(:,1,3,1) = sum(this%rbuffyC(:,:,3,1),2)/real(this%gpC%ysz(2), rkind)
-    do k=1,3
+    do k=2,3
       do j=2,this%gpC%ysz(2)
           this%rbuffyC(:,j,k,1) = this%rbuffyC(:,1,k,1)
       enddo
@@ -285,6 +353,9 @@ subroutine getSpanAvgVelAtWall(this)
     call transpose_y_to_x(this%rbuffyC(:,:,:,1), this%filteredSpeedSq, this%gpC)
     this%Uxvar(:,:) = this%filteredSpeedSq(:,:,2)
     this%Uyvar(:,:) = this%filteredSpeedSq(:,:,3)
+
+    this%filteredSpeedSq(:,:,1) = this%filteredSpeedSq(:,:,2)*this%filteredSpeedSq(:,:,2)
+    this%filteredSpeedSq(:,:,1) = this%filteredSpeedSq(:,:,1) + this%filteredSpeedSq(:,:,3)*this%filteredSpeedSq(:,:,3)
     
 end subroutine
 
@@ -309,7 +380,7 @@ subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)
     call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
     call this%spectC%ifft(cbuffy,rbuffx2)
 
-    if(this%is_z0_varying) then
+    if(this%is_z0_varying .and. (this%gpC%xst(3)==1)) then
         this%Uxvar = rbuffx1(:,:,1)
         this%Uyvar = rbuffx2(:,:,1)
     endif

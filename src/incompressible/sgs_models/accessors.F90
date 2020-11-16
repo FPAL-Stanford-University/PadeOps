@@ -19,6 +19,13 @@ pure function get_Ustar(this) result(val)
    val = this%ustar
 end function
 
+pure function get_Ustar_upstream(this) result(val)
+   class(sgs_igrid), intent(in) :: this
+   real(rkind)                     :: val
+  
+   val = this%ustar_upstream
+end function
+
 pure function get_InvObLength(this) result(val)
    class(sgs_igrid), intent(in) :: this
    real(rkind)                     :: val
