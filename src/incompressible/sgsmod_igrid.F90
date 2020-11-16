@@ -155,12 +155,15 @@ module sgsmod_igrid
             !! ACCESSORS (add these in src/incompressible/sgs_models/accessors.F90)
             procedure          :: get_GlobalConstant
             procedure          :: get_ustar
+            procedure          :: get_z0
             procedure          :: get_InvOblength
             procedure          :: get_umean 
             procedure          :: get_vmean 
+            procedure          :: get_Tmean
             procedure          :: get_uspeedmean 
             procedure          :: get_DynamicProcedureType
             procedure          :: get_wTh_surf
+            procedure          :: get_Tsurf
             procedure          :: get_uw_surf
             procedure          :: get_vw_surf
             procedure          :: get_z0varstats

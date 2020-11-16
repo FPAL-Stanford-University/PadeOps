@@ -239,7 +239,7 @@ contains
                 this%budgets_dir = igrid_sim%outputDir
             end if 
 
-            allocate(this%mean_qty(11,1))
+            allocate(this%mean_qty(13,1))
 
             if(this%do_spectra) then
                 ! note :: the number of variables for which spectra are to be calculated
@@ -1694,6 +1694,8 @@ contains
 
             this%mean_qty(10,1) = this%mean_qty(10,1) + this%igrid_sim%sgsmodel%get_InvObLength()
             this%mean_qty(11,1) = this%mean_qty(11,1) + this%igrid_sim%sgsmodel%get_wTh_surf()
+            this%mean_qty(12,1) = this%mean_qty(12,1) + this%igrid_sim%sgsmodel%get_Tsurf()
+            this%mean_qty(13,1) = this%mean_qty(13,1) + this%igrid_sim%sgsmodel%get_Tmean()
         endif
 
         ! STEP 3: SGS stress (also viscous stress if finite reynolds number is being used)

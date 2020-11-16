@@ -5,6 +5,13 @@ pure function get_GlobalConstant(this) result(val)
    val = this%cmodel_global
 end function
 
+pure function get_z0(this) result(val)
+   class(sgs_igrid), intent(in) :: this
+   real(rkind)                     :: val
+   
+   val = this%z0
+end function
+
 pure function get_Ustar(this) result(val)
    class(sgs_igrid), intent(in) :: this
    real(rkind)                     :: val
@@ -24,6 +31,22 @@ pure function get_umean(this) result(val)
    real(rkind)                     :: val
   
    val = this%umn
+
+end function
+
+pure function get_Tmean(this) result(val)
+   class(sgs_igrid), intent(in) :: this
+   real(rkind)                     :: val
+  
+   val = this%Tmn
+
+end function
+
+pure function get_Tsurf(this) result(val)
+   class(sgs_igrid), intent(in) :: this
+   real(rkind)                     :: val
+  
+   val = this%Tsurf
 
 end function
 
