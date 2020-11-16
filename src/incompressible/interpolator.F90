@@ -14,6 +14,7 @@ module interpolatorMod
         type(decomp_info) :: gpSX, gpSXY
         integer, dimension(:), allocatable  :: xInd, yInd, zInd  
         real(rkind), dimension(:), allocatable :: wx, wy, wz
+        real(rkind) :: dzDest, dzSource, z0
         contains
             procedure :: init 
             procedure :: destroy 
@@ -22,12 +23,13 @@ module interpolatorMod
 
 contains 
 
-subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest, filenameIn)
+subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest, filenameIn, z0)
     use constants, only: eps
     class(interpolator), intent(inout) :: this
     type(decomp_info), intent(in), target :: gpSource, gpDest 
     real(rkind), dimension(:), intent(in) :: xSource, ySource, zSource, xDest, yDest, zDest
     character(len=*), intent(in) :: filenameIn
+    real(rkind), intent(in) :: z0
     character(len=clen)             :: fname
     integer :: nxS, nyS, nzS, nxD, nyD, nzD, idx 
     real(rkind) :: delta, start
@@ -104,6 +106,11 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
         this%wz(idx) = (zSource(this%zInd(idx) + 1) - zDest(idx))/delta 
     end do 
 
+    ! for loglaw correction
+    this%dzSource = zSource(2)-zSource(1)
+    this%dzDest   = zDest(2)-zDest(1)
+    this%z0 = z0
+
     if(nrank==0) then
       fname = filenameIn(:len_trim(filenameIn))//"_x.dat"
       open(10,file=fname,status='unknown',action='write')
@@ -150,13 +157,31 @@ subroutine destroy(this)
     deallocate(this%fx_X, this%fx_Y, this%fxy_Y, this%fxy_Z)
 end subroutine
 
-subroutine LinInterp3D(this, fS, fD)
-    use constants, only: one 
+!subroutine loglaw_correction_uv(us, vs, ud, vd)
+    !class(interpolator), intent(inout) :: this 
+    !real(rkind), dimension(this%gpSource%xsz(1),this%gpSource%xsz(2), this%gpSource%xsz(3)), intent(in) :: us, vs
+    !real(rkind), dimension(this%gpDest%xsz(1),this%gpDest%xsz(2), this%gpDest%xsz(3)), intent(inout) :: ud, vd
+    !real(rkind) :: logfac
+
+    !logfac = log(this%dzDest/two/z0)/log(this%dzSource/two/z0)
+    !if(this%gpSX%xst(3)==1) then
+    !    ud(:,:,1) = us(:,:,1)*logfac
+    !    vd(:,:,1) = vs(:,:,1)*logfac
+    !endif
+    
+
+!end subroutine
+
+subroutine LinInterp3D(this, fS, fD, loglaw_corr)
+    use constants, only: one, two
     class(interpolator), intent(inout) :: this 
     real(rkind), dimension(this%gpSource%xsz(1),this%gpSource%xsz(2), this%gpSource%xsz(3)), intent(in) :: fS
     real(rkind), dimension(this%gpDest%xsz(1),this%gpDest%xsz(2), this%gpDest%xsz(3)), intent(out) :: fD
+    logical, optional, intent(in) :: loglaw_corr
     integer :: i, j, k 
-    
+    logical :: apply_loglaw_correction = .false.
+    real(rkind) :: logfac, z0
+
     ! interpolate in x
     do k = 1,this%gpSX%xsz(3)
         do j = 1,this%gpSX%xsz(2)
@@ -185,6 +210,14 @@ subroutine LinInterp3D(this, fS, fD)
             end do 
         end do 
     end do 
+    if(present(loglaw_corr)) then
+        apply_loglaw_correction = loglaw_corr
+    endif
+
+    if(apply_loglaw_correction) then
+        logfac = log(this%dzDest/two/this%z0)/log(this%dzSource/two/this%z0)
+        this%fxyz_z(:,:,1) = this%fxy_z(:,:,1)*logfac
+    endif
 
     ! Finally, transpose back to x decomposition 
     call transpose_z_to_y(this%fxyz_Z,this%fxyz_Y,this%gpDest)

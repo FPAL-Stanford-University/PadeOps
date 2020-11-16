@@ -46,5 +46,47 @@ contains
 
     end subroutine
 
+    subroutine doTemporalStuff_prec(prec)
+        class(igrid), intent(inout) :: prec
+
+        if (mod(prec%step,nt_print2screen) == 0) then
+            maxDiv = maxval(prec%divergence)
+            DomMaxDiv = p_maxval(maxDiv)
+            call message(0,"Time",prec%tsim)
+            call message(1,"TIDX:",prec%step)
+            call message(1,"MaxDiv:",DomMaxDiv)
+            call message(1,"Prec u_star:",prec%sgsmodel%get_ustar())
+            call message_min_max(1,"Bounds for u:", p_minval(minval(prec%u)), p_maxval(maxval(prec%u)))
+            call message_min_max(1,"Bounds for v:", p_minval(minval(prec%v)), p_maxval(maxval(prec%v)))
+            call message_min_max(1,"Bounds for w:", p_minval(minval(prec%w)), p_maxval(maxval(prec%w)))
+            if (prec%useCFL) then
+                call message(1,"Current dt:",prec%dt)
+            end if 
+            call toc()
+            call tic()
+        end if 
+
+    end subroutine
+
+    subroutine doTemporalStuff_gp(gp)
+        class(igrid), intent(inout) :: gp 
+
+        if (mod(gp%step,nt_print2screen) == 0) then
+            maxDiv = maxval(gp%divergence)
+            DomMaxDiv = p_maxval(maxDiv)
+            call message(1,"Time",gp%tsim)
+            call message(2,"TIDX:",gp%step)
+            call message(2,"MaxDiv:",DomMaxDiv)
+            call message(2,"Main u_star:",gp%sgsmodel%get_ustar())
+            call message_min_max(2,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
+            call message_min_max(2,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
+            call message_min_max(2,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
+            call message(2,"Current dt:",gp%dt)
+            call toc()
+            call tic()
+        end if 
+
+    end subroutine
+
 
 end module 
