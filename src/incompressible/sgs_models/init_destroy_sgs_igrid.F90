@@ -13,7 +13,7 @@ subroutine destroy(this)
   nullify(this%tau_11, this%tau_12, this%tau_22, this%tau_33)
   deallocate(this%tau_13, this%tau_23)
   if(this%is_z0_varying) then
-      deallocate(this%ustarsqvar, this%z0var, this%Uxvar, this%Uyvar, this%WallMFactorvar, this%lamfact)
+      deallocate(this%ustarsqvar, this%z0var, this%Uxvar, this%Uyvar, this%WallMFactorvar, this%lamfact, this%deli, this%mask_upstream)
   endif
 
 end subroutine
@@ -69,7 +69,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   integer :: DynamicProcedureType = 0, SGSmodelID = 0, WallModelType = 0, DynProcFreq = 1
   real(rkind) :: ncWall = 1.d0, Csgs = 0.17d0, z0 = 0.01d0, deltaRatio = 2.d0, turbPrandtl = 0.4d0, Cy = 100.d0 
   real(rkind) :: z0t = 0.001d0
-  character(len=clen) :: SGSDynamicRestartFile
+  character(len=clen) :: SGSDynamicRestartFile, fname, tempname
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
   logical :: usePrSGS = .false. 
   integer :: ierr, WM_matchingIndex = 1, i, j
@@ -77,7 +77,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2, deli
   logical :: is_z0_varying = .false., filter_for_heterog = .true.
   real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
-  real(rkind) :: Mfactor, dele, alpfac
+  real(rkind) :: Mfactor, dele, alpfac, excludedist = 3.0_rkind
   integer :: spnumx, spnumy
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
@@ -89,7 +89,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, &
                  is_z0_varying
 
-  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, rpstart, spx_delta, spy_delta, filter_for_heterog
+  namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, rpstart, spx_delta, spy_delta, &
+                       filter_for_heterog, excludedist
 
   this%gpC => gpC
   this%gpE => gpE
@@ -195,6 +196,13 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     allocate(this%Uyvar(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%WallMFactorvar(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%lamfact(this%gpC%xsz(1), this%gpC%xsz(2)))
+    allocate(this%mask_upstream(this%gpC%xsz(1), this%gpC%xsz(2)))
+    allocate(this%deli(this%gpC%xsz(1), this%gpC%xsz(2)))
+
+    ! set all arrays to zero :: this is important
+    this%z0var         = 0.0_rkind;   this%ustarsqvar     = 0.0_rkind;   this%Uxvar   = 0.0_rkind
+    this%Uyvar         = 0.0_rkind;   this%WallMFactorvar = 0.0_rkind;   this%lamfact = 0.0_rkind
+    this%mask_upstream = 0.0_rkind;   this%deli           = 0.0_rkind;   sp_map       = 0.0_rkind
 
     this%z0s = z0s; this%z0r = z0r
     this%filter_for_heterog = filter_for_heterog
@@ -262,6 +270,23 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
       enddo
     enddo
 
+    if(this%gpC%xst(3)==1) then
+        do j = 1, this%gpC%xsz(2)
+          do i = 1, this%gpC%xsz(1)
+            if((xMesh(i) < (rpstart-excludedist)) .or. (xMesh(i) > (rpstart+spx+excludedist))) then
+                this%mask_upstream(i,j) = one
+            !else
+            !    this%mask_upstream(i,j) = zero
+            endif
+          enddo
+        enddo
+    endif
+    this%mask_normfac = p_sum(sum(this%mask_upstream))
+    !print '(a,e19.12,1x,i5,1x,i5)', 'mask_normfac', this%mask_normfac, this%gpC%xsz(1), this%gpC%xsz(2)
+
+    do j=1, this%gpC%xsz(2)
+      this%deli(:,j) = deli(:)
+    enddo
 
     call message(1, "Printing debug info about heterog ")
     if(nrank==0) then
@@ -272,6 +297,16 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
       enddo
       close(10)
     endif
+
+    ! write all data as 2D arrays
+    this%rbuffxC(:,:,1,1) = this%z0var(:,:)
+    this%rbuffxC(:,:,2,1) = this%mask_upstream(:,:)
+    this%rbuffxC(:,:,3,1) = this%lamfact(:,:)
+    this%rbuffxC(:,:,4,1) = this%deli(:,:)
+    write(tempname,"(A)") "z0var_setup.dat"
+    fname = "./"//trim(tempname)
+    !print *, fname
+    call decomp_2d_write_one(1, this%rbuffxC(:,:,:,1), fname, gpC)
     call message(1, "Done printing debug info about heterog ")
 
   endif
