@@ -12,8 +12,8 @@ module convective_igrid_parameters
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
     
-    real(rkind), parameter :: xDim = 2000._rkind, udim =8._rkind
-    real(rkind), parameter :: timeDim = xDim/udim
+    !real(rkind), parameter :: xDim = 2000._rkind, udim =8._rkind
+    !real(rkind), parameter :: timeDim = xDim/udim
 
 end module     
 
@@ -39,10 +39,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE, ztmp
     integer :: nz, nzE, k
     real(rkind) :: sig
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4, xDim = 2.0d3
     real(rkind), dimension(:,:,:), allocatable :: randArr, Tpurt, eta
     
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, xDim 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -67,22 +67,22 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     ztmp = z*xDim
     do k = 1, decompC%xsz(3)
       ! Abkar-Moin (BLM 2017) setup
-      !if(ztmp(1,1,k) < 937.d0) then
-      !  T(:,:,k) = 300.d0
-      !elseif(ztmp(1,1,k) < 1063.d0) then
-      !  T(:,:,k) = 300.0d0 + (ztmp(1,1,k)-937.d0)*8.0d0/126.d0
-      !else
-      !  T(:,:,k) = 308.0d0 + (ztmp(1,1,k)-1063.d0)*0.003d0
-      !endif
-
-      ! Bou-Zeid (BLM 2017) setup
-      if(ztmp(1,1,k) < 1000.d0) then
+      if(ztmp(1,1,k) < 937.d0) then
         T(:,:,k) = 300.d0
-      elseif(ztmp(1,1,k) < 1100.d0) then
-        T(:,:,k) = 300.0d0 + (ztmp(1,1,k)-1000.d0)*8.0d0/100.d0
+      elseif(ztmp(1,1,k) < 1063.d0) then
+        T(:,:,k) = 300.0d0 + (ztmp(1,1,k)-937.d0)*8.0d0/126.d0
       else
-        T(:,:,k) = 308.0d0 + (ztmp(1,1,k)-1100.d0)*0.003d0
+        T(:,:,k) = 308.0d0 + (ztmp(1,1,k)-1063.d0)*0.003d0
       endif
+
+      !! Bou-Zeid (BLM 2017) setup
+      !if(ztmp(1,1,k) < 1000.d0) then
+      !  T(:,:,k) = 300.d0
+      !elseif(ztmp(1,1,k) < 1100.d0) then
+      !  T(:,:,k) = 300.0d0 + (ztmp(1,1,k)-1000.d0)*8.0d0/100.d0
+      !else
+      !  T(:,:,k) = 308.0d0 + (ztmp(1,1,k)-1100.d0)*0.003d0
+      !endif
     enddo
 
     ! Add random numbers
@@ -133,8 +133,8 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     real(rkind), intent(out) :: wTh_surf
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, z0init = 1.d-4
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, z0init = 1.d-4, xDim = 2.0d3
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, xDim
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -152,8 +152,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, z0init = 1.d-4
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, z0init = 1.d-4, xDim = 2.0d3
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, xDim
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -218,8 +218,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4, xDim = 2.0d3 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, xDim
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -266,8 +266,8 @@ subroutine set_Reference_Temperature(inputfile, Thetaref)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Thetaref
     integer :: ioUnit 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4 
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init  
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4, xDim = 2.0d3 
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, xDim
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
