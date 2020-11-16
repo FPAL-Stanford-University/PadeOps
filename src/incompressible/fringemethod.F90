@@ -220,10 +220,10 @@ contains
 
       if(present(xen_targ)) then
         this%xen_targ = xen_targ
-        print *, ' given xen_targ = ', xen_targ, this%xen_targ
+        !print *, ' given xen_targ = ', xen_targ, this%xen_targ
       else
         this%xen_targ = size(this%Fringe_kernel_cells, 1)
-        print *, ' not given xen_targ = ', this%xen_targ
+        !print *, ' not given xen_targ = ', this%xen_targ
       endif
       this%xst_targ = this%xen_targ - (this%xen_forc - this%xst_forc)
       call message(1, "xst_targ:", this%xst_targ)
