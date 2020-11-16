@@ -2,6 +2,7 @@ module sgsmod_igrid
     use kind_parameters, only: rkind, clen
     use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six, kappa, piby2 
     use decomp_2d
+    use decomp_2d_io
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
     use mpi 
@@ -70,8 +71,8 @@ module sgsmod_igrid
         integer :: WM_matchingIndex
 
         ! for varying z0
-        real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, lamfact, mask_upstream
-        real(rkind) :: kaplnzfac_s, kaplnzfac_r, z0s, z0r, mask_normfac
+        real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, lamfact, mask_upstream, deli
+        real(rkind) :: kaplnzfac_s, kaplnzfac_r, z0s, z0r, mask_normfac, ustar_upstream
         logical :: is_z0_varying = .false., filter_for_heterog = .true.
 
         ! for dynamic procedures - all are at edges
@@ -115,7 +116,7 @@ module sgsmod_igrid
             procedure, private :: embed_WM_stress
             procedure, private :: embed_WM_PotTFlux
             procedure, private :: BouZeidLocalModel
-            procedure, private :: get_ustar_upstreampart
+            procedure, private :: compute_ustar_upstreampart
             procedure, private :: getSpanAvgVelAtWall
             procedure, private :: set_tauijWM
             
@@ -155,6 +156,7 @@ module sgsmod_igrid
             !! ACCESSORS (add these in src/incompressible/sgs_models/accessors.F90)
             procedure          :: get_GlobalConstant
             procedure          :: get_ustar
+            procedure          :: get_ustar_upstream
             procedure          :: get_InvOblength
             procedure          :: get_umean 
             procedure          :: get_vmean 
