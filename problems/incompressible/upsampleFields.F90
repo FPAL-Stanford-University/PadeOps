@@ -1,7 +1,9 @@
 module RoutinesUpsampling
     use kind_parameters, only: rkind
     use exits, only: GracefulExit
-    use constants, only : one
+    use constants, only : one, two
+    use decomp_2d
+    use decomp_2d_io
     
     implicit none
     contains
@@ -122,13 +124,19 @@ module RoutinesUpsampling
 
     end subroutine
 
-    subroutine upsampleZ_cells(arrIn,arrOut)
+    subroutine upsampleZ_cells(arrIn, arrOut, logarithmic_correction, Lz, z0, is_z0_varying, gpC)
         real(rkind), dimension(:,:,:), intent(in) :: arrIn
         real(rkind), dimension(:,:,:), intent(out) :: arrOut
+        logical, intent(in), optional :: logarithmic_correction, is_z0_varying
+        real(rkind), intent(in), optional :: Lz, z0
+        type(decomp_info), intent(in), optional :: gpC
         integer :: k, nz, idx, nzf, k1, k2
         real(rkind), parameter :: ratEven = 0.25d0, ratOdd = 0.75d0
         real(rkind), allocatable, dimension(:) :: z, zfine
-        real(rkind) :: dz, dzf, interpfac
+        real(rkind) :: dz, dzf, interpfac, logcorr_factor
+        logical :: apply_logcorr
+        real(rkind), allocatable, dimension(:,:,:) :: rbuffxC
+        real(rkind), allocatable, dimension(:,:)   :: z0var
 
         nz = size(arrIn, 3); nzf = size(arrOut, 3)
 
@@ -175,6 +183,32 @@ module RoutinesUpsampling
             enddo
 
             deallocate(z, zfine)
+        endif
+
+
+        if(present(logarithmic_correction)) then
+            apply_logcorr = logarithmic_correction
+            if((.not. present(z0)) .or. (.not. present(Lz))) then
+                call GracefulExit("z0 or Lz must be present to apply logarithmic correction. Check details",999)
+            endif
+        else
+            apply_logcorr = .false.
+        endif
+        if(apply_logcorr) then
+            dzf = Lz/real(nzf, rkind); dz = Lz/real(nz, rkind)
+            if(is_z0_varying) then
+                allocate(rbuffxC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+                allocate(z0var(gpC%xsz(1),gpC%xsz(2)))
+                call decomp_2d_read_one(1, rbuffxC(:,:,:), 'z0var_setup.dat', gpC)
+                z0var(:,:) = rbuffxC(:,:,1)
+                arrOut(:,:,1) = log(dzf/two/z0var)
+                arrOut(:,:,1) = arrOut(:,:,1)/log(dz/two/z0var)
+                arrOut(:,:,1) = arrIn(:,:,1) * arrOut(:,:,1)
+                deallocate(z0var,rbuffxC)
+            else
+                logcorr_factor = log(dzf/two/z0)/log(dz/two/z0)
+                arrOut(:,:,1) = arrIn(:,:,1) * logcorr_factor
+            endif
         endif
 
     end subroutine
@@ -315,10 +349,12 @@ program upsampleFields
     real(rkind), dimension(:,:,:), allocatable :: fxyup_inZ, fxyup_inX, fxyzup_inZ, fxyzup_inY, fxyzup_inX
     character(len=clen) :: tempname, fname
     real(rkind) :: tsim 
-    logical :: periodicInZ = .false. 
+    logical :: periodicInZ = .false., apply_logcorr = .false., is_z0_varying = .false.
+    real(rkind) :: Lz = one, z0 = 1.0d-4
     integer :: nxf, nyf, nzf
     namelist /INPUT/ nx, ny, nz, inputdir, outputdir, inputFile_TID, inputFile_RID, &
-    outputFile_TID, outputFile_RID, UpsampleInZ, isStratified, PeriodicInZ
+    outputFile_TID, outputFile_RID, UpsampleInZ, isStratified, PeriodicInZ, &
+    apply_logcorr, Lz, z0, is_z0_varying
     !nxf, nyf, nzf
 
     call MPI_Init(ierr)               !<-- Begin MPI
@@ -394,7 +430,7 @@ program upsampleFields
         if (PeriodicInZ) then
            call upsampleZ_periodic(fxyup_inZ, fxyupE_inZ, fxyzup_inZ, fxyzupE_inZ)
         else
-           call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+           call upsampleZ_cells(fxyup_inZ,fxyzup_inZ,apply_logcorr,Lz,z0,is_z0_varying,gpC)
         end if 
 
         call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpC_upXYZ)
@@ -425,7 +461,7 @@ program upsampleFields
         if (PeriodicInZ) then
            call upsampleZ_periodic(fxyup_inZ, fxyupE_inZ, fxyzup_inZ, fxyzupE_inZ)
         else
-           call upsampleZ_cells(fxyup_inZ,fxyzup_inZ)
+           call upsampleZ_cells(fxyup_inZ,fxyzup_inZ,apply_logcorr,Lz,z0,is_z0_varying,gpC)
         end if 
         call transpose_z_to_y(fxyzup_inZ,fxyzup_inY,gpC_upXYZ)
         call transpose_y_to_x(fxyzup_inY,fxyzup_inX,gpC_upXYZ)
