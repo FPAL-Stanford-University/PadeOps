@@ -14,6 +14,7 @@ module IncompressibleGrid
     use timer, only: tic, toc
     use PadePoissonMod, only: Padepoisson 
     use sgsmod_igrid, only: sgs_igrid
+    use ibmgpmod, only: ibmgp
     use numerics
     !use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90
@@ -155,7 +156,7 @@ module IncompressibleGrid
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
         logical :: useCFL = .false., donot_dealias = .false.   
-        logical :: dumpPlanes = .false., useWindTurbines = .false. 
+        logical :: dumpPlanes = .false., useWindTurbines = .false., useibm = .false. 
 
         complex(rkind), dimension(:,:,:), allocatable :: dPf_dxhat
 
@@ -205,6 +206,9 @@ module IncompressibleGrid
 
         ! Wind Turbine stuff 
         type(turbineArray), allocatable :: WindTurbineArr
+
+        ! Immersed Boundary (IBM) stuff 
+        type(ibmgp), allocatable :: ibm
 
         ! KS preprocessor 
         type(ksprep), allocatable :: LES2KS
@@ -407,7 +411,7 @@ contains
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
-        logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
+        logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false., useibm = .false. 
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
@@ -455,6 +459,7 @@ contains
         namelist /SCALARS/ num_scalars, scalar_info_dir
         namelist /TURB_PRESSURE/ MeanTIDX, MeanRID, MeanFilesDir
         namelist /MOISTURE/ moistureFactor, moisture_info_dir
+        namelist /IBM/ useibm
 
         ! STEP 1: READ INPUT 
         ioUnit = 11
@@ -503,7 +508,7 @@ contains
             & specified either one of these in the input file?", 124)
         end if 
         this%t_restartDump = t_restartDump; this%tid_statsDump = tid_statsDump; this%useCoriolis = useCoriolis; 
-        this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
+        this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines; this%useibm = useibm
         this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
         this%UseDealiasFilterVert = UseDealiasFilterVert
         this%G_geostrophic = G_geostrophic; this%G_alpha = G_alpha; this%Fr = Fr; 
@@ -1021,11 +1026,17 @@ contains
        allocate(this%inst_horz_avg(5))
        this%inst_horz_avg = zero
 
-       ! STEP 13: Set visualization planes for io
+       ! STEP 13: Initialize Immersed Boundary Method (IBM)
+       if (this%useibm) then
+           allocate(this%ibm)
+           call this%ibm%init(this%InputDir, inputFile)
+       end if
+
+       ! STEP 14: Set visualization planes for io
        call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
 
 
-       ! STEP 14a : Probes
+       ! STEP 15a : Probes
        if (this%useProbes) then
            call hook_probes(inputfile, probe_locs)
            if (.not. allocated(probe_locs)) then
@@ -1095,7 +1106,7 @@ contains
            call message(0,"Total probes initialized:", p_sum(this%nprobes))
        end if
      
-       ! STEP 14b : Preprocessing for KS
+       ! STEP 15b : Preprocessing for KS
        if (this%PreprocessForKS) then
            allocate(this%LES2KS)
            if (this%KSinitType == 0) then
@@ -1117,7 +1128,7 @@ contains
        end if 
 
 
-       ! STEP 15: Set up extra buffers for RK3
+       ! STEP 16: Set up extra buffers for RK3
        if (timeSteppingScheme == 1) then
            if (this%isStratified .or. this%initspinup) then
                call this%spectC%alloc_r2c_out(this%SfieldsC2,3)
@@ -1147,14 +1158,14 @@ contains
            call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
        end if 
 
-       ! STEP 16: Initialize Statistics
+       ! STEP 17: Initialize Statistics
        if (this%timeAvgFullFields) then
            call this%init_stats3D()
        else
        !    call this%init_stats()
        end if
       
-       ! STEP 17: Set Fringe
+       ! STEP 18: Set Fringe
        allocate(this%fringe_x1, this%fringe_x2)
        allocate(this%fringe_x)
        if (this%usedoublefringex) then
@@ -1172,14 +1183,14 @@ contains
            end if
        end if 
        
-       ! STEP 18: Set HIT Forcing
+       ! STEP 19: Set HIT Forcing
        if (this%useHITForcing) then
            allocate(this%hitforce)
            call this%hitforce%init(inputfile, this%sp_gpC, this%sp_gpE, this%spectC, this%cbuffyE(:,:,:,1), &
                           this%cbuffyC(:,:,:,1), this%cbuffzE(:,:,:,1), this%cbuffzC, this%step)
        end if
        
-       ! STEP 19: Set up storage for Pressure
+       ! STEP 20: Set up storage for Pressure
        if ((this%storePressure) .or. (this%fastCalcPressure)) then
            allocate(this%Pressure(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
            if (this%computefringePressure) then
@@ -1210,10 +1221,10 @@ contains
                     & order to use computefringepressure or computeDNSpressure", 313)
        end if
 
-       ! STEP 20: Update the probes
+       ! STEP 21: Update the probes
        if (this%useProbes) call this%updateProbes()
 
-       ! STEP 21: Buoyancy term type
+       ! STEP 22: Buoyancy term type
        if (this%isStratified) then
            select case (this%BuoyancyTermType)
            case(1)
@@ -1241,7 +1252,7 @@ contains
             call this%sgsModel%set_BuoyancyFactor(this%BuoyancyFact)
        end if 
 
-       ! STEP 22a: Set moisture
+       ! STEP 23a: Set moisture
        if(this%useMoisture) then
          if(this%usescalars) then
             this%n_scalars = this%n_scalars + 1
@@ -1253,7 +1264,7 @@ contains
          endif
        endif
        
-       ! STEP 22b: Set other scalars
+       ! STEP 23b: Set other scalars
        if (this%usescalars) then
            if (allocated(this%scalars)) deallocate(this%scalars)
            allocate(this%scalars(this%n_scalars))
@@ -1272,7 +1283,7 @@ contains
            call message(0, "SCALAR fields initialized successfully.")
        end if  
          
-       ! STEP 23: Compute Rapid and Slow Pressure Split
+       ! STEP 24: Compute Rapid and Slow Pressure Split
        if (this%computeRapidSlowPressure) then
            if (this%computeDNSpressure) then
                call this%initialize_Rapid_Slow_Pressure_Split(MeanTIDX, MeanRID, MeanFilesDir)
@@ -1281,12 +1292,12 @@ contains
            end if 
        end if 
        
-       ! STEP 24: Compute pressure  
+       ! STEP 25: Compute pressure  
        if ((this%storePressure) .or. (this%fastCalcPressure)) then
            call this%ComputePressure()
        end if 
 
-       ! STEP 25: Schedule time dumps
+       ! STEP 26: Schedule time dumps
        this%vizDump_Schedule = vizDump_Schedule
        this%DumpThisStep = .false. 
        if (this%vizDump_Schedule == 1) then
@@ -1298,13 +1309,13 @@ contains
            end if 
        end if 
 
-       ! STEP 26: HDF5 IO
+       ! STEP 27: HDF5 IO
        if (ioType .ne. 0) then
            call this%initialize_hdf5_io()
            call message(0, "HDF5 IO successfully initialized.")
        end if 
 
-       ! STEP 27: Frame angle controller 
+       ! STEP 28: Frame angle controller 
        !! Set angle control PI yaw
        if (this%useControl) then
               allocate(this%angCont_yaw)
@@ -1317,18 +1328,18 @@ contains
        this%wFilt = 0.d0
        this%deltaGalpha = 0.d0
 
-       ! STEP 28: Compute the timestep
+       ! STEP 29: Compute the timestep
        call this%compute_deltaT()
        this%dtOld = this%dt
        this%dtRat = one 
       
 
-       ! STEP 29: Set the buoyancy direction
+       ! STEP 30: Set the buoyancy direction
        this%buoyancyDirection = buoyancyDirection
        this%useforcedStratification = useforcedStratification
 
 
-       ! STEP 30: Safeguard against user invalid user inputs
+       ! STEP 31: Safeguard against user invalid user inputs
        if ((this%vizDump_Schedule == 1) .and. (.not. this%useCFL)) then
            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
        end if 
@@ -1427,6 +1438,11 @@ contains
           deallocate(this%sgsModel)
        end if
        deallocate(this%xline, this%yline, this%zline, this%zEline)
+
+       if(this%useibm) then
+         call this%ibm%destroy()
+         deallocate(this%ibm)
+       endif
 
        if (allocated(this%scalars)) then
            do idx = 1,this%n_scalars
