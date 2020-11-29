@@ -28,10 +28,12 @@ contains
             call message_min_max(1,"Bounds for v:", p_minval(minval(igp%v)), p_maxval(maxval(igp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(igp%w)), p_maxval(maxval(igp%w)))
             call message_min_max(1,"Bounds for T:", p_minval(minval(igp%T)), p_maxval(maxval(igp%T)))
-            call message(1,"T_surf:",igp%Tsurf)
-            call message(1,"u_star:",igp%sgsmodel%get_ustar())
+            call message(1,"T_surf         :",igp%Tsurf)
+            call message(1,"u_star         :",igp%sgsmodel%get_ustar())
             call message(1,"Inv. Ob. Length:",igp%sgsmodel%get_InvObLength())
-            call message(1,"wTh_surf:",igp%sgsmodel%get_wTh_surf())
+            call message(1,"wTh_surf       :",igp%sgsmodel%get_wTh_surf())
+            call message(1,"T_mean         :",igp%sgsmodel%get_Tmean())
+            call message(1,"Uspmn          :",igp%sgsmodel%get_uspeedmean())
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if
