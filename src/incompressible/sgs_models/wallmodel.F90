@@ -69,9 +69,9 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhat, vhat, That
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v
    complex(rkind), dimension(:,:,:), pointer :: cbuffz, cbuffy
-   real(rkind) :: ust1fac, ustar1, epssmall = 1.0d-6
+   real(rkind) :: ust1fac, ustar1, epssmall = 1.0d-6, dzby2
    integer, dimension(this%gpC%xsz(1), this%gpC%xsz(2)) :: modelregion
-   integer :: i
+   integer :: i, j
 
    cbuffz => this%cbuffzC(:,:,:,1)
    cbuffy => this%cbuffyC(:,:,:,1)
@@ -185,15 +185,37 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       ! using this%filteredSpeedSq in the upstream region, estimate ustar1
       call this%compute_ustar_upstreampart(ustar1)
       ust1fac = ustar1/sqrt(this%kaplnzfac_s)
-     
-      where(this%deli < epssmall)
-          this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)
-      elsewhere !(this%lamfact > epssmall)
-          this%ustarsqvar = (this%rbuffxC(:,:,1,2) - this%lamfact*ust1fac) / (one - this%lamfact)
-          this%ustarsqvar = this%kaplnzfac_r*this%ustarsqvar*this%ustarsqvar
-      !elsewhere
-      !    this%ustarsqvar = this%kaplnzfac_r*this%filteredSpeedSq(:,:,1)
-      endwhere
+
+      dzby2 = half*this%dz 
+      do j = 1, this%gpC%xsz(2)
+        do i = 1, this%gpC%xsz(1)
+            if(this%deli(i,j) < epssmall) then
+                this%ustarsqvar(i,j) = this%kaplnzfac_s*this%filteredSpeedSq(i,j,1)
+            elseif(this%deli(i,j) < dzby2) then
+                !ustar1loc = sqrt(this%kaplnzfac_s*this%filteredSpeedSq(i,j,1))
+                call this%solve_nonlinprob(i, j) !ustar1loc, this%ustarsqvar(i,j))
+            else
+              if(this%alpfac*this%deli(i,j) < dzby2) then
+                  call this%solve_nonlinprob(i, j) !this%filteredspeedsq(i,j,1), this%ustarsqvar(i,j))
+              else
+                  this%ustarsqvar(i,j) = this%kaplnzfac_r*this%filteredSpeedSq(i,j,1)
+              endif
+            endif
+        enddo
+      enddo
+      !!! replace the where by if-else
+      !!where(this%deli < epssmall)
+      !!    this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)
+      !!elsewhere(this%deli < dzby2)
+      !!    ustar1loc = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)
+      !!    call this%solve_nonlinprob_1(ustar1loc, this%ustarsqvar)
+      !!elsewhere
+      !!    where (this%dele < dzby2)
+      !!        call this%solve_nonlineprob_2(this%filteredspeedsq, this%ustarsqvar)
+      !!    elsewhere
+      !!        this%ustarsqvar = this%kaplnzfac_r*this%filteredSpeedSq(:,:,1)
+      !!    endwhere
+      !!endwhere
 
       ! tau_13
       this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uxvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
@@ -207,6 +229,72 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
 end subroutine
 
+subroutine solve_nonlinprob(this, i, j) !, ustar2)
+   class(sgs_igrid), intent(inout) :: this
+   integer, intent(in) :: i, j
+   !real(rkind), intent(in)  :: ustar1
+   !real(rkind), intent(out) :: ustar2
+
+   real(rkind) :: deli, dele, z01, z02, lnfdez02, lnfdiz01, tol, xvar, xvar_new
+   real(rkind) :: xdiff, term1, term2, termp, termq, termr, terms, Rfac, fx, ustar1_sq
+   real(rkind) :: epssmall = 1.0d-6
+   integer :: iter, max_iters
+
+   deli = this%deli(i,j); z02 = this%z0r; z01 = this%z0s; dele = deli*this%alpfac
+   lnfdez02 = log(dele/z02)/kappa
+   lnfdiz01 = log(deli/z01)/kappa
+
+   !zbar = (half*this%dz - dele)/(deli-dele)
+   !ufix = sqrt(this%filteredSpeedSq(i,j))
+
+   !if(iprob==1) then
+
+   max_iters = 1000; tol = 1.0d-8 
+   xvar = zero; 
+   ! Set initial guess based on the type of transition
+   if(z01 < z02) then
+       xvar_new = 1.1_rkind   ! S-R Transition
+   else
+       xvar_new = 0.9_rkind   ! R-S Transition
+   endif
+   do iter = 1, max_iters
+     xdiff = abs(one - xvar/xvar_new)
+     if(xdiff < tol) exit
+     xvar = xvar_new;
+
+     !fx = lnfdez02*xvar - lndiz01
+     if(xvar < epssmall) then
+        term2 = zero
+     else
+        term1 = -half*(one-xvar)*(one-xvar)*(deli-dele)/(this%betfac*kappa*(dele*xvar + deli))
+        termp = two*xvar/(one-xvar)
+        termq = xvar/(one-xvar); termq = termq*termq
+        termr = deli*(one+two*this%betfac) - xvar*dele*(one-two*this%betfac)
+        termr = half*termr/(this%betfac*(deli+xvar*dele))
+        terms = half*xvar*dele/(this%betfac*(deli+xvar*dele))
+        Rfac  = sqrt(termr*termr-four*terms)
+        term2 = -one + half*(termp-termr)*log(terms/(one+termr+terms))
+        term2 = term2 + (termq + half*termr*termr - half*termp*termr - terms)/Rfac
+        term2 = term2*term1
+     endif
+     !fx = fx - term2
+     
+     xvar_new = (term2 + lnfdiz01)/lnfdez02
+   enddo
+   if(xdiff > tol) then
+     call message(1, "Did not converge", 0.0_rkind)
+     call message(2, "iter: ", iter  )
+     call message(2, "xdiff: ", xdiff)
+     call message(2, "xvar : ", xvar )
+     call GracefulExit("Nonlinear solver in wall model did not converge. Check details.", 999)
+   endif
+   !ustar1 = ufix*sqrt(this%kaplnzfac_s)
+   !ustar2loc = xvar * ustar1
+   ustar1_sq = this%kaplnzfac_s*this%filteredSpeedSq(i,j,1)
+   this%ustarsqvar(i,j) = xvar*xvar*ustar1_sq
+
+end subroutine
+ 
 subroutine compute_ustar_upstreampart(this, ustar1)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), intent(out) :: ustar1

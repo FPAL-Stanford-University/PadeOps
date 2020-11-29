@@ -77,7 +77,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2, deli
   logical :: is_z0_varying = .false., filter_for_heterog = .true.
   real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
-  real(rkind) :: Mfactor, dele, alpfac, excludedist = 3.0_rkind
+  real(rkind) :: Mfactor, dele, excludedist = 3.0_rkind
   integer :: spnumx, spnumy
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
@@ -203,6 +203,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     this%z0var         = 0.0_rkind;   this%ustarsqvar     = 0.0_rkind;   this%Uxvar   = 0.0_rkind
     this%Uyvar         = 0.0_rkind;   this%WallMFactorvar = 0.0_rkind;   this%lamfact = 0.0_rkind
     this%mask_upstream = 0.0_rkind;   this%deli           = 0.0_rkind;   sp_map       = 0.0_rkind
+    this%alpfac        = 0.027_rkind; this%betfac         = 0.15_rkind
 
     this%z0s = z0s; this%z0r = z0r
     this%filter_for_heterog = filter_for_heterog
@@ -251,7 +252,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     !!! determine lamfact
     !!! smooth patch before rpstart and after fringe. Rough between these.
     Mfactor = 0.75_rkind-0.03_rkind*log(this%z0r/this%z0s)
-    alpfac = 0.027_rkind
+    this%alpfac = 0.027_rkind
     deli = 0.0_rkind
     do j = 1, this%gpC%xsz(2)
       do i = 1, this%gpC%xsz(1)
@@ -262,10 +263,10 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
             ! downstream rough or smooth region
             xl = xMesh(i) - rpstart
             deli(i) = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind
-            this%lamfact(i,j) = -log(half*this%dz/(deli(i)*alpfac+1.0d-18)) / log(alpfac)
+            this%lamfact(i,j) = -log(half*this%dz/(deli(i)*this%alpfac+1.0d-18)) / log(this%alpfac)
             this%lamfact(i,j) = min(this%lamfact(i,j), one)     ! note :: must be here, not outside the loop
             this%lamfact(i,j) = max(this%lamfact(i,j), zero)    ! note :: must be here, not outside the loop
-            !write(100+nrank,'(2(i5,1x),7(e19.12,1x))') i, j, deli, half*this%dz, half*this%dz/(deli*alpfac+1.0d-18), -log(alpfac), this%lamfact(i,j)
+            !write(100+nrank,'(2(i5,1x),7(e19.12,1x))') i, j, deli, half*this%dz, half*this%dz/(deli*this%alpfac+1.0d-18), -log(this%alpfac), this%lamfact(i,j)
         endif
       enddo
     enddo
