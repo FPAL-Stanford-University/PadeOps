@@ -16,9 +16,12 @@ module ibmgpmod
         class(decomp_info), pointer :: gpC, gpE
         !class(spectral), pointer :: spectC, spectE
 
-        integer :: num_surfelem
+        integer :: num_surfelem, num_gptsC, num_gptsE
         real(rkind), allocatable, dimension(:,:,:) :: surfelem
         real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal
+        real(rkind), allocatable, dimension(:,:)   :: gptsC_xyz, gptsE_xyz, gptsC_bpt, gptsE_bpt
+        integer,     allocatable, dimension(:,:)   :: gptsC_ind, gptsE_ind
+        integer,     allocatable, dimension(:)     :: gptsC_bpind, gptsE_bpind
 
         contains 
             !! ALL INIT PROCEDURES
@@ -209,12 +212,119 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
   call this%compute_levelset(xlinepart, ylinepart, zlinepart, zlinepartE, mapC, mapE, levelsetC, levelsetE)
 
 
-  call this%mark_ghost_points(gpC, nlayers, mapC, flagC);  this%num_ghostptsC = sum(flagC)
-  call this%mark_ghost_points(gpE, nlayers, mapE, flagE);  this%num_ghostptsE = sum(flagE)
+  call this%mark_ghost_points(gpC, nlayers, mapC, flagC);  this%num_gptsC = sum(flagC)
+  call this%mark_ghost_points(gpE, nlayers, mapE, flagE);  this%num_gptsE = sum(flagE)
 
+  allocate(this%gptsC_xyz(this%num_gptsC,3), this%gptsE_xyz(this%num_gptsE,3))
+  allocate(this%gptsC_ind(this%num_gptsC,3), this%gptsE_ind(this%num_gptsE,3))
+  allocate(this%gptsC_bpt(this%num_gptsC,3), this%gptsE_bpt(this%num_gptsE,3))
+  allocate(this%gptsC_bpind(this%num_gptsC), this%gptsE_bpind(this%num_gptsE))
 
+  call this%save_ghost_points(gpC, flagC, gptsC, gpE, flagE, gptsE)
+
+  call this%mark_boundary_points()
+
+  call this%compute_image_points()
 
   deallocate(flagE, flagC, mapC, mapE, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE)
+
+end subroutine
+
+subroutine compute_image_points(this)
+  class(ibmgp),     intent(inout) :: this
+  integer, dimension(:,:,:), intent(in)   :: flagC, flagE
+
+  integer :: ii
+
+  do ii = 1, this%num_gptsC
+      ! compute image of gptsC_xyz(ii,:) wrt gptsc_bpt(ii,:) and
+  enddo
+
+end subroutine
+
+subroutine mark_boundary_points(this)
+  class(ibmgp),     intent(inout) :: this
+  integer, dimension(:,:,:), intent(in)   :: flagC, flagE
+
+  integer :: ii
+  real(rkind), allocatable, dimension(:) :: distfn
+
+  allocate(distfn(this%num_surfelem))
+
+  do ii = 1, this%num_gptsC
+      ! find the distance between this ghost point and all surface centroids
+      distfn(:) = (this%gptsC_xyz(ii,1) - this%surfcent(:,1))**2 + &
+                  (this%gptsC_xyz(ii,2) - this%surfcent(:,2))**2 + &
+                  (this%gptsC_xyz(ii,3) - this%surfcent(:,3))**2 
+      imin = minloc(distfn)
+      this%gptsC_bpt(ii,1) = this%surfcent(imin,1)
+      this%gptsC_bpt(ii,2) = this%surfcent(imin,2)
+      this%gptsC_bpt(ii,3) = this%surfcent(imin,3)
+      this%gptsC_bpind(ii) = imin
+  enddo
+
+  do ii = 1, this%num_gptsE
+      ! find the distance between this ghost point and all surface centroids
+      distfn(:) = (this%gptsE_xyz(ii,1) - this%surfcent(:,1))**2 + &
+                  (this%gptsE_xyz(ii,2) - this%surfcent(:,2))**2 + &
+                  (this%gptsE_xyz(ii,3) - this%surfcent(:,3))**2 
+      imin = minloc(distfn)
+      this%gptsE_bpt(ii,1) = this%surfcent(imin,1)
+      this%gptsE_bpt(ii,2) = this%surfcent(imin,2)
+      this%gptsE_bpt(ii,3) = this%surfcent(imin,3)
+      this%gptsE_bpind(ii) = imin
+  enddo
+
+  deallocate(distfn)
+
+end subroutine
+
+subroutine save_ghost_points(this, flagC, flagE, xlinepart, ylinepart, zlinepart, zlinepartE)
+  class(ibmgp),     intent(inout) :: this
+  integer, dimension(:,:,:), intent(in)   :: flagC, flagE
+  real(rkind), dimension(:), intent(in) :: xlinepart, ylinepart, zlinepart, zlinepartE
+
+  integer :: i, j, k, ii
+
+  ii = 0
+  do k = 1, gpC%xsz(3)
+    do j = 1, gpC%xsz(2)
+      do i = 1, gpC%xsz(1)
+          if(flagC(i,j,k)==1) then
+             ii = ii+1
+             
+             this%gptsC_xyz(ii,1) = xlinepart(i)
+             this%gptsC_xyz(ii,2) = ylinepart(j)
+             this%gptsC_xyz(ii,3) = zlinepart(k)
+
+             this%gptsC_ind(ii,1) = i
+             this%gptsC_ind(ii,2) = j
+             this%gptsC_ind(ii,3) = k
+          endif
+      enddo
+    enddo
+  enddo
+
+  ii = 0
+  do k = 1, gpE%xsz(3)
+    do j = 1, gpE%xsz(2)
+      do i = 1, gpE%xsz(1)
+          if(flagE(i,j,k)==1) then
+             ii = ii+1
+             this%gptsE_xyz(ii,1) = xlinepart(i)
+             this%gptsE_xyz(ii,2) = ylinepart(j)
+             this%gptsE_xyz(ii,3) = zlinepartE(k)
+
+             this%gptsE_ind(ii,1) = i
+             this%gptsE_ind(ii,2) = j
+             this%gptsE_ind(ii,3) = k
+             
+          endif
+      enddo
+    enddo
+  enddo
+
+
 
 end subroutine
 
@@ -316,6 +426,8 @@ end subroutine
 subroutine destroy(this)
   class(ibmgp), intent(inout) :: this
 
+  deallocate(this%gptsC_xyz, this%gptsE_xyz)
+  deallocate(this%gptsC_ind, this%gptsE_ind)
   deallocate(this%surfnormal)
   deallocate(this%surfcent)
   deallocate(this%surfelem)
