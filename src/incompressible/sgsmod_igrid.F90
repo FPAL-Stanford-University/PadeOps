@@ -71,7 +71,8 @@ module sgsmod_igrid
         integer :: WM_matchingIndex
 
         ! for varying z0
-        real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, lamfact, mask_upstream, deli
+        real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar
+        real(rkind), dimension(:,:), allocatable :: lamfact, mask_upstream, deli, ustarsq_ratio_kaplnzfacs
         real(rkind) :: kaplnzfac_s, kaplnzfac_r, z0s, z0r, mask_normfac, ustar_upstream, alpfac, betfac
         logical :: is_z0_varying = .false., filter_for_heterog = .true.
 

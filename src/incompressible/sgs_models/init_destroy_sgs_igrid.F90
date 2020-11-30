@@ -276,14 +276,11 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
           do i = 1, this%gpC%xsz(1)
             if((xMesh(i) < (rpstart-excludedist)) .or. (xMesh(i) > (rpstart+spx+excludedist))) then
                 this%mask_upstream(i,j) = one
-            !else
-            !    this%mask_upstream(i,j) = zero
             endif
           enddo
         enddo
     endif
     this%mask_normfac = p_sum(sum(this%mask_upstream))
-    !print '(a,e19.12,1x,i5,1x,i5)', 'mask_normfac', this%mask_normfac, this%gpC%xsz(1), this%gpC%xsz(2)
 
     do j=1, this%gpC%xsz(2)
       this%deli(:,j) = deli(:)
@@ -306,7 +303,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     this%rbuffxC(:,:,4,1) = this%deli(:,:)
     write(tempname,"(A)") "z0var_setup.dat"
     fname = "./"//trim(tempname)
-    !print *, fname
     call decomp_2d_write_one(1, this%rbuffxC(:,:,:,1), fname, gpC)
     call message(1, "Done printing debug info about heterog ")
 
