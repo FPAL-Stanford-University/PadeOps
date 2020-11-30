@@ -175,7 +175,8 @@ module sgsmod_igrid
             procedure          :: usingDynProc
             procedure          :: set_BuoyancyFactor
             procedure          :: populate_tauij_E_to_C 
-            procedure          :: solve_nonlinprob 
+            procedure          :: solve_nonlinprob_1
+            procedure          :: solve_nonlinprob_2
     end type 
 
 contains

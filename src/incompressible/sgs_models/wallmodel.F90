@@ -184,7 +184,7 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
       ! using this%filteredSpeedSq in the upstream region, estimate ustar1
       call this%compute_ustar_upstreampart(ustar1)
-      ust1fac = ustar1/sqrt(this%kaplnzfac_s)
+      !ust1fac = ustar1/sqrt(this%kaplnzfac_s)
 
       dzby2 = half*this%dz 
       do j = 1, this%gpC%xsz(2)
@@ -192,30 +192,16 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
             if(this%deli(i,j) < epssmall) then
                 this%ustarsqvar(i,j) = this%kaplnzfac_s*this%filteredSpeedSq(i,j,1)
             elseif(this%deli(i,j) < dzby2) then
-                !ustar1loc = sqrt(this%kaplnzfac_s*this%filteredSpeedSq(i,j,1))
-                call this%solve_nonlinprob(i, j) !ustar1loc, this%ustarsqvar(i,j))
+                call this%solve_nonlinprob_1(i, j)
             else
               if(this%alpfac*this%deli(i,j) < dzby2) then
-                  call this%solve_nonlinprob(i, j) !this%filteredspeedsq(i,j,1), this%ustarsqvar(i,j))
+                  call this%solve_nonlinprob_2(i, j, ustar1)
               else
                   this%ustarsqvar(i,j) = this%kaplnzfac_r*this%filteredSpeedSq(i,j,1)
               endif
             endif
         enddo
       enddo
-      !!! replace the where by if-else
-      !!where(this%deli < epssmall)
-      !!    this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)
-      !!elsewhere(this%deli < dzby2)
-      !!    ustar1loc = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)
-      !!    call this%solve_nonlinprob_1(ustar1loc, this%ustarsqvar)
-      !!elsewhere
-      !!    where (this%dele < dzby2)
-      !!        call this%solve_nonlineprob_2(this%filteredspeedsq, this%ustarsqvar)
-      !!    elsewhere
-      !!        this%ustarsqvar = this%kaplnzfac_r*this%filteredSpeedSq(:,:,1)
-      !!    endwhere
-      !!endwhere
 
       ! tau_13
       this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uxvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
@@ -229,25 +215,17 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
 end subroutine
 
-subroutine solve_nonlinprob(this, i, j) !, ustar2)
+subroutine solve_nonlinprob_1(this, i, j) !, ustar2)
    class(sgs_igrid), intent(inout) :: this
    integer, intent(in) :: i, j
-   !real(rkind), intent(in)  :: ustar1
-   !real(rkind), intent(out) :: ustar2
 
    real(rkind) :: deli, dele, z01, z02, lnfdez02, lnfdiz01, tol, xvar, xvar_new
-   real(rkind) :: xdiff, term1, term2, termp, termq, termr, terms, Rfac, fx, ustar1_sq
-   real(rkind) :: epssmall = 1.0d-6
+   real(rkind) :: xdiff, term1, termPR, termr, terms, Rfac, ustar1_sq, onemxsq
    integer :: iter, max_iters
 
    deli = this%deli(i,j); z02 = this%z0r; z01 = this%z0s; dele = deli*this%alpfac
    lnfdez02 = log(dele/z02)/kappa
    lnfdiz01 = log(deli/z01)/kappa
-
-   !zbar = (half*this%dz - dele)/(deli-dele)
-   !ufix = sqrt(this%filteredSpeedSq(i,j))
-
-   !if(iprob==1) then
 
    max_iters = 1000; tol = 1.0d-8 
    xvar = zero; 
@@ -262,24 +240,15 @@ subroutine solve_nonlinprob(this, i, j) !, ustar2)
      if(xdiff < tol) exit
      xvar = xvar_new;
 
-     !fx = lnfdez02*xvar - lndiz01
-     if(xvar < epssmall) then
-        term2 = zero
-     else
-        term1 = -half*(one-xvar)*(one-xvar)*(deli-dele)/(this%betfac*kappa*(dele*xvar + deli))
-        termp = two*xvar/(one-xvar)
-        termq = xvar/(one-xvar); termq = termq*termq
-        termr = deli*(one+two*this%betfac) - xvar*dele*(one-two*this%betfac)
-        termr = half*termr/(this%betfac*(deli+xvar*dele))
-        terms = half*xvar*dele/(this%betfac*(deli+xvar*dele))
-        Rfac  = sqrt(termr*termr-four*terms)
-        term2 = -one + half*(termp-termr)*log(terms/(one+termr+terms))
-        term2 = term2 + (termq + half*termr*termr - half*termp*termr - terms)/Rfac
-        term2 = term2*term1
-     endif
-     !fx = fx - term2
-     
-     xvar_new = (term2 + lnfdiz01)/lnfdez02
+     onemxsq = (one-xvar)**2
+     termr = -(one + (deli - xvar*dele)/(four*this%betfac*(deli+xvar*dele)))
+     terms = half*xvar*dele/(this%betfac*(deli+xvar*dele))
+     Rfac  = sqrt(termr*termr-four*terms)
+     termPR = half*(one-xvar**2) + (deli - xvar*dele)/(four*this%betfac*(deli+xvar*dele))
+     term1 = -onemxsq + (xvar*xvar + termr*termPR - onemxsq*terms)/Rfac
+     term1 = term1 + termPR*log(terms/(one+termr+terms))
+
+     xvar_new = (term1 + lnfdiz01)/lnfdez02
    enddo
    if(xdiff > tol) then
      call message(1, "Did not converge", 0.0_rkind)
@@ -288,10 +257,58 @@ subroutine solve_nonlinprob(this, i, j) !, ustar2)
      call message(2, "xvar : ", xvar )
      call GracefulExit("Nonlinear solver in wall model did not converge. Check details.", 999)
    endif
-   !ustar1 = ufix*sqrt(this%kaplnzfac_s)
-   !ustar2loc = xvar * ustar1
    ustar1_sq = this%kaplnzfac_s*this%filteredSpeedSq(i,j,1)
    this%ustarsqvar(i,j) = xvar*xvar*ustar1_sq
+
+end subroutine
+
+subroutine solve_nonlinprob_2(this, i, j, ustar1)
+   class(sgs_igrid), intent(inout) :: this
+   integer, intent(in) :: i, j
+   real(rkind), intent(in)  :: ustar1
+
+   real(rkind) :: deli, dele, z01, z02, lnfdiz01, tol, xvar, xvar_new
+   real(rkind) :: xdiff, onemxsq, term1, termPR, termr, terms, Rfac
+   real(rkind) :: zbar, ufix
+   integer :: iter, max_iters
+
+   deli = this%deli(i,j); z02 = this%z0r; z01 = this%z0s; dele = deli*this%alpfac
+   lnfdiz01 = log(deli/z01)/kappa
+
+   zbar = (half*this%dz - dele)/(deli-dele)
+   ufix = sqrt(this%filteredSpeedSq(i,j,1))
+
+   max_iters = 1000; tol = 1.0d-8 
+   xvar = zero; 
+   ! Set initial guess based on the type of transition
+   if(z01 < z02) then
+       xvar_new = 1.1_rkind   ! S-R Transition
+   else
+       xvar_new = 0.9_rkind   ! R-S Transition
+   endif
+   do iter = 1, max_iters
+     xdiff = abs(one - xvar/xvar_new)
+     if(xdiff < tol) exit
+     xvar = xvar_new;
+
+     onemxsq = (one-xvar)**2
+     termr = -(one + (deli - xvar*dele)/(four*this%betfac*(deli+xvar*dele)))
+     terms = half*xvar*dele/(this%betfac*(deli+xvar*dele))
+     Rfac  = sqrt(termr*termr-four*terms)
+     termPR = half*(one-xvar**2) + (deli - xvar*dele)/(four*this%betfac*(deli+xvar*dele))
+     term1 = (zbar-one) * onemxsq + (xvar*xvar + termr*termPR - onemxsq*terms)/Rfac
+     term1 = term1 + termPR*log((zbar*zbar+zbar*termr+terms)/(one+termr+terms))
+
+     xvar_new = -half*(deli-dele)*term1/(this%betfac*kappa*dele*(ufix/ustar1 - lnfdiz01))
+   enddo
+   if(xdiff > tol) then
+     call message(1, "Did not converge", 0.0_rkind)
+     call message(2, "iter: ", iter  )
+     call message(2, "xdiff: ", xdiff)
+     call message(2, "xvar : ", xvar )
+     call GracefulExit("Nonlinear solver in wall model did not converge. Check details.", 999)
+   endif
+   this%ustarsqvar(i,j) = (xvar*ustar1)**2
 
 end subroutine
  
