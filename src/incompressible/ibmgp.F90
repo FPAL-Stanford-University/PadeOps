@@ -1,6 +1,6 @@
 module ibmgpmod
     use kind_parameters, only: rkind, clen
-    use constants      , only: zero, one, third, half
+    use constants      , only: zero, one, third, half, two
     use exits          , only: GracefulExit
     use reductions     , only: p_maxval, p_minval
     use kdtree_wrapper , only: initialize_kdtree_ib, create_kdtree_ib, probe_nearest_points_kdtree_ib, finalize_kdtree_ib
@@ -20,8 +20,12 @@ module ibmgpmod
         real(rkind), allocatable, dimension(:,:,:) :: surfelem
         real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal
         real(rkind), allocatable, dimension(:,:)   :: gptsC_xyz, gptsE_xyz, gptsC_bpt, gptsE_bpt
+        real(rkind), allocatable, dimension(:,:)   :: gptsC_img, gptsE_img, gptsC_bnp, gptsE_bnp
         integer,     allocatable, dimension(:,:)   :: gptsC_ind, gptsE_ind
-        integer,     allocatable, dimension(:)     :: gptsC_bpind, gptsE_bpind
+        integer,     allocatable, dimension(:)     :: gptsC_bpind, gptsE_bpind, gptsC_ileft, gptsC_jleft, gptsC_kleft
+        integer,     allocatable, dimension(:)     :: gptsE_ileft, gptsE_jleft, gptsE_kleft
+        real(rkind), allocatable, dimension(:)     :: gptsC_ifacx, gptsC_jfacy, gptsC_kfacz
+        real(rkind), allocatable, dimension(:)     :: gptsE_ifacx, gptsE_jfacy, gptsE_kfacz
 
         contains 
             !! ALL INIT PROCEDURES
@@ -29,6 +33,14 @@ module ibmgpmod
             procedure          :: destroy
             procedure, private :: compute_levelset
             procedure, private :: mark_ghost_points
+            procedure, private :: save_ghost_points
+            procedure, private :: setup_interpolation
+            procedure, private :: mark_boundary_points
+            procedure, private :: compute_image_points
+            procedure, private :: interp_imptsC
+            procedure, private :: interp_imptsE
+            procedure, private :: update_gptsC
+            procedure, private :: update_gptsE
     end type 
 
 contains
@@ -42,7 +54,7 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
 
   character(len=clen)    :: surfaceMeshFile, fname, dumstr
   integer :: io, ii, jj, k, ioUnit, nlines, nlayers = 2
-  real(rkind) :: rnum1, rnum2, rnum3, Lscale = one, invLscale, dotprod
+  real(rkind) :: rnum1, rnum2, rnum3, Lscale = one, invLscale, dotprod, dx, dy
   real(rkind) :: translate_x = zero, translate_y = zero, translate_z = zero
   real(rkind) :: xmax_ib, xmin_ib, ymax_ib, ymin_ib, zmax_ib, zmin_ib, xkmag
   real(rkind) :: solidpt_x = zero, solidpt_y = zero, solidpt_z = zero
@@ -219,34 +231,127 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
   allocate(this%gptsC_ind(this%num_gptsC,3), this%gptsE_ind(this%num_gptsE,3))
   allocate(this%gptsC_bpt(this%num_gptsC,3), this%gptsE_bpt(this%num_gptsE,3))
   allocate(this%gptsC_bpind(this%num_gptsC), this%gptsE_bpind(this%num_gptsE))
+  allocate(this%gptsC_ileft(this%num_gptsC), this%gptsE_ileft(this%num_gptsE))
+  allocate(this%gptsC_jleft(this%num_gptsC), this%gptsE_jleft(this%num_gptsE))
+  allocate(this%gptsC_kleft(this%num_gptsC), this%gptsE_kleft(this%num_gptsE))
+  allocate(this%gptsC_ifacx(this%num_gptsC), this%gptsE_ifacx(this%num_gptsE))
+  allocate(this%gptsC_jfacy(this%num_gptsC), this%gptsE_jfacy(this%num_gptsE))
+  allocate(this%gptsC_kfacz(this%num_gptsC), this%gptsE_kfacz(this%num_gptsE))
 
-  call this%save_ghost_points(gpC, flagC, gptsC, gpE, flagE, gptsE)
+  call this%save_ghost_points(flagC, flagE, xlinepart, ylinepart, zlinepart, zlinepartE)
 
   call this%mark_boundary_points()
 
   call this%compute_image_points()
 
+  dx = xlinepart(2)-xlinepart(1); dy = ylinepart(2)-ylinepart(1)
+  call this%setup_interpolation(dx,dy,dz, zBot)
+
   deallocate(flagE, flagC, mapC, mapE, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE)
+
+end subroutine
+
+subroutine update_ghost_points(this)
+  class(ibmgp),     intent(inout) :: this
+
+  integer :: ii, itmp
+
+  call this%interp_imptsC()
+  call this%interp_imptsE()
+
+  call this%update_gptsC()
+  call this%update_gptsE()
+
+end subroutine
+
+subroutine update_gptsC(this)
+  class(ibmgp),     intent(inout) :: this
+
+end subroutine
+
+subroutine update_gptsE(this)
+  class(ibmgp),     intent(inout) :: this
+
+end subroutine
+
+subroutine interp_imptsE(this)
+  class(ibmgp),     intent(inout) :: this
+
+end subroutine
+
+subroutine interp_imptsC(this)
+  class(ibmgp),     intent(inout) :: this
+
+end subroutine
+
+subroutine setup_interpolation(this, dx, dy, dz, zBot)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind),      intent(in)    :: dx, dy, dz, zBot
+
+  integer :: ii, itmp
+
+  do ii = 1, this%num_gptsC
+      itmp = floor(this%gptsC_img(ii,1)/dx);        
+      this%gptsC_ileft(ii) = max(1, min(itmp+1, this%gpC%xsz(1)-1))
+      this%gptsC_ifacx(ii) = (this%gptsC_img(ii,1)-real(itmp, rkind)*dx)/dx
+
+      itmp = floor(this%gptsC_img(ii,2)/dy);
+      this%gptsC_jleft(ii) = max(1, min(itmp+1, this%gpC%ysz(2)-1))
+      this%gptsC_jfacy(ii) = (this%gptsC_img(ii,2)-real(itmp, rkind)*dy)/dy
+
+      itmp = floor((this%gptsC_img(ii,3)-zBot)/dz);
+      this%gptsC_kleft(ii) = max(1, min(itmp+1, this%gpC%zsz(3)-1))
+      this%gptsC_kfacz(ii) = (this%gptsC_img(ii,3)-real(itmp, rkind)*dz - zBot)/dz
+  enddo
+
+  do ii = 1, this%num_gptsE
+      itmp = floor(this%gptsE_img(ii,1)/dx);
+      this%gptsE_ileft(ii) = max(1, min(itmp+1, this%gpE%xsz(1)-1))
+      this%gptsE_ifacx(ii) = (this%gptsE_img(ii,1)-real(itmp, rkind)*dx)/dx
+
+      itmp = floor(this%gptsE_img(ii,2)/dy);
+      this%gptsE_jleft(ii) = max(1, min(itmp+1, this%gpE%ysz(2)-1))
+      this%gptsE_jfacy(ii) = (this%gptsE_img(ii,2)-real(itmp, rkind)*dy)/dy
+
+      itmp = floor((this%gptsE_img(ii,3)-zBot)/dz);
+      this%gptsE_kleft(ii) = max(1, min(itmp+1, this%gpE%zsz(3)-1))
+      this%gptsE_kfacz(ii) = (this%gptsE_img(ii,3)-real(itmp, rkind)*dz - zBot)/dz
+  enddo
 
 end subroutine
 
 subroutine compute_image_points(this)
   class(ibmgp),     intent(inout) :: this
-  integer, dimension(:,:,:), intent(in)   :: flagC, flagE
 
-  integer :: ii
+  integer :: ii, jj
+  real(rkind) :: vec1(3), vec2(3), dotpr
 
   do ii = 1, this%num_gptsC
       ! compute image of gptsC_xyz(ii,:) wrt gptsc_bpt(ii,:) and
+      vec1(:) = this%gptsC_bpt(ii,:) - this%gptsC_xyz(ii,:)
+      jj = this%gptsC_bpind(ii)
+      vec2(:) = this%surfnormal(jj,:)
+      dotpr = sum(vec1*vec2)
+      this%gptsC_img(ii,:) = this%gptsC_xyz(ii,:) + two*dotpr*vec2
+      this%gptsC_bnp(ii,:) = this%gptsC_xyz(ii,:) + dotpr*vec2
+  enddo
+
+  do ii = 1, this%num_gptsE
+      ! compute image of gptsC_xyz(ii,:) wrt gptsc_bpt(ii,:) and
+      vec1(:) = this%gptsE_bpt(ii,:) - this%gptsE_xyz(ii,:)
+      jj = this%gptsE_bpind(ii)
+      vec2(:) = this%surfnormal(jj,:)
+      dotpr = sum(vec1*vec2)
+      this%gptsE_img(ii,:) = this%gptsE_xyz(ii,:) + two*dotpr*vec2
+      this%gptsE_bnp(ii,:) = this%gptsE_xyz(ii,:) + dotpr*vec2
   enddo
 
 end subroutine
 
 subroutine mark_boundary_points(this)
   class(ibmgp),     intent(inout) :: this
-  integer, dimension(:,:,:), intent(in)   :: flagC, flagE
 
-  integer :: ii
+  integer :: ii, imin
   real(rkind), allocatable, dimension(:) :: distfn
 
   allocate(distfn(this%num_surfelem))
@@ -256,7 +361,7 @@ subroutine mark_boundary_points(this)
       distfn(:) = (this%gptsC_xyz(ii,1) - this%surfcent(:,1))**2 + &
                   (this%gptsC_xyz(ii,2) - this%surfcent(:,2))**2 + &
                   (this%gptsC_xyz(ii,3) - this%surfcent(:,3))**2 
-      imin = minloc(distfn)
+      imin = minloc(distfn,1)
       this%gptsC_bpt(ii,1) = this%surfcent(imin,1)
       this%gptsC_bpt(ii,2) = this%surfcent(imin,2)
       this%gptsC_bpt(ii,3) = this%surfcent(imin,3)
@@ -268,7 +373,7 @@ subroutine mark_boundary_points(this)
       distfn(:) = (this%gptsE_xyz(ii,1) - this%surfcent(:,1))**2 + &
                   (this%gptsE_xyz(ii,2) - this%surfcent(:,2))**2 + &
                   (this%gptsE_xyz(ii,3) - this%surfcent(:,3))**2 
-      imin = minloc(distfn)
+      imin = minloc(distfn,1)
       this%gptsE_bpt(ii,1) = this%surfcent(imin,1)
       this%gptsE_bpt(ii,2) = this%surfcent(imin,2)
       this%gptsE_bpt(ii,3) = this%surfcent(imin,3)
@@ -287,9 +392,9 @@ subroutine save_ghost_points(this, flagC, flagE, xlinepart, ylinepart, zlinepart
   integer :: i, j, k, ii
 
   ii = 0
-  do k = 1, gpC%xsz(3)
-    do j = 1, gpC%xsz(2)
-      do i = 1, gpC%xsz(1)
+  do k = 1, this%gpC%xsz(3)
+    do j = 1, this%gpC%xsz(2)
+      do i = 1, this%gpC%xsz(1)
           if(flagC(i,j,k)==1) then
              ii = ii+1
              
@@ -306,9 +411,9 @@ subroutine save_ghost_points(this, flagC, flagE, xlinepart, ylinepart, zlinepart
   enddo
 
   ii = 0
-  do k = 1, gpE%xsz(3)
-    do j = 1, gpE%xsz(2)
-      do i = 1, gpE%xsz(1)
+  do k = 1, this%gpE%xsz(3)
+    do j = 1, this%gpE%xsz(2)
+      do i = 1, this%gpE%xsz(1)
           if(flagE(i,j,k)==1) then
              ii = ii+1
              this%gptsE_xyz(ii,1) = xlinepart(i)
@@ -426,6 +531,14 @@ end subroutine
 subroutine destroy(this)
   class(ibmgp), intent(inout) :: this
 
+  deallocate(this%gptsC_ifacx, this%gptsE_ifacx)
+  deallocate(this%gptsC_jfacy, this%gptsE_jfacy)
+  deallocate(this%gptsC_kfacz, this%gptsE_kfacz)
+  deallocate(this%gptsC_ileft, this%gptsE_ileft)
+  deallocate(this%gptsC_jleft, this%gptsE_jleft)
+  deallocate(this%gptsC_kleft, this%gptsE_kleft)
+  deallocate(this%gptsC_bnp, this%gptsE_bnp)
+  deallocate(this%gptsC_img, this%gptsE_img)
   deallocate(this%gptsC_xyz, this%gptsE_xyz)
   deallocate(this%gptsC_ind, this%gptsE_ind)
   deallocate(this%surfnormal)
