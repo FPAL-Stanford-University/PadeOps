@@ -532,6 +532,7 @@ subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)
 end subroutine  
 
 subroutine getSurfaceQuantities(this)
+    use exits, only: GracefulExit
     class(sgs_igrid), intent(inout) :: this
     integer :: idx
     integer, parameter :: itermax = 100 
@@ -587,10 +588,11 @@ subroutine getSurfaceQuantities(this)
           a=log(hwm/this%z0); b=beta_h*hwm; c=beta_m*hwm
           PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
           at=log(hwm/this%z0t)
-   
+
           ! Inside the do loop all the used variables are on the stored on the stack
           ! After the while loop these variables are copied to their counterparts
           ! on the heap (variables part of the derived type)
+          u = 5.622128747401139d0/10.0d0; wTh = 0.024d0;
           do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
               ustarNew = u*kappa/(a - PsiM)
               Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
@@ -604,11 +606,22 @@ subroutine getSurfaceQuantities(this)
                 PsiH = two*log(half*(one+xisq));
               endif
               ustarDiff = abs((ustarNew - ustar)/ustarNew)
+              if(nrank==0) then
+                  print *, '----------------------Iter = ', idx, '-------'
+                  print '(a,3(e19.12,1x))', '(u, kap, wth)    = ',  u, kappa, wth
+                  print '(a,3(e19.12,1x))', '(PsiM, Linv, L)  = ',  PsiM, Linv, one/Linv
+                  print '(a,3(e19.12,1x))', '(Fr, ThetR)      = ',  this%Fr, this%ThetaRef
+                  print '(a,3(e19.12,1x))', '(a, b, c       ) = ',  a, b, c
+                  print '(a,3(e19.12,1x))', '(xisq, PsiH, xi) = ',  xisq, PsiH, xi
+                  print '(a,2(e19.12,1x))', '(ustar, ustardf) = ',  ustar, ustardiff
+                  print *, '-----------------Done Iter = ', idx, '-------'
+              endif
               ustar = ustarNew; idx = idx + 1
           end do 
           this%ustar = ustar; this%invObLength = Linv; 
           this%Tsurf = this%Tmn + wTh*(at-PsiH)/(ustar*kappa)
           this%PsiM = PsiM
+          call GracefulExit("Stopping code", 11)
       end select
     else
       if(this%is_z0_varying) then
