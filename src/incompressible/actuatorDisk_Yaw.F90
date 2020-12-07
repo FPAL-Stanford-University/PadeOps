@@ -170,7 +170,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
     integer :: i,j,k
      
     if (this%memory_buffers_linked) then
-        ! Normal vector
+        ! Normal vector: gamma = yaw misalignment, theta = tilt angle
         ! Adjust the yaw misalignment angle as per the convention of
         ! Howland et al. 2019 and Shapiro et al. 2019
         gamma = -gamma_negative
