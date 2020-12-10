@@ -45,7 +45,8 @@ module turbineMod
  
         real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
         complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat, zbuffC, zbuffE
-        real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1, meanWs, meanPbaseline, stdP
+        real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1, meanWs
+        real(rkind), dimension(:), allocatable :: meanPbaseline, stdP
         real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, hubDirection
         integer :: n_moving_average, timeStep, updateCounter 
         real(rkind), dimension(:,:), allocatable :: powerUpdate
@@ -518,7 +519,11 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                       this%gamma = this%windAngle*pi/180.d0
                    end if
                    ! Get RHS
-                   call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType)
+                   if (this%useDynamicYaw) then
+                       call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType, this%dyaw%ref_turbine)
+                   else
+                       call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType, .true.)
+                   end if
                    ! Proceed with dynamic yaw operations
                    if (this%useDynamicYaw) then
                        if (this%step==1) then
@@ -530,7 +535,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                        end if
                        this%powerUpdate(this%timeStep, i) = & 
                                          this%turbArrayADM_Tyaw(i)%get_power()
-                       if (this%timeStep >= this%advectionTime) then
+                       if (this%timeStep > this%advectionTime) then
                            call this%dyaw%simpleMovingAverage(this%meanP(i), &
                                 this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
                                 this%turbArrayADM_Tyaw(i)%ut, &
@@ -549,12 +554,14 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                        if (this%dirType==1 .or. this%updateCounter==1) then
                            angleIn = this%gamma - this%windAngle*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
-                                                     this%windAngle, this%meanP, this%step, this%meanPbaseline)
+                                                     this%windAngle, this%meanP, this%step, & 
+                                                     this%meanPbaseline, this%stdP)
                            this%gamma = angleIn
                        else
                            angleIn = this%gamma - this%hubDirection*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
-                                                     this%hubDirection(1), this%meanP, this%step, this%meanPbaseline)
+                                                     this%hubDirection(1), this%meanP, this%step, & 
+                                                     this%meanPbaseline, this%stdP)
                            if (this%lookup==.false.) then
                                this%gamma = angleIn
                            else
@@ -585,7 +592,9 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                 tempname, this%powerUpdate(:,i), this%dyaw%Phat, & 
                                 this%gamma, this%gamma_nm1, this%meanP, &
                                 this%dyaw%kw, this%dyaw%sigma_0, &
-                                this%dyaw%Phat_yaw, this%updateCounter, this%meanPbaseline, this%hubDirection, this%dyaw%Popti, this%stdP)
+                                this%dyaw%Phat_yaw, this%updateCounter, &
+                                this%meanPbaseline, this%hubDirection, & 
+                                this%dyaw%Popti, this%stdP, i)
                        end do
                        this%timeStep = 0
                        this%updateCounter=this%updateCounter+1

@@ -119,10 +119,11 @@ subroutine destroy(this)
     nullify(this%xG, this%yG, this%zG)
 end subroutine 
 
-subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta, wind_dir, dirType)
+subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta, wind_dir, dirType, ref_turbine)
     class(actuatordisk_yaw), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
+    logical, intent(in) :: ref_turbine
     real(rkind), intent(in) :: gamma_negative, theta, wind_dir
     real(rkind) :: usp_sq, force, gamma, gamma_local
     real(rkind), dimension(3,3) :: R, T
@@ -134,26 +135,28 @@ subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc) :: ug, vg, wg
     integer, intent(in) :: dirType
 
-    ! First run the model with no yaw misalignment to get the baseline power
-    ! production 
     ug = u; vg = v; wg = w; rhsxvalsg = rhsxvals; rhsyvalsg = rhsyvals; rhszvalsg = rhszvals;
     if (dirType==1) then
         gamma_local = wind_dir * pi / 180.d0
     elseif (dirType==2) then
         gamma_local = this%hubDirection * pi / 180.d0
     endif
-    !gamma_local = 0.d0 * wind_dir * pi / 180.d0
-    !write(*,*) 'aligned'
-    call this%get_RHS(ug, vg, wg, rhsxvalsg, rhsyvalsg, rhszvalsg, gamma_local, theta*0.d0) 
-    this%powerBaseline = this%get_power()
-    ! Now run the model with the appropriate yaw misalignment to return the
-    ! correct values
-    !write(*,*) this%get_power()
-    !write(*,*) gamma_local
-    !write(*,*) 'zero'
-    call this%get_RHS(u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta) 
-    !write(*,*) this%get_power()
-    !write(*,*) gamma_negative
+
+    ! Compute the actuator disk forcing and power
+    if (ref_turbine == .true.) then
+        ! Use reference turbine adjacent to the leading turbine as the power
+        ! reference
+        call this%get_RHS(u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta)
+        this%powerBaseline = this%get_power() 
+    else
+        ! Use a ghost turbine with zero yaw as the reference turbine
+        ! Ghost turbine with zero yaw/tilt
+        call this%get_RHS(ug, vg, wg, rhsxvalsg, rhsyvalsg, rhszvalsg, gamma_local, theta*0.d0) 
+        this%powerBaseline = this%get_power()
+        ! Now run the model with the appropriate yaw misalignment to return the
+        ! correct values
+        call this%get_RHS(u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta) 
+    end if
 
 end subroutine
 
@@ -226,10 +229,6 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         this%rbuff = this%blanks*this%speed
         this%ut = p_sum(this%rbuff)/numPoints    
         this%hubDirection = atan2(p_sum(this%blanks*v), p_sum(this%blanks*u)) * 180.d0 / pi
-        !write(*,*) 'uvw'
-        !write(*,*) p_sum(this%blanks*u)/numPoints
-        !write(*,*) p_sum(this%blanks*v)/numPoints
-        !write(*,*) p_sum(this%blanks*w)/numPoints
         ! Mean speed at the turbine
         usp_sq = (this%ut)**2
         force = -0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
@@ -239,7 +238,6 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         rhsxvals = rhsxvals + Ft(1,1) * this%scalarSource 
         rhsyvals = rhsyvals + Ft(2,1) * this%scalarSource
         rhszvals = rhszvals + Ft(3,1) * this%scalarSource 
-        !call this%get_power()
 
     end if 
 
@@ -347,22 +345,22 @@ end subroutine
 subroutine dumpPowerUpdate(this, outputfile, tempname, & 
                            powerUpdate, Phat, yaw, yawOld, & 
                            meanP, kw, sigma, phat_yaw, i, pBaseline, &
-                           hubDirection, Popti, stdP)
+                           hubDirection, Popti, stdP, turbNum)
     class(actuatordisk_yaw), intent(inout) :: this
     character(len=*),    intent(in)            :: outputfile, tempname
     integer :: fid = 1234
-    integer, intent(in) :: i
+    integer, intent(in) :: i, turbNum
     character(len=clen) :: fname, tempname2
     real(rkind), dimension(:), intent(in) :: powerUpdate, Phat, yaw, yawOld, meanP
     real(rkind), dimension(:), intent(in) :: kw, sigma, phat_yaw, pBaseline, hubDirection
     real(rkind), dimension(:), intent(in) :: Popti, stdP
 
     ! Write power
-    !fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname)
-    !open(fid,file=trim(fname), form='unformatted',action='write',position='append')
-    !open(fid,file=trim(fname), form='formatted')
-    !write(fid, *) powerUpdate
-    !close(fid)
+    write(tempname2,"(A5,I3.3,A6,I3.3,A4)") "Pvec_",i,"_turb_",turbNum,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/Pt/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) powerUpdate
+    close(fid)
     ! Write Phat
     write(tempname2,"(A5,I3.3,A4)") "Phat_",i,".txt"
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
@@ -423,6 +421,12 @@ subroutine dumpPowerUpdate(this, outputfile, tempname, &
     open(fid,file=trim(fname), form='formatted')
     write(fid, *) Popti
     close(fid)
+    ! Write full power vector to file
+    !write(tempname2,"(A5,I3.3,A4)") "Pvec_",i,".txt"
+    !fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    !open(fid,file=trim(fname), form='formatted')
+    !write(fid, *) powerUpdate
+    !close(fid)
 
 end subroutine    
 
