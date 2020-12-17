@@ -36,7 +36,7 @@ program diurnal
     call tic() 
     do while (igp%tsim < igp%tstop) 
 
-       call get_diurnalBCs(igp%tsim, igp%G_geostrophic, igp%wTh_surf)
+       call get_diurnalBCs(igp%tsim, igp%G_geostrophic, igp%wTh_surf, igp%G_alpha)
        call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
        

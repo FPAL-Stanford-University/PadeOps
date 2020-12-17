@@ -22,21 +22,23 @@ module diurnalBCsmod
     use basic_io, only: read_2d_ascii 
     use interpolation, only: spline, ispline, binarysearch 
     real(rkind), dimension(:), allocatable :: t_geo, G_geo, t_flux, wT_flux, a_geo, b_geo, c_geo, a_flux, b_flux, c_flux
+    real(rkind), dimension(:), allocatable :: t_galpha, G_alpha, a_galpha, b_galpha, c_galpha
     real(rkind) :: G_tolerance = 0.1d0
 contains
 
     subroutine setup_diurnalBCs(inputfile)
         character(len=*),                intent(in)    :: inputfile
         real(rkind), dimension(:,:), allocatable :: data2read
-        character(len=clen) :: fname_G, fname_wtheta
+        character(len=clen) :: fname_G, fname_wtheta, fname_galpha
         integer :: ioUnit
-        namelist /DIURNAL_BCS/ fname_G, fname_wtheta, G_tolerance
+        namelist /DIURNAL_BCS/ fname_G, fname_wtheta, fname_galpha, G_tolerance
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=DIURNAL_BCS)
         close(ioUnit)    
 
+        ! Geostrophic wind speed
         call read_2d_ascii(data2read, fname_G)
         allocate(t_geo(size(data2read,1)))
         allocate(G_geo(size(data2read,1)))
@@ -48,6 +50,7 @@ contains
         call spline(t_geo, G_geo, a_geo, b_geo, c_geo, size(t_geo))
         deallocate(data2read)
 
+        ! Surface sensible heat flux <w'theta'>
         call read_2d_ascii(data2read, fname_wtheta)
         allocate(t_flux(size(data2read,1)))
         allocate(wT_flux(size(data2read,1)))
@@ -57,6 +60,20 @@ contains
         t_flux = data2read(:,1) * 60.d0*60.d0/1000.d0
         wT_flux = data2read(:,2)
         call spline(t_flux, wT_flux, a_flux, b_flux, c_flux, size(t_flux))
+        deallocate(data2read)
+
+        ! Geostrophic wind direction in computational domain g_alpha 
+        ! NOTE: This is different from the frameAngle variable which describes
+        ! the geostrophic wind direction in cardinal directions
+        call read_2d_ascii(data2read, fname_galpha)
+        allocate(t_galpha(size(data2read,1)))
+        allocate(G_alpha(size(data2read,1)))
+        allocate(a_galpha(size(data2read,1)))
+        allocate(b_galpha(size(data2read,1)))
+        allocate(c_galpha(size(data2read,1)))
+        t_galpha = data2read(:,1) * 60.d0*60.d0/1000.d0
+        G_alpha = data2read(:,2)
+        call spline(t_galpha, G_alpha, a_galpha, b_galpha, c_galpha, size(t_galpha))
         deallocate(data2read)
 
 
@@ -85,9 +102,9 @@ contains
         end if 
     end subroutine     
     
-    subroutine get_diurnalBCs(time, G, wTheta)
+    subroutine get_diurnalBCs(time, G, wTheta, Gangle)
         real(rkind), intent(in) :: time
-        real(rkind), intent(out) :: G, wTheta
+        real(rkind), intent(out) :: G, wTheta, Gangle
 
         ! Convert units for time? 
         ! This assumes that the input files' time vector is appropriately
@@ -104,6 +121,7 @@ contains
         ! Linear inteprolation
         call linear_interp(size(t_geo,1),t_geo,G_geo,time,G)
         call linear_interp(size(t_flux,1),t_flux,wT_flux,time,wTheta)
+        call linear_interp(size(t_galpha,1),t_galpha,G_alpha,time,Gangle)
 
     end subroutine 
 
@@ -253,11 +271,11 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     implicit none
     real(rkind), intent(inout) :: wTh_surf
     character(len=*),                intent(in)    :: inputfile
-    real(rkind) :: tmp, time
+    real(rkind) :: tmp, tmp2, time
 
     time = wTh_surf ! temporary workaround
 
-    call get_diurnalBCs(time, tmp, wTh_surf)  ! << will be an issue for restarts
+    call get_diurnalBCs(time, tmp, wTh_surf, tmp2)  ! << will be an issue for restarts
 
 end subroutine
 

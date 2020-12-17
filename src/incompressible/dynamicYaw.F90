@@ -71,6 +71,7 @@ module dynamicYawMod
         procedure, private :: EnKF_update
         procedure, private :: observeField
         procedure, private :: rotate
+        procedure, private :: rotate_local
         procedure, private :: yawOptimize 
         procedure, private :: yawOptimize_uncertain 
         procedure, private :: onlineUpdate 
@@ -226,11 +227,11 @@ subroutine destroy(this)
 
 end subroutine 
 
-subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation, ts, powerBaseline, Pstd)
+subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation, ts, powerBaseline, Pstd, dirStd)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:), intent(inout) :: yaw
     real(rkind), dimension(:), intent(in) :: powerObservation, powerBaseline, Pstd
-    real(rkind), intent(in) :: wind_speed, wind_direction
+    real(rkind), intent(in) :: wind_speed, wind_direction, dirStd
     integer, intent(in) :: ts
 
     ! Field data observation
@@ -252,6 +253,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     end if
     this%powerBaseline = powerBaseline ! Get the power production from ADM code
     this%ts = ts
+    this%dir_std = dirStd
 
     ! Use initial fit parameters
     if (this%check==.false.) then
@@ -374,7 +376,7 @@ subroutine onlineUpdate(this)
                 end do
             end do
             bestStep = 1; 
-            kwBest_u(:,pint) = kw(this%unsort); sigmaBest_u(:,pint) = sigma_0(this%unsort);
+            kwBest_u(:,pint) = kw; sigmaBest_u(:,pint) = sigma_0;
             do t=1, this%stateEstimationEpochs;
                 ! Ensemble Kalman update
                 call this%EnKF_update( psi_kp1, this%powerObservation+this%Pstd*this%p_steps(pint), kw, sigma_0, yaw, t)
@@ -385,21 +387,19 @@ subroutine onlineUpdate(this)
                 error(t) = sum(abs(Phat-this%powerObservation-this%Pstd*this%p_steps(pint))) / real(this%Nt,rkind)
                 if (error(t)<lowestError) then
                     lowestError=error(t); bestStep = t;
-                    kwBest_u(:,pint) = kw(this%unsort); sigmaBest_u(:,pint) = sigma_0(this%unsort)
+                    kwBest_u(:,pint) = kw; sigmaBest_u(:,pint) = sigma_0
                     this%Phat_fit_u(:,pint) = Phat;
                 end if
             end do
         end do
         ! Generate optimal yaw angles
-        this%kw_u = kwBest_u; this%sigma_u = sigmaBest_u;
-        this%kw = kwBest_u(:,(this%p_bins+1)/2); this%sigma_0 = sigmaBest_u(:,(this%p_bins+1)/2) 
-
         call this%yawOptimize_uncertain(kwBest_u, sigmaBest_u, yaw)
         ! Terms are already unsorted in the uncertain case due to local array
         ! rotations (wind direction uncertainty)
-        this%kw_u = kwBest_u; this%sigma_u = sigmaBest_u
-        this%yaw = yaw 
-        this%Phat = this%Phat; this%Phat_yaw = this%Phat_yaw
+        this%kw_u = kwBest_u(this%unsort,:); this%sigma_u = sigmaBest_u(this%unsort,:)
+        this%yaw = yaw(this%unsort)
+        this%Phat = this%Phat(this%unsort); this%Phat_yaw = this%Phat_yaw(this%unsort)
+        this%kw = kwBest_u(this%unsort,(this%p_bins+1)/2); this%sigma_0 = sigmaBest_u(this%unsort,(this%p_bins+1)/2) 
         ! Deallocate
         deallocate(kwBest_u)
         deallocate(sigmaBest_u)
@@ -506,7 +506,7 @@ subroutine yawOptimize_uncertain(this, kw_u, sigma_u, yaw)
     real(rkind), dimension(this%Nt) :: m, v, yaw_orig, kw, sigma_0
     real(rkind), dimension(this%epochsYaw) :: Ptot
     real(rkind) :: Ptot_baseline, bestPower, dir_orig, ws_orig
-    real(rkind), dimension(this%Nt,2) :: layout_orig
+    real(rkind), dimension(this%Nt,2) :: layout_orig, turbCenter
     integer :: k, pint, i, j, mi
     logical :: check
     real(rkind), dimension(this%epochsYaw, this%Nt) :: P_time, yawTime
@@ -515,6 +515,7 @@ subroutine yawOptimize_uncertain(this, kw_u, sigma_u, yaw)
     real(rkind), dimension(this%dir_bins) :: dir_bin, rho_dir
     real(rkind), dimension(this%gamma_bins) :: gamma_bin, rho_gamma
     real(rkind), dimension(this%p_bins) :: rho_params
+    integer, dimension(this%Nt) :: indSorted, unsort
 
 
     ! Store original information
@@ -523,6 +524,7 @@ subroutine yawOptimize_uncertain(this, kw_u, sigma_u, yaw)
     ws_orig = this%wind_speed
     yaw_orig = yaw
     Ptotal = 0.d0; Ptotaly = 0.d0
+    indSorted = this%indSorted; unsort = this%unsort; turbCenter = layout_orig
 
     ! Define the wind condition ranges
     if (this%ws_bins>1) then
@@ -552,25 +554,22 @@ subroutine yawOptimize_uncertain(this, kw_u, sigma_u, yaw)
     do pint = 1, this%p_bins
         do j = 1, this%dir_bins
             ! Rotate the turbine array
-            this%turbCenter = layout_orig
-            this%wind_direction = 270.d0 - dir_bin(j) ! Get this from the wind direction PDF
-            call this%rotate()
+            turbCenter = layout_orig
+            call this%rotate_local(dir_bin(j), turbCenter, indSorted, unsort)
+            this%turbCenter = turbCenter
             do i = 1, this%ws_bins
                 this%wind_speed = ws_orig + ws_bin(i)
                 do mi = 1, this%gamma_bins
-                    yaw = yaw_orig
+                    yaw = yaw_orig(indSorted)
                     yaw(1) = yaw(1) + gamma_bin(mi)
                     ! Run forward pass
-                    kw = kw_u(:,pint); sigma_0 = sigma_u(:,pint);
-                    call this%forward(kw(this%indSorted), sigma_0(this%indSorted), P, yaw*0.d0)
+                    call this%forward(kw_u(indSorted,pint), sigma_u(indSorted,pint), P, yaw*0.d0)
                     Ptot_baseline = sum(P); P_baseline = P; this%Phat = P_baseline;
-                    call this%forward(kw_u(this%indSorted,pint), sigma_u(this%indSorted,pint), this%Phat_yaw, yaw)
-                    this%Phat_yaw = this%Phat_yaw / this%Phat(1)
-                    this%Phat = this%Phat / this%Phat(1)
+                    call this%forward(kw_u(indSorted,pint), sigma_u(indSorted,pint), this%Phat_yaw, yaw)
                     ! Update total power
-                    Ptotaly = Ptotaly + this%Phat_yaw(this%unsort) * rho_ws(i) * rho_dir(j) * & 
+                    Ptotaly = Ptotaly + this%Phat_yaw(unsort)/this%Phat(1) * rho_ws(i) * rho_dir(j) * & 
                              rho_params(pint) * rho_gamma(mi);
-                    Ptotal = Ptotal + this%Phat(this%unsort) * rho_ws(i) * rho_dir(j) * & 
+                    Ptotal = Ptotal + this%Phat(unsort)/this%Phat(1) * rho_ws(i) * rho_dir(j) * & 
                              rho_params(pint) * rho_gamma(mi);
                 end do
             end do
@@ -596,26 +595,26 @@ subroutine yawOptimize_uncertain(this, kw_u, sigma_u, yaw)
         do pint = 1, this%p_bins
             do j = 1, this%dir_bins
                 ! Rotate the turbine array
-                this%turbCenter = layout_orig
-                this%wind_direction = 270.d0 - dir_bin(j) ! Get this from the wind direction PDF
-                call this%rotate()
+                turbCenter = layout_orig
+                call this%rotate_local(dir_bin(j), turbCenter, indSorted, unsort)
+                this%turbCenter = turbCenter
                 do i = 1, this%ws_bins
                     this%wind_speed = ws_orig + ws_bin(i)
                     do mi = 1, this%gamma_bins
                         ! Forward prop
-                        yaw_local = yaw(this%indSorted)
+                        yaw_local = yaw(indSorted)
                         yaw_local(1) = yaw_local(1) + gamma_bin(mi)
                         this%dp_dgamma = 0.d0
-                        call this%forward(kw_u(this%indSorted,pint), sigma_u(this%indSorted,pint), Pn, yaw_local*0.d0)
-                        call this%forward(kw_u(this%indSorted,pint), sigma_u(this%indSorted,pint), P, yaw_local)
+                        call this%forward(kw_u(indSorted,pint), sigma_u(indSorted,pint), Pn, yaw_local*0.d0)
+                        call this%forward(kw_u(indSorted,pint), sigma_u(indSorted,pint), P, yaw_local)
                         yawTime(k+1,:) = yaw;
                         ! Update total power
-                        Ptotal = Ptotal + (P(this%unsort)/Pn(1)) * rho_ws(i) * rho_dir(j) * & 
+                        Ptotal = Ptotal + (P(unsort)/Pn(1)) * rho_ws(i) * rho_dir(j) * & 
                                  rho_params(pint) * rho_gamma(mi);
         
                         ! Total gradients
-                        call this%backward(kw_u(:,pint), sigma_u(:,pint), yaw_local)    
-                        grads_total = grads_total + this%dp_dgamma(this%unsort) * &
+                        call this%backward(kw_u(indSorted,pint), sigma_u(indSorted,pint), yaw_local)    
+                        grads_total = grads_total + this%dp_dgamma(unsort) * &
                             rho_ws(i) * rho_dir(j) * &
                             rho_params(pint) * rho_gamma(mi);                     
                         end do
@@ -649,10 +648,10 @@ subroutine yawOptimize_uncertain(this, kw_u, sigma_u, yaw)
     this%Ptot_final = bestPower
     this%Popti = bestPowerOut
 
-    ! Restore
+    ! Restore 
     this%turbCenter = layout_orig
-    this%wind_direction = dir_orig
     this%wind_speed = ws_orig
+    this%wind_direction = dir_orig
 
 end subroutine
 
@@ -719,44 +718,6 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     yaw = bestYaw
     this%Ptot_final = bestPower / P_baseline(1)
     this%Popti = bestPowerOut / P_baseline(1)
-
-end subroutine
-
-subroutine observeField(this)
-    class(dynamicYaw), intent(inout) :: this
-    this%wind_speed = 8.d0 ! Get this from the data
-    this%wind_direction = 270.d0 ! Get this from the data
-    this%powerObservation = (/1.d0, 0.6d0/) ! Get the power production from ADM code 
-
-end subroutine
-
-subroutine rotate(this)
-    class(dynamicYaw), intent(inout) :: this
-    real(rkind), dimension(2,2) ::  R
-    real(rkind), dimension(this%Nt,2) :: X
-    integer, dimension(:), allocatable :: indSorted
-    type(sortgroup), dimension(this%Nt) :: x_for_sorting
-    integer :: i
-    real(rkind) :: a
- 
-    a = (this%wind_direction - 270.d0) * pi / 180.d0
-    R = reshape((/cos(a), sin(a), -sin(a), cos(a)/), shape(R))
-    ! shift
-    this%turbCenter(:,1) = this%turbCenter(:,1) - this%turbCenter(this%conditionTurb,1)
-    this%turbCenter(:,2) = this%turbCenter(:,2) - this%turbCenter(this%conditionTurb,2)
-    ! rotate
-    do i=1,this%Nt
-        X(i,:) = matmul(this%turbCenter(i,:), transpose(R))
-        x_for_sorting(i)%value = X(i,1)
-        x_for_sorting(i)%zpos = i
-        this%unsort(i) = i
-    end do
-
-    ! Sort the turbines by upwind location
-    call Qsort(x_for_sorting,1)
-    this%indSorted = x_for_sorting%zpos
-    this%unsort(indSorted) = this%unsort      
-    this%turbCenter = X(this%indSorted,:)
 
 end subroutine
 
@@ -1084,7 +1045,77 @@ subroutine backward(this, kw, sigma_0, yaw)
  
 end subroutine
 
+! Utilities
 
+subroutine observeField(this)
+    class(dynamicYaw), intent(inout) :: this
+    this%wind_speed = 8.d0 ! Get this from the data
+    this%wind_direction = 270.d0 ! Get this from the data
+    this%powerObservation = (/1.d0, 0.6d0/) ! Get the power production from ADM code 
+
+end subroutine
+
+subroutine rotate(this)
+    class(dynamicYaw), intent(inout) :: this
+    real(rkind), dimension(2,2) ::  R
+    real(rkind), dimension(this%Nt,2) :: X
+    integer, dimension(:), allocatable :: indSorted
+    type(sortgroup), dimension(this%Nt) :: x_for_sorting
+    integer :: i
+    real(rkind) :: a
+ 
+    a = (this%wind_direction - 270.d0) * pi / 180.d0
+    R = reshape((/cos(a), sin(a), -sin(a), cos(a)/), shape(R))
+    ! shift
+    this%turbCenter(:,1) = this%turbCenter(:,1) - this%turbCenter(this%conditionTurb,1)
+    this%turbCenter(:,2) = this%turbCenter(:,2) - this%turbCenter(this%conditionTurb,2)
+    ! rotate
+    do i=1,this%Nt
+        X(i,:) = matmul(this%turbCenter(i,:), transpose(R))
+        x_for_sorting(i)%value = X(i,1)
+        x_for_sorting(i)%zpos = i
+        this%unsort(i) = i
+    end do
+
+    ! Sort the turbines by upwind location
+    call Qsort(x_for_sorting,1)
+    this%indSorted = x_for_sorting%zpos
+    this%unsort(indSorted) = this%unsort      
+    this%turbCenter = X(this%indSorted,:)
+
+end subroutine
+
+subroutine rotate_local(this, dir, turbCenter, indSorted, unsort)
+    class(dynamicYaw), intent(inout) :: this
+    real(rkind), intent(in) :: dir
+    real(rkind), dimension(:,:), intent(inout) :: turbCenter
+    integer, dimension(:), intent(inout) :: indSorted, unsort
+    real(rkind), dimension(2,2) ::  R
+    real(rkind), dimension(this%Nt,2) :: X
+    type(sortgroup), dimension(this%Nt) :: x_for_sorting
+    integer :: i
+    real(rkind) :: a
+    ! Rotation matrix 
+    a = dir * pi / 180.d0
+    R = reshape((/cos(a), sin(a), -sin(a), cos(a)/), shape(R))
+    ! rotate
+    do i=1,this%Nt
+        X(i,:) = matmul(turbCenter(i,:), transpose(R))
+        x_for_sorting(i)%value = X(i,1)
+        x_for_sorting(i)%zpos = i
+        unsort(i) = i
+    end do
+    ! Sort the turbines by upwind location
+    call Qsort(x_for_sorting,1)
+    indSorted = x_for_sorting%zpos
+    unsort(indSorted) = unsort      
+    turbCenter = X(indSorted,:)
+
+end subroutine
+
+
+
+! Average statistics
 subroutine simpleMovingAverage(this, meanP, power, meanWs, ws, meanPbaseline, powerBaseline, meanDir, windDir, stdP, i, t)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), intent(inout) :: meanP, meanWs, meanPbaseline, meanDir, stdP

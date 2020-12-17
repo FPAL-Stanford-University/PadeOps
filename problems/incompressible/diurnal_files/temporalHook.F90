@@ -35,6 +35,7 @@ contains
             call message(1,"Inv. Ob. Length:",igp%sgsmodel%get_InvObLength())
             call message(1,"wTh_surf:",igp%sgsmodel%get_wTh_surf())
             call message(1,"G_geostrophic:",igp%G_geostrophic)
+            call message(1,"G_alpha:",igp%G_alpha)
             maxnusgs = p_maxval(igp%nu_SGS)
             maxkappasgs = p_maxval(igp%kappaSGS)
             call message(1,"Maximum SGS viscosity:", maxnusgs)

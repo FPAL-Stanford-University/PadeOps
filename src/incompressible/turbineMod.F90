@@ -49,7 +49,7 @@ module turbineMod
         real(rkind), dimension(:), allocatable :: meanPbaseline, stdP
         real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, hubDirection
         integer :: n_moving_average, timeStep, updateCounter 
-        real(rkind), dimension(:,:), allocatable :: powerUpdate
+        real(rkind), dimension(:,:), allocatable :: powerUpdate, dirUpdate, wsUpdate
         logical :: fixedYaw = .false., considerAdvection = .true., lookup = .false.
         integer :: dynamicStart = 1, hubIndex, dirType, advectionTime
         real(rkind) :: umAngle, vmAngle, windAngle, windAngle_old
@@ -243,6 +243,8 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              allocate(this%meanWs(this%nTurbines))
              allocate(this%hubDirection(this%nTurbines))
              allocate(this%powerUpdate(this%yawUpdateInterval, this%nTurbines))
+             allocate(this%wsUpdate(this%yawUpdateInterval, this%nTurbines))
+             allocate(this%dirUpdate(this%yawUpdateInterval, this%nTurbines))
              this%powerDumpDir = powerDumpDir
              this%timeStep = 1
              this%step = 0
@@ -252,6 +254,8 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              this%meanPbaseline = 0.d0
              this%meanWs = 0.d0
              this%powerUpdate = 0.d0
+             this%wsUpdate = 0.d0
+             this%dirUpdate = 0.d0
              this%hubDirection = 0.d0
              this%firstStep = .TRUE.
          end if
@@ -490,9 +494,9 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     real(rkind),    dimension(:),                                                        intent(out)   :: inst_horz_avg
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout), optional :: uturb, vturb
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout), optional :: wturb
-    integer :: i
+    integer :: i, tavg
     character(len=clen) :: tempname
-    real(rkind) :: tmp
+    real(rkind) :: tmp, dirStd = 0.d0
     real(rkind), dimension(this%nTurbines) :: angleIn
 
     if (newTimeStep) then
@@ -528,19 +532,27 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                    if (this%useDynamicYaw) then
                        if (this%step==1) then
                            if (this%considerAdvection) then
-                               this%advectionTime = nint(2*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(1)%xLoc) / dt)
+                               if (this%dyaw%ref_turbine == .false.) then
+                                   this%advectionTime = nint(1*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(1)%xLoc) / dt)
+                               else
+                                   this%advectionTime = nint(1*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(2)%xLoc) / dt)
+                               end if
                            else
                                this%advectionTime = 1
                            end if
                        end if
-                       this%powerUpdate(this%timeStep, i) = & 
-                                         this%turbArrayADM_Tyaw(i)%get_power()
+                       ! Store variables as a function of time
+                       this%powerUpdate(this%timeStep, i) = this%turbArrayADM_Tyaw(i)%get_power()
+                       this%dirUpdate(this%timeStep, i) = this%turbArrayADM_Tyaw(i)%hubDirection
+                       this%wsUpdate(this%timeStep, i) = this%meanWs(i)
+                       ! Update moving average 
                        if (this%timeStep > this%advectionTime) then
                            call this%dyaw%simpleMovingAverage(this%meanP(i), &
                                 this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
                                 this%turbArrayADM_Tyaw(i)%ut, &
                                 this%meanPbaseline(i), this%turbArrayADM_Tyaw(i)%powerBaseline, &
-                                this%hubDirection(i), this%turbArrayADM_Tyaw(i)%hubDirection, this%stdP(i), & 
+                                this%hubDirection(i), this%turbArrayADM_Tyaw(i)%hubDirection, & 
+                                this%stdP(i), & 
                                 this%timeStep - this%advectionTime, i)
                        end if
                    end if
@@ -555,13 +567,22 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            angleIn = this%gamma - this%windAngle*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
                                                      this%windAngle, this%meanP, this%step, & 
-                                                     this%meanPbaseline, this%stdP)
+                                                     this%meanPbaseline, this%stdP, dirStd*pi/180.d0)
                            this%gamma = angleIn
                        else
+                           ! Yaw misalignments
                            angleIn = this%gamma - this%hubDirection*pi/180.d0
+                           ! Wind direction standard deviations
+                           tavg = this%timeStep - this%advectionTime
+                           dirStd = sqrt( (1.d0/real(tavg,rkind)) * & 
+                                    sum( (this%dirUpdate(1:tavg,1) - & 
+                                    sum(this%dirUpdate(1:tavg,1)) / real(tavg,rkind) ) ** 2.d0) )
+                           ! Run closed-loop control update step 
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
                                                      this%hubDirection(1), this%meanP, this%step, & 
-                                                     this%meanPbaseline, this%stdP)
+                                                     this%meanPbaseline, this%stdP, dirStd*pi/180.d0)
+                           ! Account for lookup control case (essentially void
+                           ! the prescription of yaw from the calculation above
                            if (this%lookup==.false.) then
                                this%gamma = angleIn
                            else
@@ -586,19 +607,23 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                this%gamma = this%hubDirection * pi / 180.d0
                            endif
                        end if
+                       ! Write closed-loop control data
                        do i=1,this%nTurbines
                            write(tempname,"(A12,I3.3,A8,I3.3,A4)") "powerUpdate_",i,"_update_",this%updateCounter,".txt"
-                           call this%turbArrayADM_Tyaw(i)%dumpPowerUpdate(this%powerDumpDir,& 
-                                tempname, this%powerUpdate(:,i), this%dyaw%Phat, & 
+                           call this%turbArrayADM_Tyaw(i)%dumpPowerUpdate(this%powerDumpDir, & 
+                                tempname, this%powerUpdate(:,i), this%dirUpdate(:,i), this%dyaw%Phat, & 
                                 this%gamma, this%gamma_nm1, this%meanP, &
                                 this%dyaw%kw, this%dyaw%sigma_0, &
                                 this%dyaw%Phat_yaw, this%updateCounter, &
                                 this%meanPbaseline, this%hubDirection, & 
                                 this%dyaw%Popti, this%stdP, i)
                        end do
+                       ! Clean up step
                        this%timeStep = 0
                        this%updateCounter=this%updateCounter+1
                        this%powerUpdate = 0.d0
+                       this%dirUpdate = 0.d0
+                       this%wsUpdate = 0.d0
                    end if
                    ! Update time step
                    if (this%firstStep == .FALSE.) then

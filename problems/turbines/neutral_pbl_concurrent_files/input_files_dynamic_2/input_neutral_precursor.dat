@@ -1,6 +1,6 @@
 &INPUT
-inputdir              = "/scratch/05294/mhowland/neutral_concurrent/6x1_aligned_turbineSpecific_18"   ! Directory for any input files
-outputdir             = "/scratch/05294/mhowland/neutral_concurrent/super/6x1_dynamic_linear_oneShot"   ! Directory for all output files
+inputdir              = "/work/05294/mhowland/stampede2/PadeOpsData/robust/aligned/"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/neutral_concurrent/robust/on"   ! Directory for all output files
 nx                    = 480         ! Number of points in X
 ny                    = 240          ! Number of points in Y
 nz                    = 192          ! Number of points in Z
@@ -11,7 +11,7 @@ nsteps                = 999999
 prow                  = 16            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 32            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 80000       ! TimeID of the restart file being used
+restartFile_TID       = 81000       ! TimeID of the restart file being used
 restartFile_RID       = 2            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /

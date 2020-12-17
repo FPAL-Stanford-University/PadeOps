@@ -1,5 +1,5 @@
 &INPUT
-inputdir                      = "/scratch/05294/mhowland/diurnal/init/debug"   ! Directory for any input files
+inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/kumar/init"   ! Directory for any input files
 outputdir                     = "/scratch/05294/mhowland/diurnal/kumar/debug"   ! Directory for all output files
 nx                            = 160          ! Number of points in X
 ny                            = 160          ! Number of points in Y
@@ -10,7 +10,7 @@ dt                            = 0.025D0     ! Fixed time step value (only used i
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 1676           ! TimeID of the restart file being used
+restartFile_TID               = 1691           ! TimeID of the restart file being used
 restartFile_RID               = 1           ! RunID of the restart file being used
 /
 /
@@ -131,8 +131,9 @@ t_dumpKSprep                  = 10         ! Dumping Frequency for KS files
 /
 /
 &DIURNAL_BCS
-fname_G                       =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_files/diurnal_BCs/diurnal/geostrophic_wind.txt"
-fname_wtheta                  =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_files/diurnal_BCs/diurnal/surface_flux.txt"
+fname_G                       =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_files/diurnal_BCs/kumar/geostrophic_wind.txt"
+fname_wtheta                  =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_files/diurnal_BCs/kumar/surface_flux.txt"
+fname_galpha                  =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_files/diurnal_BCs/kumar/g_alpha.txt"
 G_tolerance                   =  1.0d-4    ! The tolerance associated with the geostrophic wind on restart 
 /
 /
