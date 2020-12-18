@@ -17,6 +17,11 @@
            copyFringeRHS = .false. 
        end if
       
+       ! Step 0: IBM
+       if(this%useibm) then
+           call this%ibm%update_ibmgp(this%u, this%v, this%w, this%uE, this%vE, this%wC)
+       endif
+
        ! Step 1: Non Linear Term 
        if (useSkewSymm) then
            call this%addNonLinearTerm_skewSymm(this%u_rhs, this%v_rhs, this%w_rhs)
@@ -98,6 +103,11 @@
            copyFringeRHS = .false. 
        end if
       
+       ! Step 0: IBM
+       if(this%useibm) then
+           call this%ibm%update_ibmgp(this%u, this%v, this%w, this%uE, this%vE, this%wC)
+       endif
+
        ! Step 1: Non Linear Term 
        if (useSkewSymm) then
            !call this%addNonLinearTerm_skewSymm(this%ucon, this%vcon, this%wcon)

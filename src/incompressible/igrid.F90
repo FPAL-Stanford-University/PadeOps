@@ -1028,7 +1028,10 @@ contains
        ! STEP 13: Initialize Immersed Boundary Method (IBM)
        if (this%useibm) then
            allocate(this%ibm)
-           call this%ibm%init(this%InputDir, inputFile, this%gpC, this%gpE, this%mesh, this%Lx, this%Ly, this%zBot, this%zTop, this%dz)
+           call this%ibm%init(this%InputDir, inputFile, this%outputDir, this%RunID, this%gpC, this%gpE, this%mesh, &
+                              this%Lx, this%Ly, this%zBot, this%zTop, this%dz, &
+                              this%rbuffxC, this%rbuffyC, this%rbuffzC,        &
+                              this%rbuffxE, this%rbuffyE, this%rbuffzE)
        end if
 
        ! STEP 14: Set visualization planes for io

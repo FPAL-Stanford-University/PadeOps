@@ -5,6 +5,7 @@ module ibmgpmod
     use reductions     , only: p_maxval, p_minval
     use kdtree_wrapper , only: initialize_kdtree_ib, create_kdtree_ib, probe_nearest_points_kdtree_ib, finalize_kdtree_ib
     use decomp_2d
+    use decomp_2d_io
 
     implicit none
 
@@ -13,10 +14,10 @@ module ibmgpmod
 
     type :: ibmgp
         private 
-        class(decomp_info), pointer :: gpC, gpE
+        type(decomp_info), pointer :: gpC, gpE
         !class(spectral), pointer :: spectC, spectE
 
-        integer     :: num_surfelem, num_gptsC, num_gptsE, ibwm
+        integer     :: num_surfelem, num_gptsC, num_gptsE, ibwm, runID
         real(rkind) :: ibwm_ustar
         real(rkind), allocatable, dimension(:,:,:) :: surfelem
         real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal
@@ -27,17 +28,27 @@ module ibmgpmod
         !integer,     allocatable, dimension(:)     :: gptsE_ileft, gptsE_jleft, gptsE_kleft
         !real(rkind), allocatable, dimension(:)     :: gptsC_ifacx, gptsC_jfacy, gptsC_kfacz
         !real(rkind), allocatable, dimension(:)     :: gptsE_ifacx, gptsE_jfacy, gptsE_kfacz
+        !real(rkind), allocatable, dimension(:)     ::   gptsC_u,  gptsC_v,  gptsC_w,  gptsE_u,  gptsE_v,  gptsE_w
         integer,     allocatable, dimension(:)     ::  imptsC_numonproc, imptsE_numonproc
         integer,     allocatable, dimension(:,:,:) ::  imptsC_indices,   imptsE_indices
         real(rkind), allocatable, dimension(:,:)   ::  imptsC_multfac,   imptsE_multfac
         real(rkind), allocatable, dimension(:)     ::  imptsC_u, imptsC_v, imptsC_w, imptsE_u, imptsE_v, imptsE_w
-        real(rkind), allocatable, dimension(:)     ::   gptsC_u,  gptsC_v,  gptsC_w,  gptsE_u,  gptsE_v,  gptsE_w
         real(rkind), allocatable, dimension(:)     ::  gptsC_dst, gptsE_dst
+
+        real(rkind), dimension(:,:,:), pointer     :: rbuffxC1, rbuffxC2, rbuffyC1, rbuffyC2, rbuffzC1, rbuffzC2 
+        real(rkind), dimension(:,:,:), pointer     :: rbuffxE1, rbuffxE2, rbuffyE1, rbuffyE2, rbuffzE1, rbuffzE2 
+        real(rkind), allocatable, dimension(:,:,:) ::  mask_solid_xC, mask_solid_yC, mask_solid_zC
+        real(rkind), allocatable, dimension(:,:,:) ::  mask_solid_xE, mask_solid_yE, mask_solid_zE
+
+        character(len=clen) :: outputDir
+
+        integer :: debug_flag = 1, debug_elemid = 10
 
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
             procedure          :: destroy
+            procedure          :: update_ibmgp
             procedure, private :: compute_levelset
             procedure, private :: mark_ghost_points
             procedure, private :: save_ghost_points
@@ -50,15 +61,20 @@ module ibmgpmod
             procedure, private :: smooth_solidptsCE
             procedure, private :: set_interpfac_imptsC
             procedure, private :: set_interpfac_imptsE
+            procedure, private :: smooth_along_x
+            procedure, private :: smooth_along_y
+            procedure, private :: smooth_along_z
     end type 
 
 contains
 
-subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, dz)
+subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, mesh, Lx, Ly, zBot, zTop, dz, rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE)
   class(ibmgp),     intent(inout) :: this
-  character(len=*), intent(in)    :: inputFile, inputDir
-  class(decomp_info), intent(in), target :: gpC, gpE
+  character(len=*), intent(in)    :: inputFile, inputDir, outputDir
+  integer, intent(in) :: runID
+  type(decomp_info), intent(in), target :: gpC, gpE
   real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+  real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE
   real(rkind), intent(in) :: Lx, Ly, zBot, zTop, dz
 
   character(len=clen)    :: surfaceMeshFile, fname, dumstr
@@ -76,6 +92,9 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
   namelist /IBMGP/ surfaceMeshFile, Lscale, translate_x, translate_y, translate_z, &
                    solidpt_x, solidpt_y, solidpt_z, nlayers, ibwm, ibwm_ustar
 
+  this%runID = runID
+  this%outputDir = outputDir
+
   ioUnit = 11
   open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
   read(unit=ioUnit, NML=IBMGP)
@@ -85,6 +104,14 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
   this%gpE => gpE
   this%ibwm = ibwm
   this%ibwm_ustar = ibwm_ustar
+
+  if( (this%ibwm .ne. 1) .and. (this%ibwm .ne. 2)) then
+      call GracefulExit("Wrong choice for IB Wall Model. Check input file.", 111)
+  endif
+
+  if( (this%ibwm==2) .and. (this%ibwm_ustar < zero)) then
+      call GracefulExit("IB Wall Model ustar cannot be negative. Check input file.", 111)
+  endif
 
   ! -------Read surfaceMeshFile (x, y, z) for triangles
   ! -- First count the number of elements ---
@@ -133,17 +160,17 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
   enddo
   close(ioUnit)
 
-  if(nrank==0) then
-    print *, 'nlines = ', nlines
-    print *, 'nelems = ', this%num_surfelem
-    do jj = 1, this%num_surfelem 
-        print *, '----Element ', jj, '-------------------------------------------'
-        print '(a,3(1x,e19.12))', 'point 1:=', this%surfelem(1,jj,1:3)
-        print '(a,3(1x,e19.12))', 'point 2:=', this%surfelem(2,jj,1:3)
-        print '(a,3(1x,e19.12))', 'point 3:=', this%surfelem(3,jj,1:3)
-        print *, '------------------------------------------------------'
-    enddo
-  endif
+  !if(nrank==0) then
+  !  print *, 'nlines = ', nlines
+  !  print *, 'nelems = ', this%num_surfelem
+  !  do jj = 1, this%num_surfelem 
+  !      print *, '----Element ', jj, '-------------------------------------------'
+  !      print '(a,3(1x,e19.12))', 'point 1:=', this%surfelem(1,jj,1:3)
+  !      print '(a,3(1x,e19.12))', 'point 2:=', this%surfelem(2,jj,1:3)
+  !      print '(a,3(1x,e19.12))', 'point 3:=', this%surfelem(3,jj,1:3)
+  !      print *, '------------------------------------------------------'
+  !  enddo
+  !endif
 
   ! IB may be generated at a scale and position that is inconsistent with the
   ! problem setup. Modify the IB surface elements to be consistent with problem
@@ -152,14 +179,22 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
   this%surfelem = invLscale*this%surfelem
 
   ! --- Second :: translate the IB surface mesh
-  this%surfelem(:,:,1) = this%surfelem(:,:,1) - translate_x
-  this%surfelem(:,:,2) = this%surfelem(:,:,2) - translate_y
-  this%surfelem(:,:,3) = this%surfelem(:,:,3) - translate_z
+  this%surfelem(:,:,1) = this%surfelem(:,:,1) + translate_x
+  this%surfelem(:,:,2) = this%surfelem(:,:,2) + translate_y
+  this%surfelem(:,:,3) = this%surfelem(:,:,3) + translate_z
 
   ! --- Now check if they are consistent
   xmax_ib = p_maxval(this%surfelem(:,:,1)); xmin_ib = p_minval(this%surfelem(:,:,1))
   ymax_ib = p_maxval(this%surfelem(:,:,2)); ymin_ib = p_minval(this%surfelem(:,:,2))
   zmax_ib = p_maxval(this%surfelem(:,:,3)); zmin_ib = p_minval(this%surfelem(:,:,3))
+  if((this%debug_flag==1) .and. (nrank==0)) then
+        print *, '------------------------------------------------------'
+        print '(a,3(1x,e19.12))', '(xmin, xmax):=', xmin_ib, xmax_ib
+        print '(a,3(1x,e19.12))', '(ymin, ymax):=', ymin_ib, ymax_ib
+        print '(a,3(1x,e19.12))', '(zmin, zmax):=', zmin_ib, zmax_ib
+        print *, '------------------------------------------------------'
+  endif
+
   if((xmax_ib > Lx) .or. (xmin_ib < zero)) then
       call GracefulExit("x dimension of IB is larger than domain", 111)
   endif
@@ -212,6 +247,17 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
 
   enddo
 
+  if(this%debug_flag==1) then
+    if(nrank==0) then
+      jj = this%debug_elemid
+      print '(a,3(e19.12,1x))', 'pt. 1 : ', this%surfelem(1,jj,:)
+      print '(a,3(e19.12,1x))', 'pt. 2 : ', this%surfelem(2,jj,:)
+      print '(a,3(e19.12,1x))', 'pt. 3 : ', this%surfelem(3,jj,:)
+      print '(a,3(e19.12,1x))', 'centr : ', this%surfcent(jj,:)
+      print '(a,3(e19.12,1x))', 'normal: ', this%surfnormal(jj,:)
+    endif
+  endif
+
   ! create local grid lines
   allocate(xlinepart(this%gpC%xsz(1)), ylinepart(this%gpC%xsz(2)) )
   allocate(zlinepart(this%gpC%xsz(3)), zlinepartE(this%gpE%xsz(3)))
@@ -226,6 +272,19 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
       zlinepartE(k) = zlinepart(k-1) + half*dz
   endif
 
+  this%rbuffxC1 => rbuffxC(:,:,:,1);  this%rbuffxC2 => rbuffxC(:,:,:,2)
+  this%rbuffyC1 => rbuffyC(:,:,:,1);  this%rbuffyC2 => rbuffyC(:,:,:,2)
+  this%rbuffzC1 => rbuffzC(:,:,:,1);  this%rbuffzC2 => rbuffzC(:,:,:,2)
+  this%rbuffxE1 => rbuffxE(:,:,:,1);  this%rbuffxE2 => rbuffxE(:,:,:,2)
+  this%rbuffyE1 => rbuffyE(:,:,:,1);  this%rbuffyE2 => rbuffyE(:,:,:,2)
+  this%rbuffzE1 => rbuffzE(:,:,:,1);  this%rbuffzE2 => rbuffzE(:,:,:,2)
+  allocate(this%mask_solid_xC(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+  allocate(this%mask_solid_yC(this%gpC%ysz(1), this%gpC%ysz(2), this%gpC%ysz(3)))
+  allocate(this%mask_solid_zC(this%gpC%zsz(1), this%gpC%zsz(2), this%gpC%zsz(3)))
+  allocate(this%mask_solid_xE(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
+  allocate(this%mask_solid_yE(this%gpE%ysz(1), this%gpE%ysz(2), this%gpE%ysz(3)))
+  allocate(this%mask_solid_zE(this%gpE%zsz(1), this%gpE%zsz(2), this%gpE%zsz(3)))
+
   allocate(levelsetC(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
   allocate(levelsetE(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
   allocate(mapC     (this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
@@ -235,14 +294,41 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
 
   call this%compute_levelset(xlinepart, ylinepart, zlinepart, zlinepartE, mapC, mapE, levelsetC, levelsetE)
 
+  write(dumstr,"(A3,I2.2,A14)") "Run",this%runID,"_levelsetC.dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  call decomp_2d_write_one(1, levelsetC, fname, this%gpC)
 
-  call this%mark_ghost_points(gpC, nlayers, mapC, flagC);  this%num_gptsC = sum(flagC)
-  call this%mark_ghost_points(gpE, nlayers, mapE, flagE);  this%num_gptsE = sum(flagE)
+  write(dumstr,"(A3,I2.2,A14)") "Run",this%runID,"_levelsetE.dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  call decomp_2d_write_one(1, levelsetE, fname, this%gpE)
+
+
+  !!!print *, 'Out mapC  min = ', -p_maxval(maxval(-mapC))
+  !!!print *, 'Out mapC  max = ', p_maxval(maxval( mapC))
+  !!!!print '(a,5(i4,1x))', 'Decomp info C = ', nrank, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)
+  !!!!print '(a,5(i4,1x))', 'Decomp info E = ', nrank, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)
+
+  call this%mark_ghost_points(gpC, nlayers, mapC, flagC, this%rbuffxC1, this%rbuffyC1, this%rbuffzC1);  this%num_gptsC = sum(flagC)
+  write(dumstr,"(A3,I2.2,A9)") "Run",this%runID,"_mapC.dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  this%rbuffxC1 = mapC
+  call decomp_2d_write_one(1, this%rbuffxC1, fname, this%gpC)
+
+  call this%mark_ghost_points(gpE, nlayers, mapE, flagE, this%rbuffxE1, this%rbuffyE1, this%rbuffzE1);  this%num_gptsE = sum(flagE)
+  write(dumstr,"(A3,I2.2,A9)") "Run",this%runID,"_mapE.dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  this%rbuffxE1 = mapE
+  call decomp_2d_write_one(1, this%rbuffxE1, fname, this%gpE)
+  !!!print *, '   flagC  min = ', -p_maxval(maxval(-flagC))
+  !!!print *, '   flagC  max = ', p_maxval(maxval( flagC))
 
   allocate(this%gptsC_xyz(this%num_gptsC,3), this%gptsE_xyz(this%num_gptsE,3))
   allocate(this%gptsC_ind(this%num_gptsC,3), this%gptsE_ind(this%num_gptsE,3))
   allocate(this%gptsC_bpt(this%num_gptsC,3), this%gptsE_bpt(this%num_gptsE,3))
   allocate(this%gptsC_bpind(this%num_gptsC), this%gptsE_bpind(this%num_gptsE))
+  allocate(this%gptsC_img(this%num_gptsC,3), this%gptsE_img(this%num_gptsE,3))
+  allocate(this%gptsC_bnp(this%num_gptsC,3), this%gptsE_bnp(this%num_gptsE,3))
+  allocate(this%gptsC_dst(this%num_gptsC),   this%gptsE_dst(this%num_gptsE))
 
   allocate(this%imptsC_numonproc(this%num_gptsC), this%imptsE_numonproc(this%num_gptsE))
   allocate(this%imptsC_indices(3,8,this%num_gptsC), this%imptsE_indices(3,8,this%num_gptsE))
@@ -250,9 +336,9 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
   allocate(this%imptsC_u(this%num_gptsC), this%imptsE_u(this%num_gptsE))
   allocate(this%imptsC_v(this%num_gptsC), this%imptsE_v(this%num_gptsE))
   allocate(this%imptsC_w(this%num_gptsC), this%imptsE_w(this%num_gptsE))
-  allocate(this%gptsC_u(this%num_gptsC),  this%gptsE_u(this%num_gptsE))
-  allocate(this%gptsC_v(this%num_gptsC),  this%gptsE_v(this%num_gptsE))
-  allocate(this%gptsC_w(this%num_gptsC),  this%gptsE_w(this%num_gptsE))
+  !allocate(this%gptsC_u(this%num_gptsC),  this%gptsE_u(this%num_gptsE))
+  !allocate(this%gptsC_v(this%num_gptsC),  this%gptsE_v(this%num_gptsE))
+  !allocate(this%gptsC_w(this%num_gptsC),  this%gptsE_w(this%num_gptsE))
   !allocate(this%gptsC_ileft(this%num_gptsC), this%gptsE_ileft(this%num_gptsE))
   !allocate(this%gptsC_jleft(this%num_gptsC), this%gptsE_jleft(this%num_gptsE))
   !allocate(this%gptsC_kleft(this%num_gptsC), this%gptsE_kleft(this%num_gptsE))
@@ -260,11 +346,18 @@ subroutine init(this, inputDir, inputFile, gpC, gpE, mesh, Lx, Ly, zBot, zTop, d
   !allocate(this%gptsC_jfacy(this%num_gptsC), this%gptsE_jfacy(this%num_gptsE))
   !allocate(this%gptsC_kfacz(this%num_gptsC), this%gptsE_kfacz(this%num_gptsE))
 
-  call this%save_ghost_points(flagC, flagE, xlinepart, ylinepart, zlinepart, zlinepartE)
+  if(nrank==7) then
+      write(*,'(a,i4,1x,3(e19.12,1x))') 'testing: ', nrank, xlinepart(32), ylinepart(4), zlinepart(18)
+      write(*,'(a,i4,1x,100(e19.12,1x))') 'ylinepart: ', nrank, ylinepart(:)
+      write(*,'(a,i4,1x,100(i4,1x))') 'mapC: ', nrank, mapC(32,:,18)
+      write(*,'(a,i4,1x,100(i4,1x))') 'numptsC, numptsE: ', this%num_gptsC, this%num_gptsE
+  endif
+
+  call this%save_ghost_points(flagC, flagE, mapC, mapE, xlinepart, ylinepart, zlinepart, zlinepartE)
 
   call this%mark_boundary_points()
 
-  call this%compute_image_points()
+  call this%compute_image_points(Lx, Ly, zBot, zTop)
 
   dx = xlinepart(2)-xlinepart(1); dy = ylinepart(2)-ylinepart(1)
   call this%setup_interpolation(dx,dy,dz, zBot, xlinepart, ylinepart, zlinepart)
@@ -275,76 +368,273 @@ end subroutine
 
 subroutine update_ibmgp(this, u, v, w, uE, vE, wC)
   class(ibmgp),     intent(inout) :: this
-  real(rkind), dimension(:,:,:), intent(in) :: u, v, w, uE, vE, wC
+  real(rkind), dimension(:,:,:), intent(inout) :: u, v, w, uE, vE, wC
 
   integer :: ii, itmp
+  real(rkind) :: umax, umin, vmax, vmin, wmax, wmin, uEmax, uEmin, vEmax, vEmin, wCmax, wCmin
 
+  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
+  if(nrank==0) then
+      print *, '-----Before interp_impts------'
+      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
+      print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+      print *, '------------------------------'
+  endif
   call this%interp_imptsC(u, v,  wC)
   call this%interp_imptsE(uE, vE, w)
 
-  call this%update_ghostptsCE()
+  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
+  if(nrank==0) then
+      print *, '-----After  interp_impts------'
+      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
+      print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+      print *, '------------------------------'
+  endif
+  call this%update_ghostptsCE(u, v, w)
 
-  call this%smooth_solidptsCE()
+  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
+  if(nrank==0) then
+      print *, '-----After  update_gpts ------'
+      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
+      print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+      print *, '------------------------------'
+  endif
+  call this%smooth_solidptsCE(u, v, w)
+
+  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
+  if(nrank==0) then
+      print *, '-----After  smooth_solidpts---'
+      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
+      print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+      print *, '------------------------------'
+  endif
+end subroutine
+
+subroutine smooth_solidptsCE(this, u, v, w)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), dimension(:,:,:), intent(inout) :: u, v, w
+
+  integer :: num_smooth, ii, jj, kk
+  real(rkind) :: diffcoeff
+  real(rkind) :: umax, umin, vmax, vmin, wmax, wmin
+  real(rkind) :: uEmax, uEmin, vEmax, vEmin, wCmax, wCmin
+
+  num_smooth = 10; diffcoeff = 1.0d-1;
+
+  if(nrank==8) then
+    jj = 1; kk = 16;
+    open(10,file='smooth_along_x_before.dat',status='replace')
+    do ii = 1, size(u,1)
+        write(10,*) u(ii,jj,kk), this%mask_solid_xC(ii,jj,kk)
+    enddo
+    close(10)
+  endif
+
+  call this%smooth_along_x(u,             this%rbuffxC1, this%mask_solid_xC, num_smooth, diffcoeff)
+  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
+  if(nrank==0) then
+      print *, '-----After  smooth_along_x---'
+      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wmax, wmin
+      !print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+      print *, '------------------------------'
+  endif
+  if(nrank==8) then
+    jj = 1; kk = 16;
+    open(10,file='smooth_along_x_after.dat',status='replace')
+    do ii = 1, size(u,1)
+        write(10,*) u(ii,jj,kk), this%mask_solid_xC(ii,jj,kk)
+    enddo
+  endif
+
+  call transpose_x_to_y   (u,             this%rbuffyC1, this%gpC)
+  if(nrank==8) then
+    ii = 1; kk = 16;
+    open(10,file='smooth_along_y_before.dat',status='replace')
+    do jj = 1, size(this%rbuffyC1,2)
+        write(10,*) this%rbuffyC1(ii,jj,kk), this%mask_solid_yC(ii,jj,kk)
+    enddo
+    close(10)
+  endif
+  call this%smooth_along_y(this%rbuffyC1, this%rbuffyC2, this%mask_solid_yC, num_smooth, diffcoeff)
+  if(nrank==8) then
+    ii = 1; kk = 16;
+    open(10,file='smooth_along_y_after.dat',status='replace')
+    do jj = 1, size(this%rbuffyC1,2)
+        write(10,*) this%rbuffyC1(ii,jj,kk), this%mask_solid_yC(ii,jj,kk)
+    enddo
+    close(10)
+  endif
+  umax = p_maxval(this%rbuffyC1); umin = p_minval(this%rbuffyC1)
+  if(nrank==0) then
+      print *, '-----After  smooth_along_y---'
+      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin
+      print *, '------------------------------'
+  endif
+  call transpose_y_to_z   (this%rbuffyC1, this%rbuffzC1, this%gpC)
+  if(nrank==8) then
+    print *, 'nrank 8 x = ', this%gpC%zst(1), this%gpC%zen(1)
+    ii = 1; jj = 33;
+    open(10,file='smooth_along_z_before.dat',status='replace')
+    do kk = 1, size(this%rbuffzC1,3)
+        write(10,*) this%rbuffzC1(ii,jj,kk), this%mask_solid_zC(ii,jj,kk)
+    enddo
+    close(10)
+  endif
+  call this%smooth_along_z(this%rbuffzC1, this%rbuffzC2, this%mask_solid_zC, num_smooth, diffcoeff)
+  if(nrank==8) then
+    ii = 1; jj = 33;
+    open(10,file='smooth_along_z_after.dat',status='replace')
+    do kk = 1, size(this%rbuffzC1,3)
+        write(10,*) this%rbuffzC1(ii,jj,kk), this%mask_solid_zC(ii,jj,kk)
+    enddo
+    close(10)
+  endif
+  umax = p_maxval(this%rbuffzC1); umin = p_minval(this%rbuffzC1)
+  if(nrank==0) then
+      print *, '-----After  smooth_along_z---'
+      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin
+      print *, '------------------------------'
+  endif
+  call transpose_z_to_y   (this%rbuffzC1, this%rbuffyC1, this%gpC)
+  call transpose_y_to_x   (this%rbuffyC1, u,             this%gpC)
+
+  !call GracefulExit("Stopping here for now", 111)
+
+  call this%smooth_along_x(v,             this%rbuffxC1, this%mask_solid_xC, num_smooth, diffcoeff)
+  call transpose_x_to_y   (v,             this%rbuffyC1, this%gpC)
+  call this%smooth_along_y(this%rbuffyC1, this%rbuffyC2, this%mask_solid_yC, num_smooth, diffcoeff)
+  call transpose_y_to_z   (this%rbuffyC1, this%rbuffzC1, this%gpC)
+  call this%smooth_along_z(this%rbuffzC1, this%rbuffzC2, this%mask_solid_zC, num_smooth, diffcoeff)
+  call transpose_z_to_y   (this%rbuffzC1, this%rbuffyC1, this%gpC)
+  call transpose_y_to_x   (this%rbuffyC1, v,             this%gpC)
+
+  call this%smooth_along_x(w,             this%rbuffxE1, this%mask_solid_xE, num_smooth, diffcoeff)
+  call transpose_x_to_y   (w,             this%rbuffyE1, this%gpE)
+  call this%smooth_along_y(this%rbuffyE1, this%rbuffyE2, this%mask_solid_yE, num_smooth, diffcoeff)
+  call transpose_y_to_z   (this%rbuffyE1, this%rbuffzE1, this%gpE)
+  call this%smooth_along_z(this%rbuffzE1, this%rbuffzE2, this%mask_solid_zE, num_smooth, diffcoeff)
+  call transpose_z_to_y   (this%rbuffzE1, this%rbuffyE1, this%gpE)
+  call transpose_y_to_x   (this%rbuffyE1, w,             this%gpE)
 
 end subroutine
 
-subroutine smooth_solidptsCE(this)
-  class(ibmgp),     intent(inout) :: this
 
-  integer :: it, i, j, k, num_smooth, nx, ny, nz
-  real(rkind) :: diffcoedd
+subroutine smooth_along_x(this, uarr, rhs, mask_solid_x, num_smooth, diffcoeff)
+  class(ibmgp),                  intent(in)    :: this
+  real(rkind), dimension(:,:,:), intent(inout) :: uarr, rhs
+  real(rkind), dimension(:,:,:), intent(in   ) :: mask_solid_x
+  integer,                       intent(in)    :: num_smooth
+  real(rkind),                   intent(in)    :: diffcoeff
 
-  nx = this%gpC%xsz(1);  ny = this%gpC%ysz(2);  nz = this%gpC%zsz(3)
-  num_smooth = 10; diffcoeff = 1.0d0;
+  integer :: it, i, j, k, nx, nyloc, nzloc
+  real(rkind) :: diffcoeff_x
+
+  nx = size(uarr, 1); nyloc = size(uarr, 2); nzloc = size(uarr, 3)
 
   ! In x decomp; Smooth along x
   diffcoeff_x = diffcoeff ! * (dt/dx^2)
+
   do it = 1, num_smooth
-      ! for u
-      do k = 1, this%gpC%xsz(3)
-        do j = 1, this%gpC%xsz(2)
-          rhs(1,j,k) = zero
-          rhs(2:nx-1,j,k) = (u(3:nx,j,k) + u(1:nx-2) - two*u(2:nx-1,j,k))
-          rhs(nx,j,k) = zero
+      do k = 1, nzloc
+        do j = 1, nyloc
+          rhs(1,j,k) = (uarr(2,j,k) + uarr(nx,j,k) - two*uarr(1,j,k))
+          rhs(2:nx-1,j,k) = (uarr(3:nx,j,k) + uarr(1:nx-2,j,k) - two*uarr(2:nx-1,j,k))
+          rhs(nx,j,k) = (uarr(1,j,k) + uarr(nx-1,j,k) - two*uarr(nx,j,k))
         enddo
       enddo
-      u = u + diffcoeff_x*rhs*this%solid_maskC_x
-      
-      ! for v
-      do k = 1, this%gpC%xsz(3)
-        do j = 1, this%gpC%xsz(2)
-          rhs(1,j,k) = zero
-          rhs(2:nx-1,j,k) = (v(3:nx,j,k) + v(1:nx-2) - two*v(2:nx-1,j,k))
-          rhs(nx,j,k) = zero
-        enddo
-      enddo
-      v = v + diffcoeff_x*rhs*this%solid_maskC_x
-      
-      ! for v
-      do k = 1, this%gpE%xsz(3)
-        do j = 1, this%gpE%xsz(2)
-          rhsE(1,j,k) = zero
-          rhsE(2:nx-1,j,k) = (w(3:nx,j,k) + w(1:nx-2) - two*w(2:nx-1,j,k))
-          rhsE(nx,j,k) = zero
-        enddo
-      enddo
-      w = w + diffcoeff_x*rhsE*this%solid_maskE_x
+      uarr = uarr + diffcoeff_x*rhs*mask_solid_x
   enddo
 
 end subroutine
 
-subroutine update_ghostptsCE(this)
-  class(ibmgp),     intent(inout) :: this
+subroutine smooth_along_y(this, uarr, rhs, mask_solid_y, num_smooth, diffcoeff)
+  class(ibmgp),                  intent(in)    :: this
+  real(rkind), dimension(:,:,:), intent(inout) :: uarr, rhs
+  real(rkind), dimension(:,:,:), intent(in   ) :: mask_solid_y
+  integer,                       intent(in)    :: num_smooth
+  real(rkind),                   intent(in)    :: diffcoeff
 
-  integer :: ii, jj
+  integer :: it, i, j, k, nxloc, ny, nzloc
+  real(rkind) :: diffcoeff_y
+
+  nxloc = size(uarr, 1); ny = size(uarr, 2); nzloc = size(uarr, 3)
+
+  ! In y decomp; Smooth along y
+  diffcoeff_y = diffcoeff ! * (dt/dy^2)
+
+  do it = 1, num_smooth
+      do k = 1, nzloc
+        rhs(:,1,k) = (uarr(:,2,k) + uarr(:,ny,k) - two*uarr(:,1,k))
+        do j = 2, ny-1
+          rhs(:,j,k) = (uarr(:,j+1,k) + uarr(:,j-1,k) - two*uarr(:,j,k))
+        enddo
+        rhs(:,ny,k) = (uarr(:,1,k) + uarr(:,ny-1,k) - two*uarr(:,ny,k))
+      enddo
+      uarr = uarr + diffcoeff_y*rhs*mask_solid_y
+  enddo
+
+end subroutine
+
+subroutine smooth_along_z(this, uarr, rhs, mask_solid_z, num_smooth, diffcoeff)
+  class(ibmgp),                  intent(in)    :: this
+  real(rkind), dimension(:,:,:), intent(inout) :: uarr, rhs
+  real(rkind), dimension(:,:,:), intent(in   ) :: mask_solid_z
+  integer,                       intent(in)    :: num_smooth
+  real(rkind),                   intent(in)    :: diffcoeff
+
+  integer :: it, i, j, k, nxloc, nyloc, nz
+  real(rkind) :: diffcoeff_z, dcmax, dcmin, rhsmax, rhsmin
+  integer :: maxmsk, minmsk
+
+  nxloc = size(uarr, 1); nyloc = size(uarr, 2); nz = size(uarr, 3)
+
+  ! In z decomp; Smooth along z
+  diffcoeff_z = diffcoeff ! * (dt/dz^2)
+
+  do it = 1, num_smooth
+      do k = 2, nz-1
+          rhs(:,:,k) = (uarr(:,:,k-1) + uarr(:,:,k+1) - two*uarr(:,:,k))
+      enddo
+      rhs(:,:,1) = rhs(:,:,2)
+      rhs(:,:,nz) = rhs(:,:,nz-1)
+      uarr = uarr + diffcoeff_z*rhs*mask_solid_z
+  enddo
+  dcmax = p_maxval(diffcoeff_z); dcmin = p_minval(diffcoeff_z)
+  rhsmax = p_maxval(rhs);    rhsmin = p_minval(rhs)
+  maxmsk = p_maxval(maxval(mask_solid_z)); minmsk = p_minval(minval(mask_solid_z))
+  if(nrank==0) then
+      print *, 'diffcoeff: ', dcmax, dcmin
+      print *, 'rhs      : ', rhsmax, rhsmin
+      print *, 'mask     : ', maxmsk, minmsk
+  endif
+
+end subroutine
+
+subroutine update_ghostptsCE(this, u, v, w)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), dimension(:,:,:), intent(inout) :: u, v, w
+
+  integer :: ii, jj, i, j, k
   real(rkind) :: vec1(3), vec2(3), unrm(3), utan(3), dotpr, twodist
   real(rkind) :: ibwallstress, utan_gp(3), unrm_gp(3)
 
 
   if(this%ibwm==1) then
       ! no slip immersed boundary
-      this%gptsC_u = -this%imptsC_u;   this%gptsC_v = -this%imptsC_v;   this%gptsC_w = -this%imptsC_w
-      this%gptsE_u = -this%imptsE_u;   this%gptsE_v = -this%imptsE_v;   this%gptsE_w = -this%imptsE_w
+      do ii = 1, this%num_gptsC
+          i = this%gptsC_ind(ii,1);  j = this%gptsC_ind(ii,2);  k = this%gptsC_ind(ii,3)
+          u(i,j,k) = -this%imptsc_u(ii)
+          v(i,j,k) = -this%imptsc_v(ii)
+      enddo
+      do ii = 1, this%num_gptsE
+          i = this%gptsE_ind(ii,1);   j = this%gptsE_ind(ii,2);  k = this%gptsE_ind(ii,3)
+          w(i,j,k) = -this%imptsE_w(ii)
+      enddo
   elseif(this%ibwm==2) then
       ! simple log-law immersed boundary
       do ii = 1, this%num_gptsC
@@ -360,9 +650,10 @@ subroutine update_ghostptsCE(this)
           utan_gp = utan-twodist*ibwallstress
           unrm_gp = -unrm
 
-          this%gptsC_u(ii) = utan_gp(1) + unrm_gp(1)
-          this%gptsC_v(ii) = utan_gp(2) + unrm_gp(2)
-          this%gptsC_w(ii) = utan_gp(3) + unrm_gp(3)
+          i = this%gptsC_ind(ii,1);  j = this%gptsC_ind(ii,2);  k = this%gptsC_ind(ii,3)
+          u(i,j,k) = utan_gp(1) + unrm_gp(1)
+          v(i,j,k) = utan_gp(2) + unrm_gp(2)
+          !this%gptsC_w(ii) = utan_gp(3) + unrm_gp(3)
       enddo
 
       do ii = 1, this%num_gptsE
@@ -378,9 +669,10 @@ subroutine update_ghostptsCE(this)
           utan_gp = utan-twodist*ibwallstress
           unrm_gp = -unrm
 
-          this%gptsE_u(ii) = utan_gp(1) + unrm_gp(1)
-          this%gptsE_v(ii) = utan_gp(2) + unrm_gp(2)
-          this%gptsE_w(ii) = utan_gp(3) + unrm_gp(3)
+          i = this%gptsE_ind(ii,1);   j = this%gptsE_ind(ii,2);  k = this%gptsE_ind(ii,3)
+          !this%gptsE_u(ii) = utan_gp(1) + unrm_gp(1)
+          !this%gptsE_v(ii) = utan_gp(2) + unrm_gp(2)
+          w(i,j,k) = utan_gp(3) + unrm_gp(3)
       enddo
 
   endif
@@ -468,42 +760,43 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
       if( (xloc>=xdom_left) .and. (xloc<=xdom_right) .and. &
           (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
           (zloc>=zdom_left) .and. (zloc<=zdom_right) ) then
+
+        itmp = floor((xloc-xdom_left)/dx);        
+        jtmp = floor((yloc-ydom_left)/dy);        
+        ktmp = floor((zloc-zdom_left)/dz);        
+
+        ! determine facx, facy, facz
+        if(itmp==0) then
+            facx = one - (xlinepart(1)-xloc)/dx
+        else
+            facx = one - (xloc-xlinepart(itmp))/dx
+        endif
+
+        if(jtmp==0) then
+            facy = one - (ylinepart(1)-yloc)/dy
+        else
+            facy = one - (yloc-ylinepart(jtmp))/dy
+        endif
+
+        if(ktmp==0) then
+            facz = one - (zlinepart(1)-zloc)/dz
+        else
+            facz = one - (zloc-zlinepart(ktmp))/dz
+        endif
+
+        onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
+
+        ! now consider 8 points separately
+        point_number = 0
+        call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
+        call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
+        call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
+        call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
+        call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
+        call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
+        call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
+        call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
       endif
-      itmp = floor((xloc-xdom_left)/dx);        
-      jtmp = floor((yloc-ydom_left)/dy);        
-      ktmp = floor((zloc-zdom_left)/dz);        
-
-      ! determine facx, facy, facz
-      if(itmp==0) then
-          facx = one - (xlinepart(1)-xloc)/dx
-      else
-          facx = one - (xloc-xlinepart(itmp))/dx
-      endif
-
-      if(jtmp==0) then
-          facy = one - (ylinepart(1)-yloc)/dy
-      else
-          facy = one - (yloc-ylinepart(jtmp))/dy
-      endif
-
-      if(ktmp==0) then
-          facz = one - (zlinepart(1)-zloc)/dz
-      else
-          facz = one - (zloc-zlinepart(ktmp))/dz
-      endif
-
-      onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
-
-      ! now consider 8 points separately
-      point_number = 0
-      call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
-      call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
-      call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
-      call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
-      call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
-      call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
-      call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
-      call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
 
       !this%gptsC_ileft(ii) = max(1, min(itmp+1, this%gpC%xsz(1)-1))
       !this%gptsC_ifacx(ii) = (this%gptsC_img(ii,1)-real(itmp, rkind)*dx)/dx
@@ -524,54 +817,67 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
       if( (xloc>=xdom_left) .and. (xloc<=xdom_right) .and. &
           (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
           (zloc>=zdom_left) .and. (zloc<=zdom_right) ) then
+
+        itmp = floor((xloc-xdom_left)/dx);        
+        jtmp = floor((yloc-ydom_left)/dy);        
+        ktmp = floor((zloc-zdom_left)/dz);        
+
+        ! determine facx, facy, facz
+        if(itmp==0) then
+            facx = one - (xlinepart(1)-xloc)/dx
+        else
+            facx = one - (xloc-xlinepart(itmp))/dx
+        endif
+
+        if(jtmp==5) then
+            print *, '-----nrank = ', nrank 
+            print '(a,2(i5,1x),3(e19.12,1x))', '--nrank: ', nrank, ii, xloc, yloc, zloc
+            print '(a,1(i5,1x),3(e19.12,1x))', '--xdom : ', itmp, xdom_left, xdom_right, dx
+            print '(a,1(i5,1x),3(e19.12,1x))', '--ydom : ', jtmp, ydom_left, ydom_right, dy
+            print '(a,1(i5,1x),3(e19.12,1x))', '--zdom : ', ktmp, zdom_left, zdom_right, dz
+            print '(a,       100(e19.12,1x))', '--xline: ', xlinepart
+            print '(a,       100(e19.12,1x))', '--yline: ', ylinepart
+            print '(a,       100(e19.12,1x))', '--zline: ', zlinepart
+        endif
+
+        if(jtmp==0) then
+            facy = one - (ylinepart(1)-yloc)/dy
+        else
+            facy = one - (yloc-ylinepart(jtmp))/dy
+        endif
+
+        if(ktmp==0) then
+            facz = one - (zlinepart(1)-zloc)/dz
+        else
+            facz = one - (zloc-zlinepart(ktmp))/dz
+        endif
+
+        onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
+
+        ! now consider 8 points separately
+        point_number = 0
+        call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
+        call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
+        call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
+        call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
+        call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
+        call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
+        call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
+        call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
+
+        !itmp = floor(this%gptsE_img(ii,1)/dx);
+        !this%gptsE_ileft(ii) = max(1, min(itmp+1, this%gpE%xsz(1)-1))
+        !this%gptsE_ifacx(ii) = (this%gptsE_img(ii,1)-real(itmp, rkind)*dx)/dx
+
+        !itmp = floor(this%gptsE_img(ii,2)/dy);
+        !this%gptsE_jleft(ii) = max(1, min(itmp+1, this%gpE%ysz(2)-1))
+        !this%gptsE_jfacy(ii) = (this%gptsE_img(ii,2)-real(itmp, rkind)*dy)/dy
+
+        !itmp = floor((this%gptsE_img(ii,3)-zBot)/dz);
+        !this%gptsE_kleft(ii) = max(1, min(itmp+1, this%gpE%zsz(3)-1))
+        !this%gptsE_kfacz(ii) = (this%gptsE_img(ii,3)-real(itmp, rkind)*dz - zBot)/dz
+
       endif
-      itmp = floor((xloc-xdom_left)/dx);        
-      jtmp = floor((yloc-ydom_left)/dy);        
-      ktmp = floor((zloc-zdom_left)/dz);        
-
-      ! determine facx, facy, facz
-      if(itmp==0) then
-          facx = one - (xlinepart(1)-xloc)/dx
-      else
-          facx = one - (xloc-xlinepart(itmp))/dx
-      endif
-
-      if(jtmp==0) then
-          facy = one - (ylinepart(1)-yloc)/dy
-      else
-          facy = one - (yloc-ylinepart(jtmp))/dy
-      endif
-
-      if(ktmp==0) then
-          facz = one - (zlinepart(1)-zloc)/dz
-      else
-          facz = one - (zloc-zlinepart(ktmp))/dz
-      endif
-
-      onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
-
-      ! now consider 8 points separately
-      point_number = 0
-      call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
-      call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
-      call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
-      call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
-      call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
-      call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
-      call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
-      call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
-
-      !itmp = floor(this%gptsE_img(ii,1)/dx);
-      !this%gptsE_ileft(ii) = max(1, min(itmp+1, this%gpE%xsz(1)-1))
-      !this%gptsE_ifacx(ii) = (this%gptsE_img(ii,1)-real(itmp, rkind)*dx)/dx
-
-      !itmp = floor(this%gptsE_img(ii,2)/dy);
-      !this%gptsE_jleft(ii) = max(1, min(itmp+1, this%gpE%ysz(2)-1))
-      !this%gptsE_jfacy(ii) = (this%gptsE_img(ii,2)-real(itmp, rkind)*dy)/dy
-
-      !itmp = floor((this%gptsE_img(ii,3)-zBot)/dz);
-      !this%gptsE_kleft(ii) = max(1, min(itmp+1, this%gpE%zsz(3)-1))
-      !this%gptsE_kfacz(ii) = (this%gptsE_img(ii,3)-real(itmp, rkind)*dz - zBot)/dz
   enddo
 
 end subroutine
@@ -622,11 +928,13 @@ subroutine set_interpfac_imptsE(this, ip, jp, kp, ii, point_number, multfac)
 
 end subroutine
 
-subroutine compute_image_points(this)
+subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
   class(ibmgp),     intent(inout) :: this
+  real(rkind), intent(in) :: Lx, Ly, zBot, zTop
 
   integer :: ii, jj
-  real(rkind) :: vec1(3), vec2(3), dotpr
+  real(rkind) :: vec1(3), vec2(3), dotpr, xmax_img, xmin_img, ymax_img, ymin_img, zmax_img, zmin_img
+  character(len=clen) :: fname, dumstr
 
   do ii = 1, this%num_gptsC
       ! compute image of gptsC_xyz(ii,:) wrt gptsc_bpt(ii,:) and
@@ -650,6 +958,49 @@ subroutine compute_image_points(this)
       this%gptsE_dst(ii)   = two*dotpr
   enddo
 
+  write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsC_img_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_gptsC
+      write(11, '(7(e19.12,1x))') this%gptsC_img(ii,:), this%gptsC_bnp(ii,:), this%gptsC_dst(ii)
+  enddo
+  close(11)
+
+  write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsE_img_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_gptsE
+      write(11, '(7(e19.12,1x))') this%gptsE_img(ii,:), this%gptsE_bnp(ii,:), this%gptsE_dst(ii)
+  enddo
+  close(11)
+
+  xmax_img = p_maxval(maxval(this%gptsC_img(:,1)));   xmin_img = p_minval(minval(this%gptsC_img(:,1)))
+  ymax_img = p_maxval(maxval(this%gptsC_img(:,2)));   ymin_img = p_minval(minval(this%gptsC_img(:,2)))
+  zmax_img = p_maxval(maxval(this%gptsC_img(:,3)));   zmin_img = p_minval(minval(this%gptsC_img(:,3)))
+  if((xmax_img > Lx) .or. (xmin_img < zero)) then
+      call GracefulExit("Cell image points x coordinates outside domain", 111)
+  endif
+  if((ymax_img > Ly) .or. (ymin_img < zero)) then
+      call GracefulExit("Cell image points y coordinates outside domain", 111)
+  endif
+  if((zmax_img > zTop) .or. (zmin_img < zBot)) then
+      call GracefulExit("Cell image points z coordinates outside domain", 111)
+  endif
+
+  xmax_img = p_maxval(maxval(this%gptsE_img(:,1)));   xmin_img = p_minval(minval(this%gptsE_img(:,1)))
+  ymax_img = p_maxval(maxval(this%gptsE_img(:,2)));   ymin_img = p_minval(minval(this%gptsE_img(:,2)))
+  zmax_img = p_maxval(maxval(this%gptsE_img(:,3)));   zmin_img = p_minval(minval(this%gptsE_img(:,3)))
+  if((xmax_img > Lx) .or. (xmin_img < zero)) then
+      call GracefulExit("Edge image points x coordinates outside domain", 111)
+  endif
+  if((ymax_img > Ly) .or. (ymin_img < zero)) then
+      call GracefulExit("Edge image points y coordinates outside domain", 111)
+  endif
+  if((zmax_img > zTop) .or. (zmin_img < zBot)) then
+      call GracefulExit("Edge image points z coordinates outside domain", 111)
+  endif
+
+
 end subroutine
 
 subroutine mark_boundary_points(this)
@@ -657,6 +1008,7 @@ subroutine mark_boundary_points(this)
 
   integer :: ii, imin
   real(rkind), allocatable, dimension(:) :: distfn
+  character(len=clen) :: fname, dumstr
 
   allocate(distfn(this%num_surfelem))
 
@@ -686,14 +1038,31 @@ subroutine mark_boundary_points(this)
 
   deallocate(distfn)
 
+  write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsC_bpt_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_gptsC
+      write(11, '(3(e19.12,1x), 3(i5,1x))') this%gptsC_bpt(ii,:), this%gptsC_bpind(ii)
+  enddo
+  close(11)
+
+  write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsE_bpt_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_gptsE
+      write(11, '(3(e19.12,1x), 3(i5,1x))') this%gptsE_bpt(ii,:), this%gptsE_bpind(ii)
+  enddo
+  close(11)
+
 end subroutine
 
-subroutine save_ghost_points(this, flagC, flagE, xlinepart, ylinepart, zlinepart, zlinepartE)
+subroutine save_ghost_points(this, flagC, flagE, mapC, mapE,  xlinepart, ylinepart, zlinepart, zlinepartE)
   class(ibmgp),     intent(inout) :: this
-  integer, dimension(:,:,:), intent(in)   :: flagC, flagE
+  integer, dimension(:,:,:), intent(in)   :: flagC, flagE, mapC, mapE
   real(rkind), dimension(:), intent(in) :: xlinepart, ylinepart, zlinepart, zlinepartE
 
   integer :: i, j, k, ii
+  character(len=clen)    :: fname, dumstr
 
   ii = 0
   do k = 1, this%gpC%xsz(3)
@@ -733,40 +1102,164 @@ subroutine save_ghost_points(this, flagC, flagE, xlinepart, ylinepart, zlinepart
     enddo
   enddo
 
+  ! fill mask_solid
+  this%mask_solid_xC = zero
+  do k = 1, this%gpC%xsz(3)
+    do j = 1, this%gpC%xsz(2)
+      do i = 1, this%gpC%xsz(1)
+          if( (flagC(i,j,k)==0) .and. (mapC(i,j,k)==0) ) then
+              this%mask_solid_xC(i,j,k) = one
+          endif
+      enddo
+    enddo
+  enddo
+  call transpose_x_to_y(this%mask_solid_xC, this%mask_solid_yC, this%gpC)
+  call transpose_y_to_z(this%mask_solid_yC, this%mask_solid_zC, this%gpC)
+
+  this%mask_solid_xE = zero
+  do k = 1, this%gpE%xsz(3)
+    do j = 1, this%gpE%xsz(2)
+      do i = 1, this%gpE%xsz(1)
+          if( (flagE(i,j,k)==0) .and. (mapE(i,j,k)==0) ) then
+              this%mask_solid_xE(i,j,k) = one
+          endif
+      enddo
+    enddo
+  enddo
+  call transpose_x_to_y(this%mask_solid_xE, this%mask_solid_yE, this%gpE)
+  call transpose_y_to_z(this%mask_solid_yE, this%mask_solid_zE, this%gpE)
+
+  write(dumstr,"(A3,I2.2,A11,I4.4,A4)") "Run",this%runID,"_ibm_gptsC_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_gptsC
+      write(11, '(3(e19.12,1x), 3(i5,1x))') this%gptsC_xyz(ii,:), this%gptsC_ind(ii,:)
+  enddo
+  close(11)
+  write(dumstr,"(A3,I2.2,A11,I4.4,A4)") "Run",this%runID,"_ibm_gptsE_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_gptsE
+      write(11, '(3(e19.12,1x), 3(i5,1x))') this%gptsE_xyz(ii,:), this%gptsE_ind(ii,:)
+  enddo
+  close(11)
+  !if(nrank==0) then
+      print ('(a,2(i5,1x))'), '--Done writing ghost points information to file--', nrank, this%num_gptsC
+  !endif
+
+  ! Write all mask fields to file
+  write(dumstr,"(A3,I2.2,A12)") "Run",this%runID,"_mask_xC.dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  call decomp_2d_write_one(1, this%mask_solid_xC, fname, this%gpC)
+
+  write(dumstr,"(A3,I2.2,A12)") "Run",this%runID,"_mask_yC.dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  call decomp_2d_write_one(2, this%mask_solid_yC, fname, this%gpC)
+
+  write(dumstr,"(A3,I2.2,A12)") "Run",this%runID,"_mask_zC.dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  call decomp_2d_write_one(3, this%mask_solid_zC, fname, this%gpC)
 
 
 end subroutine
 
-subroutine mark_ghost_points(this, gp, nlayers, map, flag)
+subroutine mark_ghost_points(this, gp, nlayers, map, flag, rbuffx1, rbuffy1, rbuffz1)
   class(ibmgp),     intent(in) :: this
-  class(decomp_info), pointer, intent(in) :: gp
+  type(decomp_info), pointer, intent(in) :: gp
   integer, intent(in) :: nlayers
   integer, dimension(:,:,:), intent(in) :: map
   integer, dimension(:,:,:), intent(out) :: flag
+  real(rkind), dimension(:,:,:), pointer, intent(inout) :: rbuffx1, rbuffy1, rbuffz1
 
   integer :: i, j, k, ii, jj
   integer, allocatable, dimension(:) :: locflags
+  integer, allocatable, dimension(:,:,:) :: map_yd, map_zd, flag_yd, flag_zd
 
   flag = 0
-  allocate(locflags(3*nlayers))
-  ! mark ghost points
+
+  allocate(locflags(2*nlayers))
+  allocate(map_yd(gp%ysz(1), gp%ysz(2), gp%ysz(3)))
+  allocate(map_zd(gp%zsz(1), gp%zsz(2), gp%zsz(3)))
+  allocate(flag_yd(gp%ysz(1), gp%ysz(2), gp%ysz(3)))
+  allocate(flag_zd(gp%zsz(1), gp%zsz(2), gp%zsz(3)))
+
+  print '(a,5(i4,1x))', '-----mark_ghost_points x decomp---', nrank, gp%xsz(1), gp%xsz(2), gp%xsz(3)
+  print '(a,5(i4,1x))', '-----mark_ghost_points y decomp---', nrank, gp%ysz(1), gp%ysz(2), gp%ysz(3)
+  print '(a,5(i4,1x))', '-----mark_ghost_points z decomp---', nrank, gp%zsz(1), gp%zsz(2), gp%zsz(3)
+  print '(a,5(i4,1x))', '-----size array map_yd         ---', nrank, size(map_yd,1), size(map_yd,2), size(map_yd,3)
+  print '(a,5(i4,1x))', '-----size array map_zd         ---', nrank, size(map_zd,1), size(map_zd,2), size(map_zd,3)
+
+  ! mark ghost points 
+  ! first check in x direction
   do k = 1, gp%xsz(3)
     do j = 1, gp%xsz(2)
-      do i = 1, gp%xsz(1)
+      do i = 1+nlayers, gp%xsz(1)-nlayers
+          !if(nrank==7 .and. i==32 .and. k==18) then
+          !    print '(a,3(i4,1x))', 'In mark_ghost_points', j, map(i,j,k), nlayers
+          !endif
           if(map(i,j,k)==0) then
-             ! point (i,j,k) is solid; check its neighbours
+             ! point (i,j,k) is solid; check its x neighbours
              ii = 0; locflags = 0
              do jj = 1, nlayers
-                 ii = ii+1;   locflags(ii) = map(i+jj, j,    k   )
-                 ii = ii+1;   locflags(ii) = map(i,    j+jj, k   )
-                 ii = ii+1;   locflags(ii) = map(i,    j,    k+jj)
+                 ii = ii+1;   locflags(ii) = map(i+jj, j, k)
+                 ii = ii+1;   locflags(ii) = map(i-jj, j, k)
              enddo 
              if(sum(locflags) > 0) flag(i,j,k) = 1
           endif
       enddo
     enddo
   enddo
-  deallocate(locflags)
+
+  ! now check in y direction
+  rbuffx1 = map;   call transpose_x_to_y(rbuffx1,  rbuffy1,  gp);  map_yd = rbuffy1
+  rbuffx1 = flag;  call transpose_x_to_y(rbuffx1,  rbuffy1,  gp); flag_yd = rbuffy1
+  do k = 1, gp%ysz(3)
+    do j = 1+nlayers, gp%ysz(2)-nlayers
+      do i = 1, gp%ysz(1)
+          !if(nrank==7 .and. i==32 .and. k==18) then
+          !    print '(a,3(i4,1x))', 'In mark_ghost_points', j, map(i,j,k), nlayers
+          !endif
+          if(map_yd(i,j,k)==0) then
+             ! point (i,j,k) is solid; check its x neighbours
+             ii = 0; locflags = 0
+             do jj = 1, nlayers
+                 ii = ii+1;   locflags(ii) = map_yd(i, j+jj, k)
+                 ii = ii+1;   locflags(ii) = map_yd(i, j-jj, k)
+             enddo 
+             if(sum(locflags) > 0) flag_yd(i,j,k) = flag_yd(i,j,k) + 1
+          endif
+      enddo
+    enddo
+  enddo
+
+  ! now check in z direction
+  rbuffy1 = map_yd;   call transpose_y_to_z(rbuffy1,  rbuffz1,  gp);  map_zd = rbuffz1
+  rbuffy1 = flag_yd;  call transpose_y_to_z(rbuffy1,  rbuffz1,  gp); flag_zd = rbuffz1
+  do k = 1+nlayers, gp%zsz(3)-nlayers
+    do j = 1, gp%zsz(2)
+      do i = 1, gp%zsz(1)
+          !if(nrank==7 .and. i==32 .and. k==18) then
+          !    print '(a,3(i4,1x))', 'In mark_ghost_points', j, map(i,j,k), nlayers
+          !endif
+          if(map_zd(i,j,k)==0) then
+             ! point (i,j,k) is solid; check its x neighbours
+             ii = 0; locflags = 0
+             do jj = 1, nlayers
+                 ii = ii+1;   locflags(ii) = map_zd(i, j, k+jj)
+                 ii = ii+1;   locflags(ii) = map_zd(i, j, k-jj)
+             enddo 
+             if(sum(locflags) > 0) flag_zd(i,j,k) = flag_zd(i,j,k) + 1
+          endif
+      enddo
+    enddo
+  enddo
+
+  rbuffz1 = flag_zd;   call transpose_z_to_y(rbuffz1,  rbuffy1,  gp)
+                       call transpose_y_to_x(rbuffy1,  rbuffx1,  gp);   flag = rbuffx1
+
+  flag = min(flag, 1)
+
+  deallocate(locflags, flag_yd, flag_zd, map_yd, map_zd)
 
 end subroutine
 
@@ -795,8 +1288,8 @@ subroutine compute_levelset(this, xlinepart, ylinepart, zlinepart, zlinepartE, m
       do i = 1, this%gpC%xsz(1)
           jj = lnearlistC(i,j,k)
           xk(1) = xlinepart(i)-this%surfcent(jj,1)
-          xk(2) = ylinepart(i)-this%surfcent(jj,2)
-          xk(3) = zlinepart(i)-this%surfcent(jj,3)
+          xk(2) = ylinepart(j)-this%surfcent(jj,2)
+          xk(3) = zlinepart(k)-this%surfcent(jj,3)
           xkmag = sqrt(sum(xk*xk))
           levelsetC(i,j,k) = sign(1.0_rkind, dot_product(xk, this%surfnormal(jj,:)))*xkmag
       enddo
@@ -805,6 +1298,10 @@ subroutine compute_levelset(this, xlinepart, ylinepart, zlinepart, zlinepartE, m
   where (levelsetC > zero)
     mapC = 1
   endwhere
+  print *, 'levelsetC max = ', p_maxval(levelsetC)
+  print *, 'levelsetC min = ', p_minval(levelsetC)
+  print *, '    mapC  min = ', -p_maxval(maxval(-mapC))
+  print *, '    mapC  max = ', p_maxval(maxval( mapC))
 
   ! compute levelsetE using lnearlistE
   call probe_nearest_points_kdtree_ib(1, this%gpE%xsz(1), 1, this%gpE%xsz(2), 1, this%gpE%xsz(3), &
@@ -815,8 +1312,8 @@ subroutine compute_levelset(this, xlinepart, ylinepart, zlinepart, zlinepartE, m
       do i = 1, this%gpE%xsz(1)
           jj = lnearlistE(i,j,k)
           xk(1) = xlinepart(i)-this%surfcent(jj,1)
-          xk(2) = ylinepart(i)-this%surfcent(jj,2)
-          xk(3) = zlinepartE(i)-this%surfcent(jj,3)
+          xk(2) = ylinepart(j)-this%surfcent(jj,2)
+          xk(3) = zlinepartE(k)-this%surfcent(jj,3)
           xkmag = sqrt(sum(xk*xk))
           levelsetE(i,j,k) = sign(1.0_rkind, dot_product(xk, this%surfnormal(jj,:)))*xkmag
       enddo
@@ -835,15 +1332,23 @@ end subroutine
 subroutine destroy(this)
   class(ibmgp), intent(inout) :: this
 
+  deallocate(this%mask_solid_xC, this%mask_solid_yC, this%mask_solid_zC)
+  deallocate(this%mask_solid_xE, this%mask_solid_yE, this%mask_solid_zE)
+  nullify(this%rbuffxC1, this%rbuffxC2)
+  nullify(this%rbuffyC1, this%rbuffyC2)
+  nullify(this%rbuffzC1, this%rbuffzC2)
+  nullify(this%rbuffxE1, this%rbuffxE2)
+  nullify(this%rbuffyE1, this%rbuffyE2)
+  nullify(this%rbuffzE1, this%rbuffzE2)
   !deallocate(this%gptsC_ifacx, this%gptsE_ifacx)
   !deallocate(this%gptsC_jfacy, this%gptsE_jfacy)
   !deallocate(this%gptsC_kfacz, this%gptsE_kfacz)
   !deallocate(this%gptsC_ileft, this%gptsE_ileft)
   !deallocate(this%gptsC_jleft, this%gptsE_jleft)
   !deallocate(this%gptsC_kleft, this%gptsE_kleft)
-  deallocate(this%gptsC_u,  this%gptsE_u)
-  deallocate(this%gptsC_v,  this%gptsE_v)
-  deallocate(this%gptsC_w,  this%gptsE_w)
+  !deallocate(this%gptsC_u,  this%gptsE_u)
+  !deallocate(this%gptsC_v,  this%gptsE_v)
+  !deallocate(this%gptsC_w,  this%gptsE_w)
   deallocate(this%imptsC_u, this%imptsE_u)
   deallocate(this%imptsC_v, this%imptsE_v)
   deallocate(this%imptsC_w, this%imptsE_w)

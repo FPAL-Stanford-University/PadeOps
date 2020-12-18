@@ -14,7 +14,7 @@ module reductions
     end interface
 
     interface P_MINVAL
-        module procedure P_MINVAL_arr4, P_MINVAL_arr3, P_MINVAL_arr2, P_MINVAL_sca
+        module procedure P_MINVAL_arr4, P_MINVAL_arr3, P_MINVAL_arr2, P_MINVAL_sca, P_MINVAL_int
     end interface
 
     interface P_SUM
@@ -149,6 +149,15 @@ contains
         integer :: ierr
 
         call MPI_Allreduce(x, minimum, 1, mpirkind, MPI_MIN, MPI_COMM_WORLD, ierr)
+
+    end function
+
+    function P_MINVAL_int(x) result(minimum)
+        integer, intent(in) :: x
+        integer :: minimum
+        integer :: ierr
+
+        call MPI_Allreduce(x, minimum, 1, mpi_int, MPI_MIN, MPI_COMM_WORLD, ierr)
 
     end function
 
