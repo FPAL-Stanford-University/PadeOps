@@ -4,6 +4,7 @@ module ibmgpmod
     use exits          , only: GracefulExit
     use reductions     , only: p_maxval, p_minval
     use kdtree_wrapper , only: initialize_kdtree_ib, create_kdtree_ib, probe_nearest_points_kdtree_ib, finalize_kdtree_ib
+    use spectralMod    , only: spectral  
     use decomp_2d
     use decomp_2d_io
 
@@ -15,10 +16,10 @@ module ibmgpmod
     type :: ibmgp
         private 
         type(decomp_info), pointer :: gpC, gpE
-        !class(spectral), pointer :: spectC, spectE
+        class(spectral), pointer :: spectC, spectE
 
         integer     :: num_surfelem, num_gptsC, num_gptsE, ibwm, runID
-        real(rkind) :: ibwm_ustar
+        real(rkind) :: ibwm_ustar, ibwm_z0
         real(rkind), allocatable, dimension(:,:,:) :: surfelem
         real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal
         real(rkind), allocatable, dimension(:,:)   :: gptsC_xyz, gptsE_xyz, gptsC_bpt, gptsE_bpt
@@ -68,11 +69,12 @@ module ibmgpmod
 
 contains
 
-subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, mesh, Lx, Ly, zBot, zTop, dz, rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE)
+subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, spectE, mesh, Lx, Ly, zBot, zTop, dz, rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE)
   class(ibmgp),     intent(inout) :: this
   character(len=*), intent(in)    :: inputFile, inputDir, outputDir
   integer, intent(in) :: runID
   type(decomp_info), intent(in), target :: gpC, gpE
+  type(spectral),    intent(in), target :: spectC, spectE
   real(rkind), dimension(:,:,:,:), intent(in) :: mesh
   real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE
   real(rkind), intent(in) :: Lx, Ly, zBot, zTop, dz
@@ -87,10 +89,10 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, mesh, Lx,
   integer,     allocatable, dimension(:,:,:) :: mapC, mapE, flagC, flagE
   real(rkind), allocatable, dimension(:,:,:) :: levelsetC, levelsetE
   real(rkind), dimension(3) :: vec1, vec2, xk
-  real(rkind) :: ibwm_ustar = one
+  real(rkind) :: ibwm_ustar = one, ibwm_z0 = 1.0d-4
 
   namelist /IBMGP/ surfaceMeshFile, Lscale, translate_x, translate_y, translate_z, &
-                   solidpt_x, solidpt_y, solidpt_z, nlayers, ibwm, ibwm_ustar
+                   solidpt_x, solidpt_y, solidpt_z, nlayers, ibwm, ibwm_ustar, ibwm_z0
 
   this%runID = runID
   this%outputDir = outputDir
@@ -102,8 +104,11 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, mesh, Lx,
 
   this%gpC => gpC
   this%gpE => gpE
+  this%spectC => spectC
+  this%spectE => spectE
   this%ibwm = ibwm
   this%ibwm_ustar = ibwm_ustar
+  this%ibwm_z0    = ibwm_z0
 
   if( (this%ibwm .ne. 1) .and. (this%ibwm .ne. 2)) then
       call GracefulExit("Wrong choice for IB Wall Model. Check input file.", 111)
@@ -366,52 +371,59 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, mesh, Lx,
 
 end subroutine
 
-subroutine update_ibmgp(this, u, v, w, uE, vE, wC)
+subroutine update_ibmgp(this, u, v, w, uE, vE, wC, uhat, vhat, what)
   class(ibmgp),     intent(inout) :: this
-  real(rkind), dimension(:,:,:), intent(inout) :: u, v, w, uE, vE, wC
+  real(rkind),    dimension(:,:,:), intent(inout) :: u, v, w, uE, vE, wC
+  complex(rkind), dimension(:,:,:), intent(out)   :: uhat, vhat, what
 
   integer :: ii, itmp
   real(rkind) :: umax, umin, vmax, vmin, wmax, wmin, uEmax, uEmin, vEmax, vEmin, wCmax, wCmin
 
-  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
-  uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
-  if(nrank==0) then
-      print *, '-----Before interp_impts------'
-      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
-      print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
-      print *, '------------------------------'
-  endif
+  !umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
+  !if(nrank==0) then
+  !    print *, '-----Before interp_impts------'
+  !    print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
+  !    print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
   call this%interp_imptsC(u, v,  wC)
   call this%interp_imptsE(uE, vE, w)
 
-  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
-  uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
-  if(nrank==0) then
-      print *, '-----After  interp_impts------'
-      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
-      print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
-      print *, '------------------------------'
-  endif
+  !umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
+  !if(nrank==0) then
+  !    print *, '-----After  interp_impts------'
+  !    print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
+  !    print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
   call this%update_ghostptsCE(u, v, w)
 
-  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
-  uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
-  if(nrank==0) then
-      print *, '-----After  update_gpts ------'
-      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
-      print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
-      print *, '------------------------------'
-  endif
+  !umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
+  !if(nrank==0) then
+  !    print *, '-----After  update_gpts ------'
+  !    print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
+  !    print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
   call this%smooth_solidptsCE(u, v, w)
 
-  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
-  uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
-  if(nrank==0) then
-      print *, '-----After  smooth_solidpts---'
-      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
-      print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
-      print *, '------------------------------'
-  endif
+  !umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
+  !if(nrank==0) then
+  !    print *, '-----After  smooth_solidpts---'
+  !    print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wCmax, wCmin
+  !    print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
+
+  ! Step 3: Take it to spectral fields
+  call this%spectC%fft(u, uhat)
+  call this%spectC%fft(v, vhat)
+  call this%spectE%fft(w, what)
+
 end subroutine
 
 subroutine smooth_solidptsCE(this, u, v, w)
@@ -425,101 +437,146 @@ subroutine smooth_solidptsCE(this, u, v, w)
 
   num_smooth = 10; diffcoeff = 1.0d-1;
 
-  if(nrank==8) then
-    jj = 1; kk = 16;
-    open(10,file='smooth_along_x_before.dat',status='replace')
-    do ii = 1, size(u,1)
-        write(10,*) u(ii,jj,kk), this%mask_solid_xC(ii,jj,kk)
-    enddo
-    close(10)
-  endif
+  !if(nrank==8) then
+  !  jj = 1; kk = 16;
+  !  open(10,file='smooth_along_x_before.dat',status='replace')
+  !  do ii = 1, size(u,1)
+  !      write(10,*) u(ii,jj,kk), this%mask_solid_xC(ii,jj,kk)
+  !  enddo
+  !  close(10)
+  !endif
+  !umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+  !!uEmax = p_maxval(uE);uEmin = p_minval(uE); vEmax = p_maxval(vE);vEmin = p_minval(vE); wCmax = p_maxval(wC);wCmin = p_minval(wC);
+  !if(nrank==0) then
+  !    print *, '-----Before Smoothing ---'
+  !    print '(a,6(e19.12,1x))', 'CeEd uvw:', umax, umin, vmax, vmin, wmax, wmin
+  !    !print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
 
   call this%smooth_along_x(u,             this%rbuffxC1, this%mask_solid_xC, num_smooth, diffcoeff)
-  umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
-  !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
-  if(nrank==0) then
-      print *, '-----After  smooth_along_x---'
-      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin, vmax, vmin, wmax, wmin
-      !print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
-      print *, '------------------------------'
-  endif
-  if(nrank==8) then
-    jj = 1; kk = 16;
-    open(10,file='smooth_along_x_after.dat',status='replace')
-    do ii = 1, size(u,1)
-        write(10,*) u(ii,jj,kk), this%mask_solid_xC(ii,jj,kk)
-    enddo
-  endif
+  !umax = p_maxval(u); umin = p_minval(u)
+  !if(nrank==0) then
+  !    print *, '-----Smoothing u velocity ---'
+  !    print *, '-----After  smooth_along_x---'
+  !    print '(a,6(e19.12,1x))', 'Cell u:', umax, umin
+  !    print *, '------------------------------'
+  !endif
+  !if(nrank==8) then
+  !  jj = 1; kk = 16;
+  !  open(10,file='smooth_along_x_after.dat',status='replace')
+  !  do ii = 1, size(u,1)
+  !      write(10,*) u(ii,jj,kk), this%mask_solid_xC(ii,jj,kk)
+  !  enddo
+  !endif
 
   call transpose_x_to_y   (u,             this%rbuffyC1, this%gpC)
-  if(nrank==8) then
-    ii = 1; kk = 16;
-    open(10,file='smooth_along_y_before.dat',status='replace')
-    do jj = 1, size(this%rbuffyC1,2)
-        write(10,*) this%rbuffyC1(ii,jj,kk), this%mask_solid_yC(ii,jj,kk)
-    enddo
-    close(10)
-  endif
+  !if(nrank==8) then
+  !  ii = 1; kk = 16;
+  !  open(10,file='smooth_along_y_before.dat',status='replace')
+  !  do jj = 1, size(this%rbuffyC1,2)
+  !      write(10,*) this%rbuffyC1(ii,jj,kk), this%mask_solid_yC(ii,jj,kk)
+  !  enddo
+  !  close(10)
+  !endif
   call this%smooth_along_y(this%rbuffyC1, this%rbuffyC2, this%mask_solid_yC, num_smooth, diffcoeff)
-  if(nrank==8) then
-    ii = 1; kk = 16;
-    open(10,file='smooth_along_y_after.dat',status='replace')
-    do jj = 1, size(this%rbuffyC1,2)
-        write(10,*) this%rbuffyC1(ii,jj,kk), this%mask_solid_yC(ii,jj,kk)
-    enddo
-    close(10)
-  endif
-  umax = p_maxval(this%rbuffyC1); umin = p_minval(this%rbuffyC1)
-  if(nrank==0) then
-      print *, '-----After  smooth_along_y---'
-      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin
-      print *, '------------------------------'
-  endif
+  !if(nrank==8) then
+  !  ii = 1; kk = 16;
+  !  open(10,file='smooth_along_y_after.dat',status='replace')
+  !  do jj = 1, size(this%rbuffyC1,2)
+  !      write(10,*) this%rbuffyC1(ii,jj,kk), this%mask_solid_yC(ii,jj,kk)
+  !  enddo
+  !  close(10)
+  !endif
+  !umax = p_maxval(this%rbuffyC1); umin = p_minval(this%rbuffyC1)
+  !if(nrank==0) then
+  !    print *, '-----After  smooth_along_y---'
+  !    print '(a,6(e19.12,1x))', 'Cell u:', umax, umin
+  !    print *, '------------------------------'
+  !endif
   call transpose_y_to_z   (this%rbuffyC1, this%rbuffzC1, this%gpC)
-  if(nrank==8) then
-    print *, 'nrank 8 x = ', this%gpC%zst(1), this%gpC%zen(1)
-    ii = 1; jj = 33;
-    open(10,file='smooth_along_z_before.dat',status='replace')
-    do kk = 1, size(this%rbuffzC1,3)
-        write(10,*) this%rbuffzC1(ii,jj,kk), this%mask_solid_zC(ii,jj,kk)
-    enddo
-    close(10)
-  endif
+  !if(nrank==8) then
+  !  print *, 'nrank 8 x = ', this%gpC%zst(1), this%gpC%zen(1)
+  !  ii = 1; jj = 33;
+  !  open(10,file='smooth_along_z_before.dat',status='replace')
+  !  do kk = 1, size(this%rbuffzC1,3)
+  !      write(10,*) this%rbuffzC1(ii,jj,kk), this%mask_solid_zC(ii,jj,kk)
+  !  enddo
+  !  close(10)
+  !endif
   call this%smooth_along_z(this%rbuffzC1, this%rbuffzC2, this%mask_solid_zC, num_smooth, diffcoeff)
-  if(nrank==8) then
-    ii = 1; jj = 33;
-    open(10,file='smooth_along_z_after.dat',status='replace')
-    do kk = 1, size(this%rbuffzC1,3)
-        write(10,*) this%rbuffzC1(ii,jj,kk), this%mask_solid_zC(ii,jj,kk)
-    enddo
-    close(10)
-  endif
-  umax = p_maxval(this%rbuffzC1); umin = p_minval(this%rbuffzC1)
-  if(nrank==0) then
-      print *, '-----After  smooth_along_z---'
-      print '(a,6(e19.12,1x))', 'Cell uvw:', umax, umin
-      print *, '------------------------------'
-  endif
+  !if(nrank==8) then
+  !  ii = 1; jj = 33;
+  !  open(10,file='smooth_along_z_after.dat',status='replace')
+  !  do kk = 1, size(this%rbuffzC1,3)
+  !      write(10,*) this%rbuffzC1(ii,jj,kk), this%mask_solid_zC(ii,jj,kk)
+  !  enddo
+  !  close(10)
+  !endif
+  !umax = p_maxval(this%rbuffzC1); umin = p_minval(this%rbuffzC1)
+  !if(nrank==0) then
+  !    print *, '-----After  smooth_along_z---'
+  !    print '(a,6(e19.12,1x))', 'Cell u:', umax, umin
+  !    print *, '------------------------------'
+  !endif
   call transpose_z_to_y   (this%rbuffzC1, this%rbuffyC1, this%gpC)
   call transpose_y_to_x   (this%rbuffyC1, u,             this%gpC)
 
-  !call GracefulExit("Stopping here for now", 111)
-
   call this%smooth_along_x(v,             this%rbuffxC1, this%mask_solid_xC, num_smooth, diffcoeff)
+  !umax = p_maxval(v); umin = p_minval(v)
+  !if(nrank==0) then
+  !    print *, '-----Smoothing v velocity ---'
+  !    print *, '-----After  smooth_along_x---'
+  !    print '(a,6(e19.12,1x))', 'Cell v:', umax, umin
+  !    print *, '------------------------------'
+  !endif
   call transpose_x_to_y   (v,             this%rbuffyC1, this%gpC)
   call this%smooth_along_y(this%rbuffyC1, this%rbuffyC2, this%mask_solid_yC, num_smooth, diffcoeff)
+  !umax = p_maxval(this%rbuffyC1); umin = p_minval(this%rbuffyC1)
+  !if(nrank==0) then
+  !    print *, '-----After  smooth_along_y---'
+  !    print '(a,6(e19.12,1x))', 'Cell v:', umax, umin
+  !    print *, '------------------------------'
+  !endif
   call transpose_y_to_z   (this%rbuffyC1, this%rbuffzC1, this%gpC)
   call this%smooth_along_z(this%rbuffzC1, this%rbuffzC2, this%mask_solid_zC, num_smooth, diffcoeff)
+  !umax = p_maxval(this%rbuffzC1); umin = p_minval(this%rbuffzC1)
+  !if(nrank==0) then
+  !    print *, '-----After  smooth_along_z---'
+  !    print '(a,6(e19.12,1x))', 'Cell v:', umax, umin
+  !    print *, '------------------------------'
+  !endif
   call transpose_z_to_y   (this%rbuffzC1, this%rbuffyC1, this%gpC)
   call transpose_y_to_x   (this%rbuffyC1, v,             this%gpC)
 
   call this%smooth_along_x(w,             this%rbuffxE1, this%mask_solid_xE, num_smooth, diffcoeff)
+  !umax = p_maxval(w); umin = p_minval(w)
+  !if(nrank==0) then
+  !    print *, '-----Smoothing w velocity ---'
+  !    print *, '-----After  smooth_along_x---'
+  !    print '(a,6(e19.12,1x))', 'Edge w:', umax, umin
+  !    print *, '------------------------------'
+  !endif
   call transpose_x_to_y   (w,             this%rbuffyE1, this%gpE)
   call this%smooth_along_y(this%rbuffyE1, this%rbuffyE2, this%mask_solid_yE, num_smooth, diffcoeff)
+  !umax = p_maxval(this%rbuffyE1); umin = p_minval(this%rbuffyE1)
+  !if(nrank==0) then
+  !    print *, '-----After  smooth_along_z---'
+  !    print '(a,6(e19.12,1x))', 'Edge w:', umax, umin
+  !    print *, '------------------------------'
+  !endif
   call transpose_y_to_z   (this%rbuffyE1, this%rbuffzE1, this%gpE)
   call this%smooth_along_z(this%rbuffzE1, this%rbuffzE2, this%mask_solid_zE, num_smooth, diffcoeff)
+  !umax = p_maxval(this%rbuffzE1); umin = p_minval(this%rbuffzE1)
+  !if(nrank==0) then
+  !    print *, '-----After  smooth_along_z---'
+  !    print '(a,6(e19.12,1x))', 'Edge w:', umax, umin
+  !    print *, '------------------------------'
+  !endif
   call transpose_z_to_y   (this%rbuffzE1, this%rbuffyE1, this%gpE)
   call transpose_y_to_x   (this%rbuffyE1, w,             this%gpE)
+
+  !call GracefulExit("Stopping here for now", 111)
 
 end subroutine
 
@@ -607,11 +664,11 @@ subroutine smooth_along_z(this, uarr, rhs, mask_solid_z, num_smooth, diffcoeff)
   dcmax = p_maxval(diffcoeff_z); dcmin = p_minval(diffcoeff_z)
   rhsmax = p_maxval(rhs);    rhsmin = p_minval(rhs)
   maxmsk = p_maxval(maxval(mask_solid_z)); minmsk = p_minval(minval(mask_solid_z))
-  if(nrank==0) then
-      print *, 'diffcoeff: ', dcmax, dcmin
-      print *, 'rhs      : ', rhsmax, rhsmin
-      print *, 'mask     : ', maxmsk, minmsk
-  endif
+  !if(nrank==0) then
+  !    print *, 'diffcoeff: ', dcmax, dcmin
+  !    print *, 'rhs      : ', rhsmax, rhsmin
+  !    print *, 'mask     : ', maxmsk, minmsk
+  !endif
 
 end subroutine
 
@@ -620,8 +677,8 @@ subroutine update_ghostptsCE(this, u, v, w)
   real(rkind), dimension(:,:,:), intent(inout) :: u, v, w
 
   integer :: ii, jj, i, j, k
-  real(rkind) :: vec1(3), vec2(3), unrm(3), utan(3), dotpr, twodist
-  real(rkind) :: ibwallstress, utan_gp(3), unrm_gp(3)
+  real(rkind) :: vec1(3), vec2(3), unrm(3), utan(3), dotpr, dist
+  real(rkind) :: ibwallvel, utan_gp(3), unrm_gp(3), vmax, vmin
 
 
   if(this%ibwm==1) then
@@ -645,16 +702,34 @@ subroutine update_ghostptsCE(this, u, v, w)
           unrm = vec2*dotpr
           utan = vec1-unrm
 
-          twodist = this%gptsC_dst(ii) ! distance from ghost to image point
-          ibwallstress = this%ibwm_ustar/kappa/twodist*two
-          utan_gp = utan-twodist*ibwallstress
+          dist = this%gptsC_dst(ii) ! distance from ghost pt to image point
+          !ibwallvel = this%ibwm_ustar/kappa*log(dist/this%ibwm_z0)
+          !utan_gp = -utan+two*ibwallvel   ! (WM01)
+           utan_gp = utan*(one - two*kappa/log(dist/this%ibwm_z0)) ! (WM04) 
+          !utan_gp = utan  ! (WM03)
+          !utan_gp = utan - two*this%ibwm_ustar/kappa ! (WM02) 
           unrm_gp = -unrm
 
           i = this%gptsC_ind(ii,1);  j = this%gptsC_ind(ii,2);  k = this%gptsC_ind(ii,3)
           u(i,j,k) = utan_gp(1) + unrm_gp(1)
           v(i,j,k) = utan_gp(2) + unrm_gp(2)
           !this%gptsC_w(ii) = utan_gp(3) + unrm_gp(3)
+          !if(v(i,j,k) > 17.2d0 ) then
+          !    print *, '++++++ ii = ', ii, '++++++'
+          !    print '(a,3(e19.12,1x))', 'vec1   : ', vec1
+          !    print '(a,3(e19.12,1x))', 'vec2   : ', vec2
+          !    print '(a,3(e19.12,1x))', 'dotpr  : ', dotpr
+          !    print '(a,3(e19.12,1x))', 'unrm   : ', unrm
+          !    print '(a,3(e19.12,1x))', 'utan   : ', utan
+          !    print '(a,3(e19.12,1x))', 'unrm_gp: ', unrm_gp
+          !    print '(a,3(e19.12,1x))', 'utan_gp: ', utan_gp
+          !    print '(a,3(e19.12,1x))', 'u, v   : ', utan_gp(1:2) + unrm_gp(1:2)
+          !    print *, '++++++---------------------------'
+          !endif
       enddo
+
+      !vmax = p_maxval(v); vmin = p_minval(v)
+      !print '(a,i4.4,1x,2(e19.12,1x))', '(vmax vmin): ', nrank, maxval(v), minval(v)
 
       do ii = 1, this%num_gptsE
           vec1(1) = this%imptsE_u(ii);  vec1(2) = this%imptsE_v(ii);  vec1(3) = this%imptsE_w(ii)
@@ -664,9 +739,12 @@ subroutine update_ghostptsCE(this, u, v, w)
           unrm = vec2*dotpr
           utan = vec1-unrm
 
-          twodist = this%gptsE_dst(ii) ! distance from ghost to and image point
-          ibwallstress = this%ibwm_ustar/kappa/twodist*two
-          utan_gp = utan-twodist*ibwallstress
+          dist = this%gptsE_dst(ii) ! distance from ghost pt to image point
+          !ibwallvel = this%ibwm_ustar/kappa*log(dist/this%ibwm_z0)
+          !utan_gp = -utan+two*ibwallvel ! (WM01)
+           utan_gp = utan*(one - two*kappa/log(dist/this%ibwm_z0)) ! (WM04) 
+          !utan_gp = utan  ! (WM03)
+          !utan_gp = utan - two*this%ibwm_ustar/kappa ! (WM02)
           unrm_gp = -unrm
 
           i = this%gptsE_ind(ii,1);   j = this%gptsE_ind(ii,2);  k = this%gptsE_ind(ii,3)
@@ -944,7 +1022,7 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
       dotpr = sum(vec1*vec2)
       this%gptsC_img(ii,:) = this%gptsC_xyz(ii,:) + two*dotpr*vec2
       this%gptsC_bnp(ii,:) = this%gptsC_xyz(ii,:) + dotpr*vec2
-      this%gptsC_dst(ii)   = two*dotpr
+      this%gptsC_dst(ii)   = dotpr
   enddo
 
   do ii = 1, this%num_gptsE
@@ -955,7 +1033,7 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
       dotpr = sum(vec1*vec2)
       this%gptsE_img(ii,:) = this%gptsE_xyz(ii,:) + two*dotpr*vec2
       this%gptsE_bnp(ii,:) = this%gptsE_xyz(ii,:) + dotpr*vec2
-      this%gptsE_dst(ii)   = two*dotpr
+      this%gptsE_dst(ii)   = dotpr
   enddo
 
   write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsC_img_",nrank,".dat"

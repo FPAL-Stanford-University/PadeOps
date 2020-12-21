@@ -38,6 +38,7 @@
        class(igrid), intent(inout), target :: this
        real(rkind), intent(in), optional :: dtforced
        integer :: idx 
+  real(rkind) :: umax, umin, vmax, vmin, wmax, wmin
 
        if(present(dtforced)) then
          this%dt = dtforced
@@ -53,9 +54,9 @@
        else
            call this%populate_rhs()
        end if
-       !print*, sum(abs(this%u_rhs))
-       !print*, sum(abs(this%v_rhs))
-       !print*, sum(abs(this%w_rhs))
+       !print '(a,e19.12)', 'rhsu: ', p_sum(abs(this%u_rhs))
+       !print '(a,e19.12)', 'rhsv: ', p_sum(abs(this%v_rhs))
+       !print '(a,e19.12)', 'rhsw: ', p_sum(abs(this%w_rhs))
        !print*, sum(abs(this%T_rhs))
      
        this%newTimeStep = .false. 
@@ -78,14 +79,29 @@
           end do 
        end if
 
+  !umax = p_maxval(this%u); umin = p_minval(this%u);  vmax = p_maxval(this%v); vmin = p_minval(this%v);  wmax = p_maxval(this%w); wmin = p_minval(this%w);
+  !if(nrank==0) then
+  !    print *, '-----Before projection---'
+  !    print '(a,6(e19.12,1x))', 'CeEd uvw:', umax, umin, vmax, vmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
        ! Now perform the projection and prep for next stage
        call this%project_and_prep(this%fastCalcPressure)
         
+  !umax = p_maxval(this%u); umin = p_minval(this%u);  vmax = p_maxval(this%v); vmin = p_minval(this%v);  wmax = p_maxval(this%w); wmin = p_minval(this%w);
+  !if(nrank==0) then
+  !    print *, '-----After  projection---'
+  !    print '(a,6(e19.12,1x))', 'CeEd uvw:', umax, umin, vmax, vmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
 
        !!! STAGE 2
        ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
        ! what we want. 
        call this%populate_rhs()
+       !print '(a,e19.12)', 'rhsu: ', p_sum(abs(this%u_rhs))
+       !print '(a,e19.12)', 'rhsv: ', p_sum(abs(this%v_rhs))
+       !print '(a,e19.12)', 'rhsw: ', p_sum(abs(this%w_rhs))
 
        ! reset u, v, w pointers
        call this%reset_pointers()
@@ -108,14 +124,30 @@
           end do 
        end if
 
+  !umax = p_maxval(this%u); umin = p_minval(this%u);  vmax = p_maxval(this%v); vmin = p_minval(this%v);  wmax = p_maxval(this%w); wmin = p_minval(this%w);
+  !if(nrank==0) then
+  !    print *, '-----Before projection---'
+  !    print '(a,6(e19.12,1x))', 'CeEd uvw:', umax, umin, vmax, vmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
        ! Now perform the projection and prep for next stage
        call this%project_and_prep(.false.)
 
+  !umax = p_maxval(this%u); umin = p_minval(this%u);  vmax = p_maxval(this%v); vmin = p_minval(this%v);  wmax = p_maxval(this%w); wmin = p_minval(this%w);
+  !if(nrank==0) then
+  !    print *, '-----After  projection---'
+  !    print '(a,6(e19.12,1x))', 'CeEd uvw:', umax, umin, vmax, vmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
+       ! Now perform the projection and prep for next stage
 
        !!! STAGE 3 (Final Stage)
        ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
        ! we really want. 
        call this%populate_rhs()
+       !print '(a,e19.12)', 'rhsu: ', p_sum(abs(this%u_rhs))
+       !print '(a,e19.12)', 'rhsv: ', p_sum(abs(this%v_rhs))
+       !print '(a,e19.12)', 'rhsw: ', p_sum(abs(this%w_rhs))
        
        ! reset u, v, w pointers
        call this%reset_pointers()
@@ -130,9 +162,21 @@
           end do 
        end if
        
+  !umax = p_maxval(this%u); umin = p_minval(this%u);  vmax = p_maxval(this%v); vmin = p_minval(this%v);  wmax = p_maxval(this%w); wmin = p_minval(this%w);
+  !if(nrank==0) then
+  !    print *, '-----Before projection---'
+  !    print '(a,6(e19.12,1x))', 'CeEd uvw:', umax, umin, vmax, vmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
        ! Now perform the projection and prep for next time step
        call this%project_and_prep(.false.)
 
+  !umax = p_maxval(this%u); umin = p_minval(this%u);  vmax = p_maxval(this%v); vmin = p_minval(this%v);  wmax = p_maxval(this%w); wmin = p_minval(this%w);
+  !if(nrank==0) then
+  !    print *, '-----After  projection---'
+  !    print '(a,6(e19.12,1x))', 'CeEd uvw:', umax, umin, vmax, vmin, wmax, wmin
+  !    print *, '------------------------------'
+  !endif
 
        ! Wrap up this time step 
        call this%wrapup_timestep() 

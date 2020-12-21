@@ -19,7 +19,8 @@
       
        ! Step 0: IBM
        if(this%useibm) then
-           call this%ibm%update_ibmgp(this%u, this%v, this%w, this%uE, this%vE, this%wC)
+           call this%ibm%update_ibmgp(this%u, this%v, this%w, this%uE, this%vE, this%wC, this%uhat, this%vhat, this%what)
+           call this%interp_PrimitiveVars()
        endif
 
        ! Step 1: Non Linear Term 
@@ -105,7 +106,8 @@
       
        ! Step 0: IBM
        if(this%useibm) then
-           call this%ibm%update_ibmgp(this%u, this%v, this%w, this%uE, this%vE, this%wC)
+           call this%ibm%update_ibmgp(this%u, this%v, this%w, this%uE, this%vE, this%wC, this%uhat, this%vhat, this%what)
+           call this%interp_PrimitiveVars()
        endif
 
        ! Step 1: Non Linear Term 
