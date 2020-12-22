@@ -35,9 +35,9 @@ module dynamicYawMod
         real(rkind), dimension(:,:), allocatable :: Phat_fit_u ! size: [Num_turbines, power probability bins]
         integer :: p_bins, ws_bins, dir_bins, gamma_bins
         real(rkind), dimension(:), allocatable :: p_steps
-        real(rkind) :: dir_std, gamma_std, ws_std
+        real(rkind) :: dir_std, gamma_std, ws_std, leading_Pstd, MaxModelError
         ! Wind conditions
-        real(rkind) :: wind_speed, wind_direction
+        real(rkind) :: wind_speed, wind_direction, wind_direction_next
         real(rkind), dimension(:), allocatable :: powerObservation, powerBaseline, Popti, Pstd
         integer :: conditionTurb
         ! Other stuff
@@ -54,7 +54,7 @@ module dynamicYawMod
         ! Moving average stuff
         integer :: n_moving_average
         real(rkind), dimension(:,:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, dir_minus_n
-        real(rkind), dimension(:), allocatable :: Phat, Phat_yaw
+        real(rkind), dimension(:), allocatable :: Phat, Phat_yaw, Phat_fit
         logical :: check = .true., useInitialParams = .false., secondary = .false., uncertain = .false.
         logical :: ref_turbine
         ! Superposition stuff
@@ -63,6 +63,10 @@ module dynamicYawMod
         real(rkind) :: epsUc = 1.0D-3
         real(rkind), dimension(:,:), allocatable :: ucr
         real(rkind), dimension(:), allocatable :: v
+        ! Wind direction statistics
+        integer :: Tf_init, Tf_min
+        logical :: use_alpha_check
+        real(rkind) :: dalpha_max
 
     contains
         procedure :: init
@@ -78,6 +82,7 @@ module dynamicYawMod
         procedure, private :: backward
         procedure :: update_and_yaw
         procedure :: simpleMovingAverage
+        procedure :: alpha_check
     end type
 
 
@@ -97,8 +102,8 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     integer, intent(in) :: Nt
     logical, intent(out) :: fixedYaw, considerAdvection, lookup
     integer, intent(out) :: dynamicStart, dirType
-    logical :: useInitialParams, secondary, uncertain, ref_turbine
-    real(rkind) :: dir_std, gamma_std, ws_std
+    logical :: useInitialParams, secondary, uncertain, ref_turbine, use_alpha_check
+    real(rkind) :: dir_std, gamma_std, ws_std, MaxModelError, dalpha_max
 
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
@@ -106,7 +111,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
                            fixedYaw, dynamicStart, dirType, considerAdvection, lookup, &
                            useInitialParams, powerExp, superposition, secondary, uncertain, &
                            p_bins, dir_bins, gamma_bins, ws_bins, ref_turbine, &
-                           dir_std, gamma_std, ws_std
+                           dir_std, gamma_std, ws_std, MaxModelError, use_alpha_check, dalpha_max
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -135,6 +140,9 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     this%gamma_std = gamma_std
     this%dir_std = dir_std
     this%ws_std = ws_std
+    this%MaxModelError = MaxModelError
+    this%use_alpha_check = use_alpha_check
+    this%dalpha_max = dalpha_max ! degrees
 
     ! Is there an adjacent reference turbine which we are not yawing?
     if (this%ref_turbine == .true.) then
@@ -166,6 +174,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     allocate(this%kw(this%Nt))
     allocate(this%sigma_0(this%Nt))
     allocate(this%Phat(this%Nt))
+    allocate(this%Phat_fit(this%Nt))
     allocate(this%Phat_yaw(this%Nt))
     allocate(this%Popti(this%Nt))
     allocate(this%v(this%Nt))
@@ -184,6 +193,9 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     this%power_minus_n = 0.d0
     this%ws_minus_n = 0.d0
     this%pb_minus_n = 0.d0
+    ! Wind direction statistics
+    this%Tf_init = this%n_moving_average; 
+    this%Tf_min = this%n_moving_average/4.d0
 
     ! Uncertain
     ! Discretize between -1 STD and +1 STD
@@ -227,16 +239,17 @@ subroutine destroy(this)
 
 end subroutine 
 
-subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservation, ts, powerBaseline, Pstd, dirStd)
+subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, wind_direction_next, powerObservation, ts, powerBaseline, Pstd, dirStd)
     class(dynamicYaw), intent(inout) :: this
     real(rkind), dimension(:), intent(inout) :: yaw
     real(rkind), dimension(:), intent(in) :: powerObservation, powerBaseline, Pstd
-    real(rkind), intent(in) :: wind_speed, wind_direction, dirStd
+    real(rkind), intent(in) :: wind_speed, wind_direction, dirStd, wind_direction_next
     integer, intent(in) :: ts
 
     ! Field data observation
     this%wind_speed = wind_speed ! Get this from the data
     this%wind_direction = 270.d0-wind_direction ! Get this from the data
+    this%wind_direction_next = 270.d0-wind_direction_next ! Get this from the data
     ! Use a locally linear interpolation to get the wind direction at the end of
     ! the step
     ! If one of the turbines is a reference turbine modify the power observation
@@ -269,6 +282,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, powerObservatio
     ! Normalize the power production by baseline power (computed using ADM)
     this%powerObservation = this%powerObservation(this%indSorted) / this%powerBaseline(this%conditionTurb)
     this%Pstd = this%Pstd(this%indSorted) / this%powerBaseline(this%conditionTurb);
+    this%leading_Pstd = this%Pstd(1)
     this%Pstd(1) = 0.d0
 
     ! Online control update
@@ -300,7 +314,7 @@ subroutine onlineUpdate(this)
     real(rkind), dimension(:), allocatable :: Phat_zeroYaw, p_steps
     real(rkind), dimension(:,:), allocatable :: psi_kp1, kwBest_u, sigmaBest_u
     real(rkind), dimension(this%stateEstimationEpochs) :: error
-    real(rkind) :: lowestError
+    real(rkind) :: lowestError, leading_turbine_err
     integer :: nt2, i, t, bestStep, pint
 
     ! Allocate
@@ -341,6 +355,16 @@ subroutine onlineUpdate(this)
                 this%Ptot_initial = sum(Phat)
             end if
         end do
+        this%Phat_fit = Phat(this%unsort)
+
+        ! Rotate to future wind direction
+        kwBest = kwBest(this%unsort); ! unsort
+        sigmaBest = sigmaBest(this%unsort) ! unsort
+        this%wind_direction = this%wind_direction_next ! set next step wind direction forecast
+        this%turbCenter = this%turbCenterStore ! restore original layout
+        call this%rotate() ! rotate
+        kwBest = kwBest(this%indSorted); ! sort
+        sigmaBest = sigmaBest(this%indSorted); ! sort
 
         ! Generate optimal yaw angles
         this%kw = kwBest; this%sigma_0 = sigmaBest;
@@ -361,37 +385,66 @@ subroutine onlineUpdate(this)
         allocate(kwBest_u(this%Nt, this%p_bins))
         allocate(sigmaBest_u(this%Nt, this%p_bins))
         kwBest_u = this%kw_u; sigmaBest_u = this%sigma_u;
-        this%Phat_fit_u = 0.d0
-        do pint = 1, this%p_bins
-            ! Store local parameter and rotate
-            kw = this%kw_u(this%indSorted,pint); sigma_0 = this%sigma_u(this%indSorted,pint)
-            yaw = this%yaw(this%indSorted)
-            call this%forward(kw, sigma_0, Phat_zeroYaw, yaw*0.d0)
-            ! State estimation
-            error = 0.d0; lowestError = 100.d0
-            do i=1, this%Ne
-                do t=1,this%Nt
-                    psi_kp1(t,i) = kw(t)
-                    psi_kp1(this%Nt+t,i) = sigma_0(t)
+        ! Check wake model error to determinite if the parameters need to be
+        ! updated
+        kw = this%kw_u(this%indSorted, (this%p_bins+1)/2); 
+        sigma_0 = this%sigma_u(this%indSorted,(this%p_bins+1)/2)
+        call this%forward(kw, sigma_0, Phat, yaw)
+        call this%forward(kw, sigma_0, Phat_zeroYaw, yaw*0.d0)
+        error(1) = sum(abs(Phat-this%powerObservation)) / real(this%Nt,rkind)
+        leading_turbine_err = abs(Phat(1)/Phat_zeroYaw(1) - this%powerObservation(1))
+
+        ! Check the fitting error and the quality of the input data
+        ! If the leading turbine normalized power differs significantly from the
+        ! wake model, don't use the data for updating wake model parameters
+        if (error(1)>this%MaxModelError .and. leading_turbine_err<this%leading_Pstd) then
+            ! Update wake model parameters
+            this%Phat_fit_u = 0.d0
+            do pint = 1, this%p_bins
+                ! Store local parameter and rotate
+                kw = this%kw_u(this%indSorted,pint); sigma_0 = this%sigma_u(this%indSorted,pint)
+                yaw = this%yaw(this%indSorted)
+                call this%forward(kw, sigma_0, Phat_zeroYaw, yaw*0.d0)
+                ! State estimation
+                error = 0.d0; lowestError = 100.d0
+                do i=1, this%Ne
+                    do t=1,this%Nt
+                        psi_kp1(t,i) = kw(t)
+                        psi_kp1(this%Nt+t,i) = sigma_0(t)
+                    end do
+                end do
+                bestStep = 1; 
+                kwBest_u(:,pint) = kw; sigmaBest_u(:,pint) = sigma_0;
+                do t=1, this%stateEstimationEpochs;
+                    ! Ensemble Kalman update
+                    call this%EnKF_update( psi_kp1, this%powerObservation+this%Pstd*this%p_steps(pint), kw, sigma_0, yaw, t)
+                    ! Run forward model pass
+                    call this%forward(kw, sigma_0, Phat, yaw)
+                    ! Normalized
+                    Phat = Phat / Phat_zeroYaw(1)
+                    error(t) = sum(abs(Phat-this%powerObservation-this%Pstd*this%p_steps(pint))) / real(this%Nt,rkind)
+                    if (error(t)<lowestError) then
+                        lowestError=error(t); bestStep = t;
+                        kwBest_u(:,pint) = kw; sigmaBest_u(:,pint) = sigma_0
+                        this%Phat_fit_u(:,pint) = Phat;
+                    end if
                 end do
             end do
-            bestStep = 1; 
-            kwBest_u(:,pint) = kw; sigmaBest_u(:,pint) = sigma_0;
-            do t=1, this%stateEstimationEpochs;
-                ! Ensemble Kalman update
-                call this%EnKF_update( psi_kp1, this%powerObservation+this%Pstd*this%p_steps(pint), kw, sigma_0, yaw, t)
-                ! Run forward model pass
-                call this%forward(kw, sigma_0, Phat, yaw)
-                ! Normalized
-                Phat = Phat / Phat_zeroYaw(1)
-                error(t) = sum(abs(Phat-this%powerObservation-this%Pstd*this%p_steps(pint))) / real(this%Nt,rkind)
-                if (error(t)<lowestError) then
-                    lowestError=error(t); bestStep = t;
-                    kwBest_u(:,pint) = kw; sigmaBest_u(:,pint) = sigma_0
-                    this%Phat_fit_u(:,pint) = Phat;
-                end if
-            end do
-        end do
+        else
+            kwBest_u = this%kw_u(this%indSorted,:); 
+            sigmaBest_u = this%sigma_u(this%indSorted,:)
+        end if
+        this%Phat_fit = this%Phat_fit_u(this%unsort,(this%p_bins+1)/2)
+
+        ! Rotate to future wind direction
+        kwBest_u = kwBest_u(this%unsort,:); ! unsort
+        sigmaBest_u = sigmaBest_u(this%unsort,:) ! unsort
+        this%wind_direction = this%wind_direction_next ! set next step wind direction forecast
+        this%turbCenter = this%turbCenterStore ! restore original layout
+        call this%rotate() ! rotate
+        kwBest_u = kwBest_u(this%indSorted,:); ! sort
+        sigmaBest_u = sigmaBest_u(this%indSorted,:); ! sort
+
         ! Generate optimal yaw angles
         call this%yawOptimize_uncertain(kwBest_u, sigmaBest_u, yaw)
         ! Terms are already unsorted in the uncertain case due to local array
@@ -1045,7 +1098,126 @@ subroutine backward(this, kw, sigma_0, yaw)
  
 end subroutine
 
+
+!! alpha_check() is used to check the stationarity of the wind direction and
+!! to produce the statistics of the wind direction relevant for wake
+!! steering
+subroutine alpha_check(this, alpha, t, alpha_m, alpha_std, Tf_out)
+    class(dynamicYaw), intent(inout) :: this
+    real(rkind), dimension(:), intent(in) :: t, alpha ! should be time and alpha from t-2*Tf_init:t where t is current timestep
+    real(rkind), intent(out) :: alpha_m, alpha_std
+    integer, intent(out) :: Tf_out
+    real(rkind), dimension(:), allocatable :: Rsq, x, y, yp, sig 
+    real(rkind), dimension(:,:), allocatable :: cov, p
+    integer, dimension(:), allocatable :: p_in
+    real(rkind) :: dalpha, eps_f, eps_m, ym, t_future, dt, Tint, SStot, SSres, Rsq_min = 0.2d0
+    integer :: tstart, Tf
+    logical :: check, stationary
+    ! Allocate
+    allocate(p_in(2))
+    allocate(Rsq(2))
+    allocate(p(2,2))
+    allocate(cov(2,2))
+    allocate(x(this%Tf_init))
+    allocate(y(this%Tf_init))
+    allocate(yp(this%Tf_init))
+    allocate(sig(this%Tf_init))
+
+    ! Initailize
+    tstart=size(t)
+    check=.true.; dalpha=this%dalpha_max+1.d0; Tf=this%Tf_init;
+    p_in = (/ 0, 1 /)
+    dt = mean(t(2:2*this%Tf_init)-t(1:2*this%Tf_init-1)) 
+    sig = 1.d0
+
+    ! While loop over Tfit integration length
+    do while (dalpha>=this%dalpha_max .and. check==.true.)
+        ! Initialize loop
+        ! Least squares fit, Step 1
+        ! t-2*Tf:t-Tf
+        x = t(tstart - 2*this%Tf_init+1 : tstart - 1*this%Tf_init); 
+        y = alpha(tstart - 2*this%Tf_init+1 : tstart - 1*this%Tf_init); ym = mean(y);
+        call pfit(x,y,sig,p_in,p(:,1),cov)
+        yp = p(2,1)*x + p(1,1);
+        SStot = sum((y - mean(y))**2.d0);
+        SSres = sum((y - yp)**2.d0);
+        Rsq(1) = 1.d0 - SSres/SStot;
+        ! t-Tf:t
+        x = t(tstart - 1*this%Tf_init+1 : tstart); 
+        y = alpha(tstart - 1*this%Tf_init+1 : tstart); !ym(2) = mean(y);
+        call pfit(x,y,sig,p_in,p(:,2),cov)
+        yp = p(2,2)*x + p(1,2);
+        SStot = sum((y - mean(y))**2.d0);
+        SSres = sum((y - yp)**2.d0);
+        Rsq(2) = 1.d0 - SSres/SStot;
+
+        ! Step 2
+        stationary = .true.; dalpha = 0.d0; x=0.d0; y = 0.d0;
+        if (Rsq(1)>Rsq_min .and. Rsq(2)>Rsq_min) then
+            ! Step 3
+            y(1:Tf) = p(2,1)*t(tstart - 1*Tf+1 : tstart) + p(1,1);
+            eps_f = mean( (alpha(tstart - 1*Tf+1 : tstart) - y(1:Tf) )**2.d0 );
+            ! Step 4
+            eps_m = mean( (alpha(tstart - 1*Tf+1 : tstart) - ym)**2.d0 );
+            ! Step 5
+            if (eps_f < eps_m) then
+                stationary = .false.;
+                ! Steps 6 & 7
+                y(1:Tf) = p(2,1)*t(tstart - 1*Tf+1 : tstart) + p(1,1);
+                alpha_std = std( alpha(tstart - 1*Tf+1 : tstart) - y(1:Tf) );
+                ! Add previous predictive error to the STD
+                alpha_std = alpha_std + sqrt(eps_f);
+                ! Time
+                t_future = t(tstart - 1*Tf+1) + real(Tf/2,rkind) * dt
+                Tint = t(tstart) - t(tstart - 1*Tf+1)
+                ! Predicted mean
+                alpha_m = p(2,2)*t_future + p(1,2);
+                dalpha = Tint*abs(p(2,2));
+            else 
+                stationary = .true.;
+                ! Steps 9 & 10
+                alpha_std = std( alpha(tstart - 1*Tf+1 : tstart) );
+                ! Add previous predictive error to the STD
+                alpha_std = alpha_std + sqrt(eps_m);
+                ! Mean
+                alpha_m = mean( alpha(tstart - 1*Tf+1 : tstart) );
+                dalpha = alpha_m - mean( alpha(tstart - 2*Tf+1 : tstart - 1*Tf) );
+            end if
+        else ! step 11
+            stationary = .true.;
+            eps_m = mean( (alpha(tstart - 1*Tf+1 : tstart) - ym)**2.d0 );
+            ! Steps 12 & 13
+            alpha_std = std( alpha(tstart - 1*Tf+1 : tstart) );
+            ! Add previous predictive error to the STD
+            alpha_std = alpha_std + sqrt(eps_m);
+            ! Mean
+            alpha_m = mean( alpha(tstart - 1*Tf+1 : tstart) );
+            dalpha = alpha_m - mean( alpha(tstart - 2*Tf+1 : tstart - 1*Tf) );
+        end if
+
+        ! Update Tf
+        if (dalpha>this%dalpha_max) then;
+            if (Tf/2>=this%Tf_min) then;
+                Tf = Tf/2; 
+            else
+                check=.false.;
+            end if
+        end if
+        Tf_out = Tf;
+
+    end do
+    write(*,*) 'Stationary'
+    write(*,*) stationary
+
+    ! Deallocate
+    deallocate(p_in,Rsq,p,cov,x,y,sig,yp)
+
+end subroutine
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! Utilities
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 subroutine observeField(this)
     class(dynamicYaw), intent(inout) :: this
@@ -1162,6 +1334,19 @@ end subroutine
 !! LAPACK
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+function mean(x) result(xm)
+    real(rkind), dimension(:), intent(in) :: x
+    real(rkind) :: xm
+    xm = sum(x) / real(size(x),rkind)
+end function mean
+
+function std(x) result(xstd)
+    real(rkind), dimension(:), intent(in) :: x
+    real(rkind) :: xm, xstd
+    xm = sum(x) / real(size(x),rkind)
+    xstd = sqrt( (1.d0/real(size(x),rkind)) * sum((x-xm)**2.d0) )
+end function std
+
 function inv(A) result(Ainv)
   real(rkind), dimension(:,:), intent(in) :: A
   real(rkind), dimension(size(A,1),size(A,2)) :: Ainv
@@ -1209,5 +1394,179 @@ end function inv
       r = sum((y(1+1:n-0) + y(1+0:n-1))*(x(1+1:n-0) - x(1+0:n-1)))/2
     end associate
   end function
+
+subroutine pfit(x,y,sig,p,a,cov,coeff,chi)
+    ! Fit data to a polynomial a_0 + a_1 x + ... + a_d x**d
+    ! Original call: subroutine pfit(x,y,sig,p,a,cov,coeff,chi)
+    ! Inputs:
+    !   x(1:npt)           - abscissas
+    !   y(1:npt)           - data values
+    !   sig(1:npt)         - data errors
+    ! Outputs:
+    !   a(1:np)            - max. likelihood parameters
+    !   coeff(1:npt,1:np)  - coefficients giving the max. likelihood parameters
+    !                        in terms of the data:
+    !                           a(i) = \Sum_{j} coeff(j,i) * y(j)
+    !   cov(1:n,1:np)      - Covariance matrix, cov(i,j) = Cov(a(i),a(j))
+    !                        The estimated error in a(i) is sqrt(Cov(a(i),a(i)))
+    !   chi                - Reduced chi value,
+    !                          chi = sqrt(chi**2/(npt - np))
+    ! Notes:
+    !   This routine uses a QR decomposition method, which should be more
+    !   numerically stable than solving the normal equations.
+    implicit none
+    real(rkind), intent(in)  :: x(:), y(:), sig(:)
+    integer,  intent(in)  :: p(:)
+    real(rkind), intent(out) :: a(:)
+    real(rkind), intent(out), optional :: cov(:,:), coeff(:,:), chi
+
+    real(rkind), allocatable :: work(:), C(:,:), Q(:,:), R(:,:), b(:)
+    integer :: ipiv(size(a)), lwork
+    integer :: k,npt,ifail,np,ip,jp
+    real(rkind) :: coeff1(size(x),size(a)), val
+
+    npt = size(x) ! Number of data points
+    np = size(p) ! Number of polynomial terms
+    if (size(a) .ne. np) stop "Error 0 in pfit"
+    if (size(y) .ne. npt) stop "Error 1 in pfit"
+    if (size(sig) .ne. npt) stop "Error 2 in pfit"
+    if (np .gt. npt) stop "Error 4 in pfit"
+    if (present(coeff)) then
+       if (size(coeff,1) .ne. npt) stop "Error 6 in pfit"
+       if (size(coeff,2) .ne. np) stop "Error 5 in pfit"
+    end if
+    if (present(cov)) then
+       if (size(cov,1) .ne. np) stop "Error 7 in pfit"
+       if (size(cov,2) .ne. np) stop "Error 8 in pfit"
+    end if
+
+    allocate(C(npt,np), Q(npt,np), R(np,np), b(np))
+
+    ! Vandermonde matrix
+    do jp=1,np
+       do k=1,npt
+          C(k,jp) = x(k)**(p(jp))/sig(k)
+       end do
+    end do
+
+    ! QR decomposition
+    call DQRF(C,Q,R,work)
+
+    ! Inversion of R factor
+    R = inv(R)
+
+    ! Compute max-likelihood parameters
+    ! a = R^-1 Q^T y/σ
+    b = 0.d0
+    do jp=1,np
+       do k=1,npt
+          b(jp) = b(jp) + Q(k,jp) * y(k) / sig(k)
+       end do
+    end do
+
+    a = 0.d0
+    do ip=1,np
+       do jp=1,np
+          a(ip) = a(ip) + R(ip,jp) * b(jp)
+       end do
+    end do
+
+    ! Compute coefficient matrix coeff such that a(i) = Σ_j coeff(j,i) y(j)
+    ! Here a(i) = R^{-1}(i,j) Q(k,j) y(k)/σ(k)
+    ! So coeff(k,i) = R^{-1}(i,j) Q(k,j) / σ(k)
+    if (present(coeff) .or. present(cov)) then
+       coeff1 = 0.d0
+       do ip=1,np
+          do jp=1,np
+             do k=1,npt
+                coeff1(k,ip) = coeff1(k,ip) + R(ip,jp) * Q(k,jp) / sig(k)
+             end do
+          end do
+       end do
+       if (present(coeff)) coeff = coeff1
+    end if
+
+    ! Compute covariance matrix Cov(a(i),a(j)) = Σ_k C(k,i) C(k,j) σ(k)^2
+    if (present(cov)) then
+       cov = 0.d0
+       do jp=1,np
+          do ip=1,np
+             do k=1,npt
+                cov(ip,jp) = cov(ip,jp) + coeff1(k,ip) * coeff1(k,jp) * sig(k)**2
+             end do
+          end do
+       end do
+    end if
+
+    ! Compute sqrt(chi^2/ndf)
+    if (present(chi)) then
+       chi = 0.d0
+       do k=1,npt
+          val = 0.d0
+          do ip=1,np
+             val = val + a(ip) * x(k)**p(ip)
+          end do
+          chi = chi + (val - y(k))**2/sig(k)**2
+       end do
+       chi = sqrt(chi/(npt - np))
+    end if
+  end subroutine pfit
+
+
+  subroutine DQRF(A,Q,R,work)
+    ! Compute the QR factorization of a general real matrix A:
+    !   A = Q R
+    ! where Q is unitary and R is upper triangular, using the LAPACK routine
+    ! zgeqrf.
+    ! Inputs:
+    !   A:     Matrix to be factorized, m x n
+    ! Ouputs:
+    !   Q:     Unitary matrix, m x m
+    !   R:     Upper triangular, n x n
+    ! Input/output:
+    !   work:  real(8) allocatable workspace array. If unallocated, this
+    !          routine will allocate it to an appropriate size. If allocated,
+    !          it is assumed to be the correct size for this problem.
+    implicit none
+    real(8), intent(in)  :: A(:,:)
+    real(8), intent(out) :: Q(:,:), R(:,:)
+    real(8), allocatable :: work(:)
+
+    integer :: m, n, lwork, ierr, i, j
+    real(8) :: tau(size(A,2)), qwork(1)
+    real(8) :: A1(size(A,1),size(A,2))
+
+    m = size(A,1)
+    n = size(A,2)
+    if (m .lt. n) stop "Error in DQRF: m < n"
+    if (size(Q,1) .ne. m) stop "Error in DQRF (2)"
+    if (size(Q,2) .ne. n) stop "Error in DQRF (3)"
+    if (size(R,1) .ne. n) stop "Error in DQRF (4)"
+    if (size(R,2) .ne. n) stop "Error in DQRF (5)"
+
+    A1 = A
+    if (.not. allocated(work)) then
+       ! Compute size of workspace
+       lwork = -1
+       call DGEQRF(m, n, A1, m, TAU, qwork, LWORK, ierr)
+       if (ierr .ne. 0) stop "Error calling DGEQRF (1)"
+       lwork = qwork(1)
+       allocate(work(lwork))
+    end if
+
+    lwork = size(work)
+    call dgeqrf(m,n,A1,m,tau,work,lwork,ierr)
+    if (ierr .ne. 0) stop "Error calling DGEQRF (2)"
+    R = 0.d0
+    do j=1,n
+       do i=1,j
+          R(i,j) = A1(i,j)
+       end do
+    end do
+    Q(:,1:n) = A1
+    call dorgqr(m,n,n,Q,m,tau,work,lwork,ierr)
+    if (ierr .ne. 0) stop "Error calling DORGQR"
+  end subroutine DQRF
+
 
 end module 

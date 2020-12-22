@@ -1,16 +1,16 @@
 &INPUT
-inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/kumar/init"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal/farm/debug"   ! Directory for all output files
-nx                            = 160          ! Number of points in X
-ny                            = 160          ! Number of points in Y
-nz                            = 160          ! Number of points in Z
+inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/farm/init"   ! Directory for any input files
+outputdir                     = "/scratch/05294/mhowland/diurnal/farm/2x2/dynamic"   ! Directory for all output files
+nx                            = 320          ! Number of points in X
+ny                            = 320          ! Number of points in Y
+nz                            = 320          ! Number of points in Z
 tstop                         = 8.64D1      ! Physical time to stop the simulation
 CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.025D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 1691           ! TimeID of the restart file being used
+restartFile_TID               = 2551           ! TimeID of the restart file being used
 restartFile_RID               = 1           ! RunID of the restart file being used
 /
 /
@@ -29,8 +29,8 @@ donot_dealias         = .FALSE.
 /
 &IO 
 RunID                         = 1           ! Run Label (All output files will be tagged with this nubber)
-t_restartDump                 = 500        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 500         ! Data dumping frequency (# of timesteps)
+t_restartDump                 = 400        ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump                    = 400         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
@@ -122,10 +122,10 @@ num_turbines                  = 4          ! How many turbines?
 ADM                           = .TRUE.      ! Are these actuator disks?
 turbInfoDir           = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_files/turbInfo/2x2array"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/diurnal/farm/debug/turbOut"
+powerDumpDir          = "/scratch/05294/mhowland/diurnal/farm/2x2/dynamic/turbOut"
 useDynamicYaw         = .TRUE.
 yawUpdateInterval     = 400
-inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/dynamicYaw_diurnal_aligned.inp"
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_dynamic.inp"
 /
 /
 &KSPREPROCESS
@@ -157,8 +157,8 @@ restart_counter       = 1000     ! Restart budget file counter
 /
 /
 &PROBLEM_INPUT
-Lx                            =  4.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            =  4.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lx                            =  8.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            =  8.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
 Lz                            =  2.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  290.D0      ! Reference Temp. 
 wTh_surf0                     =  0.1D0     ! Surface heat flux (at tsim=0) in K-m/s (need to take care of the dimensions)

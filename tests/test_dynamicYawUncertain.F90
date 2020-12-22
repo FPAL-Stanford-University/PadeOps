@@ -1,6 +1,7 @@
 program test_dynamicYawUncertain
     use kind_parameters, only: rkind, clen
     use constants, only: pi, two, one, imi, zero, half, kappa
+    use Gridtools, only: linspace, mytrapz
     use reductions, only: p_maxval, p_sum 
     use timer, only: tic, toc
     use decomp_2d
@@ -14,7 +15,7 @@ program test_dynamicYawUncertain
 
     type(dynamicYaw) :: dyaw
     type(actuatorDisk_yaw), allocatable, dimension(:) :: ad
-    character(len=clen) :: inputDir = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/dynamicYaw_neutral_debug.inp"
+    character(len=clen) :: inputDir = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/neutral/dynamicYaw_neutral_debug.inp"
     character(len=clen) :: inputDir_turb = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/turbines/neutral_pbl_concurrent_files/turbInfo/3x1array"
 
     integer, parameter :: nx = 192, ny = 96, nz = 128
@@ -28,6 +29,10 @@ program test_dynamicYawUncertain
     real(rkind), dimension(:), allocatable :: yaw, xLoc, yLoc, power, Pstd
     logical :: fixedYaw
     logical :: considerAdvection, lookup
+    ! Variables for the alpha_check() function
+    real(rkind), dimension(4000) :: alpha, t
+    real(rkind) :: alpha_m, alpha_std
+    integer :: Tf_out
 
     call MPI_Init(ierr)
     call decomp_2d_init(nx, ny, nz, prow, pcol)
@@ -94,7 +99,7 @@ program test_dynamicYawUncertain
     wind_direction = 0.0d0 * 180.d0 / pi
     dirStd = 2.5d0   
  
-    call dyaw%update_and_yaw(yaw, wind_speed, wind_direction, power, 1, power*0.d0+1.d0, Pstd, dirStd)
+    call dyaw%update_and_yaw(yaw, wind_speed, wind_direction, wind_direction, power, 1, power*0.d0+1.d0, Pstd, dirStd)
 
     ! O, t
     write(*,*) dyaw%yaw*180.d0/pi
@@ -128,6 +133,18 @@ program test_dynamicYawUncertain
     write(*,*) dyaw%v
     write(*,*) 'yc'
     write(*,*) dyaw%y_c
+
+    ! alpha_check()
+    t = linspace(0.d0, 4000.d0, 4000)
+    !alpha = 1.d0
+    alpha = 5.d0 * sin(t*pi/200.d0)
+    call dyaw%alpha_check(alpha(size(alpha)-dyaw%Tf_init*2+1 : size(alpha)), t(size(alpha)-dyaw%Tf_init*2+1 : size(alpha)), &
+                          alpha_m, alpha_std, Tf_out)
+    write(*,*) 'Alpha check output'
+    write(*,*) size(alpha(size(alpha)-dyaw%Tf_init*2+1 : size(alpha)))
+    write(*,*) alpha_m
+    write(*,*) alpha_std
+    write(*,*) Tf_out
 
     call MPI_Finalize(ierr)
 end program 

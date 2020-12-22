@@ -343,17 +343,18 @@ subroutine dumpPower(this, outputfile, tempname)
 end subroutine    
 
 subroutine dumpPowerUpdate(this, outputfile, tempname, & 
-                           powerUpdate, dirUpdate, Phat, yaw, yawOld, & 
+                           powerUpdate, dirUpdate, Phat, Phat_fit, yaw, yawOld, & 
                            meanP, kw, sigma, phat_yaw, i, pBaseline, &
-                           hubDirection, Popti, stdP, turbNum)
+                           hubDirection, Popti, stdP, alpha_m, dirStd, turbNum)
     class(actuatordisk_yaw), intent(inout) :: this
     character(len=*),    intent(in)            :: outputfile, tempname
     integer :: fid = 1234
     integer, intent(in) :: i, turbNum
     character(len=clen) :: fname, tempname2
-    real(rkind), dimension(:), intent(in) :: powerUpdate, dirUpdate, Phat, yaw, yawOld, meanP
+    real(rkind), dimension(:), intent(in) :: powerUpdate, dirUpdate, Phat, Phat_fit, yaw, yawOld, meanP
     real(rkind), dimension(:), intent(in) :: kw, sigma, phat_yaw, pBaseline, hubDirection
     real(rkind), dimension(:), intent(in) :: Popti, stdP
+    real(rkind), intent(in) :: alpha_m, dirStd
 
     ! Write power
     write(tempname2,"(A5,I3.3,A6,I3.3,A4)") "Pvec_",i,"_turb_",turbNum,".txt"
@@ -367,11 +368,17 @@ subroutine dumpPowerUpdate(this, outputfile, tempname, &
     open(fid,file=trim(fname), form='formatted')
     write(fid, *) dirUpdate
     close(fid)
-    ! Write Phat
+    ! Write Phat (this one also included wind condition distributions)
     write(tempname2,"(A5,I3.3,A4)") "Phat_",i,".txt"
     fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
     open(fid,file=trim(fname), form='formatted')
     write(fid, *) Phat
+    close(fid)
+    ! Write Phat_fit
+    write(tempname2,"(A5,I3.3,A4)") "Pfit_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) Phat_fit
     close(fid)
     ! Write yaw opti
     write(tempname2,"(A8,I3.3,A4)") "YawOpti_",i,".txt"
@@ -433,6 +440,20 @@ subroutine dumpPowerUpdate(this, outputfile, tempname, &
     !open(fid,file=trim(fname), form='formatted')
     !write(fid, *) powerUpdate
     !close(fid)
+
+    ! Data associated with the wind direction stationarity statistics
+    ! Write alpha_m in this time interval
+    write(tempname2,"(A7,I3.3,A4)") "alpham_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) alpha_m
+    close(fid)
+    ! Write dirStd in this time interval
+    write(tempname2,"(A7,I3.3,A4)") "dirstd_",i,".txt"
+    fname = outputfile(:len_trim(outputfile))//"/"//trim(tempname2)
+    open(fid,file=trim(fname), form='formatted')
+    write(fid, *) dirStd
+    close(fid)
 
 end subroutine    
 
