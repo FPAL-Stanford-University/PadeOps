@@ -1,5 +1,5 @@
 module ibmgpmod
-    use kind_parameters, only: rkind, clen
+    use kind_parameters, only: rkind, clen, mpiinteg, mpirkind
     use constants      , only: zero, one, third, half, two, kappa
     use exits          , only: GracefulExit
     use reductions     , only: p_maxval, p_minval
@@ -7,6 +7,7 @@ module ibmgpmod
     use spectralMod    , only: spectral  
     use decomp_2d
     use decomp_2d_io
+    use mpi
 
     implicit none
 
@@ -19,6 +20,7 @@ module ibmgpmod
         class(spectral), pointer :: spectC, spectE
 
         integer     :: num_surfelem, num_gptsC, num_gptsE, ibwm, runID
+        integer     :: num_imptsC_glob, num_imptsE_glob
         real(rkind) :: ibwm_ustar, ibwm_z0
         real(rkind), allocatable, dimension(:,:,:) :: surfelem
         real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal
@@ -26,14 +28,19 @@ module ibmgpmod
         real(rkind), allocatable, dimension(:,:)   :: gptsC_img, gptsE_img, gptsC_bnp, gptsE_bnp
         integer,     allocatable, dimension(:,:)   :: gptsC_ind, gptsE_ind
         integer,     allocatable, dimension(:)     :: gptsC_bpind, gptsE_bpind!, gptsC_ileft, gptsC_jleft, gptsC_kleft
+        integer,     allocatable, dimension(:)     :: num_imptsC_arr, imptsC_index_st
+        integer,     allocatable, dimension(:)     :: num_imptsE_arr, imptsE_index_st
         !integer,     allocatable, dimension(:)     :: gptsE_ileft, gptsE_jleft, gptsE_kleft
         !real(rkind), allocatable, dimension(:)     :: gptsC_ifacx, gptsC_jfacy, gptsC_kfacz
         !real(rkind), allocatable, dimension(:)     :: gptsE_ifacx, gptsE_jfacy, gptsE_kfacz
         !real(rkind), allocatable, dimension(:)     ::   gptsC_u,  gptsC_v,  gptsC_w,  gptsE_u,  gptsE_v,  gptsE_w
         integer,     allocatable, dimension(:)     ::  imptsC_numonproc, imptsE_numonproc
         integer,     allocatable, dimension(:,:,:) ::  imptsC_indices,   imptsE_indices
-        real(rkind), allocatable, dimension(:,:)   ::  imptsC_multfac,   imptsE_multfac
+        real(rkind), allocatable, dimension(:,:)   ::  imptsC_multfac,   imptsE_multfac, imptsC_xyz, imptsE_xyz
+        real(rkind), allocatable, dimension(:,:)   ::  imptsC_xyz_loc, imptsE_xyz_loc
         real(rkind), allocatable, dimension(:)     ::  imptsC_u, imptsC_v, imptsC_w, imptsE_u, imptsE_v, imptsE_w
+        real(rkind), allocatable, dimension(:)     ::  imptsC_u_tmp, imptsC_v_tmp, imptsC_w_tmp
+        real(rkind), allocatable, dimension(:)     ::  imptsE_u_tmp, imptsE_v_tmp, imptsE_w_tmp
         real(rkind), allocatable, dimension(:)     ::  gptsC_dst, gptsE_dst
 
         real(rkind), dimension(:,:,:), pointer     :: rbuffxC1, rbuffxC2, rbuffyC1, rbuffyC2, rbuffzC1, rbuffzC2 
@@ -80,7 +87,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   real(rkind), intent(in) :: Lx, Ly, zBot, zTop, dz
 
   character(len=clen)    :: surfaceMeshFile, fname, dumstr
-  integer :: io, ii, jj, k, ioUnit, nlines, nlayers = 2, ibwm = 1
+  integer :: io, ii, jj, k, ioUnit, nlines, nlayers = 2, ibwm = 1, ierr
   real(rkind) :: rnum1, rnum2, rnum3, Lscale = one, invLscale, dotprod, dx, dy
   real(rkind) :: translate_x = zero, translate_y = zero, translate_z = zero
   real(rkind) :: xmax_ib, xmin_ib, ymax_ib, ymin_ib, zmax_ib, zmin_ib, xkmag
@@ -327,6 +334,37 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   !!!print *, '   flagC  min = ', -p_maxval(maxval(-flagC))
   !!!print *, '   flagC  max = ', p_maxval(maxval( flagC))
 
+! comehere
+
+  allocate(this%num_imptsC_arr(nproc), this%num_imptsE_arr(nproc))
+  allocate(this%imptsC_index_st(nproc), this%imptsE_index_st(nproc))
+
+  this%num_imptsC_arr = 0
+  call MPI_AllGather(this%num_gptsC, 1, mpiinteg, this%num_imptsC_arr, 1, mpiinteg, MPI_COMM_WORLD, ierr)
+  this%num_imptsC_glob = sum(this%num_imptsC_arr)
+  this%imptsC_index_st(1) = 1
+  do ii = 2, nproc
+    this%imptsC_index_st(ii) = this%imptsC_index_st(ii-1)
+  enddo
+
+  this%num_imptsE_arr = 0
+  call MPI_AllGather(this%num_gptsE, 1, mpiinteg, this%num_imptsE_arr, 1, mpiinteg, MPI_COMM_WORLD, ierr)
+  this%num_imptsE_glob = sum(this%num_imptsE_arr)
+  this%imptsE_index_st(1) = 1
+  do ii = 2, nproc
+    this%imptsE_index_st(ii) = this%imptsE_index_st(ii-1)
+  enddo
+
+  allocate(this%imptsC_xyz(this%num_imptsC_glob,3), this%imptsE_xyz(this%num_imptsE_glob,3))
+  allocate(this%imptsC_xyz_loc(this%num_imptsC_glob,3), this%imptsE_xyz_loc(this%num_imptsE_glob,3))
+  allocate(this%imptsC_u_tmp(this%num_imptsC_glob), this%imptsE_u_tmp(this%num_imptsE_glob))
+  allocate(this%imptsC_v_tmp(this%num_imptsC_glob), this%imptsE_v_tmp(this%num_imptsE_glob))
+  allocate(this%imptsC_w_tmp(this%num_imptsC_glob), this%imptsE_w_tmp(this%num_imptsE_glob))
+     ! imptsC_numonproc; imptsC_indices, imptsC_multfac
+  allocate(this%imptsC_numonproc(this%num_imptsC_glob), this%imptsE_numonproc(this%num_imptsE_glob))
+  allocate(this%imptsC_indices(3,8,this%num_imptsC_glob), this%imptsE_indices(3,8,this%num_imptsE_glob))
+  allocate(this%imptsC_multfac(  8,this%num_imptsC_glob), this%imptsE_multfac(  8,this%num_imptsE_glob))
+
   allocate(this%gptsC_xyz(this%num_gptsC,3), this%gptsE_xyz(this%num_gptsE,3))
   allocate(this%gptsC_ind(this%num_gptsC,3), this%gptsE_ind(this%num_gptsE,3))
   allocate(this%gptsC_bpt(this%num_gptsC,3), this%gptsE_bpt(this%num_gptsE,3))
@@ -335,21 +373,12 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   allocate(this%gptsC_bnp(this%num_gptsC,3), this%gptsE_bnp(this%num_gptsE,3))
   allocate(this%gptsC_dst(this%num_gptsC),   this%gptsE_dst(this%num_gptsE))
 
-  allocate(this%imptsC_numonproc(this%num_gptsC), this%imptsE_numonproc(this%num_gptsE))
-  allocate(this%imptsC_indices(3,8,this%num_gptsC), this%imptsE_indices(3,8,this%num_gptsE))
-  allocate(this%imptsC_multfac(  8,this%num_gptsC), this%imptsE_multfac(  8,this%num_gptsE))
-  allocate(this%imptsC_u(this%num_gptsC), this%imptsE_u(this%num_gptsE))
-  allocate(this%imptsC_v(this%num_gptsC), this%imptsE_v(this%num_gptsE))
-  allocate(this%imptsC_w(this%num_gptsC), this%imptsE_w(this%num_gptsE))
-  !allocate(this%gptsC_u(this%num_gptsC),  this%gptsE_u(this%num_gptsE))
-  !allocate(this%gptsC_v(this%num_gptsC),  this%gptsE_v(this%num_gptsE))
-  !allocate(this%gptsC_w(this%num_gptsC),  this%gptsE_w(this%num_gptsE))
-  !allocate(this%gptsC_ileft(this%num_gptsC), this%gptsE_ileft(this%num_gptsE))
-  !allocate(this%gptsC_jleft(this%num_gptsC), this%gptsE_jleft(this%num_gptsE))
-  !allocate(this%gptsC_kleft(this%num_gptsC), this%gptsE_kleft(this%num_gptsE))
-  !allocate(this%gptsC_ifacx(this%num_gptsC), this%gptsE_ifacx(this%num_gptsE))
-  !allocate(this%gptsC_jfacy(this%num_gptsC), this%gptsE_jfacy(this%num_gptsE))
-  !allocate(this%gptsC_kfacz(this%num_gptsC), this%gptsE_kfacz(this%num_gptsE))
+  !allocate(this%imptsC_numonproc(this%num_gptsC), this%imptsE_numonproc(this%num_gptsE))
+  !allocate(this%imptsC_indices(3,8,this%num_gptsC), this%imptsE_indices(3,8,this%num_gptsE))
+  !allocate(this%imptsC_multfac(  8,this%num_gptsC), this%imptsE_multfac(  8,this%num_gptsE))
+  allocate(this%imptsC_u(this%num_imptsC_glob), this%imptsE_u(this%num_imptsE_glob))
+  allocate(this%imptsC_v(this%num_imptsC_glob), this%imptsE_v(this%num_imptsE_glob))
+  allocate(this%imptsC_w(this%num_imptsC_glob), this%imptsE_w(this%num_imptsE_glob))
 
   if(nrank==7) then
       write(*,'(a,i4,1x,3(e19.12,1x))') 'testing: ', nrank, xlinepart(32), ylinepart(4), zlinepart(18)
@@ -676,7 +705,7 @@ subroutine update_ghostptsCE(this, u, v, w)
   class(ibmgp),     intent(inout) :: this
   real(rkind), dimension(:,:,:), intent(inout) :: u, v, w
 
-  integer :: ii, jj, i, j, k
+  integer :: ii, jj, kk, i, j, k
   real(rkind) :: vec1(3), vec2(3), unrm(3), utan(3), dotpr, dist
   real(rkind) :: ibwallvel, utan_gp(3), unrm_gp(3), vmax, vmin
 
@@ -685,17 +714,21 @@ subroutine update_ghostptsCE(this, u, v, w)
       ! no slip immersed boundary
       do ii = 1, this%num_gptsC
           i = this%gptsC_ind(ii,1);  j = this%gptsC_ind(ii,2);  k = this%gptsC_ind(ii,3)
-          u(i,j,k) = -this%imptsc_u(ii)
-          v(i,j,k) = -this%imptsc_v(ii)
+          jj = this%imptsC_index_st(nrank) + ii - 1
+          u(i,j,k) = -this%imptsc_u(jj)
+          v(i,j,k) = -this%imptsc_v(jj)
       enddo
       do ii = 1, this%num_gptsE
           i = this%gptsE_ind(ii,1);   j = this%gptsE_ind(ii,2);  k = this%gptsE_ind(ii,3)
-          w(i,j,k) = -this%imptsE_w(ii)
+          jj = this%imptsE_index_st(nrank) + ii - 1
+          w(i,j,k) = -this%imptsE_w(jj)
       enddo
   elseif(this%ibwm==2) then
       ! simple log-law immersed boundary
       do ii = 1, this%num_gptsC
-          vec1(1) = this%imptsC_u(ii);  vec1(2) = this%imptsC_v(ii);  vec1(3) = this%imptsC_w(ii)
+          kk = this%imptsC_index_st(nrank) + ii - 1
+          vec1(1) = this%imptsC_u(kk);  vec1(2) = this%imptsC_v(kk);  vec1(3) = this%imptsC_w(kk)
+
           jj = this%gptsC_bpind(ii)
           vec2(:) = this%surfnormal(jj,:)
           dotpr = sum(vec1*vec2)
@@ -732,7 +765,9 @@ subroutine update_ghostptsCE(this, u, v, w)
       !print '(a,i4.4,1x,2(e19.12,1x))', '(vmax vmin): ', nrank, maxval(v), minval(v)
 
       do ii = 1, this%num_gptsE
-          vec1(1) = this%imptsE_u(ii);  vec1(2) = this%imptsE_v(ii);  vec1(3) = this%imptsE_w(ii)
+          kk = this%imptsC_index_st(nrank) + ii - 1
+          vec1(1) = this%imptsE_u(kk);  vec1(2) = this%imptsE_v(kk);  vec1(3) = this%imptsE_w(kk)
+
           jj = this%gptsE_bpind(ii)
           vec2(:) = this%surfnormal(jj,:)
           dotpr = sum(vec1*vec2)
@@ -761,11 +796,11 @@ subroutine interp_imptsE(this, uE, vE, w)
   class(ibmgp),     intent(inout) :: this
   real(rkind), dimension(:,:,:), intent(in) :: uE, vE, w
 
-  integer :: ii, jj, i, j, k
+  integer :: ii, jj, i, j, k, ierr
   real(rkind) :: fac, tmpval1, tmpval2, tmpval3
 
-  this%imptsE_u = zero;  this%imptsE_v = zero;  this%imptsE_w = zero
-  do ii = 1, this%num_gptsE
+  this%imptsE_u_tmp = zero;  this%imptsE_v_tmp = zero;  this%imptsE_w_tmp = zero
+  do ii = 1, this%num_imptsE_glob ! this%num_gptsE
       ! how many of the 8 interpolation points are on this proc?
       tmpval1 = zero; tmpval2 = zero; tmpval3 = zero
       do jj = 1, this%imptsE_numonproc(ii)
@@ -777,10 +812,14 @@ subroutine interp_imptsE(this, uE, vE, w)
           tmpval2 = tmpval2 + fac*vE(i,j,k)
           tmpval3 = tmpval3 + fac* w(i,j,k)
       enddo
-      this%imptsE_u(ii) = tmpval1
-      this%imptsE_v(ii) = tmpval2
-      this%imptsE_w(ii) = tmpval3
+      this%imptsE_u_tmp(ii) = tmpval1
+      this%imptsE_v_tmp(ii) = tmpval2
+      this%imptsE_w_tmp(ii) = tmpval3
   enddo
+
+  call MPI_AllReduce(this%imptsE_u_tmp, this%imptsE_u, this%num_imptsE_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%imptsE_v_tmp, this%imptsE_v, this%num_imptsE_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%imptsE_w_tmp, this%imptsE_w, this%num_imptsE_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
 
 end subroutine
 
@@ -788,11 +827,11 @@ subroutine interp_imptsC(this, u, v, wC)
   class(ibmgp),     intent(inout) :: this
   real(rkind), dimension(:,:,:), intent(in) :: u, v, wC
 
-  integer :: ii, jj, i, j, k
+  integer :: ii, jj, i, j, k, ierr
   real(rkind) :: fac, tmpval1, tmpval2, tmpval3
 
-  this%imptsC_u = zero;  this%imptsC_v = zero;  this%imptsC_w = zero
-  do ii = 1, this%num_gptsC
+  this%imptsC_u_tmp = zero;  this%imptsC_v_tmp = zero;  this%imptsC_w_tmp = zero
+  do ii = 1, this%num_imptsC_glob ! this%num_gptsC
       ! how many of the 8 interpolation points are on this proc?
       tmpval1 = zero; tmpval2 = zero; tmpval3 = zero
       do jj = 1, this%imptsC_numonproc(ii)
@@ -802,12 +841,16 @@ subroutine interp_imptsC(this, u, v, wC)
           fac = this%imptsC_multfac(jj, ii)
           tmpval1 = tmpval1 + fac* u(i,j,k)
           tmpval2 = tmpval2 + fac* v(i,j,k)
-          tmpval3 = tmpval2 + fac*wC(i,j,k)
+          tmpval3 = tmpval3 + fac*wC(i,j,k)
       enddo
-      this%imptsC_u(ii) = tmpval1
-      this%imptsC_v(ii) = tmpval2
-      this%imptsC_w(ii) = tmpval3
+      this%imptsC_u_tmp(ii) = tmpval1
+      this%imptsC_v_tmp(ii) = tmpval2
+      this%imptsC_w_tmp(ii) = tmpval3
   enddo
+
+  call MPI_AllReduce(this%imptsC_u_tmp, this%imptsC_u, this%num_imptsC_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%imptsC_v_tmp, this%imptsC_v, this%num_imptsC_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%imptsC_w_tmp, this%imptsC_w, this%num_imptsC_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
 
 end subroutine
 
@@ -831,9 +874,10 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
   ydom_left = ylinepart(1)-dy;   ydom_right = ylinepart(nyloc)+dy
   zdom_left = zlinepart(1)-dz;   zdom_right = zlinepart(nzloc)+dz
 
-  do ii = 1, this%num_gptsC
+  do ii = 1, this%num_imptsC_glob  !this%num_gptsC
       ! first check if this point is on this processor
-      xloc = this%gptsC_img(ii,1);  yloc = this%gptsC_img(ii,2);  zloc = this%gptsC_img(ii,3);
+      !xloc = this%gptsC_img(ii,1);  yloc = this%gptsC_img(ii,2);  zloc = this%gptsC_img(ii,3);
+      xloc = this%imptsC_xyz(ii,1);  yloc = this%imptsC_xyz(ii,2);  zloc = this%imptsC_xyz(ii,3);
 
       if( (xloc>=xdom_left) .and. (xloc<=xdom_right) .and. &
           (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
@@ -888,9 +932,10 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
       !this%gptsC_kfacz(ii) = (this%gptsC_img(ii,3)-real(itmp, rkind)*dz - zBot)/dz
   enddo
 
-  do ii = 1, this%num_gptsE
+  do ii = 1, this%num_imptsE_glob ! this%num_gptsE
       ! first check if this point is on this processor
-      xloc = this%gptsE_img(ii,1);  yloc = this%gptsE_img(ii,2);  zloc = this%gptsE_img(ii,3);
+      !xloc = this%gptsE_img(ii,1);  yloc = this%gptsE_img(ii,2);  zloc = this%gptsE_img(ii,3);
+      xloc = this%imptsC_xyz(ii,1);  yloc = this%imptsC_xyz(ii,2);  zloc = this%imptsC_xyz(ii,3);
 
       if( (xloc>=xdom_left) .and. (xloc<=xdom_right) .and. &
           (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
@@ -1010,9 +1055,11 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
   class(ibmgp),     intent(inout) :: this
   real(rkind), intent(in) :: Lx, Ly, zBot, zTop
 
-  integer :: ii, jj
+  integer :: ii, jj, kk, ierr
   real(rkind) :: vec1(3), vec2(3), dotpr, xmax_img, xmin_img, ymax_img, ymin_img, zmax_img, zmin_img
   character(len=clen) :: fname, dumstr
+
+  kk = this%imptsC_index_st(nrank)-1
 
   do ii = 1, this%num_gptsC
       ! compute image of gptsC_xyz(ii,:) wrt gptsc_bpt(ii,:) and
@@ -1020,9 +1067,14 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
       jj = this%gptsC_bpind(ii)
       vec2(:) = this%surfnormal(jj,:)
       dotpr = sum(vec1*vec2)
-      this%gptsC_img(ii,:) = this%gptsC_xyz(ii,:) + two*dotpr*vec2
+
+      this%gptsC_img(kk,:) = this%gptsC_xyz(ii,:) + two*dotpr*vec2
       this%gptsC_bnp(ii,:) = this%gptsC_xyz(ii,:) + dotpr*vec2
       this%gptsC_dst(ii)   = dotpr
+
+      ! store in the global array
+      kk = kk+1
+      this%imptsC_xyz_loc(kk,:) = this%gptsC_img(kk,:)
   enddo
 
   do ii = 1, this%num_gptsE
@@ -1031,10 +1083,20 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
       jj = this%gptsE_bpind(ii)
       vec2(:) = this%surfnormal(jj,:)
       dotpr = sum(vec1*vec2)
+
       this%gptsE_img(ii,:) = this%gptsE_xyz(ii,:) + two*dotpr*vec2
       this%gptsE_bnp(ii,:) = this%gptsE_xyz(ii,:) + dotpr*vec2
       this%gptsE_dst(ii)   = dotpr
+
+      ! store in the global array
+      kk = kk+1
+      this%imptsE_xyz_loc(kk,:) = this%gptsE_img(kk,:)
   enddo
+
+  !create global image point arrays; this%imptsC_glob(index,3);
+  !this%imptsE_glob(index,3)
+  call MPI_AllReduce(this%imptsC_xyz_loc, this%imptsC_xyz, this%num_imptsC_glob*3, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%imptsE_xyz_loc, this%imptsE_xyz, this%num_imptsE_glob*3, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
 
   write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsC_img_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
@@ -1427,6 +1489,13 @@ subroutine destroy(this)
   !deallocate(this%gptsC_u,  this%gptsE_u)
   !deallocate(this%gptsC_v,  this%gptsE_v)
   !deallocate(this%gptsC_w,  this%gptsE_w)
+  deallocate(this%num_imptsC_arr, this%num_imptsE_arr)
+  deallocate(this%imptsC_index_st, this%imptsE_index_st)
+  deallocate(this%imptsC_xyz, this%imptsE_xyz)
+  deallocate(this%imptsC_xyz_loc, this%imptsE_xyz_loc)
+  deallocate(this%imptsC_u_tmp, this%imptsE_u_tmp)
+  deallocate(this%imptsC_v_tmp, this%imptsE_v_tmp)
+  deallocate(this%imptsC_w_tmp, this%imptsE_w_tmp)
   deallocate(this%imptsC_u, this%imptsE_u)
   deallocate(this%imptsC_v, this%imptsE_v)
   deallocate(this%imptsC_w, this%imptsE_w)
