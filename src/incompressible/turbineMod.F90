@@ -587,7 +587,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            angleIn = this%gamma - this%windAngle*pi/180.d0
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), this%windAngle, & 
                                                      this%windAngle, this%meanP, this%step, & 
-                                                     this%meanPbaseline, this%stdP, dirStd*pi/180.d0)
+                                                     this%meanPbaseline, this%stdP, dirStd)
                            ! Force to zero yaw misalignment setpoint at first
                            ! update
                            if (this%updateCounter==1) then
@@ -620,9 +620,9 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            end if
                            ! Run closed-loop control update step 
                            call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), &
-                                                     this%hubDirection(1)*pi/180.d0, & 
-                                                     alpha_m*pi/180.d0, this%meanP, this%step, & 
-                                                     this%meanPbaseline, this%stdP, dirStd*pi/180.d0)
+                                                     this%hubDirection(1), & 
+                                                     alpha_m, this%meanP, this%step, & 
+                                                     this%meanPbaseline, this%stdP, dirStd)
                            ! Account for lookup control case (essentially void
                            ! the prescription of yaw from the calculation above
                            if (this%lookup==.false.) then

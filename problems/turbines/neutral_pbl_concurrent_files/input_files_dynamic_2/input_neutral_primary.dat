@@ -157,7 +157,7 @@ ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 
 powerDumpDir          = "/scratch/05294/mhowland/neutral_concurrent/robust/on/turbOut"
 useDynamicYaw         = .TRUE.
 yawUpdateInterval     = 500
-inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/dynamicYaw_neutral_on.inp"
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/neutral/dynamicYaw_neutral_on.inp"
 /
 /
 &FRINGE
