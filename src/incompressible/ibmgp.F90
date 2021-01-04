@@ -344,16 +344,23 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   this%num_imptsC_glob = sum(this%num_imptsC_arr)
   this%imptsC_index_st(1) = 1
   do ii = 2, nproc
-    this%imptsC_index_st(ii) = this%imptsC_index_st(ii-1)
+    this%imptsC_index_st(ii) = this%imptsC_index_st(ii-1) + this%num_imptsC_arr(ii-1)
   enddo
+  print '(a,20(i5,1x))', 'imptsC_index_st :=', nrank, this%imptsC_index_st
+  print '(a,20(i5,1x))', 'num_imptsC_arr  :=', nrank, this%num_imptsC_arr
+  print '(a,20(i5,1x))', 'num_gptsC       :=', nrank, this%num_gptsC, this%num_imptsC_glob
+
 
   this%num_imptsE_arr = 0
   call MPI_AllGather(this%num_gptsE, 1, mpiinteg, this%num_imptsE_arr, 1, mpiinteg, MPI_COMM_WORLD, ierr)
   this%num_imptsE_glob = sum(this%num_imptsE_arr)
   this%imptsE_index_st(1) = 1
   do ii = 2, nproc
-    this%imptsE_index_st(ii) = this%imptsE_index_st(ii-1)
+    this%imptsE_index_st(ii) = this%imptsE_index_st(ii-1) + this%num_imptsE_arr(ii-1)
   enddo
+  print '(a,20(i5,1x))', 'imptsE_index_st :=', nrank, this%imptsE_index_st
+  print '(a,20(i5,1x))', 'num_imptsE_arr  :=', nrank, this%num_imptsE_arr
+  print '(a,20(i5,1x))', 'num_gptsE       :=', nrank, this%num_gptsE, this%num_imptsE_glob
 
   allocate(this%imptsC_xyz(this%num_imptsC_glob,3), this%imptsE_xyz(this%num_imptsE_glob,3))
   allocate(this%imptsC_xyz_loc(this%num_imptsC_glob,3), this%imptsE_xyz_loc(this%num_imptsE_glob,3))
@@ -365,6 +372,15 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   allocate(this%imptsC_indices(3,8,this%num_imptsC_glob), this%imptsE_indices(3,8,this%num_imptsE_glob))
   allocate(this%imptsC_multfac(  8,this%num_imptsC_glob), this%imptsE_multfac(  8,this%num_imptsE_glob))
 
+  this%imptsC_xyz       = zero;      this%imptsE_xyz       = zero;
+  this%imptsC_xyz_loc   = zero;      this%imptsE_xyz_loc   = zero;
+  this%imptsC_u_tmp     = zero;      this%imptsE_u_tmp     = zero;
+  this%imptsC_v_tmp     = zero;      this%imptsE_v_tmp     = zero;
+  this%imptsC_w_tmp     = zero;      this%imptsE_w_tmp     = zero;
+  this%imptsC_numonproc = 0;         this%imptsE_numonproc = 0;
+  this%imptsC_indices   = 0;         this%imptsE_indices   = 0;
+  this%imptsC_multfac   = zero;      this%imptsE_multfac   = zero;
+
   allocate(this%gptsC_xyz(this%num_gptsC,3), this%gptsE_xyz(this%num_gptsE,3))
   allocate(this%gptsC_ind(this%num_gptsC,3), this%gptsE_ind(this%num_gptsE,3))
   allocate(this%gptsC_bpt(this%num_gptsC,3), this%gptsE_bpt(this%num_gptsE,3))
@@ -373,12 +389,24 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   allocate(this%gptsC_bnp(this%num_gptsC,3), this%gptsE_bnp(this%num_gptsE,3))
   allocate(this%gptsC_dst(this%num_gptsC),   this%gptsE_dst(this%num_gptsE))
 
+  this%gptsC_xyz   = zero;      this%gptsE_xyz   = zero;
+  this%gptsC_ind   = 0;         this%gptsE_ind   = 0;   
+  this%gptsC_bpt   = zero;      this%gptsE_bpt   = zero;
+  this%gptsC_bpind = 0;         this%gptsE_bpind = 0;   
+  this%gptsC_img   = zero;      this%gptsE_img   = zero;
+  this%gptsC_bnp   = zero;      this%gptsE_bnp   = zero;
+  this%gptsC_dst   = zero;      this%gptsE_dst   = zero;
+
   !allocate(this%imptsC_numonproc(this%num_gptsC), this%imptsE_numonproc(this%num_gptsE))
   !allocate(this%imptsC_indices(3,8,this%num_gptsC), this%imptsE_indices(3,8,this%num_gptsE))
   !allocate(this%imptsC_multfac(  8,this%num_gptsC), this%imptsE_multfac(  8,this%num_gptsE))
   allocate(this%imptsC_u(this%num_imptsC_glob), this%imptsE_u(this%num_imptsE_glob))
   allocate(this%imptsC_v(this%num_imptsC_glob), this%imptsE_v(this%num_imptsE_glob))
   allocate(this%imptsC_w(this%num_imptsC_glob), this%imptsE_w(this%num_imptsE_glob))
+
+  this%imptsC_u = zero;      this%imptsE_u = zero;
+  this%imptsC_v = zero;      this%imptsE_v = zero;
+  this%imptsC_w = zero;      this%imptsE_w = zero;
 
   if(nrank==7) then
       write(*,'(a,i4,1x,3(e19.12,1x))') 'testing: ', nrank, xlinepart(32), ylinepart(4), zlinepart(18)
@@ -714,19 +742,19 @@ subroutine update_ghostptsCE(this, u, v, w)
       ! no slip immersed boundary
       do ii = 1, this%num_gptsC
           i = this%gptsC_ind(ii,1);  j = this%gptsC_ind(ii,2);  k = this%gptsC_ind(ii,3)
-          jj = this%imptsC_index_st(nrank) + ii - 1
+          jj = this%imptsC_index_st(nrank+1) + ii - 1
           u(i,j,k) = -this%imptsc_u(jj)
           v(i,j,k) = -this%imptsc_v(jj)
       enddo
       do ii = 1, this%num_gptsE
           i = this%gptsE_ind(ii,1);   j = this%gptsE_ind(ii,2);  k = this%gptsE_ind(ii,3)
-          jj = this%imptsE_index_st(nrank) + ii - 1
+          jj = this%imptsE_index_st(nrank+1) + ii - 1
           w(i,j,k) = -this%imptsE_w(jj)
       enddo
   elseif(this%ibwm==2) then
       ! simple log-law immersed boundary
       do ii = 1, this%num_gptsC
-          kk = this%imptsC_index_st(nrank) + ii - 1
+          kk = this%imptsC_index_st(nrank+1) + ii - 1
           vec1(1) = this%imptsC_u(kk);  vec1(2) = this%imptsC_v(kk);  vec1(3) = this%imptsC_w(kk)
 
           jj = this%gptsC_bpind(ii)
@@ -765,7 +793,7 @@ subroutine update_ghostptsCE(this, u, v, w)
       !print '(a,i4.4,1x,2(e19.12,1x))', '(vmax vmin): ', nrank, maxval(v), minval(v)
 
       do ii = 1, this%num_gptsE
-          kk = this%imptsC_index_st(nrank) + ii - 1
+          kk = this%imptsE_index_st(nrank+1) + ii - 1
           vec1(1) = this%imptsE_u(kk);  vec1(2) = this%imptsE_v(kk);  vec1(3) = this%imptsE_w(kk)
 
           jj = this%gptsE_bpind(ii)
@@ -859,9 +887,12 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
   real(rkind),               intent(in)    :: dx, dy, dz, zBot
   real(rkind), dimension(:), intent(in)    :: xlinepart, ylinepart, zlinepart
 
-  integer :: ii, itmp, jtmp, ktmp, nxloc, nyloc, nzloc, point_number
+  integer :: ii, itmp, jtmp, ktmp, nxloc, nyloc, nzloc, point_number, ierr
   real(rkind) :: xdom_left, xdom_right, ydom_left, ydom_right, zdom_left, zdom_right
   real(rkind) :: xloc, yloc, zloc, facx, facy, facz, onemfacx, onemfacy, onemfacz
+  character(len=clen) :: fname, dumstr
+  integer    , allocatable, dimension(:)    :: psum_numonproc
+  real(rkind), allocatable, dimension(:)    :: psum_multfac, lsum_multfac
 
    ! set imptsC_numonproc (any number between 1 and 8)
    ! fill imptsC_indices(1:3,1:this%imptsc_numonproc)
@@ -931,6 +962,28 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
       !this%gptsC_kleft(ii) = max(1, min(itmp+1, this%gpC%zsz(3)-1))
       !this%gptsC_kfacz(ii) = (this%gptsC_img(ii,3)-real(itmp, rkind)*dz - zBot)/dz
   enddo
+
+  ! Check p_sum imptsC_numonproc. This should be either 0 or 8
+  allocate(psum_numonproc(this%num_imptsC_glob), psum_multfac(this%num_imptsC_glob), lsum_multfac(this%num_imptsC_glob))
+  do ii = 1, this%num_imptsC_glob
+    lsum_multfac = sum(this%imptsC_multfac(:,ii))
+  enddo
+  call MPI_AllReduce(this%imptsC_numonproc, psum_numonproc, this%num_imptsC_glob, mpiinteg, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(lsum_multfac         , psum_multfac  , this%num_imptsC_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  if(nrank==0) then
+    print *, 'psum_numonproc :=', maxval(psum_numonproc), minval(psum_numonproc)
+    print *, 'psum_multfac   :=', maxval(psum_multfac  ), minval(psum_multfac  )
+  endif
+  deallocate(psum_numonproc, psum_multfac, lsum_multfac)
+
+  ! Print imptsC_numonproc for each processor and check manually
+  write(dumstr,"(A3,I2.2,A22,I4.4,A4)") "Run",this%runID,"_ibm_imptsC_numonproc_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_imptsC_glob
+      write(11, '(i4,1x,8(e19.12,1x),24(i4,1x))') this%imptsC_numonproc(ii), this%imptsC_multfac(:,ii), this%imptsC_indices(:,:,ii)
+  enddo
+  close(11)
 
   do ii = 1, this%num_imptsE_glob ! this%num_gptsE
       ! first check if this point is on this processor
@@ -1003,6 +1056,27 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
       endif
   enddo
 
+  ! Check p_sum imptsE_numonproc. This should be either 0 or 8
+  allocate(psum_numonproc(this%num_imptsE_glob), psum_multfac(this%num_imptsE_glob), lsum_multfac(this%num_imptsE_glob))
+  do ii = 1, this%num_imptsE_glob
+    lsum_multfac = sum(this%imptsE_multfac(:,ii))
+  enddo
+  call MPI_AllReduce(this%imptsE_numonproc, psum_numonproc, this%num_imptsE_glob, mpiinteg, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(lsum_multfac         , psum_multfac  , this%num_imptsE_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  if(nrank==0) then
+    print *, 'psum_numonprocE:=', maxval(psum_numonproc), minval(psum_numonproc)
+    print *, 'psum_multfac  E:=', maxval(psum_multfac  ), minval(psum_multfac  )
+  endif
+  deallocate(psum_numonproc, psum_multfac, lsum_multfac)
+
+  write(dumstr,"(A3,I2.2,A22,I4.4,A4)") "Run",this%runID,"_ibm_imptsE_numonproc_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_imptsE_glob
+      write(11, '(i4,1x,8(e19.12,1x),24(i4,1x))') this%imptsE_numonproc(ii), this%imptsE_multfac(:,ii), this%imptsE_indices(:,:,ii)
+  enddo
+  close(11)
+
 end subroutine
 
 subroutine set_interpfac_imptsC(this, ip, jp, kp, ii, point_number, multfac)
@@ -1059,7 +1133,7 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
   real(rkind) :: vec1(3), vec2(3), dotpr, xmax_img, xmin_img, ymax_img, ymin_img, zmax_img, zmin_img
   character(len=clen) :: fname, dumstr
 
-  kk = this%imptsC_index_st(nrank)-1
+  kk = this%imptsC_index_st(nrank+1)-1
 
   do ii = 1, this%num_gptsC
       ! compute image of gptsC_xyz(ii,:) wrt gptsc_bpt(ii,:) and
@@ -1068,14 +1142,16 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
       vec2(:) = this%surfnormal(jj,:)
       dotpr = sum(vec1*vec2)
 
-      this%gptsC_img(kk,:) = this%gptsC_xyz(ii,:) + two*dotpr*vec2
+      this%gptsC_img(ii,:) = this%gptsC_xyz(ii,:) + two*dotpr*vec2
       this%gptsC_bnp(ii,:) = this%gptsC_xyz(ii,:) + dotpr*vec2
       this%gptsC_dst(ii)   = dotpr
 
-      ! store in the global array
+      ! prepare to store in the global array
       kk = kk+1
-      this%imptsC_xyz_loc(kk,:) = this%gptsC_img(kk,:)
+      this%imptsC_xyz_loc(kk,:) = this%gptsC_img(ii,:)
   enddo
+
+  kk = this%imptsE_index_st(nrank+1)-1
 
   do ii = 1, this%num_gptsE
       ! compute image of gptsC_xyz(ii,:) wrt gptsc_bpt(ii,:) and
@@ -1088,9 +1164,9 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
       this%gptsE_bnp(ii,:) = this%gptsE_xyz(ii,:) + dotpr*vec2
       this%gptsE_dst(ii)   = dotpr
 
-      ! store in the global array
+      ! prepare to store in the global array
       kk = kk+1
-      this%imptsE_xyz_loc(kk,:) = this%gptsE_img(kk,:)
+      this%imptsE_xyz_loc(kk,:) = this%gptsE_img(ii,:)
   enddo
 
   !create global image point arrays; this%imptsC_glob(index,3);
