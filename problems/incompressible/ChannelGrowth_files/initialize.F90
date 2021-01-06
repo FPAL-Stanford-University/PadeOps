@@ -136,11 +136,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(vpurt(size(v ,1),size(v ,2),size(v ,3)))
     allocate(wpurt(size(wC,1),size(wC,2),size(wC,3)))
 
-    call get_perturbations(decompC, x, y, kx, ky, ModeFile, upurt, vpurt, wpurt)
+    !call get_perturbations(decompC, x, y, kx, ky, ModeFile, upurt, vpurt, wpurt)
 
-    u  = u  + pert_Amp*upurt
-    v  = v  + pert_Amp*vpurt
-    wC = wC + pert_Amp*wpurt
+    u  = u  !+ pert_Amp*upurt
+    v  = v  !+ pert_Amp*vpurt
+    wC = wC !+ pert_Amp*wpurt
     
     deallocate(upurt, vpurt, wpurt)
     allocate(randArr(size(wC,1),size(wC,2),size(wC,3)))
@@ -202,13 +202,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 6
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [5,15,30,50,80,150]
+    xplanes = [16]
+    yplanes = [16]
+    zplanes = [16]
 
 end subroutine
 
