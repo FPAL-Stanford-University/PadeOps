@@ -112,7 +112,7 @@ ComputeRapidSlowPressure = .false.
 /
 &BCs
 PeriodicInZ           = .false.           ! Is the domain periodic in vertical?
-topWall               = 2                 ! no_slip = 1, slip = 2, wall model = 3
+topWall               = 1                 ! no_slip = 1, slip = 2, wall model = 3
 botWall               = 1                 ! no_slip = 1, slip = 2, wall model = 3
 botBC_Temp            = 1                 ! Dirichlet = 0, Neumann = 1, Inhomog. Neumann = 2, ??? = 3
 topBC_Temp            = 0                 ! Dirichlet = 0, Neumann = 1, Inhomog. Neumann = 2, ??? = 3
