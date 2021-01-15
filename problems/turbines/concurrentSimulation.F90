@@ -11,6 +11,7 @@ program concurrentSimulation
     use timer, only: tic, toc
     use exits, only: message
     use budgets_time_avg_mod, only: budgets_time_avg  
+    use budgets_xy_avg_mod, only: budgets_xy_avg  
 
     implicit none
 
@@ -20,6 +21,7 @@ program concurrentSimulation
     !real(rkind), dimension(:,:,:), allocatable :: utarget, vtarget, wtarget
     integer :: ioUnit
     type(budgets_time_avg) :: budg_tavg
+    type(budgets_xy_avg) :: budg_xyavg
     namelist /concurrent/ precInputFile, mainInputFile
 
     call MPI_Init(ierr)                                                 !<-- Begin MPI
@@ -44,6 +46,8 @@ program concurrentSimulation
     ! Fringe associations for non-periodic BCs in x
     call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w) !<-- Link the target velocity array to igp 
 
+    call budg_xyavg%init(precInputFile, prec)   !<-- Budget class initialization 
+
     call budg_tavg%init(mainInputFile, igp)   !<-- Budget class initialization 
     ! NOTE: Beyond this point, the target arrays can change in time, In case of
     ! concurrent simulations where inflow is turbulent, the utarget, vtarget and
@@ -52,13 +56,19 @@ program concurrentSimulation
 
     call tic() 
     do while (igp%tsim < igp%tstop) 
-       
        call prec%timeAdvance()                                           !<- Time stepping scheme + Pressure Proj. (see igrid.F90)
        call igp%timeAdvance(prec%get_dt())                               !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
+       call budg_xyavg%doBudgets()       
        call budg_tavg%doBudgets()       
        call doTemporalStuff(prec, igp)                                   !<-- Go to the temporal hook (see temporalHook.F90)
        
     end do 
+
+    call budg_xyavg%doBudgets(.true.)
+    call budg_tavg%doBudgets(.true.)
+
+    call budg_xyavg%destroy()
+    call budg_tavg%destroy()
  
     call prec%finalize_io()                                              !<-- Close the header file (wrap up i/o)
     call igp%finalize_io()                                               !<-- Close the header file (wrap up i/o)

@@ -7,6 +7,23 @@ end interface
 
 contains
 
+    subroutine write_1d_ascii(raw_data,filename)
+        real(kind=rkind), intent(in) :: raw_data(:)
+        character(len=*), intent(in) :: filename
+        character(len=30) :: rowfmt
+        integer :: n1
+        integer :: i
+
+        n1 = size(raw_data)
+        write(rowfmt,'(A,I4,A)') '(',1,'(es25.17E3,1x))'
+        OPEN(UNIT=10, FILE=trim(filename))
+
+        do i=1,n1
+            write(10,FMT=rowfmt) raw_data(i)
+        enddo
+        CLOSE(10)
+    end subroutine   
+ 
     subroutine write_2d_ascii(raw_data,filename)
         real(kind=rkind), intent(in) :: raw_data(:,:)
         character(len=*), intent(in) :: filename
@@ -77,6 +94,32 @@ contains
 
     end subroutine 
     
+   subroutine read_1d_ascii(data2read,filename)
+        implicit none 
+        real(rkind), intent(out), dimension(:), allocatable :: data2read
+        character(len=*), intent(in) :: filename
+        integer :: nr, ierr, i
+
+
+        open(unit=10,file=filename,access='sequential',form='formatted')
+        nr = 0
+        do 
+            read(10,*, iostat = ierr)
+            if (ierr == -1) exit       
+            nr = nr + 1
+        end do 
+        rewind(10)
+       
+        allocate(data2read(nr))
+
+        do i=1, nr
+            read (10, *)  data2read (i)
+        end do     
+
+        close(10)
+
+    end subroutine
+   
     subroutine write_2D_binary(data2write,filename)
         implicit none
         real(rkind), intent(in), dimension(:,:) :: data2write

@@ -51,17 +51,33 @@ pure function get_wTh_surf(this) result(val)
 
 end function
 
-pure function get_uw_surf(this) result(val)
-   class(sgs_igrid), intent(in) :: this
+function get_uw_surf(this) result(val)
+   class(sgs_igrid), intent(inout) :: this
    real(rkind)                     :: val
   
+   call transpose_x_to_y(this%tau_13,this%rbuffyE(:,:,:,1),this%gpE)
+   call transpose_y_to_z(this%rbuffyE(:,:,:,1),this%rbuffzE(:,:,:,1),this%gpE)
+   call this%PadeDer%interpz_E2C(this%rbuffzE(:,:,:,1),this%rbuffzC(:,:,:,1),0,0)
+   call transpose_z_to_y(this%rbuffzC(:,:,:,1),this%rbuffyC(:,:,:,1),this%gpC)
+   call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%tau_13C,this%gpC)
+   call this%spectC%fft(this%tau_13C,this%cbuffyC(:,:,:,1))
+   this%uw_surf = real(this%cbuffyC(1,1,1,1),rkind)*this%meanFact
+
    val = this%uw_surf
 end function
 
-pure function get_vw_surf(this) result(val)
-   class(sgs_igrid), intent(in) :: this
+function get_vw_surf(this) result(val)
+   class(sgs_igrid), intent(inout) :: this
    real(rkind)                     :: val
   
+   call transpose_x_to_y(this%tau_23,this%rbuffyE(:,:,:,1),this%gpE)
+   call transpose_y_to_z(this%rbuffyE(:,:,:,1),this%rbuffzE(:,:,:,1),this%gpE)
+   call this%PadeDer%interpz_E2C(this%rbuffzE(:,:,:,1),this%rbuffzC(:,:,:,1),0,0)
+   call transpose_z_to_y(this%rbuffzC(:,:,:,1),this%rbuffyC(:,:,:,1),this%gpC)
+   call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%tau_23C,this%gpC)
+   call this%spectC%fft(this%tau_23C,this%cbuffyC(:,:,:,1))
+   this%vw_surf = real(this%cbuffyC(1,1,1,1),rkind)*this%meanFact
+
    val = this%vw_surf
 end function
 

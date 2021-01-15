@@ -1,0 +1,44 @@
+!---This file contains "Wu-Pa-2011-miniature" turbine data; Airfoil 4 contains data from Stevens, Martinez, Meneveau, RE (2018)
+!----Table for TwistAngle (in degrees)
+8
+0.01	20.5
+0.02	20.9
+0.03	19.83
+0.04	16.91
+0.05	13.19
+0.06	10.67
+0.07	9.12
+0.075	6.66
+
+!----Table for chord length (in meters)
+8
+0.01	0.0139
+0.02	0.0147
+0.03	0.0147
+0.04	0.0141
+0.05	0.0131
+0.06	0.0118
+0.07	0.0102
+0.075	0.0060
+
+!----Table for airfoilID (integers in real format): properties defined in AirfoilType_$airfoilID_CL.inp and AirfoilType_$airfoilID_CD.inp
+4
+0.0          9.0
+0.00750      9.0
+0.00751      4.0
+0.075        4.0
+
+!-----------------------------------------------------------------
+!--- This file does not use namelists, so order in which data is 
+!--- written in this file appears is important. Contains one header 
+!--- followed by three tables. Each table has the following format:
+ > ! Comments - this line is ignored
+ > num_entries
+ > raddist(1), twistAng(1)
+ > raddist(2), twistAng(2)
+ > .....
+ > .....
+ > raddist(num_entries), twistAng(num_entries)
+ > 
+!--- Tables for twistAng, chord, airfoilID in that order
+

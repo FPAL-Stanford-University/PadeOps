@@ -29,8 +29,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: i,j,k, ioUnit
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, z0init = 2.0d-4
+    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -91,8 +91,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind) ::  z0init = 1.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
+    real(rkind) ::  z0init = 2.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0
+    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init, zpeak
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -201,9 +201,9 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
-    real(rkind) :: ThetaRef, Lx, Ly, Lz
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
     integer :: iounit
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
+    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init
     
     wTh_surf = zero
     
@@ -223,9 +223,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
     integer :: iounit
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
+    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -244,10 +244,10 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz
+    real(rkind) :: Lx, Ly, Lz, z0init
     integer :: iounit
     
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz
+    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

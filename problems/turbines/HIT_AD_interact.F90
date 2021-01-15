@@ -14,13 +14,15 @@ program HIT_AD_interact
     use HIT_AD_interact_parameters, only: simulationID, InflowProfileType, InflowProfileAmplit, InflowProfileThick
     use fof_mod, only: fof
     use budgets_time_avg_mod, only: budgets_time_avg  
-    !use decomp_2d,                only: nrank
+    use budgets_vol_avg_mod, only: budgets_vol_avg  
+    use decomp_2d
     implicit none
 
     type(igrid), allocatable, target :: hit, adsim
-    character(len=clen) :: inputfile, HIT_InputFile, AD_InputFile, fof_dir, filoutdir
+    character(len=clen) :: inputfile, HIT_InputFile, AD_InputFile, fof_dir, filoutdir, PODWriteDir
     integer :: ierr, ioUnit
     type(budgets_time_avg) :: budg_tavg
+    type(budgets_vol_avg)  :: budg_vavg
     real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0
     real(rkind), dimension(:,:,:), allocatable :: utarget1, vtarget1, wtarget1
     real(rkind) :: dt1, dt2, dt, InflowSpeed = 1.d0
@@ -31,8 +33,11 @@ program HIT_AD_interact
     integer :: fid, nfilters = 2, tid_FIL_FullField = 75, tid_FIL_Planes = 4
     logical :: applyFilters = .false. 
     logical, parameter :: synchronize_RK_substeps = .true.
+    type(decomp_info), allocatable :: iogp
+    real(rkind), dimension(:,:,:), allocatable :: vizField
+    integer :: nxsub_io, xstart_io=1, xend_io=1, PODWriteFreq = 1000000, PODWriteStart = 1000000
 
-    namelist /concurrent/ HIT_InputFile, AD_InputFile, InflowSpeed, k_bandpass_left, k_bandpass_right
+    namelist /concurrent/ HIT_InputFile, AD_InputFile, InflowSpeed, k_bandpass_left, k_bandpass_right, PODWriteFreq, PODWriteStart, PODWriteDir
     namelist /FILTER_INFO/ applyfilters, nfilters, fof_dir, tid_FIL_FullField, tid_FIL_Planes, filoutdir
 
     call MPI_Init(ierr)                                                
@@ -120,7 +125,15 @@ program HIT_AD_interact
     end if 
 
     call budg_tavg%init(AD_Inputfile, adsim)   !<-- Budget class initialization 
-    print*, nxADSIM, nxHIT
+    call budg_vavg%init(HIT_Inputfile, hit)    !<-- Budget class initialization 
+
+    ! get xstart = minloc(ad%x-5.0d0) ; xend = minloc(ad%x-20.0d0)
+    xstart_io = minloc(abs(adsim%mesh(:,1,1,1)-5.0d0), 1)
+    xend_io   = minloc(abs(adsim%mesh(:,1,1,1)-20.0d0), 1)
+    nxsub_io = xend_io-xstart_io+1
+    allocate(iogp)
+    call decomp_info_init(nxsub_io, adsim%ny, adsim%nz, iogp)
+    allocate(vizField(iogp%xsz(1), iogp%xsz(2), iogp%xsz(3)))
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
@@ -157,7 +170,8 @@ program HIT_AD_interact
           call hit%timeAdvance(dt)
        end if  
 
-       call budg_tavg%doBudgets()       !<--- perform budget related operations -----Question::Where should this be placed ??
+       call budg_tavg%doBudgets()       !<--- perform budget related operations
+       call budg_vavg%doBudgets()       !<--- perform budget related operations
 
        x_shift = adsim%tsim*InflowSpeed
        call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
@@ -195,14 +209,37 @@ program HIT_AD_interact
                   if (mod(adsim%step,tid_FIL_FullField) == 0) call filt(fid)%dumpFullField( adsim%rbuffxC(:,:,:,1), "pres",adsim%step)
                   if (mod(adsim%step,tid_FIL_Planes) == 0) call filt(fid)%dumpYplanes( adsim%rbuffxC(:,:,:,1), "pres",pid, adsim%step)
                end if
-            end do 
+            end do
             call message(0,"Just dumped filtered data")
-         end if  
-       end if 
+         end if
+       end if
 
-    end do 
+    if(adsim%step > PODWriteStart) then
+        if(mod(adsim%step, PODWriteFreq) == 0) then
+            vizField = adsim%u(xstart_io:xend_io,:,:)
+            call adsim%dumpFullField(vizField, 'upod', iogp, PODWriteDir)
+            
+            vizField = adsim%v(xstart_io:xend_io,:,:)
+            call adsim%dumpFullField(vizField, 'vpod', iogp, PODWriteDir)
+            
+            vizField = adsim%wC(xstart_io:xend_io,:,:)
+            call adsim%dumpFullField(vizField, 'wpod', iogp, PODWriteDir)
+            
+            vizField = adsim%pressure(xstart_io:xend_io,:,:)
+            call adsim%dumpFullField(vizField, 'ppod', iogp, PODWriteDir)
+        endif
+    endif
 
-    call budg_tavg%destroy()           !<-- release memory taken by the budget class 
+    end do
+
+    call budg_tavg%doBudgets(.true.)   !<--- force dump if budget calculation had started
+    call budg_vavg%doBudgets(.true.)   !<--- force dump if budget calculation had started
+
+    call budg_tavg%destroy()           !<-- release memory taken by the budget class
+    call budg_vavg%destroy()           !<-- release memory taken by the budget class
+
+    deallocate(vizField)
+    deallocate(iogp)
 
     if (applyfilters) then
       do fid = 1,nfilters
@@ -210,16 +247,16 @@ program HIT_AD_interact
       end do
       if (allocated(pid)) deallocate(pid)
       deallocate(filt)
-    end if 
+    end if
 
-    call hit%finalize_io()          
-    call adsim%finalize_io()         
+    call hit%finalize_io()
+    call adsim%finalize_io()
 
-    call hit%destroy()                
-    call adsim%destroy()               
+    call hit%destroy()
+    call adsim%destroy()
    
-    deallocate(hit, adsim)             
+    deallocate(hit, adsim)
     
-    call MPI_Finalize(ierr)        
+    call MPI_Finalize(ierr)
 
 end program
