@@ -1,6 +1,6 @@
 &INPUT
 inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/farm/init"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal/farm/2x2/dynamic"   ! Directory for all output files
+outputdir                     = "/scratch/05294/mhowland/diurnal/farm/32array/dynamic_robust_off_acheck_off"   ! Directory for all output files
 nx                            = 320          ! Number of points in X
 ny                            = 320          ! Number of points in Y
 nz                            = 320          ! Number of points in Z
@@ -118,14 +118,14 @@ WM_MatchingIndex              = 1
 /
 &WINDTURBINES
 useWindTurbines               = .TRUE.     ! Do you want to use Wind turbines ?
-num_turbines                  = 4          ! How many turbines? 
+num_turbines                  = 5          ! How many turbines? 
 ADM                           = .TRUE.      ! Are these actuator disks?
-turbInfoDir           = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_files/turbInfo/2x2array"
+turbInfoDir           = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_files/turbInfo/32array"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/diurnal/farm/2x2/dynamic/turbOut"
+powerDumpDir          = "/scratch/05294/mhowland/diurnal/farm/32array/dynamic_robust_off_acheck_off/turbOut"
 useDynamicYaw         = .TRUE.
 yawUpdateInterval     = 400
-inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_dynamic.inp"
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_dynamic_robust_off_acheck_on.inp"
 /
 /
 &KSPREPROCESS

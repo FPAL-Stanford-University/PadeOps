@@ -28,6 +28,7 @@ module dynamicYawMod
         real(rkind), dimension(:), allocatable :: yaw
         ! Wake model parameters
         real(rkind), dimension(:), allocatable :: kw, sigma_0, kw_initial, sigma_initial
+        real(rkind) :: kw_init, sigma_init
         real(rkind) :: powerExp, eps=1.0D-12, Ct, eta ! Power exponent is 3 for this AD implementation
         integer :: Nx
         ! Uncertain wake model parameter matrices
@@ -173,6 +174,8 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     allocate(this%turbCenterStore(this%Nt,2))
     allocate(this%kw(this%Nt))
     allocate(this%sigma_0(this%Nt))
+    allocate(this%kw_initial(this%Nt))
+    allocate(this%sigma_initial(this%Nt))
     allocate(this%Phat(this%Nt))
     allocate(this%Phat_fit(this%Nt))
     allocate(this%Phat_yaw(this%Nt))
@@ -186,10 +189,12 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
 
     ! Define
     this%yaw = 0.d0
-    this%kw = 0.1d0
-    this%sigma_0 = 0.25
-    this%kw_u = 0.1d0
-    this%sigma_u = 0.25
+    this%kw_init = 0.1d0;
+    this%sigma_init = 0.25;
+    this%kw = this%kw_init; 
+    this%sigma_0 = this%sigma_init; 
+    this%kw_u = this%kw_init;
+    this%sigma_u = this%sigma_init;
     this%power_minus_n = 0.d0
     this%ws_minus_n = 0.d0
     this%pb_minus_n = 0.d0
@@ -270,10 +275,14 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, wind_direction_
 
     ! Use initial fit parameters
     if (this%check==.false.) then
-        this%kw = this%kw_initial
-        this%sigma_0 = this%sigma_initial
-        this%kw_u = this%kw_u_initial
-        this%sigma_u = this%sigma_u_initial
+        ! For WES P1 CNBL, this was this%kw_initial and this%sigma_initial
+        ! (meaning initial fit not initialization values)
+        ! Modified for diurnal case, leave as init condition (not after first
+        ! fit)
+        this%kw = this%kw_init
+        this%sigma_0 = this%sigma_init
+        this%kw_u = this%kw_init
+        this%sigma_u = this%sigma_init
     end if
 
     ! Rotate domain
@@ -299,10 +308,10 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, wind_direction_
 
     ! Save the initial fit for kw and sigma
     if (this%check==.true.) then
-        this%kw_initial = this%kw
-        this%sigma_initial = this%sigma_0
-        this%kw_u_initial = this%kw_u
-        this%sigma_u_initial = this%sigma_u
+        this%kw_initial = this%kw;
+        this%sigma_initial = this%sigma_0;
+        this%kw_u_initial = this%kw_u;
+        this%sigma_u_initial = this%sigma_u;
         this%check = .false.
     end if
 
@@ -397,7 +406,7 @@ subroutine onlineUpdate(this)
         ! Check the fitting error and the quality of the input data
         ! If the leading turbine normalized power differs significantly from the
         ! wake model, don't use the data for updating wake model parameters
-        if (error(1)>this%MaxModelError .and. leading_turbine_err<this%leading_Pstd) then
+        if (error(1)>this%MaxModelError) then ! .and. leading_turbine_err<this%leading_Pstd) then
             ! Update wake model parameters
             this%Phat_fit_u = 0.d0
             do pint = 1, this%p_bins
@@ -1181,7 +1190,7 @@ subroutine alpha_check(this, alpha, t, alpha_m, alpha_std, Tf_out)
                 alpha_std = alpha_std + sqrt(eps_m);
                 ! Mean
                 alpha_m = mean( alpha(tstart - 1*Tf+1 : tstart) );
-                dalpha = alpha_m - mean( alpha(tstart - 2*Tf+1 : tstart - 1*Tf) );
+                dalpha = abs(alpha_m - mean( alpha(tstart - 2*Tf+1 : tstart - 1*Tf) ));
             end if
         else ! step 11
             stationary = .true.;
@@ -1192,7 +1201,7 @@ subroutine alpha_check(this, alpha, t, alpha_m, alpha_std, Tf_out)
             alpha_std = alpha_std + sqrt(eps_m);
             ! Mean
             alpha_m = mean( alpha(tstart - 1*Tf+1 : tstart) );
-            dalpha = alpha_m - mean( alpha(tstart - 2*Tf+1 : tstart - 1*Tf) );
+            dalpha = abs(alpha_m - mean( alpha(tstart - 2*Tf+1 : tstart - 1*Tf) ));
         end if
 
         ! Update Tf
