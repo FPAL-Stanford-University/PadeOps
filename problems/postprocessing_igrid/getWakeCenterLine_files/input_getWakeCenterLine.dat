@@ -1,0 +1,11 @@
+&INPUT
+inputdir   = "/scratch/04076/tg833754/HIT_Interact/tall/pbl/spbc/ti0p10/cs0p30/d1g2c/turbine/main_data/outfiles"
+outputdir  = "/scratch/04076/tg833754/HIT_Interact/tall/pbl/spbc/ti0p10/cs0p30/d1g2c/turbine/main_data/outfiles"
+RunID  = 34
+tsnapshot = 30000
+nx     = 384 
+ny     = 256 
+nz     = 192 
+Re     = 0.05d0
+NumericalSchemeVert = 1
+/

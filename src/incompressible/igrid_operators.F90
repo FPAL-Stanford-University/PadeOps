@@ -81,9 +81,38 @@ module igrid_Operators
          procedure :: create_turbine_array
          procedure :: destroy_turbine_array
          procedure :: get_turbine_RHS 
+         procedure :: getGrid
      end type 
 
 contains
+
+subroutine getGrid(this, x, y, z)
+    use constants, only : two
+    class(igrid_ops), intent(inout) :: this
+    real(rkind), dimension(:,:,:), intent(out) :: x, y, z
+
+    integer :: i, j, k, ix1, iy1, iz1, ixn, iyn, izn
+
+    ix1 = this%gp%xst(1); iy1 = this%gp%xst(2); iz1 = this%gp%xst(3)
+    ixn = this%gp%xen(1); iyn = this%gp%xen(2); izn = this%gp%xen(3)
+  
+    do k=1,size(x,3)
+        do j=1,size(x,2)
+            do i=1,size(x,1)
+                x(i,j,k) = real( ix1 + i - 1, rkind ) * this%dx
+                y(i,j,k) = real( iy1 + j - 1, rkind ) * this%dy
+                z(i,j,k) = real( iz1 + k - 1, rkind ) * this%dz + this%dz/two
+            end do
+        end do
+    end do
+
+    ! Shift everything to the origin 
+    x = x - this%dx
+    y = y - this%dy
+    z = z - this%dz 
+    
+
+end subroutine 
 
 subroutine create_turbine_array(this, inputfile)
     use constants, only : two
