@@ -207,7 +207,6 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
             if(this%deli(i,j) < epssmall) then
                 this%ustarsqvar(i,j) = this%kaplnzfac_s*this%filteredSpeedSq(i,j,1)
             elseif(this%deli(i,j) < dzby2) then
-                !call this%solve_nonlinprob_1(i, j)
                 this%ustarsqvar(i,j) = this%ustarsq_ratio_kaplnzfacs(i,j) * this%filteredSpeedSq(i,j,1)
             else
               if(this%alpfac*this%deli(i,j) < dzby2) then
@@ -231,69 +230,128 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
 end subroutine
 
+function feval_one(this,xvar,fparams) result(fval) 
+   
+    class(sgs_igrid), intent(inout) :: this
+    real(rkind), intent(in) ::xvar 
+    real(rkind), intent(in), dimension(:) :: fparams
+    
+    real(rkind) :: deli, dele, beta, lnfdez02, lnfdiz01, termp, termq
+    real(rkind) :: fval, termr, termRfac, terms, term1, term2, term3, tmp
+
+    deli = fparams(1);        dele = fparams(2);  beta = fparams(3)
+    lnfdez02 = fparams(4);    lnfdiz01 = fparams(5)
+
+    termp =  two*(xvar/(one-xvar));   termq =  (xvar/(one-xvar))**2 
+    termr =  -((deli*(one+two*beta) - xvar*dele*(one-two*beta))/(two*beta*(deli+xvar*dele)))
+    terms =  -xvar*dele/(two*beta*(deli+xvar*dele))
+    termRfac =  sqrt(termr*termr/four - terms)
+
+    term1 =  -one + half*(termp-termr) * log(terms/(one+termr+terms)) 
+    tmp   = ((termq+termr**2/two -termp*termr/two - terms)/(two*termRfac))
+    tmp   = tmp   * log((termr/two-termRfac)*(one+termr/two+termRfac)/((termr/two+termRfac)*(one+termr/two-termRfac)))
+    term1 = term1 + tmp
+
+    term2 =  -((one-xvar)**2 * (deli-dele)/((two*beta*kappa)*(xvar*dele+deli)))
+    term3 =  term2*term1
+
+    fval =  xvar* lnfdez02  - lnfdiz01 - term3
+end function
+
+
+function feval_two(this,xvar,fparams) result(fval) 
+   
+    class(sgs_igrid), intent(inout) :: this
+    real(rkind), intent(in) ::xvar 
+    real(rkind), intent(in), dimension(:) :: fparams
+    
+    real(rkind) :: deli, dele, beta, lnfdez02, lnfdiz01, termp, termq, tmp
+    real(rkind) :: fval, termr, termRfac, terms, term1, term2, term3, zbar, ufix
+
+    deli = fparams(1);      dele = fparams(2);      beta = fparams(3)
+    lnfdez02 = fparams(4);  lnfdiz01 = fparams(5);  zbar = fparams(6) 
+    ufix = fparams(7)
+
+    termp =  two*(xvar/(one-xvar));    termq =  (xvar/(one-xvar))**2 
+    termr =  -((deli*(one+two*beta) - xvar*dele*(one-two*beta))/(two*beta*(deli+xvar*dele)))
+    terms =  -xvar*dele/(two*beta*(deli+xvar*dele))
+    termRfac =  sqrt(termr*termr/four - terms)
+
+    term1 = zbar -one + (termp-termr)/two * log(zbar**2+termr*zbar+terms/(one+termr+terms)) 
+    tmp   =  ((termq+termr**2/two -termp*termr/two - terms)/(two*termRfac))
+    tmp   = tmp * log((zbar+termr/two-termRfac)*(one+termr/two+termRfac)/((zbar+termr/two+termRfac)*(one+termr/two-termRfac)))
+    term1 = term1 + tmp
+
+    term2 =  -((one-xvar)**2 * (deli-dele)/((two*beta*kappa)*(xvar*dele+deli)))
+    term3 =  term2*term1 
+    
+    fval = ufix - term3 - lnfdiz01
+end function
+
+
 subroutine solve_nonlinprob_1(this, i, j)
    class(sgs_igrid), intent(inout) :: this
    integer, intent(in) :: i, j
 
    real(rkind) :: deli, dele, z01, z02, lnfdez02, lnfdiz01, tol, xvar, xvar_new
-   real(rkind) :: xdiff, term1, termPR, termr, terms, Rfac, ustar1_sq, onemxsq
+   real(rkind) :: xdiff, term1, termPR, termr, terms, Rfac, ustar1_sq, onemxsq,fparams(5), xa,xb, xmid
    integer :: iter, max_iters
+   real(rkind) ::  sfmid,sfa,sfb
 
    deli = this%deli(i,j); z02 = this%z0r; z01 = this%z0s; dele = deli*this%alpfac
-   lnfdez02 = log(dele/z02)/kappa
-   lnfdiz01 = log(deli/z01)/kappa
+   lnfdez02 = log(dele/z02)/kappa;    lnfdiz01 = log(deli/z01)/kappa
+     
+   fparams(1) = deli;          fparams(2) = dele
+   fparams(3) = this%betfac;   fparams(4) = lnfdez02;   fparams(5) = lnfdiz01
+   !if(nrank==0 .and. i==61 .and. j==1) then
+   !    print '(a,2(e19.12,1x))', 'deli, dele = ', deli, dele
+   !    print '(a,2(e19.12,1x))', 'z01, z02   = ', z01, z02  
+   !    print '(a,2(e19.12,1x))', 'lnfacdez   = ', lnfdez02, lnfdiz01
+   !   !print '(a,3(e19.12,1x))', 'xvar       = ', xvar, xvar_new, xdiff
+   !endif
 
-   if(nrank==0 .and. i==61 .and. j==1) then
-       print '(a,2(e19.12,1x))', 'deli, dele = ', deli, dele
-       print '(a,2(e19.12,1x))', 'z01, z02   = ', z01, z02  
-       print '(a,2(e19.12,1x))', 'lnfacdez   = ', lnfdez02, lnfdiz01
-       !print '(a,3(e19.12,1x))', 'xvar       = ', xvar, xvar_new, xdiff
-   endif
-
-   max_iters = 10; tol = 1.0d-8 
+   max_iters = 1000; tol = 1.0d-8 
    xvar = zero; 
    ! Set initial guess based on the type of transition
    if(z01 < z02) then
-       xvar_new = 1.1_rkind   ! S-R Transition
+       ! S-R Transition
+       xa = 1.0_rkind;       xb = 100.0_rkind
    else
-       xvar_new = 0.9_rkind   ! R-S Transition
+       ! R-S Transition
+       xa = 1.0d-12;       xb = 1.0_rkind - 1.0d-12
    endif
+
+   sfa = sign(one,this%feval_one(xa,fparams))
+   sfb = sign(one,this%feval_one(xb,fparams))
+
    do iter = 1, max_iters
-     xdiff = abs(one - xvar/xvar_new)
+     xdiff = abs(xa-xb)
      if(xdiff < tol) exit
-     xvar = xvar_new;
-
-     onemxsq = (one-xvar)**2
-     termr = -(one + (deli - xvar*dele)/(two*this%betfac*(deli+xvar*dele)))
-     terms = -half*xvar*dele/(this%betfac*(deli+xvar*dele))
-     Rfac  = sqrt(termr*termr-four*terms)
-     termPR = half*(one-xvar**2) + (deli - xvar*dele)/(four*this%betfac*(deli+xvar*dele))
-     term1 = -onemxsq + (xvar*xvar + termr*termPR - onemxsq*terms)/Rfac
-     term1 = term1 + termPR*log(xvar*dele/deli)    !*log(terms/(one+termr+terms))
-
-     if(nrank==0 .and. i==61 .and. j==1) then
-         print '(a,i4,a)', '------iteration no   = ', iter, '-----'
-         print '(a,1(e19.12,1x))', 'xvar        = ', xvar
-         print '(a,1(e19.12,1x))', 'onemxsq     = ', onemxsq
-         print '(a,1(e19.12,1x))', 'termr       = ', termr
-         print '(a,1(e19.12,1x))', 'terms       = ', terms
-         print '(a,1(e19.12,1x))', 'Rfac        = ', Rfac
-         print '(a,1(e19.12,1x))', 'termPR      = ', termPR
-         print '(a,1(e19.12,1x))', 'term1      = ', term1
-         print '(a,i4,a)', '------Done iteration no   = ', iter, '-----'
-     endif
+     xmid = half*(xa+xb)
+ 
+     sfmid = sign(one,this%feval_one(xmid,fparams))
+  
+     if (sfmid*sfb<zero) then
+        xa = xmid;        sfa = sfmid 
+     else
+        xb =  xmid;       sfb = sfmid
+     end if
+   end do
 
 
-     xvar_new = (term1 + lnfdiz01)/lnfdez02
-   enddo
-   if(xdiff > tol) then
-     call message(1, "Did not converge", 0.0_rkind)
-     call message(2, "iter: ", iter  )
-     call message(2, "xdiff: ", xdiff)
-     call message(2, "xvar : ", xvar )
-     call GracefulExit("Nonlinear solver in wall model did not converge. Check details.", 999)
-   endif
-   this%ustarsq_ratio_kaplnzfacs(i,j) = xvar*xvar*this%kaplnzfac_s
+   !if(nrank==0 .and. i==61 .and. j==1) then
+   !     print '(a,i4,a)', '------iteration no   = ', iter, '-----'
+   !    print '(a,1(e19.12,1x))', 'xvar        = ', xmid
+   !     print '(a,1(e19.12,1x))', 'onemxsq     = ', onemxsq
+   !     print '(a,1(e19.12,1x))', 'termr       = ', termr
+   !     print '(a,1(e19.12,1x))', 'terms       = ', terms
+   !    print '(a,1(e19.12,1x))', 'Rfac        = ', Rfac
+   !     print '(a,1(e19.12,1x))', 'termPR      = ', termPR
+   !     print '(a,1(e19.12,1x))', 'term1      = ', term1
+   !     print '(a,i4,a)', '------Done iteration no   = ', iter, '-----'
+   !endif
+
+   this%ustarsq_ratio_kaplnzfacs(i,j) = xmid*xmid*this%kaplnzfac_s
 
 end subroutine
 
@@ -303,47 +361,57 @@ subroutine solve_nonlinprob_2(this, i, j, ustar1)
    real(rkind), intent(in)  :: ustar1
 
    real(rkind) :: deli, dele, z01, z02, lnfdiz01, tol, xvar, xvar_new
-   real(rkind) :: xdiff, onemxsq, term1, termPR, termr, terms, Rfac
-   real(rkind) :: zbar, ufix
+   real(rkind) :: xdiff, onemxsq, termp, termq, termr, terms, termRfac,term1,term2,term3,fparams(7)
+   real(rkind) :: zbar, ufix, xa,xb,xmid,sfa,sfb,sfmid
    integer :: iter, max_iters
 
    deli = this%deli(i,j); z02 = this%z0r; z01 = this%z0s; dele = deli*this%alpfac
    lnfdiz01 = log(deli/z01)/kappa
 
    zbar = (half*this%dz - dele)/(deli-dele)
-   ufix = sqrt(this%filteredSpeedSq(i,j,1))
+   ufix = sqrt(this%filteredSpeedSq(i,j,1))/ustar1
+
+   fparams(1) = deli;   fparams(2) = dele;       fparams(3) = this%betfac
+   fparams(4) = zero;   fparams(5) = lnfdiz01;   fparams(6) = zbar
+   fparams(7) = ufix  
 
    max_iters = 1000; tol = 1.0d-8 
    xvar = zero; 
    ! Set initial guess based on the type of transition
    if(z01 < z02) then
-       xvar_new = 1.1_rkind   ! S-R Transition
+       ! S-R Transition
+       xa = 1.0_rkind;       xb = 100.0_rkind
    else
-       xvar_new = 0.9_rkind   ! R-S Transition
+       ! R-S Transition
+       xa = 1.0d-12;       xb = 1.0_rkind - 1.0d-12
    endif
+
+   sfa = sign(one,this%feval_two(xa,fparams))
+   sfb = sign(one,this%feval_two(xb,fparams))
+
    do iter = 1, max_iters
-     xdiff = abs(one - xvar/xvar_new)
+     xdiff = abs(xa-xb)
      if(xdiff < tol) exit
-     xvar = xvar_new;
+     xmid = half*(xa+xb)
+ 
+     sfmid = sign(one,this%feval_two(xmid,fparams))
+  
+     if (sfmid*sfb<zero) then
+        xa = xmid;        sfa = sfmid
+     else
+        xb =  xmid;       sfb = sfmid
+     end if
+   end do
 
-     onemxsq = (one-xvar)**2
-     termr = -(one + (deli - xvar*dele)/(two*this%betfac*(deli+xvar*dele)))
-     terms = -half*xvar*dele/(this%betfac*(deli+xvar*dele))
-     Rfac  = sqrt(termr*termr-four*terms)
-     termPR = half*(one-xvar**2) + (deli - xvar*dele)/(four*this%betfac*(deli+xvar*dele))
-     term1 = (zbar-one) * onemxsq + (xvar*xvar + termr*termPR - onemxsq*terms)/Rfac
-     term1 = term1 + termPR*log((zbar*zbar+zbar*termr+terms)/(one+termr+terms))
-
-     xvar_new = -half*(deli-dele)*term1/(this%betfac*kappa*dele*(ufix/ustar1 - lnfdiz01))
-   enddo
-   if(xdiff > tol) then
-     call message(1, "Did not converge", 0.0_rkind)
-     call message(2, "iter: ", iter  )
-     call message(2, "xdiff: ", xdiff)
-     call message(2, "xvar : ", xvar )
-     call GracefulExit("Nonlinear solver in wall model did not converge. Check details.", 999)
-   endif
-   this%ustarsqvar(i,j) = (xvar*ustar1)**2
+   this%ustarsqvar(i,j) = (xmid*ustar1)**2 * this%kaplnzfac_r * this%filteredSpeedSq(i,j,1)
+   
+   !if(xdiff > tol) then
+   !  call message(1, "Did not converge", 0.0_rkind)
+   !  call message(2, "iter: ", iter  )
+   !  call message(2, "xdiff: ", xdiff)
+   !  call message(2, "xvar : ", xvar )
+   !  call GracefulExit("Nonlinear solver in wall model did not converge. Check details.", 999)
+   !endif
 
 end subroutine
  
@@ -532,7 +600,6 @@ subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)
 end subroutine  
 
 subroutine getSurfaceQuantities(this)
-    use exits, only: GracefulExit
     class(sgs_igrid), intent(inout) :: this
     integer :: idx
     integer, parameter :: itermax = 100 
@@ -588,7 +655,7 @@ subroutine getSurfaceQuantities(this)
           a=log(hwm/this%z0); b=beta_h*hwm; c=beta_m*hwm
           PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn
           at=log(hwm/this%z0t)
-
+   
           ! Inside the do loop all the used variables are on the stored on the stack
           ! After the while loop these variables are copied to their counterparts
           ! on the heap (variables part of the derived type)
