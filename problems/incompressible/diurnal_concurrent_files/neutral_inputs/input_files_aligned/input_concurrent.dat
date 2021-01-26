@@ -1,0 +1,5 @@
+&concurrent
+primary_InputFile                 = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/turbines/neutral_pbl_concurrent_files/input_files_aligned/input_neutral_primary.dat"
+precursor_InputFile                  = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/turbines/neutral_pbl_concurrent_files/input_files_aligned/input_neutral_precursor.dat"
+synchronize_RK_fringe = .true.
+/
