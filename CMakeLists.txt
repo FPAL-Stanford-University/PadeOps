@@ -1,4 +1,6 @@
+#cmake_minimum_required(VERSION 2.8.10)
 cmake_minimum_required(VERSION 2.8)
+#cmake_minimum_required(VERSION 2.8.10)
 project(PadeOps)
 
 enable_language(Fortran)
@@ -35,6 +37,11 @@ set(FFTPACK_PATH $ENV{FFTPACK_PATH})
 set(FFTPACK_LIBRARY_PATH "${FFTPACK_PATH}/lib")
 set(FFTPACK_INCLUDE_PATH "${FFTPACK_PATH}/include")
 
+#find_package(MPI REQUIRED)
+#message(STATUS ${MPI_Fortran_LIBRARIES})
+#message(STATUS ${MPI_Fortran_LINK_FLAGS})
+#message(STATUS ${MPI_Fortran_INCLUDE_PATH})
+#message(STATUS ${MPI_Fortran_COMPILE_FLAGS})
 
 set(CMAKE_Fortran_COMPILER_ID $ENV{COMPILER_ID})
 
@@ -42,6 +49,7 @@ set(CMAKE_Fortran_COMPILER_ID $ENV{COMPILER_ID})
 if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
     if ( CMAKE_BUILD_TYPE MATCHES "Release" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -mkl -heap-arrays 1024 -warn all -xhost -dynamic -qopt-report=2 -qopt-report-phase=vec -qoverride-limits -qopenmp")
+        #set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -heap-arrays 1024 -warn all -xhost -dynamic -qopt-report=2 -qopt-report-phase=vec -qoverride-limits -qopenmp")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -traceback -pg -mkl -heap-arrays 1024 -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
     endif()

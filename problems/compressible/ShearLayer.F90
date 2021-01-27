@@ -1,7 +1,7 @@
 #include "ShearLayer_files/hooks.F90"
 
 program ShearLayer
-
+    use mpi
     use hdf5
     use kind_parameters,  only: rkind,clen
     use CompressibleGrid, only: cgrid
@@ -14,6 +14,8 @@ program ShearLayer
 
     ! Start MPI
     call MPI_Init(ierr)
+    if (ierr /= 0) call GracefulExit("Could not initialize MPI correctly.",7356)
+
 
     ! Initialize the HDF5 library and Fortran interfaces
     call h5open_f(error)

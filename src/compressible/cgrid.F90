@@ -346,6 +346,9 @@ contains
         this%filter_x = filter_x    
         this%filter_y = filter_y    
         this%filter_z = filter_z  
+        if ((this%filter_x=='none') .AND. (this%filter_y=='none') .AND. (this%filter_z=='none')) then
+            call message("Note: Filtering turned off")
+        end if
         
         ! Allocate der
         if ( allocated(this%der) ) deallocate(this%der)
@@ -366,9 +369,15 @@ contains
         allocate(this%gfil)
         
         ! Initialize filters
-        call this%fil%init(                           this%decomp, &
+        if ((this%filter_x=='none') .AND. (this%filter_y=='none') .AND. (this%filter_z=='none')) then
+            call this%fil%init( this%decomp, &
+                         periodicx,   periodicy,    periodicz, &
+                         'cf90',      'cf90',       'cf90'  ) 
+        else
+            call this%fil%init( this%decomp, &
                          periodicx,     periodicy,      periodicz, &
-                          filter_x,      filter_y,       filter_z  )      
+                          filter_x,      filter_y,       filter_z  ) 
+        end if
         call this%gfil%init(                          this%decomp, &
                          periodicx,     periodicy,      periodicz, &
                         "gaussian",    "gaussian",     "gaussian"  )      
@@ -962,14 +971,16 @@ contains
             end if
 
             ! Filter the conserved variables
-            do i = 1,this%mix%ns
-                call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-            end do
-            call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-            call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
-            call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
-            call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-            
+            if (.not. ((this%filter_x=='none') .AND. (this%filter_y=='none') .AND.(this%filter_z=='none') )) then
+                do i = 1,this%mix%ns
+                    call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+                end do
+                call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+                call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+                call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+                call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+            end if
+
             call this%get_primitive()
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
@@ -2003,7 +2014,7 @@ contains
         class(cgrid), intent(inout) :: this, seed
         character(len=clen) :: charout
         real(rkind) :: cputime
-        integer :: i, vizcount=0, nx, ny, nz, i, j
+        integer :: vizcount=0, ny, i, j
 
         ! Start reading restart file
         write(charout,'(A,A)') "Reading seed restart dump from ", adjustl(trim(seed%restart%filename))
