@@ -32,7 +32,7 @@ subroutine initWallModel(this)
       allocate(this%PsiM_surf(this%gpC%zsz(1),this%gpC%zsz(2)))
       allocate(this%Linv_surf(this%gpC%zsz(1),this%gpC%zsz(2)))
       allocate(this%T_surf(this%gpC%zsz(1),this%gpC%zsz(2)))
-      allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3))) ! Howland: Added 1/25/21, this variable is also allocated in igrid.F90
+      !allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3))) ! Howland: Added 1/25/21, this variable is also allocated in igrid.F90
       ! This variable was causing an issue using a concurrent precursor
       ! methodology. Only failed in the precursor. Why?
    end if 

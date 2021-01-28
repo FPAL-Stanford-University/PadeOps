@@ -1,7 +1,7 @@
 &INPUT
-inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/farm/init"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/dynamic_robust"   ! Directory for all output files
-nx                            = 320          ! Number of points in X
+inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/long/init"   ! Directory for any input files
+outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/dynamic_robust"   ! Directory for all output files
+nx                            = 480          ! Number of points in X
 ny                            = 320          ! Number of points in Y
 nz                            = 320          ! Number of points in Z
 tstop                         = 8.64D1      ! Physical time to stop the simulation
@@ -10,7 +10,7 @@ dt                            = 0.025D0     ! Fixed time step value (only used i
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 2551           ! TimeID of the restart file being used
+restartFile_TID               = 2690           ! TimeID of the restart file being used
 restartFile_RID               = 1           ! RunID of the restart file being used
 /
 /
@@ -140,9 +140,9 @@ num_turbines                  = 9          ! How many turbines?
 ADM                           = .TRUE.      ! Are these actuator disks?
 turbInfoDir           = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/turbInfo/4x2array_0"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/dynamic_robust/turbOut"
+powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/dynamic_robust/turbOut"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 400
+yawUpdateInterval     = 800
 inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_dynamic_Pp_2p5.inp"
 /
 /
@@ -154,9 +154,9 @@ t_dumpKSprep                  = 10         ! Dumping Frequency for KS files
 /
 /
 &DIURNAL_BCS
-fname_G                       =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/diurnal_BCs/farm/geostrophic_wind.txt"
-fname_wtheta                  =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/diurnal_BCs/farm/surface_flux.txt"
-fname_galpha                  =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/diurnal_BCs/farm/g_alpha.txt"
+fname_G                       =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/diurnal_BCs/init/geostrophic_wind.txt"
+fname_wtheta                  =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/diurnal_BCs/init/surface_flux.txt"
+fname_galpha                  =  "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/diurnal_BCs/init/g_alpha.txt"
 G_tolerance                   =  1.0d-4    ! The tolerance associated with the geostrophic wind on restart 
 /
 /
@@ -175,8 +175,8 @@ restart_counter       = 1000     ! Restart budget file counter
 /
 /
 &PROBLEM_INPUT
-Lx                            =  8.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            =  8.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lx                            =  12.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            =  4.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
 Lz                            =  2.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  290.D0      ! Reference Temp. 
 wTh_surf0                     =  0.1D0     ! Surface heat flux (at tsim=0) in K-m/s (need to take care of the dimensions)
