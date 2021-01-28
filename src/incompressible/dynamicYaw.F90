@@ -1259,7 +1259,7 @@ subroutine rotate(this)
     end do
 
     ! Sort the turbines by upwind location
-    call Qsort(x_for_sorting,1)
+    call Qsort(x_for_sorting,this%Nt)
     this%indSorted = x_for_sorting%zpos
     this%unsort(indSorted) = this%unsort      
     this%turbCenter = X(this%indSorted,:)
@@ -1287,7 +1287,7 @@ subroutine rotate_local(this, dir, turbCenter, indSorted, unsort)
         unsort(i) = i
     end do
     ! Sort the turbines by upwind location
-    call Qsort(x_for_sorting,1)
+    call Qsort(x_for_sorting,this%Nt)
     indSorted = x_for_sorting%zpos
     unsort(indSorted) = unsort      
     turbCenter = X(indSorted,:)
