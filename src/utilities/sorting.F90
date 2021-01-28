@@ -7,7 +7,7 @@ implicit none
 
 type sortgroup
     real(rkind) :: value  = 0._rkind  ! values to be sorted by
-    real(rkind) :: zpos   = 0._rkind  ! z coordinate 
+    integer     :: zpos   = 1         ! z coordinate 
 end type sortgroup
  
 contains

@@ -540,7 +540,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                    if (this%useDynamicYaw) then
                        if (this%step==1) then
                            if (this%considerAdvection) then
-                               if (this%dyaw%ref_turbine == .false.) then
+                               if (.not. this%dyaw%ref_turbine) then
                                    this%advectionTime = nint(1*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(1)%xLoc) / dt)
                                else
                                    this%advectionTime = nint(1*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(2)%xLoc) / dt)
@@ -595,7 +595,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            end if
                        else
                            ! Wind direction standard deviations
-                           if (this%dyaw%use_alpha_check == .true.) then
+                           if (this%dyaw%use_alpha_check) then
                                call this%dyaw%alpha_check( &
                                                       this%alpha_sim(this%step-this%dyaw%Tf_init*2+1 : this%step), & 
                                                       this%t_sim(this%step-this%dyaw%Tf_init*2+1 : this%step), &
@@ -625,7 +625,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                                                      this%meanPbaseline, this%stdP, dirStd)
                            ! Account for lookup control case (essentially void
                            ! the prescription of yaw from the calculation above
-                           if (this%lookup==.false.) then
+                           if (.not.(this%lookup)) then
                                this%gamma = angleIn
                            else
                                ! These angles were taken after one step of
@@ -661,7 +661,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            fname = this%powerDumpDir(:len_trim(this%powerDumpDir))//"/tdata/"//trim(tempname2)
                            inquire(FILE=fname, EXIST=file_exists)
                            ! Write turbine data
-                           if (file_exists==.false.) then
+                           if (.not.(file_exists)) then
                                call this%turbArrayADM_Tyaw(i)%dumpPowerUpdate(this%powerDumpDir, & 
                                     tempname, this%powerUpdate(:,i), this%dirUpdate(:,i), & 
                                     this%dyaw%Phat, this%dyaw%Phat_fit, & 
@@ -680,7 +680,7 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                        this%wsUpdate = 0.d0
                    end if
                    ! Update time step
-                   if (this%firstStep == .FALSE.) then
+                   if (.not.(this%firstStep)) then
                        this%timeStep = this%timeStep+1 
                    else
                        ! Don't count the initialization step

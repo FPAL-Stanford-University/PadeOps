@@ -99,8 +99,8 @@ program diurnal_concurrent
        
        call budg_tavg%doBudgets()       
 
-       call doTemporalStuff(primary)                                        
-       call doTemporalStuff(precursor)                                        
+       call doTemporalStuff(primary, 1)                                        
+       call doTemporalStuff(precursor, 2)                                        
        !call doTemporalStuff(primary,   1)                                        
        !call doTemporalStuff(precursor,2)                                        
      

@@ -143,7 +143,7 @@ subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_
     endif
 
     ! Compute the actuator disk forcing and power
-    if (ref_turbine == .true.) then
+    if (ref_turbine ) then
         ! Use reference turbine adjacent to the leading turbine as the power
         ! reference
         call this%get_RHS(u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta)

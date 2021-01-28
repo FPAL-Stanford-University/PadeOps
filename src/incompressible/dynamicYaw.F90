@@ -48,7 +48,8 @@ module dynamicYawMod
         real(rkind), dimension(:), allocatable :: u_eff, Cp, a_mom
         real(rkind), dimension(:), allocatable :: ap, delta_u_face_store
         real(rkind), dimension(:,:), allocatable :: gaussianStore, y_c, yCenter, erfStore
-        real(rkind), dimension(:,:), allocatable :: deltaUIndividual, sigmaEnd, turbinesInFront
+        real(rkind), dimension(:,:), allocatable :: deltaUIndividual, sigmaEnd
+        logical, dimension(:,:), allocatable :: turbinesInFront
         real(rkind) :: A, rho
         ! Backward stuff
         real(rkind), dimension(:), allocatable :: dp_dgamma 
@@ -146,7 +147,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     this%dalpha_max = dalpha_max ! degrees
 
     ! Is there an adjacent reference turbine which we are not yawing?
-    if (this%ref_turbine == .true.) then
+    if (this%ref_turbine) then
         this%Nt = this%Nt - 1
     end if
 
@@ -211,7 +212,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     end if
 
     ! Get the wind turbine locations
-    if (this%ref_turbine == .true.) then
+    if (this%ref_turbine) then
         ! It is assumed that the reference turbine is the first actuator disk
         ! model initiated
         do i=1,this%Nt
@@ -259,7 +260,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, wind_direction_
     ! the step
     ! If one of the turbines is a reference turbine modify the power observation
     ! to only consider turbines 2:Nt+1
-    if (this%ref_turbine == .true.) then    
+    if (this%ref_turbine) then    
         this%powerObservation = powerObservation(2:this%Nt+1)
         this%Pstd = Pstd(2:this%Nt+1)
         this%yaw = yaw(2:this%Nt+1) 
@@ -274,7 +275,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, wind_direction_
     this%dir_std = dirStd
 
     ! Use initial fit parameters
-    if (this%check==.false.) then
+    if (.not. (this%check)) then
         ! For WES P1 CNBL, this was this%kw_initial and this%sigma_initial
         ! (meaning initial fit not initialization values)
         ! Modified for diurnal case, leave as init condition (not after first
@@ -296,7 +297,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, wind_direction_
 
     ! Online control update
     call this%onlineUpdate()
-    if (this%ref_turbine == .true.) then    
+    if (this%ref_turbine) then    
         yaw(2:this%Nt+1) = this%yaw;
         yaw(1) = 0.d0; ! reference turbine needs zero yaw misalignment
     else
@@ -307,7 +308,7 @@ subroutine update_and_yaw(this, yaw, wind_speed, wind_direction, wind_direction_
     this%turbCenter = this%turbCenterStore
 
     ! Save the initial fit for kw and sigma
-    if (this%check==.true.) then
+    if (this%check) then
         this%kw_initial = this%kw;
         this%sigma_initial = this%sigma_0;
         this%kw_u_initial = this%kw_u;
@@ -337,7 +338,7 @@ subroutine onlineUpdate(this)
     nt2 = this%Nt*2
     allocate(psi_kp1(nt2,this%Ne))
 
-    if (this%uncertain == .false.) then ! Certain wake model parameters
+    if (.not.(this%uncertain)) then ! Certain wake model parameters
         ! Store local parameter and rotate
         kw = this%kw(this%indSorted); sigma_0 = this%sigma_0(this%indSorted)
         yaw = this%yaw(this%indSorted)
@@ -378,7 +379,7 @@ subroutine onlineUpdate(this)
         ! Generate optimal yaw angles
         this%kw = kwBest; this%sigma_0 = sigmaBest;
         ! If useInitialParams only use initial fit to optimize model
-        if (this%useInitialParams==.true. .and. this%check==.false.) then
+        if (this%useInitialParams .and. (.not. this%check)) then
             kwBest = this%kw_initial(this%indSorted)
             sigmaBest = this%sigma_initial(this%indSorted)
         end if
@@ -647,11 +648,11 @@ subroutine yawOptimize_uncertain(this, kw_u, sigma_u, yaw)
     yaw = 0.d0
  
     ! eps also determines the termination condition
-    k=1; check = 0; 
+    k=1; check = .false.; 
     bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
     m=0.d0; v=0.d0;
     bestPower = 0.d0; bestYaw = 0.d0; bestPowerOut = 0.d0;
-    do while (k < this%epochsYaw .and. check == .false.) 
+    do while (k < this%epochsYaw .and. (.not. check)) 
     
         Ptotal = 0.d0; grads_total = 0.d0
         do pint = 1, this%p_bins
@@ -743,11 +744,11 @@ subroutine yawOptimize(this, kw, sigma_0, yaw)
     yaw = 0.d0
  
     ! eps also determines the termination condition
-    k=1; check = 0; 
+    k=1; check = .false.; 
     bestYaw = 0.d0; Ptot = 0.d0; P_time = 0.d0; P_time = 0.d0; yawTime = 0.d0
     m=0.d0; v=0.d0;
     bestPower = 0.d0; bestYaw = 0.d0; bestPowerOut = 0.d0;
-    do while (k < this%epochsYaw .and. check == .false.) 
+    do while (k < this%epochsYaw .and. (.not. check)) 
     
         ! Forward prop
         this%dp_dgamma = 0.d0
@@ -795,7 +796,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
     real(rkind), dimension(this%Nx) :: xpFront, delta_v, dwVect, dvec
     logical :: check
     real(rkind), dimension(this%Ny) :: duSum, us, ylocal, uw
-    real, dimension(this%Nt, this%Nt) :: uci
+    real(rkind), dimension(this%Nt, this%Nt) :: uci
  
     ! Definitions
     ! Set the relevant turbine length scale
@@ -827,14 +828,14 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                    boundHigh = this%turbCenter(i,2)+dw/2;
                    edgeLow = this%turbCenter(j,2)-D/2;
                    edgeHigh = this%turbCenter(j,2)+D/2;
-                   check = 0
+                   check = .false.
                    if (edgeLow>=boundLow .and. edgeLow<=boundHigh) then
-                       check = 1
+                       check = .true.
                    end if
                    if (edgeHigh>=boundLow .and. edgeHigh<=boundHigh) then
-                       check = 1
+                       check = .true.
                    end if
-                   if (check == .TRUE.) then
+                   if (check) then
                        turbinesInFront(j,i) = .true.
                    end if
                 end if
@@ -844,7 +845,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
             duSum = 0.d0; us = 0.d0; duSum = 0.d0; uw = 0.d0
             ylocal = linspace(this%turbCenter(j, 2)-D/2, this%turbCenter(j, 2)+D/2, this%Ny);
             do k = 1, this%Nt
-                if (turbinesInFront(j,k) == .TRUE.) then
+                if (turbinesInFront(j,k)) then
                     ! Individual velocity deficits
                     aPrev = 0.5*(1.d0-sqrt(1.d0-this%Ct*cos(yaw(k))**2))
                     dx = this%turbCenter(j, 1) - this%turbCenter(k, 1)
@@ -869,7 +870,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                     elseif (this%superposition == 2 .or. this%superposition == 3) then
                         dvi = this%u_eff(k) * 0.25 * this%Ct * cos(yaw(k))**2 * sin(yaw(k))
                     end if
-                    if (this%secondary == .true.) then
+                    if (this%secondary) then
                         delta_v0(j) = dvi + this%v(k)
                     else
                         delta_v0(j) = dvi
@@ -920,7 +921,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                         this%erfStore(k, j) = (du/this%u_eff(k)) * gaussian * uci(k, j) / Uc(j); 
                     end if
                     this%gaussianStore(k, j) = gaussian;
-                    if (this%secondary == .true.) then
+                    if (this%secondary) then
                         this%ucr(k, j) = (uci(k, j) / Uc(j)) * dv * gaussian;
                         this%v(j) = this%v(j) + dvi * this%ucr(k, j);
                     end if
@@ -1013,7 +1014,7 @@ subroutine backward(this, kw, sigma_0, yaw)
                if (edgeHigh>=boundLow .and. edgeHigh<=boundHigh) then
                    check = .true.
                end if
-               if (check == .true.) then
+               if (check) then
                    turbinesInBack(j) = .true.
                    turbinesInBackMat(i,j) = .true.
                end if
@@ -1023,7 +1024,7 @@ subroutine backward(this, kw, sigma_0, yaw)
         ! Flip over whether the turbine sees a wake or not
         du_eff_da = 0;
         do k = 1, this%Nt
-            if (turbinesInBack(k) == .true.) then
+            if (turbinesInBack(k)) then
                 du_eff_da = -this%deltaUIndividual(k,i) / (this%a_mom(i)+this%eps) * & 
                             this%gaussianStore(i,k)
                 this%dp_dgamma(i) = this%dp_dgamma(i) + & 
@@ -1050,10 +1051,9 @@ subroutine backward(this, kw, sigma_0, yaw)
                 this%dp_dgamma(i) = this%dp_dgamma(i) + & 
                                     dp_du_eff(k)*du_eff_dyc(i)*dy_c_dgamma(i) 
                 ! Extra terms from secondary steering
-                if ((this%superposition==2 .or. this%superposition==3) .and. &
-                    this%secondary==.true.) then;
+                if ((this%superposition==2 .or. this%superposition==3) .and. this%secondary) then;
                     do m = 1, this%Nt
-                        if (this%turbinesInFront(i, m) == .true.) then
+                        if (this%turbinesInFront(i, m)) then
                             ! d y_c / d gamma
                             dy_c_dgamma(m) = (this%u_eff(m)/this%u_eff(i)) * this%ucr(m, i) &
                                              * (cos(yaw(m))**3-2*sin(yaw(m))**2*cos(yaw(m)))* &
@@ -1072,9 +1072,9 @@ subroutine backward(this, kw, sigma_0, yaw)
     if (this%superposition == 2 .or. this%superposition == 3) then
         do i = this%Nt, 1, -1
             do m = 1, this%Nt
-            if (this%turbinesInFront(i, m) == .true.) then
+            if (this%turbinesInFront(i, m)) then
                 do k = 1, this%Nt
-                if (turbinesInBackMat(i, k) == .true.) then
+                if (turbinesInBackMat(i, k)) then
                     du_eff_dueffUp = -this%erfStore(i, k);
                     ! 1
                     du_eff_da = -this%deltaUIndividual(i,m) / (this%a_mom(m)+this%eps) * this%gaussianStore(m, i);
@@ -1140,7 +1140,7 @@ subroutine alpha_check(this, alpha, t, alpha_m, alpha_std, Tf_out)
     sig = 1.d0
 
     ! While loop over Tfit integration length
-    do while (dalpha>=this%dalpha_max .and. check==.true.)
+    do while (dalpha>=this%dalpha_max .and. check)
         ! Initialize loop
         ! Least squares fit, Step 1
         ! t-2*Tf:t-Tf
@@ -1542,7 +1542,8 @@ subroutine pfit(x,y,sig,p,a,cov,coeff,chi)
     real(8), allocatable :: work(:)
 
     integer :: m, n, lwork, ierr, i, j
-    real(8) :: tau(size(A,2)), qwork(1)
+    real(8) :: tau(size(A,2))
+    integer :: qwork(1)
     real(8) :: A1(size(A,1),size(A,2))
 
     m = size(A,1)
