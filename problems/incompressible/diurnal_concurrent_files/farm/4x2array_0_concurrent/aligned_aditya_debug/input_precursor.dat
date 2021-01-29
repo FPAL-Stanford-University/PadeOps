@@ -1,6 +1,6 @@
 &INPUT
 inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/long/init"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off"   ! Directory for all output files
+outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_debug"   ! Directory for all output files
 nx                            = 160          ! Number of points in X
 ny                            = 160          ! Number of points in Y
 nz                            = 160          ! Number of points in Z

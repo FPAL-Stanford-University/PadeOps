@@ -893,7 +893,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
                         this%y_c(k, j) = mytrapz(xpFront, -delta_v/this%u_eff(k))
                     end if
                     ! Local y frame
-                    this%sigmaEnd(k, j) = sigma_0(k) * dw 
+                    this%sigmaEnd(k, j) = sigma_0(k) * dw
                     ! take the last value of sigma which is at the next turbine
                     this%yCenter(k, j) = this%y_c(k, j) + this%turbCenter(k, 2);
                     ! Effective velocity at turbine face
@@ -953,7 +953,7 @@ subroutine forward(this, kw, sigma_0, Phat, yaw)
             Phat(j) = 0.5 * this%rho * this%A * this%Cp(j) * this%u_eff(j)**3;  
         end do
         ! Error update
-        if (this%superposition == 2) then
+        if (this%superposition == 2 .or. this%superposition == 3) then
             uc_error = sum(abs(Uc_old-Uc))/real(this%Nt); 
             ucCount = ucCount+1; this%turbinesInFront = turbinesInFront
         else
@@ -1542,8 +1542,9 @@ subroutine pfit(x,y,sig,p,a,cov,coeff,chi)
     real(8), allocatable :: work(:)
 
     integer :: m, n, lwork, ierr, i, j
-    real(8) :: tau(size(A,2))
-    integer :: qwork(1)
+    real(8) :: tau(size(A,2)), qwork(1)
+    !real(8) :: tau(size(A,2))
+    !integer :: qwork(1) ! this line throws an error in this code
     real(8) :: A1(size(A,1),size(A,2))
 
     m = size(A,1)
