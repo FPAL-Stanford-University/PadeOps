@@ -43,7 +43,9 @@ contains
             call message(1,"G_alpha:",gp%G_alpha)
             call message(1,"Surface Flux (K*nd velocity):",gp%wTh_surf)
             if (simid == 1) then
-                call message(0,"Wind direction hub height", gp%WindTurbineArr%windAngle)
+                if (gp%useWindTurbines) then
+                    call message(0,"Wind direction hub height", gp%WindTurbineArr%windAngle)
+                end if 
             end if 
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)

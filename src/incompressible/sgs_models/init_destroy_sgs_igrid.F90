@@ -80,6 +80,10 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, & 
                  WallFunctionType, useFullyLocalWM 
 
+  open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+  read(unit=123, NML=SGS_MODEL)
+  close(123)
+  
   this%gpC => gpC
   this%gpE => gpE
   this%spectC => spectC
@@ -146,9 +150,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%rbuffyC => rbuffyC
   this%rbuffzC => rbuffzC
 
-  open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
-  read(unit=123, NML=SGS_MODEL)
-  close(123)
 
   this%useScalarBounding = useScalarBounding 
   this%Cy = Cy  

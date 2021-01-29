@@ -54,7 +54,9 @@ program diurnal_concurrent
     end if 
 
     call budg_tavg%init(primary_inputfile, primary)   !<-- Budget class initialization 
-    call primary%WindTurbineArr%link_reference_domain_for_control(primary%u, primary%v, primary%rbuffyC, primary%rbuffzC, primary%gpC)
+    if (primary%useWindTurbines) then
+        call primary%WindTurbineArr%link_reference_domain_for_control(primary%u, primary%v, primary%rbuffyC, primary%rbuffzC, primary%gpC)
+    end if 
 
     call diurnalBCs_CorrectnessCheck(primary%tsim, primary%G_geostrophic)
     call diurnalBCs_CorrectnessCheck(precursor%tsim, precursor%G_geostrophic)

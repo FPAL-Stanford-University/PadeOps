@@ -38,6 +38,7 @@ contains
         read(unit=ioUnit, NML=DIURNAL_BCS)
         close(ioUnit)    
 
+
         ! Geostrophic wind speed
         call read_2d_ascii(data2read, fname_G)
         allocate(t_geo(size(data2read,1)))
