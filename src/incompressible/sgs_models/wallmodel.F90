@@ -56,7 +56,7 @@ subroutine initWallModel(this)
         !print *, 'nx = ', this%gpC%xsz(1)
         open(10, file='debug_heterog_wm04.dat',action='write',status='unknown')
         do i=1,this%gpC%xsz(1)
-          write(10,'(5(e19.12,1x))') this%z0var(i,1), this%lamfact(i,1), this%deli(i,1), this%ustarsq_ratio_kaplnzfacs(i,1)/this%kaplnzfac_s
+          write(10,'(5(e19.12,1x))') this%z0var(i,1), this%lamfact(i,1), this%deli(i,1), this%ustarsq_ratio_kaplnzfacs(i,1)!/this%kaplnzfac_s
         enddo
         close(10)
       endif
@@ -199,6 +199,7 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
       ! using this%filteredSpeedSq in the upstream region, estimate ustar1
       call this%compute_ustar_upstreampart(ustar1)
+      this%ustar_upstream = ustar1
       !ust1fac = ustar1/sqrt(this%kaplnzfac_s)
 
       dzby2 = half*this%dz 
@@ -209,7 +210,7 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
             elseif(this%deli(i,j) < dzby2) then
                 this%ustarsqvar(i,j) = this%ustarsq_ratio_kaplnzfacs(i,j) * this%filteredSpeedSq(i,j,1)
             else
-              if(this%alpfac*this%deli(i,j) < dzby2) then
+              if(this%alpfac(i,j)*this%deli(i,j) < dzby2) then
                   call this%solve_nonlinprob_2(i, j, ustar1)
               else
                   this%ustarsqvar(i,j) = this%kaplnzfac_r*this%filteredSpeedSq(i,j,1)
@@ -272,17 +273,18 @@ function feval_two(this,xvar,fparams) result(fval)
     lnfdez02 = fparams(4);  lnfdiz01 = fparams(5);  zbar = fparams(6) 
     ufix = fparams(7)
 
-    termp =  two*(xvar/(one-xvar));    termq =  (xvar/(one-xvar))**2 
+    termp =  two*xvar/(one-xvar);
+    termq =  xvar/(one-xvar); termq = termq*termq
     termr =  -((deli*(one+two*beta) - xvar*dele*(one-two*beta))/(two*beta*(deli+xvar*dele)))
     terms =  -xvar*dele/(two*beta*(deli+xvar*dele))
     termRfac =  sqrt(termr*termr/four - terms)
 
-    term1 = zbar -one + (termp-termr)/two * log(zbar**2+termr*zbar+terms/(one+termr+terms)) 
-    tmp   =  ((termq+termr**2/two -termp*termr/two - terms)/(two*termRfac))
-    tmp   = tmp * log((zbar+termr/two-termRfac)*(one+termr/two+termRfac)/((zbar+termr/two+termRfac)*(one+termr/two-termRfac)))
+    term1 = zbar - one + half*(termp-termr) * log((zbar*zbar+termr*zbar+terms)/(one+termr+terms)) 
+    tmp   =  (termq + half*termr*termr - half*termp*termr - terms)/(two*termRfac)
+    tmp   = tmp * log((zbar+half*termr-termRfac)*(one+half*termr+termRfac)/((zbar+half*termr+termRfac)*(one+half*termr-termRfac)))
     term1 = term1 + tmp
 
-    term2 =  -((one-xvar)**2 * (deli-dele)/((two*beta*kappa)*(xvar*dele+deli)))
+    term2 =  -(one-xvar)**2 * (deli-dele)/(two*beta*kappa*(xvar*dele+deli))
     term3 =  term2*term1 
     
     fval = ufix - term3 - lnfdiz01
@@ -298,7 +300,7 @@ subroutine solve_nonlinprob_1(this, i, j)
    integer :: iter, max_iters
    real(rkind) ::  sfmid,sfa,sfb
 
-   deli = this%deli(i,j); z02 = this%z0r; z01 = this%z0s; dele = deli*this%alpfac
+   deli = this%deli(i,j); z02 = this%z0r; z01 = this%z0s; dele = deli*this%alpfac(i,j)
    lnfdez02 = log(dele/z02)/kappa;    lnfdiz01 = log(deli/z01)/kappa
      
    fparams(1) = deli;          fparams(2) = dele
@@ -351,7 +353,7 @@ subroutine solve_nonlinprob_1(this, i, j)
    !     print '(a,i4,a)', '------Done iteration no   = ', iter, '-----'
    !endif
 
-   this%ustarsq_ratio_kaplnzfacs(i,j) = xmid*xmid*this%kaplnzfac_s
+   this%ustarsq_ratio_kaplnzfacs(i,j) = xmid*xmid!*this%kaplnzfac_s
 
 end subroutine
 
@@ -365,7 +367,7 @@ subroutine solve_nonlinprob_2(this, i, j, ustar1)
    real(rkind) :: zbar, ufix, xa,xb,xmid,sfa,sfb,sfmid
    integer :: iter, max_iters
 
-   deli = this%deli(i,j); z02 = this%z0r; z01 = this%z0s; dele = deli*this%alpfac
+   deli = this%deli(i,j); z02 = this%z0r; z01 = this%z0s; dele = deli*this%alpfac(i,j)
    lnfdiz01 = log(deli/z01)/kappa
 
    zbar = (half*this%dz - dele)/(deli-dele)
@@ -377,17 +379,36 @@ subroutine solve_nonlinprob_2(this, i, j, ustar1)
 
    max_iters = 1000; tol = 1.0d-8 
    xvar = zero; 
-   ! Set initial guess based on the type of transition
-   if(z01 < z02) then
-       ! S-R Transition
-       xa = 1.0_rkind;       xb = 100.0_rkind
-   else
-       ! R-S Transition
-       xa = 1.0d-12;       xb = 1.0_rkind - 1.0d-12
-   endif
+   !! Set initial guess based on the type of transition
+   !if(z01 < z02) then
+   !    ! S-R Transition
+   !    xa = 1.0_rkind;       xb = 100.0_rkind
+   !else
+   !    ! R-S Transition
+   !    xa = 1.0d-12;       xb = 1.0_rkind - 1.0d-12
+   !endif
+   xa = 1.0d-6; xb = 10.0d0-1.0d-6
+
+   !if((this%gpC%xst(3)==1) .and. (nrank==0) .and. (j==1) .and. (i==35)) then
+   !   xa = 0.001d0; xb = 10.0d0
+   !   max_iters = 100
+   !   do iter = 1, max_iters
+   !     xmid = xa + real(iter, rkind)*(xb-xa)/real(max_iters+1, rkind)
+   !     write(100,'(2(e19.12,1x))') xmid, this%feval_two(xmid, fparams)
+   !   enddo
+   !   stop
+   !endif
+
 
    sfa = sign(one,this%feval_two(xa,fparams))
    sfb = sign(one,this%feval_two(xb,fparams))
+   if(sfa*sfb > zero) then
+     print *, '----Stopping nonlinprob_2----'
+     print *, '+++ ', i, j
+     print *, '+++ ', sfa, sfb
+     print *, '+++ ', xa, xb
+     print *, '----Done Stopping nonlinprob_2----'
+   endif
 
    do iter = 1, max_iters
      xdiff = abs(xa-xb)
@@ -403,8 +424,13 @@ subroutine solve_nonlinprob_2(this, i, j, ustar1)
      end if
    end do
 
-   this%ustarsqvar(i,j) = (xmid*ustar1)**2 * this%kaplnzfac_r * this%filteredSpeedSq(i,j,1)
-   
+   this%ustarsqvar(i,j) = (xmid*ustar1)**2 !* this%kaplnzfac_r * this%filteredSpeedSq(i,j,1)
+
+
+   if((this%gpC%xst(3)==1) .and. (nrank==0) .and. (j==1)) then
+      write(*,'(a,3(i4,1x),6(e19.12,1x))') 'nlp2 :: ', nrank, i, j, xmid, this%ustarsqvar(i,j), fparams(1:2), fparams(6:7)
+   endif
+
    !if(xdiff > tol) then
    !  call message(1, "Did not converge", 0.0_rkind)
    !  call message(2, "iter: ", iter  )

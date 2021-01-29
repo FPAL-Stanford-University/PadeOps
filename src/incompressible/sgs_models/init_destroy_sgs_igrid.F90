@@ -13,7 +13,7 @@ subroutine destroy(this)
   nullify(this%tau_11, this%tau_12, this%tau_22, this%tau_33)
   deallocate(this%tau_13, this%tau_23)
   if(this%is_z0_varying) then
-      deallocate(this%ustarsqvar, this%z0var, this%Uxvar, this%Uyvar, this%WallMFactorvar, this%lamfact, this%deli, this%mask_upstream)
+      deallocate(this%ustarsqvar, this%z0var, this%Uxvar, this%Uyvar, this%WallMFactorvar, this%lamfact, this%deli, this%mask_upstream, this%alpfac)
   endif
 
 end subroutine
@@ -75,9 +75,9 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   integer :: ierr, WM_matchingIndex = 1, i, j
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0, xpos = 0.0_rkind, epssmall = 1.0d-6
   real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2, deli
-  logical :: is_z0_varying = .false., filter_for_heterog = .true.
+  logical :: is_z0_varying = .false., filter_for_heterog = .true., use_const_alpfac = .true.
   real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
-  real(rkind) :: Mfactor, dele, excludedist = 3.0_rkind
+  real(rkind) :: Mfactor, dele, excludedist = 3.0_rkind, const_alpfac = 0.027_rkind, blht_for_alpfac = 3.0_rkind
   integer :: spnumx, spnumy
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
@@ -90,7 +90,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
                  is_z0_varying
 
   namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, rpstart, spx_delta, spy_delta, &
-                       filter_for_heterog, excludedist
+                       filter_for_heterog, excludedist, use_const_alpfac, const_alpfac, blht_for_alpfac
 
   this%gpC => gpC
   this%gpE => gpE
@@ -193,6 +193,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     allocate(this%z0var(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%ustarsqvar(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%Uxvar(this%gpC%xsz(1), this%gpC%xsz(2)))
+    allocate(this%alpfac(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%Uyvar(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%WallMFactorvar(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%lamfact(this%gpC%xsz(1), this%gpC%xsz(2)))
@@ -203,7 +204,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     this%z0var         = 0.0_rkind;   this%ustarsqvar     = 0.0_rkind;   this%Uxvar   = 0.0_rkind
     this%Uyvar         = 0.0_rkind;   this%WallMFactorvar = 0.0_rkind;   this%lamfact = 0.0_rkind
     this%mask_upstream = 0.0_rkind;   this%deli           = 0.0_rkind;   sp_map       = 0.0_rkind
-    this%alpfac        = 0.027_rkind; this%betfac         = 0.15_rkind
+    this%betfac         = 0.15_rkind
 
     this%z0s = z0s; this%z0r = z0r
     this%filter_for_heterog = filter_for_heterog
@@ -248,11 +249,23 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
       this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
     enddo
 
+    ! NOTE :: rpstart must be figured out before this block for setting alpfac
+    this%alpfac = const_alpfac
+    if(.not. use_const_alpfac) then
+        do j = 1, this%gpC%xsz(2)
+          do i = 1, this%gpC%xsz(1)
+              xl = xMesh(i) - rpstart
+              if(xl > epssmall) then
+                  this%alpfac(i,j) = 0.004551_rkind * (xl/blht_for_alpfac)**(-0.3593)
+              endif
+          enddo
+        enddo
+    endif
+
     !!! only for Abkar-PA model. Think where to put this later
     !!! determine lamfact
     !!! smooth patch before rpstart and after fringe. Rough between these.
     Mfactor = 0.75_rkind-0.03_rkind*log(this%z0r/this%z0s)
-    this%alpfac = 0.027_rkind
     deli = 0.0_rkind
     do j = 1, this%gpC%xsz(2)
       do i = 1, this%gpC%xsz(1)
@@ -263,10 +276,10 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
             ! downstream rough or smooth region
             xl = xMesh(i) - rpstart
             deli(i) = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind
-            this%lamfact(i,j) = -log(half*this%dz/(deli(i)*this%alpfac+1.0d-18)) / log(this%alpfac)
+            this%lamfact(i,j) = -log(half*this%dz/(deli(i)*this%alpfac(i,j)+1.0d-18)) / log(this%alpfac(i,j))
             this%lamfact(i,j) = min(this%lamfact(i,j), one)     ! note :: must be here, not outside the loop
             this%lamfact(i,j) = max(this%lamfact(i,j), zero)    ! note :: must be here, not outside the loop
-            !write(100+nrank,'(2(i5,1x),7(e19.12,1x))') i, j, deli, half*this%dz, half*this%dz/(deli*this%alpfac+1.0d-18), -log(this%alpfac), this%lamfact(i,j)
+            write(100+nrank,'(2(i5,1x),9(e19.12,1x))') i, j, xl, deli(i), this%alpfac(i,j), half*this%dz, half*this%dz/(deli(i)*this%alpfac(i,j)+1.0d-18), -log(this%alpfac(i,j)), this%lamfact(i,j)
         endif
       enddo
     enddo

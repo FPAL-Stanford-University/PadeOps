@@ -13,16 +13,19 @@ program getWakeCenterline
    real(rkind), dimension(:,:,:), allocatable :: u, v, w, fconv, fconv_p, buff1_p 
    real(rkind), dimension(:,:  ), allocatable :: data2write, raddist, fmask
    real(rkind), dimension(:    ), allocatable :: yc, zc
+   integer,     dimension(:    ), allocatable :: tidx_arr
    real(rkind) :: dx, dy, dz, Re = 3000.d0, turbDiam = one, turbRadSq
-   integer :: nx, ny, nz, RunID, TIDX
+   integer :: nx, ny, nz, RunID, TIDX, tcoun
    type(igrid_ops) :: ops
    character(len=clen) ::  inputdir, outputdir
-   character(len=clen) :: inputfile!, filename
-   real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0, numer, denom, ycen, zcen, xturb, yturb, zturb
-   integer :: ierr, tsnapshot = 0, NumericalSchemeVert = 1, i, j, k, jst, jen, kst, ken, shift_y, shift_z, ii2(2)
-   logical :: isZPeriodic = .false. 
+   character(len=clen) :: inputfile
+   character(len=4)    :: flabel
+   real(rkind) :: Lx = 9.d0*pi, Ly = 9.d0*pi, Lz = 8.d0, numer, denom, ycen, zcen, xturb = 0.2_rkind, yturb, zturb, xst, xen
+   integer :: ierr, NumericalSchemeVert = 1, i, j, k, jst, jen, kst, ken, shift_y, shift_z, ii2(2), ist, ien
+   integer :: tsnap_st = 70000, dtsnaps = 40, nsnaps = 40, max_nyen, max_nzen, min_nyen, min_nzen, jturb, kturb, num_radii_y=6, num_radii_z=3
+   logical :: isZPeriodic = .false.
 
-   namelist /INPUT/ Lx, Ly, Lz, InputDir, OutputDir, RunID, tsnapshot, nx, ny, nz, Re, NumericalSchemeVert, turbDiam, xturb,  yturb, zturb
+   namelist /INPUT/ InputDir, OutputDir, RunID, nx, ny, nz, Lx, Ly, Lz, Re, NumericalSchemeVert, turbDiam, xturb,  yturb, zturb, tsnap_st, dtsnaps, nsnaps, num_radii_y, num_radii_z
    
    call MPI_Init(ierr)               
    call GETARG(1,inputfile)          
@@ -55,131 +58,124 @@ program getWakeCenterline
    call ops%allocate3DField(omega2)
    call ops%allocate3DField(omega3)
 
-
-   tidx = tsnapshot
-   call message(0, "Reading fields for tid:", TIDX)
-   call tic()
-   call ops%ReadField3D(u,"uVel",TIDX)
-   call ops%ReadField3D(v,"vVel",TIDX)
-   call ops%ReadField3D(w,"wVel",TIDX)
-  
    allocate(yc(nx),zc(nx))
-   !allocate(raddist(ny,nz),fconv(ny,nz))
    allocate(fconv_p(ny,nz,nx),fconv(nx,ny,nz))
    allocate(buff1_p(ny,nz,nx))
+   allocate(data2write(nx,3))
 
-
-   fconv = zero; fconv_p = zero; buff1_p = zero
-
-   ! linear impulse
    call ops%getGrid(x,y,z)
-   !call ops%getCurl(u,v,w,omega1,omega2,omega3,0,0,0,0)
-   !buff1 = half*(y*omega3 - z*omega2)
-
-   !do i=1,size(x,1)
-   !  numer = p_sum(sum(buff1(i,:,:)*y(i,:,:)))
-   !  denom = p_sum(sum(buff1(i,:,:)))
-   !  yc(i) = numer/(denom+1.0d-18)
- 
-   !  numer = p_sum(sum(buff1(i,:,:)*z(i,:,:)))
-   !  zc(i) = numer/(denom+1.0d-18)
-   !enddo
-
-   ! calculate power
-   buff1 = u*u + v*v + w*w
-   buff1 = half*buff1*u
-
-   
- 
    turbRadSq = turbDiam*turbDiam/4.0d0
-
-
-   do i = 1, nx
-     do k = 1, nz
-       do j = 1, ny
-         buff1_p(j,k,i) = buff1(i,j,k)
-       enddo
-     enddo
-   enddo
-
    shift_y = floor(turbDiam/two/dy)
    shift_z = floor(turbDiam/two/dz)
 
    jst = shift_y+1; jen = ny-shift_y
    kst = shift_z+1; ken = nz-shift_z
 
-   do i = 1, nx
+   xst = xturb-0.5*turbDiam;     ist = minloc(abs(x(:,1,1)-xst),1)
+   xen = xturb+20.0*turbDiam;    ien = minloc(abs(x(:,1,1)-xen),1)
+
+   !! trial 1
+   !min_nyen = 1
+   !min_nzen = 1
+   !max_nyen = floor(3.0_rkind*ny/4.0_rkind)
+   !max_nzen = floor(3.0_rkind*nz/4.0_rkind)
+
+   ! trial 2
+   jturb = minloc(abs(y(1,:,1)-yturb),1)
+   kturb = minloc(abs(z(1,1,:)-zturb),1)
+   min_nyen = jturb - num_radii_y*shift_y; min_nyen = max(min_nyen, 1)
+   max_nyen = jturb + num_radii_y*shift_y; max_nyen = min(max_nyen, floor(3.0*ny/4.0))
+   min_nzen = kturb - num_radii_z*shift_z; min_nzen = max(min_nzen, 1)
+   max_nzen = kturb + num_radii_z*shift_z; max_nzen = min(max_nzen, floor(3.0*nz/4.0))
+   print *, 'y limits = ', min_nyen, max_nyen
+   print *, 'z limits = ', min_nzen, max_nzen
+
+   allocate(tidx_arr(nsnaps))
+   do tcoun = 1, nsnaps
+       tidx_arr(tcoun) = tsnap_st + (tcoun-1) * dtsnaps
+   enddo
+
+   do tcoun = 1, size(tidx_arr)
+
+     tidx = tidx_arr(tcoun)
+     call message(0, "Reading fields for tid:", TIDX)
+     call tic()
+     call ops%ReadField3D(u,"uVel",TIDX)
+     call ops%ReadField3D(v,"vVel",TIDX)
+     call ops%ReadField3D(w,"wVel",TIDX)
+  
+
+     fconv_p = zero;     yc = zero;     zc = zero
+
+     ! linear impulse
+     !call ops%getCurl(u,v,w,omega1,omega2,omega3,0,0,0,0)
+     !buff1 = half*(y*omega3 - z*omega2)
+
+     !do i=1,size(x,1)
+     !  numer = p_sum(sum(buff1(i,:,:)*y(i,:,:)))
+     !  denom = p_sum(sum(buff1(i,:,:)))
+     !  yc(i) = numer/(denom+1.0d-18)
+ 
+     !  numer = p_sum(sum(buff1(i,:,:)*z(i,:,:)))
+     !  zc(i) = numer/(denom+1.0d-18)
+     !enddo
+
+     ! calculate power
+     buff1 = u*u + v*v + w*w
+     buff1 = half*buff1*u
+
+     do i = 1, nx
+       do k = 1, nz
+         do j = 1, ny
+           buff1_p(j,k,i) = buff1(i,j,k)
+         enddo
+       enddo
+     enddo
+
+     do i = ist, ien
+       do k = 1, nz
+          buff1_p(:,k,i) = buff1_p(:,k,i) - sum(buff1_p(:,k,i))/real(ny, rkind)
+       enddo
+       do j = jst, jen
+         do k = kst, ken
+             fconv_p(j,k,i) = sum(buff1_p(j-shift_y:j+shift_y,k-shift_z:k+shift_z,i))
+         enddo
+       enddo
+       ii2 = minloc(fconv_p(min_nyen:max_nyen,min_nzen:max_nzen,i))
+       ii2(1) = ii2(1) + min_nyen-1;       ii2(2) = ii2(2) + min_nzen-1
+       yc(i) = y(i,ii2(1),ii2(2))
+       zc(i) = z(i,ii2(1),ii2(2))
+       print '(3(i5,1x),2(f12.5,1x))', i, ii2, y(i,ii2(1),ii2(2)), z(i,ii2(1),ii2(2))
+     enddo
+
      do k = 1, nz
-        buff1_p(:,k,i) = buff1_p(:,k,i) - sum(buff1_p(:,k,i))/real(ny, rkind)
-     enddo
-     do j = jst, jen
-       do k = kst, ken
-           fconv_p(j,k,i) = sum(buff1_p(j-shift_y:j+shift_y,k-shift_z:k+shift_z,i))
+       do j = 1, ny
+         do i = 1, nx
+           fconv(i,j,k) = fconv_p(j,k,i)
+         enddo
        enddo
      enddo
-     ii2 = minloc(fconv_p)
-     yc(i) = y(i,ii2(1),ii2(2))
-     zc(i) = z(i,ii2(1),ii2(2))
-     print *, i
+     call ops%WriteField3D(fconv, "fcnv", tidx)
+
+     !call ops%WriteField3D(buff2, "pcon", tidx)
+
+     data2write(:,1) = x(:,1,1)
+     data2write(:,2) = yc
+     data2write(:,3) = zc
+     write(flabel,"(A1,I3.3)") "c", tcoun
+     !print *, filename
+     call ops%WriteASCII_2D(data2write, flabel)
+ 
    enddo
 
-   do k = 1, nz
-     do j = 1, ny
-       do i = 1, nx
-         fconv(i,j,k) = fconv_p(j,k,i)
-       enddo
-     enddo
-   enddo
-   call ops%WriteField3D(fconv, "fcnv", tidx)
-
-   !buff2 = -100.0d0
-   !kst = minloc(abs(z(1,1,:)-(zturb-two*turbDiam)),dim=1)
-   !ken = minloc(abs(z(1,1,:)-(zturb+two*turbDiam)),dim=1)
-   !jst = minloc(abs(y(1,:,1)-(yturb-two*turbDiam)),dim=1)
-   !jen = minloc(abs(y(1,:,1)-(yturb+two*turbDiam)),dim=1)
-   !print *, jst, jen
-   !print *, kst, ken
-   !print *, zturb, yturb, turbDiam
-   !print *, minval(z), maxval(z)
-   !print *, minval(y), maxval(y)
- 
-   !! sharp mask function
-   !do k = kst, ken
-   !  do j = jst, jen
-   !    print *, j, k
-   !    ycen = y(1,j,k); zcen = z(1,j,k)
-   !    raddist(:,:) = (y(1,:,:) - ycen)**2 + (z(1,:,:) - zcen)**2
-   !    where(raddist < turbRadSq)
-   !      fmask = -one
-   !    elsewhere
-   !      fmask = zero
-   !    endwhere
-   !   
-   !    do i = 1, nx 
-   !      buff2(i,j,k) = p_sum(sum(buff1(i,:,:)*fmask))
-   !    enddo
-
-   !  enddo
-   !enddo 
-
-   !call ops%WriteField3D(buff1, "powd", tidx)
-   call ops%WriteField3D(buff2, "pcon", tidx)
-   
-
-   allocate(data2write(nx,3))
-   data2write(:,1) = x(:,1,1)
-   data2write(:,2) = yc
-   data2write(:,3) = zc
-   !write(filename,"(A5,I6.6,A4)") "yczc_", tidx, ".dat"
-   !print *, filename
-   call ops%WriteASCII_2D(data2write, 'yczc')
- 
-   call message(0,"Done computing x impulse")
-   call ops%WriteField3D(buff1, "impx", tidx)
-   call message(0, "x impulse field written.")
    call ops%destroy()
    call MPI_Finalize(ierr)           
 
 
 end program 
 
+     ! go to y decomp
+     ! cast all local arrarys s.t. u(ny, nzloc, nxloc)
+     ! compute buff1_p with local spanwise mean subtracted
+     ! compute sum in y. then
+ 
