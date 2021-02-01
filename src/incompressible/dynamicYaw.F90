@@ -187,6 +187,9 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     allocate(this%sigma_u(this%Nt, this%p_bins))
     allocate(this%Phat_fit_u(this%Nt, this%p_bins))
     allocate(this%p_steps(this%p_bins))
+    allocate(this%power_minus_n(this%n_moving_average,this%Nt+1))
+    allocate(this%ws_minus_n(this%n_moving_average,this%Nt+1))
+    allocate(this%pb_minus_n(this%n_moving_average,this%Nt+1))
 
     ! Define
     this%yaw = 0.d0
@@ -221,9 +224,6 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
         end do
         this%turbCenterStore = this%turbCenter
         ! Handle modified allocations for change to Nt
-        allocate(this%power_minus_n(this%n_moving_average,this%Nt+1))
-        allocate(this%ws_minus_n(this%n_moving_average,this%Nt+1))
-        allocate(this%pb_minus_n(this%n_moving_average,this%Nt+1))
         allocate(this%dir_minus_n(this%n_moving_average,this%Nt+1))
     else    
         do i=1,this%Nt
@@ -232,9 +232,6 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
         end do
         this%turbCenterStore = this%turbCenter
         ! Allocate
-        allocate(this%power_minus_n(this%n_moving_average,this%Nt))
-        allocate(this%ws_minus_n(this%n_moving_average,this%Nt))
-        allocate(this%pb_minus_n(this%n_moving_average,this%Nt))
         allocate(this%dir_minus_n(this%n_moving_average,this%Nt))
     end if
 
