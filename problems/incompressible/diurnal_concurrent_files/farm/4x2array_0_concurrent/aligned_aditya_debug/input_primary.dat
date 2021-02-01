@@ -122,15 +122,15 @@ WM_MatchingIndex              = 1
 &FRINGE
 apply_x_fringe = .TRUE.
 apply_y_fringe = .TRUE.
-Fringe_xst           = 0.85d0 ! It starts at this point, the fringe is off before this point         
+Fringe_xst           = 0.75d0 ! It starts at this point, the fringe is off before this point         
 Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
-Fringe_delta_st_x    = 0.05d0 ! How much distance to use to ramp up
+Fringe_delta_st_x    = 0.10d0 ! How much distance to use to ramp up
 Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
-LambdaFact           = 0.6d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 10.0d0
-Fringe_yst           = 0.85d0 ! Same but for y        
+LambdaFact           = 0.3d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
+LambdaFactPotTemp    = 1.0d0
+Fringe_yst           = 0.75d0 ! Same but for y        
 Fringe_yen           = 0.95d0
-Fringe_delta_st_y    = 0.05d0
+Fringe_delta_st_y    = 0.10d0
 Fringe_delta_en_y    = 0.05d0
 /
 /
@@ -143,7 +143,7 @@ ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 
 powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_debug/turbOut"
 useDynamicYaw         = .TRUE.
 yawUpdateInterval     = 800
-inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_aligned_acheck_off.inp"
+inputDirDyaw          = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/farm/4x2array_0_concurrent/aligned_aditya_debug/dynamicYaw_diurnal_aligned_acheck_off.inp"
 /
 /
 &KSPREPROCESS

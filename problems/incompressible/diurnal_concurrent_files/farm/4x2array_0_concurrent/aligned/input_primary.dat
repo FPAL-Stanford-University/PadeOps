@@ -1,11 +1,11 @@
 &INPUT
 inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/long/init"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off"   ! Directory for all output files
+outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off_low_CFL"   ! Directory for all output files
 nx                            = 480          ! Number of points in X
 ny                            = 320          ! Number of points in Y
 nz                            = 320          ! Number of points in Z
 tstop                         = 8.64D1      ! Physical time to stop the simulation
-CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL                           = 1.4D0       ! 1.4D0 CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.025D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
@@ -122,15 +122,15 @@ WM_MatchingIndex              = 1
 &FRINGE
 apply_x_fringe = .TRUE.
 apply_y_fringe = .TRUE.
-Fringe_xst           = 0.85d0 ! It starts at this point, the fringe is off before this point         
+Fringe_xst           = 0.75d0 ! It starts at this point, the fringe is off before this point         
 Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
-Fringe_delta_st_x    = 0.05d0 ! How much distance to use to ramp up
+Fringe_delta_st_x    = 0.1d0 ! How much distance to use to ramp up
 Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
-LambdaFact           = 0.6d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 10.0d0
-Fringe_yst           = 0.85d0 ! Same but for y        
+LambdaFact           = 0.3d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
+LambdaFactPotTemp    = 1.0d0
+Fringe_yst           = 0.75d0 ! Same but for y        
 Fringe_yen           = 0.95d0
-Fringe_delta_st_y    = 0.05d0
+Fringe_delta_st_y    = 0.1d0
 Fringe_delta_en_y    = 0.05d0
 /
 /
@@ -140,7 +140,7 @@ num_turbines                  = 9          ! How many turbines?
 ADM                           = .TRUE.      ! Are these actuator disks?
 turbInfoDir           = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/turbInfo/4x2array_0"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off/turbOut"
+powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off_low_CFL/turbOut"
 useDynamicYaw         = .TRUE.
 yawUpdateInterval     = 800
 inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_aligned_acheck_off.inp"

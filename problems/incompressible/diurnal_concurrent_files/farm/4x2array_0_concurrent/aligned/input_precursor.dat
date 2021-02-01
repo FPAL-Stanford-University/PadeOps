@@ -1,11 +1,11 @@
 &INPUT
 inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/long/init"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off"   ! Directory for all output files
+outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off_low_CFL"   ! Directory for all output files
 nx                            = 480          ! Number of points in X
 ny                            = 320          ! Number of points in Y
 nz                            = 320          ! Number of points in Z
 tstop                         = 8.64D1      ! Physical time to stop the simulation
-CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL                           = 1.4D0       ! 1.4D0 CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.025D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
