@@ -34,6 +34,7 @@ contains
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
             call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
+            call message_min_max(1,"Bounds for T:", p_minval(minval(gp%T)), p_maxval(maxval(gp%T)))
             call message(1, "Time step limit:" // trim(gp%dtlimit))
             call message(1,"T_surf:",gp%Tsurf)
             call message(1,"u_star:",gp%sgsmodel%get_ustar())

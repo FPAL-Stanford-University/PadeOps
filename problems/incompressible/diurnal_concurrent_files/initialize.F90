@@ -310,9 +310,9 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [64]
+    xplanes = [1]
     yplanes = [64]
-    zplanes = [256]
+    zplanes = [240]
 
 end subroutine
 
