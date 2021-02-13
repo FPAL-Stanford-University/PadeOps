@@ -168,13 +168,13 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 3
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
     xplanes = [32]
     yplanes = [32]
-    zplanes = [32]
+    zplanes = [5, 12, 32]
 
 end subroutine
 

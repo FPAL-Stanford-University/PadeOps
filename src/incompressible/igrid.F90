@@ -380,6 +380,7 @@ module IncompressibleGrid
             procedure          :: advance_SSP_RK45_Stage_3 
             procedure          :: advance_SSP_RK45_Stage_4 
             procedure          :: advance_SSP_RK45_Stage_5 
+            procedure          :: do_debug
    end type
 
 contains 
@@ -1364,6 +1365,23 @@ contains
 
        call message("IGRID initialized successfully!")
        call message("===========================================================")
+
+   end subroutine
+
+   
+   subroutine do_debug(this)
+       use decomp_2d_io
+       class(igrid), intent(inout) :: this
+
+       character(len=clen) :: tempname, fname
+       integer :: fieldID
+
+       ! write ustarsqvar and nlptype
+       fieldId = 1
+       call this%sgsmodel%get_z0varstats(this%rbuffxC(:,:,:,1))
+       write(tempname,"(A3,I2.2,A11,I1.1,A2,I6.6,A4)") "Run",this%RunId,"_debug_qty_",fieldID,"_t",this%step,".s3D"
+       fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
+       call decomp_2d_write_one(1, this%rbuffxC(:,:,:,1), fname, this%gpC)
 
    end subroutine
 

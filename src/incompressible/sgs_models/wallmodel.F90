@@ -4,6 +4,7 @@ subroutine destroyWallModel(this)
    if (allocated(this%filteredSpeedSq)) deallocate(this%filteredSpeedSq)
    !if (allocated(this%mask_upstream)) deallocate(this%mask_upstream)
    if(allocated(this%ustarsq_ratio_kaplnzfacs)) deallocate(this%ustarsq_ratio_kaplnzfacs)
+   if(allocated(this%nlptype)) deallocate(this%nlptype)
 end subroutine
 
 subroutine initWallModel(this)
@@ -40,7 +41,9 @@ subroutine initWallModel(this)
       !allocate(this%mask_upstream(this%gpC%xsz(1), this%gpC%xsz(2)))
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
       allocate(this%ustarsq_ratio_kaplnzfacs(this%gpC%xsz(1),this%gpC%xsz(2)))
+      allocate(this%nlptype(this%gpC%xsz(1),this%gpC%xsz(2)))
       this%ustarsq_ratio_kaplnzfacs = zero
+      this%nlptype = zero
       if(this%gpC%xst(3)==1) then
           do j = 1, this%gpC%xsz(2)
             do i = 1, this%gpC%xsz(1)
@@ -207,13 +210,16 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
         do i = 1, this%gpC%xsz(1)
             if(this%deli(i,j) < epssmall) then
                 this%ustarsqvar(i,j) = this%kaplnzfac_s*this%filteredSpeedSq(i,j,1)
+                this%nlptype(i,j) = zero
             elseif(this%deli(i,j) < dzby2) then
-                this%ustarsqvar(i,j) = this%ustarsq_ratio_kaplnzfacs(i,j) * this%filteredSpeedSq(i,j,1)
+                this%ustarsqvar(i,j) = this%ustarsq_ratio_kaplnzfacs(i,j) * ustar1*ustar1 !this%filteredSpeedSq(i,j,1)
+                this%nlptype(i,j) = one
             else
               if(this%alpfac(i,j)*this%deli(i,j) < dzby2) then
                   call this%solve_nonlinprob_2(i, j, ustar1)
               else
                   this%ustarsqvar(i,j) = this%kaplnzfac_r*this%filteredSpeedSq(i,j,1)
+                  this%nlptype(i,j) = four
               endif
             endif
         enddo
@@ -387,7 +393,7 @@ subroutine solve_nonlinprob_2(this, i, j, ustar1)
    !    ! R-S Transition
    !    xa = 1.0d-12;       xb = 1.0_rkind - 1.0d-12
    !endif
-   xa = 1.0d-6; xb = 10.0d0-1.0d-6
+   xa = 1.0d-6; xb = 1.0d0-1.0d-6
 
    !if((this%gpC%xst(3)==1) .and. (nrank==0) .and. (j==1) .and. (i==35)) then
    !   xa = 0.001d0; xb = 10.0d0
@@ -403,33 +409,41 @@ subroutine solve_nonlinprob_2(this, i, j, ustar1)
    sfa = sign(one,this%feval_two(xa,fparams))
    sfb = sign(one,this%feval_two(xb,fparams))
    if(sfa*sfb > zero) then
-     print *, '----Stopping nonlinprob_2----'
-     print *, '+++ ', i, j
-     print *, '+++ ', sfa, sfb
-     print *, '+++ ', xa, xb
-     print *, '----Done Stopping nonlinprob_2----'
-   endif
+     !print *, '----Stopping nonlinprob_2----'
+     !print *, '+++ ', i, j
+     !print *, '+++ ', sfa, sfb
+     !print *, '+++ ', xa, xb
+     !print *, '----Done Stopping nonlinprob_2----'
 
-   do iter = 1, max_iters
-     xdiff = abs(xa-xb)
-     if(xdiff < tol) exit
-     xmid = half*(xa+xb)
+     !! if not converged, revert to nonlinprob_1
+     xmid = sqrt(this%ustarsq_ratio_kaplnzfacs(i,j))
+     this%nlptype(i,j) = two
+
+   else
+
+     do iter = 1, max_iters
+       xdiff = abs(xa-xb)
+       if(xdiff < tol) exit
+       xmid = half*(xa+xb)
  
-     sfmid = sign(one,this%feval_two(xmid,fparams))
+       sfmid = sign(one,this%feval_two(xmid,fparams))
   
-     if (sfmid*sfb<zero) then
-        xa = xmid;        sfa = sfmid
-     else
-        xb =  xmid;       sfb = sfmid
-     end if
-   end do
+       if (sfmid*sfb<zero) then
+          xa = xmid;        sfa = sfmid
+       else
+          xb =  xmid;       sfb = sfmid
+       end if
+     end do
+     this%nlptype(i,j) = three
+
+   endif
 
    this%ustarsqvar(i,j) = (xmid*ustar1)**2 !* this%kaplnzfac_r * this%filteredSpeedSq(i,j,1)
 
 
-   if((this%gpC%xst(3)==1) .and. (nrank==0) .and. (j==1)) then
-      write(*,'(a,3(i4,1x),6(e19.12,1x))') 'nlp2 :: ', nrank, i, j, xmid, this%ustarsqvar(i,j), fparams(1:2), fparams(6:7)
-   endif
+   !if((this%gpC%xst(3)==1) .and. (nrank==0) .and. (j==1)) then
+   !   write(*,'(a,3(i4,1x),6(e19.12,1x))') 'nlp2 :: ', nrank, i, j, xmid, this%ustarsqvar(i,j), fparams(1:2), fparams(6:7)
+   !endif
 
    !if(xdiff > tol) then
    !  call message(1, "Did not converge", 0.0_rkind)

@@ -183,6 +183,9 @@ program concurrentSimulation
            call budg_tavg%doBudgets()       
            call doTemporalStuff(prec, igp)                    !<-- Go to the temporal hook (see temporalHook.F90)
        endif
+
+       !call igp%do_debug()
+
     end do 
 
     call budg_xyavg1%doBudgets(.true.)
