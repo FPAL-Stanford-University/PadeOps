@@ -1,5 +1,7 @@
 #!/bin/bash
-
+module purge
+module load git cmake
+module load intel impi
 export COMPILER_ID=Intel
 export FC=mpiifort
 export CC=mpiicc
