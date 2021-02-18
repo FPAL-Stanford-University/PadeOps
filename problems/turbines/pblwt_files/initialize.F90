@@ -17,7 +17,7 @@ end module
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use pblwt_parameters    
-    use kind_parameters,  only: rkind
+    use kind_parameters,  only: rkind, clen
     use constants,        only: one, two
     use decomp_2d,        only: decomp_info
     implicit none
@@ -30,7 +30,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one, zpeak
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak
+    character(len=clen) :: read_u_file
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, read_u_file
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -72,7 +73,7 @@ end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use pblwt_parameters
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
@@ -87,13 +88,18 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: randArr
+    real(rkind), dimension(:),     allocatable :: uin, zin
     real(rkind) :: z0init = 1.0d-4, epsnd = 0.1, sig, ustarinit = 1.0d0
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, ioUnit, k
+    integer :: nz, nzE, ioUnit, k, nlines, io, k1, k2
     real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0
     real(rkind) :: zpeak = 0.2d0
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak 
+    real(rkind) :: Lx = one, Ly = one, Lz = one
+    character(len=clen) :: read_u_file
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, read_u_file 
+
+
+    read_u_file = "null"
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -115,7 +121,55 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
-   
+  
+    if ((trim(read_u_file) .eq. "null") .or.(trim(read_u_file) .eq. "NULL")) then
+    else
+        call message(1, "Reading u input from file")
+
+        ! count number of lines
+        ioUnit = 11
+        open(unit=ioUnit, file=trim(read_u_file), form='FORMATTED', status='old', action='read')
+        nlines = 0
+        do
+          read(ioUnit, *, iostat=io)
+          if(io/=0) exit
+          nlines = nlines+1
+        enddo  
+        close(ioUnit)    
+
+        ! now read in the data
+        allocate(zin(nlines), uin(nlines))
+        ioUnit = 11
+        open(unit=ioUnit, file=trim(read_u_file), form='FORMATTED', status='old', action='read')
+        do k = 1, nlines
+          read(ioUnit, *, iostat=io) uin(k), zin(k)
+        enddo  
+
+        !if(nrank==0) then
+        !    print *, 'uin = ', uin
+        !    print *, 'zin = ', zin
+        !endif
+
+        ! use it to set the background u field
+        do k = 1,size(u,3)
+          k1 = minloc(abs(z(1,1,k)-zin(:)),1)
+          if(z(1,1,k) < zin(k1)) k1 = k1-1
+          k2 = k1+1
+          if(k1<1) then
+            k1 = 1; k2 = 2
+          endif
+          if(k2>nlines) then
+            k1 = nlines-1; k2 = nlines
+          endif
+          if(abs(zin(k2)-zin(k1))<1.0d-12) then
+                print '(3(i5,1x),2(e19.12,1x))', k, k1, k2, zin(k1), zin(k2)
+          else
+              u(:,:,k) = uin(k1) + (z(1,1,k)-zin(k1))/(zin(k2)-zin(k1)) * (uin(k2)-uin(k1))
+          endif
+        end do  
+        deallocate(uin, zin)
+    endif
+ 
     !Add random numbers
     randomScaleFact = 0.1d0
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
