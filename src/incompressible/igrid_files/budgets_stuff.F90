@@ -1,6 +1,6 @@
-subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb)  
+subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, vturb, wturb)  
     class(igrid), intent(inout) :: this
-    complex(rkind), dimension(:,:,:), intent(in), target :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb 
+    complex(rkind), dimension(:,:,:), intent(in), target :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, vturb, wturb 
 
     this%ucon => uc
     this%vcon => vc
@@ -25,8 +25,8 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc
 
     this%wb => wb
     this%uturb => uturb 
-    this%vturb => null()
-    this%wturb => null()
+    this%vturb => vturb
+    this%wturb => wturb
 
     if(this%computeDNSPressure) then
         ! do nothing so as to not break what budg_tavg might have done

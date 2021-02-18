@@ -100,7 +100,7 @@ module budgets_xy_avg_mod
         private
         integer :: budgetType = 1, run_id, nz, num_vars_rz, nxeff
 
-        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb
+        complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, vturb, wturb
         type(igrid), pointer :: igrid_sim 
         real(rkind), dimension(:), allocatable :: U_mean, V_mean, dUdz, dVdz, uw, vw
         real(rkind), dimension(:), allocatable :: dUdzE, dVdzE
@@ -290,6 +290,8 @@ contains
             call igrid_sim%spectC%alloc_r2c_out(this%ucor)
             call igrid_sim%spectC%alloc_r2c_out(this%px)
             call igrid_sim%spectC%alloc_r2c_out(this%uturb)
+            call igrid_sim%spectC%alloc_r2c_out(this%vturb)
+            call igrid_sim%spectE%alloc_r2c_out(this%wturb)
 
             call igrid_sim%spectC%alloc_r2c_out(this%vc)
             call igrid_sim%spectC%alloc_r2c_out(this%vsgs)
@@ -308,7 +310,7 @@ contains
             ! STEP 3: Now instrument igrid 
             call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
-                       & this%vcor, this%wcor, this%uturb) 
+                       & this%vcor, this%wcor, this%uturb, this%vturb, this%wturb) 
 
         end if 
 
@@ -376,7 +378,7 @@ contains
         if(this%do_budgets) then    !---should we ideally check if (allocated(...)) for each array before deallocating ??
             deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
-                       & this%vcor, this%wcor, this%uturb)
+                       & this%vcor, this%wcor, this%uturb, this%vturb, this%wturb)
             deallocate(this%budget_0, this%budget_1)
             deallocate(this%mean_qty)
             if(this%do_spectra) then
