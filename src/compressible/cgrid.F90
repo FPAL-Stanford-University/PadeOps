@@ -9,8 +9,8 @@ module CompressibleGrid
                                      transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,        only: derivatives
     use io_hdf5_stuff,         only: io_hdf5
-    use IdealGasEOS,           only: idealgas
-    use MixtureEOSMod,         only: mixture
+    use RealGasEOS,            only: realgas
+    use MixtureEOSMod_Real,    only: mixture
     use PowerLawViscosityMod,  only: powerLawViscosity
     use TKEBudgetMod,          only: tkeBudget
     use ScaleDecompositionMod, only: scaleDecomposition
@@ -259,9 +259,7 @@ contains
 
         ! Set default materials with the same gam and Rgas
         if (this%mix%inviscid) then
-            do i = 1,ns
-                call this%mix%set_material(i,idealgas(gam,Rgas))
-            end do
+            call GracefulExit("Cannot have inviscid real gas.",4568)
         end if
 
         nfields = kap_index + 2*ns   ! Add ns massfractions to fields
@@ -309,9 +307,12 @@ contains
         call this%mix%check_initialization()
 
         ! Update mix
+        ! After hooks, need to calc p and e
         call this%mix%update(this%Ys)
-        call this%mix%get_e_from_p(this%rho,this%p,this%e)
-        call this%mix%get_T(this%e,this%T)
+        call this%mix%get_e_from_T(this%rho,this%T,this%e)
+        call this%mix%get_p(this%rho,this%T,this%p)
+        !call this%mix%get_e_from_p(this%rho,this%p,this%e)
+        !call this%mix%get_T(this%e,this%T)
 
         ! print *, "Cp(1,1,1) = ", this%mix%Cp(1,1,1)
         ! print *, "Cp(-1,1,1) = ", this%mix%Cp(this%nxp,1,1)
@@ -878,8 +879,10 @@ contains
 
         if (this%step == 0) then
             call this%mix%update(this%Ys)
-            call this%mix%get_e_from_p(this%rho,this%p,this%e)
-            call this%mix%get_T(this%e,this%T)
+            call this%mix%get_e_from_T(this%rho,this%T,this%e)
+            call this%mix%get_p(this%rho,this%T,this%p)
+            !call this%mix%get_e_from_p(this%rho,this%p,this%e)
+            !call this%mix%get_T(this%e,this%T)
         end if
 
         if ( (vizcond) .and. (this%compute_tke_budget) ) then
@@ -1124,7 +1127,7 @@ contains
 
     end subroutine
 
-    pure subroutine get_primitive(this)
+    subroutine get_primitive(this)
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:), pointer :: onebyrho
         real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
@@ -1154,8 +1157,8 @@ contains
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
         
         call this%mix%update(this%Ys)
-        call this%mix%get_p(this%rho,this%e,this%p)
-        call this%mix%get_T(this%e,this%T)
+        call this%mix%get_p(this%rho,this%T,this%p)
+        call this%mix%get_T(this%rho,this%e,this%T)
 
     end subroutine
 
@@ -1177,8 +1180,10 @@ contains
         class(cgrid), intent(inout) :: this
 
         call this%mix%update(this%Ys)
-        call this%mix%get_e_from_p(this%rho,this%p,this%e)
-        call this%mix%get_T(this%e,this%T)
+        call this%mix%get_e_from_T(this%rho,this%T,this%e)
+        call this%mix%get_p(this%rho,this%T,this%p)
+        !call this%mix%get_e_from_p(this%rho,this%p,this%e)
+        !call this%mix%get_T(this%e,this%T)
 
     end subroutine
 
@@ -1806,7 +1811,7 @@ contains
         ! If multispecies, add the inter-species enthalpy flux
         if (this%mix%ns .GT. 1) then
             do i = 1,this%mix%ns
-                call this%mix%material(i)%mat%get_enthalpy(this%T,tmp1_in_y)
+                call this%mix%material(i)%mat%get_enthalpy(this%rho,this%p,this%T,tmp1_in_y)
                 duidxj(:,:,:,qxidx) = duidxj(:,:,:,qxidx) + ( tmp1_in_y * Jx(:,:,:,i) )
                 duidxj(:,:,:,qyidx) = duidxj(:,:,:,qyidx) + ( tmp1_in_y * Jy(:,:,:,i) )
                 duidxj(:,:,:,qzidx) = duidxj(:,:,:,qzidx) + ( tmp1_in_y * Jz(:,:,:,i) )
