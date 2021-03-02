@@ -1083,7 +1083,7 @@ contains
         kdealiasy = (one/three)*pi/this%dy*surfaceFilterFact
         do j = 1,size(tmp1,2)
             do i = 1,size(tmp1,1)
-                if ((abs(tmp1(i,j,1)) < kdealiasx) .and. (abs(tmp2(i,j,1))< kdealiasy)) then
+                if ((abs(tmp1(i,j,1)) <= kdealiasx) .and. (abs(tmp2(i,j,1)) <= kdealiasy)) then
                     this%GSurfaceFilter(i,j) = one
                 else
                     this%GSurfaceFilter(i,j) = zero
