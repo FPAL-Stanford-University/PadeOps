@@ -1,6 +1,6 @@
 &INPUT
-inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/long/init"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off"   ! Directory for all output files
+inputdir                      = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off_low_CFL"   ! Directory for any input files
+outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_debug_globalWM"   ! Directory for all output files
 nx                            = 480          ! Number of points in X
 ny                            = 320          ! Number of points in Y
 nz                            = 320          ! Number of points in Z
@@ -10,7 +10,7 @@ dt                            = 0.025D0     ! Fixed time step value (only used i
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 2690           ! TimeID of the restart file being used
+restartFile_TID               = 14400           ! TimeID of the restart file being used
 restartFile_RID               = 1           ! RunID of the restart file being used
 /
 /
@@ -33,9 +33,9 @@ t_restartDump                 = 400        ! Restart File Dumping Frequency  (# 
 t_dataDump                    = 400         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
-t_planeDump                   = 10         ! Plane dumping frequency (# of timesteps)
-t_start_planeDump             = 0        ! When do you want to start dumping planes?
-t_stop_planeDump              = 5000000        ! When do you want to stop dumping planes?
+t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
+t_start_planeDump             = 3500        ! When do you want to start dumping planes?
+t_stop_planeDump              = 5000        ! When do you want to stop dumping planes?
 /
 /
 &STATS
@@ -77,13 +77,13 @@ useScalars                    = .false.     ! Do you want to use scalars? --Why 
 /
 /
 &PRESSURE_CALC
-fastCalcPressure              = .TRUE.     ! Compute and store pressure at every time step using the faster algorithm?
+fastCalcPressure              = .FALSE.     ! Compute and store pressure at every time step using the faster algorithm?
 storePressure                 = .FALSE.     ! Would you like to compute and store pressure?
 P_dumpFreq                    = 5000         ! How often (timesteps) do you want to dump pressure?
 P_compFreq                    = 10          ! How often (timesteps) do you want to compute pressure? 
-computeDNSPressure    = .TRUE.
-computeFringePressure = .TRUE.
-computeTurbinePressure    = .TRUE.
+computeDNSPressure    = .FALSE.
+computeFringePressure = .FALSE.
+computeTurbinePressure    = .FALSE.
 computeRapidSlowPressure  = .FALSE.
 /
 /
@@ -122,27 +122,27 @@ WM_MatchingIndex              = 1
 &FRINGE
 apply_x_fringe = .TRUE.
 apply_y_fringe = .TRUE.
-Fringe_xst           = 0.75d0 ! It starts at this point, the fringe is off before this point         
+Fringe_xst           = 0.85d0 ! It starts at this point, the fringe is off before this point         
 Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
 Fringe_delta_st_x    = 0.05d0 ! How much distance to use to ramp up
 Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
-LambdaFact           = 0.6d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 10.0d0
-Fringe_yst           = 0.75d0 ! Same but for y        
+LambdaFact           = 0.1d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
+LambdaFactPotTemp    = 0.1d0
+Fringe_yst           = 0.85d0 ! Same but for y        
 Fringe_yen           = 0.95d0
 Fringe_delta_st_y    = 0.05d0
 Fringe_delta_en_y    = 0.05d0
 /
 /
 &WINDTURBINES
-useWindTurbines               = .TRUE.     ! Do you want to use Wind turbines ?
-num_turbines                  = 9          ! How many turbines? 
+useWindTurbines               = .FALSE.     ! Do you want to use Wind turbines ?
+num_turbines                  = 0          ! How many turbines? 
 ADM                           = .TRUE.      ! Are these actuator disks?
 turbInfoDir           = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/turbInfo/4x2array_0"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off/turbOut"
+powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/aligned_acheck_off/turbOut"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 800
+yawUpdateInterval     = 400
 inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_aligned_acheck_off.inp"
 /
 /

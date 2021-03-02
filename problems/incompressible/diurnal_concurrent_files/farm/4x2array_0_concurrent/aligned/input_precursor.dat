@@ -1,6 +1,6 @@
 &INPUT
 inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/long/init"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off_low_CFL"   ! Directory for all output files
+outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/aligned_acheck_off"   ! Directory for all output files
 nx                            = 480          ! Number of points in X
 ny                            = 320          ! Number of points in Y
 nz                            = 320          ! Number of points in Z
@@ -106,7 +106,7 @@ Csgs                          = 1.00d0      ! Model constant (asymptotic value i
 z0                            = 2.0d-5      ! Roughness length scale (CAUTION: this assumes appropriate non-dimensionalization)
 DynamicProcedureType          = 0           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.  
 WallModelType                 = 1            ! 0: no wall model, 1: Moeng's wall model, 2: Bou-zeid wall model
-useFullyLocalWM               = .true.
+useFullyLocalWM               = .false.
 useVerticalTfilter            = .false.     ! Use test filtering in vertical direction for dynamic procedure? 
 DynProcFreq                   = 5           ! Dynamic procedure used every DYNPROCFREQ timesteps. 
 useWallDamping                = .FALSE.     ! Use the Wall Damping Function 

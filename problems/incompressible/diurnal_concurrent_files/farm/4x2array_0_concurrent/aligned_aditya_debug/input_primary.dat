@@ -95,7 +95,7 @@ zstSponge                     = 0.75d0       ! Height above which the sponge lay
 SpongeTscale                  = 40.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 botBC_Temp                    = 2           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 topBC_temp                    = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
-useFringe             = .TRUE.     ! Use Fringe/Buffer region in x or y directions?
+useFringe             = .FALSE.     ! Use Fringe/Buffer region in x or y directions?
 usedoubleFringex      = .FALSE.      ! Use two fringes (in x)?
 usecontrol            = .FALSE.     ! Use frame angle controller?
 /
@@ -120,22 +120,22 @@ WM_MatchingIndex              = 1
 /
 /
 &FRINGE
-apply_x_fringe = .TRUE.
-apply_y_fringe = .TRUE.
+apply_x_fringe = .FALSE.
+apply_y_fringe = .FALSE.
 Fringe_xst           = 0.75d0 ! It starts at this point, the fringe is off before this point         
 Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
-Fringe_delta_st_x    = 0.10d0 ! How much distance to use to ramp up
+Fringe_delta_st_x    = 0.05d0 ! How much distance to use to ramp up
 Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
-LambdaFact           = 0.3d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 1.0d0
+LambdaFact           = 0.6d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
+LambdaFactPotTemp    = 10.0d0
 Fringe_yst           = 0.75d0 ! Same but for y        
 Fringe_yen           = 0.95d0
-Fringe_delta_st_y    = 0.10d0
+Fringe_delta_st_y    = 0.05d0
 Fringe_delta_en_y    = 0.05d0
 /
 /
 &WINDTURBINES
-useWindTurbines               = .TRUE.     ! Do you want to use Wind turbines ?
+useWindTurbines               = .FALSE.     ! Do you want to use Wind turbines ?
 num_turbines                  = 5          ! How many turbines? 
 ADM                           = .TRUE.      ! Are these actuator disks?
 turbInfoDir           = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/turbInfo/4x2array_0"
