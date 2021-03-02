@@ -4,8 +4,9 @@ subroutine destroyWallModel(this)
    if (allocated(this%filteredSpeedSq)) deallocate(this%filteredSpeedSq)
 end subroutine
 
-subroutine initWallModel(this)
+subroutine initWallModel(this, SurfaceFilterFact)
    class(sgs_igrid), intent(inout) :: this
+   real(rkind), intent(in) :: SurfaceFilterFact
 
    this%useWallModel = .true.
    allocate(this%tauijWM(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
@@ -33,6 +34,8 @@ subroutine initWallModel(this)
       allocate(this%Linv_surf(this%gpC%zsz(1),this%gpC%zsz(2)))
       allocate(this%T_surf(this%gpC%zsz(1),this%gpC%zsz(2)))
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3))) ! Howland: Added 1/25/21
+      call this%spectC%ResetSurfaceFilter(SurfaceFilterFact)
+      call message(2,"Fully local wall model set up with a filter factor:", SurfaceFilterFact)
    end if 
 
    if (this%isStratified .or. this%initspinup) then
