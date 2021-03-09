@@ -70,8 +70,8 @@ contains
         this%MW = MW
 
         ! PR coefficients
-        this%PR_A = 0.457236*(this%Rgas*this%Tc)**2/this%Pc 
-        this%PR_B = 0.0778*this%Rgas*this%Tc/this%Pc
+        this%PR_A = 0.457236*(Ru*this%Tc)**2/this%Pc 
+        this%PR_B = 0.0778*Ru*this%Tc/this%Pc
         this%PR_kappa = 0.37464 + 1.54226*omega - 0.26992*omega**2
         
         ! Used to calculate K1
@@ -80,8 +80,10 @@ contains
         this%b2 = (1.d0 + 2**0.5)*this%PR_B
        
         ! Fitting for internal energy and temps
-        this%an = an
-
+        this%an = (/2.356773520E+00,\
+           8.984596770E-03,-7.123562690E-06,2.459190220E-09,\
+           -1.436995480E-13,-4.837196970E+04,9.901052220E+00/)
+        
         ! Allocate necessary fields
         nxp = decomp%ysz(1)
         nyp = decomp%ysz(2)
@@ -109,10 +111,10 @@ contains
         real(rkind), dimension(:,:,:), intent(in)  :: rho,T
         real(rkind), dimension(:,:,:), intent(out) :: p
 
-        this%vm = 1.d0/rho
+        this%vm = this%MW/rho
         this%Tr = T/this%Tc
         this%tmp1 = this%PR_A * (1 + this%PR_kappa*(1-this%Tr**0.5))**2 ! alpha*a
-        p = this%Rgas*T/(this%vm-this%PR_B) - this%tmp1 / (this%vm**2 + 2*this%vm*this%PR_B - this%PR_B**2)
+        p = Ru*T/(this%vm-this%PR_B) - this%tmp1 / (this%vm**2 + 2*this%vm*this%PR_B - this%PR_B**2)
     end subroutine
 
     !pure subroutine get_e_from_p(this,rho,p,e)
@@ -191,8 +193,7 @@ contains
         !    = dh_ideal/dT - R - T*d^2(a*alpha)/dT^2
 
         ! Ideal enthalphy derivative dh_ideal/dT (store in cp for now)
-        an = this%an
-        this%cp = this%Rgas*(an(1) + an(2)*T + an(3)*T**2d0 + an(4)*T**3d0 + an(5)*T**4d0 )
+        this%cp = this%Rgas*(this%an(1) + this%an(2)*T + this%an(3)*T**2.d0 + this%an(4)*T**3.d0 + this%an(5)*T**4.d0 )
        
         ! Second derivative of d2(a*alpha)/dT^2 store in tmp2
         c = this%PR_kappa

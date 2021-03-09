@@ -69,7 +69,7 @@ contains
         this%nyp = decomp%ysz(2)
         this%nzp = decomp%ysz(3)
         
-        if (ns.GT. 0) call GracefulExit("Real gas multispecies not implemented.",4534)
+        if (ns.GT. 1) call GracefulExit("Real gas multispecies not implemented.",4534)
 
         if (present(inviscid)) then
             this%inviscid = inviscid
@@ -96,7 +96,7 @@ contains
         class(bulkViscosity),       optional, intent(in)    :: bulkvisc
         class(thermalConductivity), optional, intent(in)    :: thermcond
         
-        if (imat.GT. 0) call GracefulExit("Real gas multispecies not implemented.",4534)
+        if (imat.GT.1) call GracefulExit("Real gas multispecies not implemented.",4534)
 
         if ((imat .GT. this%ns) .OR. (imat .LE. 0)) call GracefulExit("Cannot set material with index greater than the number of species.",4534)
 
@@ -191,8 +191,6 @@ contains
             this%Cv = mat%Cv
             this%gam = mat%gam 
         end if
-
-
     end subroutine
 
     !pure subroutine get_p(this,rho,e,p)

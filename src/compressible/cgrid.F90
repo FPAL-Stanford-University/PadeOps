@@ -184,7 +184,6 @@ contains
                       compute_tke_budget, compute_scale_decomposition, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
-
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=INPUT)
@@ -300,19 +299,46 @@ contains
         this%nzp = this%decomp%ysz(3)
 
         ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, &
+            this%mesh, this%fields, &
+            this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
+        print *, ''
+        print *, 'After initFields:'
+        print *, '  Min/Max qcons:'
+        do i=1,5
+            print *,'  ', minval(this%Wcnsrv(:,:,:,i)),maxval(this%Wcnsrv(:,:,:,i)) 
+        enddo
+        print *, '  rho: ',minval(this%rho),maxval(this%rho)
+        print *, '  u: ',minval(this%u),maxval(this%u)
+        print *, '  v: ',minval(this%v),maxval(this%v)
+        print *, '  w: ',minval(this%w),maxval(this%w)
+        print *, '  e: ',minval(this%e),maxval(this%e)
+        print *, '  T: ',minval(this%T),maxval(this%T)
+        print *, '  P: ',minval(this%p),maxval(this%p)
         
         ! Check for correct initialization of the mixture object
         call this%mix%check_initialization()
 
         ! Update mix
         ! After hooks, need to calc p and e
-        call this%mix%update(this%Ys)
+        call this%mix%update(this%Ys,this%rho,this%T)
         call this%mix%get_e_from_T(this%rho,this%T,this%e)
         call this%mix%get_p(this%rho,this%T,this%p)
         !call this%mix%get_e_from_p(this%rho,this%p,this%e)
         !call this%mix%get_T(this%e,this%T)
+        print *, ''
+        print *, 'After update:'
+        print *, '  Min/Max qcons:'
+        do i=1,5
+            print *,'  ', minval(this%Wcnsrv(:,:,:,i)),maxval(this%Wcnsrv(:,:,:,i)) 
+        enddo
+        print *, '  rho: ',minval(this%rho),maxval(this%rho)
+        print *, '  u: ',minval(this%u),maxval(this%u)
+        print *, '  v: ',minval(this%v),maxval(this%v)
+        print *, '  w: ',minval(this%w),maxval(this%w)
+        print *, '  e: ',minval(this%e),maxval(this%e)
+        print *, '  T: ',minval(this%T),maxval(this%T)
+        print *, '  P: ',minval(this%p),maxval(this%p)
 
         ! print *, "Cp(1,1,1) = ", this%mix%Cp(1,1,1)
         ! print *, "Cp(-1,1,1) = ", this%mix%Cp(this%nxp,1,1)
@@ -415,7 +441,8 @@ contains
         this%nrestart = nrestart
 
         if ( ((this%step > 0) .or. (this%tsim > zero)) .and. (rewrite_viz)) then
-            this%viz%vizcount = int(this%tsim / this%tviz + 100._rkind*eps) + 1
+            !this%viz%vizcount = int(this%tsim / this%tviz + 100._rkind*eps) + 1
+            this%viz%vizcount = 1
         end if
 
         ! Check for consistency of massfractions
@@ -454,6 +481,20 @@ contains
             call this%scaledecomp%init(this%decomp, this%der, this%gfil, this%mesh, this%dx, this%dy, this%dz, this%mix%ns, &
                                        this%x_bc, this%y_bc, this%z_bc, inputfile)
         end if
+            
+        print *, 'End of init:'
+        print *, '  Min/Max qcons:'
+            do i=1,5
+                print *,'  ', minval(this%Wcnsrv(:,:,:,i)),maxval(this%Wcnsrv(:,:,:,i)) 
+            enddo
+            print *, '  rho: ',minval(this%rho),maxval(this%rho)
+            print *, '  u: ',minval(this%u),maxval(this%u)
+            print *, '  v: ',minval(this%v),maxval(this%v)
+            print *, '  w: ',minval(this%w),maxval(this%w)
+            print *, '  e: ',minval(this%e),maxval(this%e)
+            print *, '  T: ',minval(this%T),maxval(this%T)
+            print *, '  P: ',minval(this%p),maxval(this%p)
+
 
     end subroutine
 
@@ -878,7 +919,7 @@ contains
         character(len=clen) :: charout
 
         if (this%step == 0) then
-            call this%mix%update(this%Ys)
+            call this%mix%update(this%Ys,this%rho,this%T)
             call this%mix%get_e_from_T(this%rho,this%T,this%e)
             call this%mix%get_p(this%rho,this%T,this%p)
             !call this%mix%get_e_from_p(this%rho,this%p,this%e)
@@ -930,6 +971,20 @@ contains
 
         do isub = 1,RK45_steps
             call this%get_conserved()
+            
+            print *, 'isub=',isub
+            print *, 'Time step: ',this%dt
+            print *, '  Min/Max qcons:'
+            do i=1,5
+                print *,'  ', minval(this%Wcnsrv(:,:,:,i)),maxval(this%Wcnsrv(:,:,:,i)) 
+            enddo
+            print *, '  rho: ',minval(this%rho),maxval(this%rho)
+            print *, '  u: ',minval(this%u),maxval(this%u)
+            print *, '  v: ',minval(this%v),maxval(this%v)
+            print *, '  w: ',minval(this%w),maxval(this%w)
+            print *, '  e: ',minval(this%e),maxval(this%e)
+            print *, '  T: ',minval(this%T),maxval(this%T)
+            print *, '  P: ',minval(this%p),maxval(this%p)
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
@@ -943,6 +998,18 @@ contains
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
+            print *, 'After substep:'
+            print *, '  Min/Max qcons:'
+            do i=1,5
+                print *,'  ', minval(this%Wcnsrv(:,:,:,i)),maxval(this%Wcnsrv(:,:,:,i)) 
+            enddo
+            print *, '  rho: ',minval(this%rho),maxval(this%rho)
+            print *, '  u: ',minval(this%u),maxval(this%u)
+            print *, '  v: ',minval(this%v),maxval(this%v)
+            print *, '  w: ',minval(this%w),maxval(this%w)
+            print *, '  e: ',minval(this%e),maxval(this%e)
+            print *, '  T: ',minval(this%T),maxval(this%T)
+            print *, '  P: ',minval(this%p),maxval(this%p)
 
             ! if ( (vizcond) .and. (this%compute_tke_budget) .and. (isub == RK45_steps) ) then
             if ( (vizcond) .and. ((this%compute_tke_budget) .or. (this%compute_scale_decomposition)) ) then
@@ -1156,7 +1223,7 @@ contains
         this%w = rhow * onebyrho
         this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
         
-        call this%mix%update(this%Ys)
+        call this%mix%update(this%Ys,this%rho,this%T)
         call this%mix%get_p(this%rho,this%T,this%p)
         call this%mix%get_T(this%rho,this%e,this%T)
 
@@ -1179,7 +1246,7 @@ contains
     subroutine post_bc(this)
         class(cgrid), intent(inout) :: this
 
-        call this%mix%update(this%Ys)
+        call this%mix%update(this%Ys,this%rho,this%T)
         call this%mix%get_e_from_T(this%rho,this%T,this%e)
         call this%mix%get_p(this%rho,this%T,this%p)
         !call this%mix%get_e_from_p(this%rho,this%p,this%e)

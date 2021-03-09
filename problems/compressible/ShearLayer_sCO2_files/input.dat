@@ -1,16 +1,16 @@
 &INPUT
 
-inputdir  = "/farmshare/user_data/kmatsuno/ShearLayerData/small"
-outputdir = "/farmshare/user_data/kmatsuno/ShearLayerData/small"
+inputdir  = "/lus/theta-fs0/projects/HighMachTurbulence/ShearLayerData/sCO2/1D/"
+outputdir = "/lus/theta-fs0/projects/HighMachTurbulence/ShearLayerData/sCO2/1D/"
 
-nx = 128                ! Number of points in X (256)
-ny = 128              ! Number of points in Y (192)
-nz = 32             ! Number of points in Z (128)
+nx = 16               ! Number of points in X (256)
+ny = 64              ! Number of points in Y (192)
+nz = 16            ! Number of points in Z (128)
 
 dt = -1.0D-4              ! Fixed time step value (Set to negative to disable)
 tstop = 1D1              ! Physical time to stop the simulation
 CFL = 0.5D0               ! CFL criterion for time step (Set to negative to disable)
-nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+nsteps = 1               ! Number of time steps before stopping (Set to negative to disable)
 
 tviz = 1D-1    ! Time between visualization dumps (Set to negative to disable)
 vizprefix = "shearlayer"  ! Prefix for the visualization files
@@ -42,7 +42,7 @@ Ckap  = 0.D0              ! LAD coeff
 Cdiff = 0.D0              ! LAD coeff 
 Cy    = 0.D0              ! LAD coeff 
 inviscid = .false.        ! Inviscid simulation?
-ns       = 2              ! Number of species + passive tracers
+ns       = 1              ! Number of species + passive tracers
 nrestart = 5000          ! Number of steps between restart dumps
 compute_tke_budget = .false. ! Compute TKE budgets?
 y_bc1    = 1              ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
@@ -53,14 +53,22 @@ y_bcn    = 1              ! Right Y BC (0 => general, 1 => symmetric). Not used 
 Lx      = 20.D0         ! Pantano 2002        
 Ly      = 20.D0         ! Pantano 2002
 Lz      = 10.D0         ! Pantano 2002
-Mc      = 2.4D0         ! Convective Mach number
 Re      = 5D2           ! Reynolds number rho_Ref*dU*L/mu_ref
 Pr      = 0.7D0         ! Prandtl number nu/kappa 0.7
 Sc      = 1.D0          ! Schmidt number nu/massDiffusivity
+MW      = 44.0095d-3    ! Molecular weight
+Tc      = 304.2         ! Critical temperature, K
+Pc      = 7.3825d6      ! Critical pressure, Pa
+omega   = 0.225         ! acentric factor
 T_ref = 1.D0            ! Reference temp 
-p_ref = 1.D0            ! Reference press 
-rho_ref = 1.D0          ! Reference density
-rho_ratio = 1.D0        ! Density ratio rho2/rho1
-noiseAmp = 0.D0         ! noise amplitude 
-fname_prefix = "/farmshare/user_data/kmatsuno/ShearLayerData/small/ModeInput/shearlayer"
+mu_ref = 1.D0           ! Reference viscosity 
+noiseAmp = 0.D0         ! noise amplitude
+U1      = 110.d0 
+T1      = 308.15
+P1      = 8d6 
+rho1    = 419.08 
+U2      = 22.d0
+T2      = 396.19 
+P2      = 8d6
+rho2    = 241.05
 /

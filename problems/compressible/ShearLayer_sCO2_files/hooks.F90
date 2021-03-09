@@ -10,7 +10,8 @@ module ShearLayer_sCO2_data
     integer, parameter :: ns = 1
 
     ! Problem parameters
-    real(rkind) :: dtheta0 = 1._rkind       ! Base profile thickness 
+    real(rkind) :: Ru = 8.3144621 ! Universal gas constant J/mol/K
+    real(rkind) :: dtheta0 = 1._rkind ! Base profile thickness 
     real(rkind) :: MW, Tc, Pc, omega, T0, rho0, noiseAmp
     real(rkind) :: mu_ref, T_ref
     real(rkind) :: U1, T1, P1, rho1 ! rho1 and rho2 are guesses
@@ -65,11 +66,11 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use ShearLayer_sCO2_data
 
     implicit none
-    character(clen)                                :: inputfile
     type(decomp_info),               intent(in)    :: decomp
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    character(clen) :: inputfile='input.dat'
 
     namelist /PROBINPUT/ & 
         dtheta0,&
@@ -92,9 +93,6 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-        if (nrank == 0) then
-            print *, "Domain size: ",Lx,Ly,Lz
-        end if
         dx = Lx/real(nx,rkind)
         dy = Ly/real(ny,rkind)
         dz = Lz/real(nz,rkind)
@@ -147,7 +145,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
     
-    real(rkind), dimension(:), allocatable :: tmp1,tmp2,p1D,T1D,rho1D,alpha,f,df
+    real(rkind), dimension(:), allocatable :: tmp1,tmp2,p1D,T1D,rho1D,alpha,f,df,vm1d
     real(rkind) :: A,B,c,R,Ti,rhoi
     integer :: i,j, iounit, nx, ny, nz
     
@@ -163,6 +161,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
+    ! Require P1=P2 for shear layer
+    if (P1.ne.P2) then
+        if (nrank==0) print *, 'P1,P2 = ',P1,P2
+        call GracefulExit("Required P1=P2 for shear layer.",4562)
+    endif
+
     ! Local domain sizes
     nx = decomp%xsz(1) 
     ny = decomp%ysz(2) 
@@ -174,7 +178,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
              e => fields(:,:,:,  e_index), &
             Ys => fields(:,:,:,Ys_index:Ys_index+mix%ns-1), &
              x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-
 
     ! Set each material's transport coefficient object.
     ! Also initialize guesses for Ti,rhoi used in get_T_from_e
@@ -193,45 +196,68 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
     ! Add base flow profiles.
     ! Set P and T, then iterate for consistent rho 
-    if (allocated(tmp1)) deallocate(tmp1); allocate(tmp1(ny))
-    if (allocated(tmp2)) deallocate(tmp2); allocate(tmp2(ny))
-    if (allocated(p1D))  deallocate(p1D);  allocate(p1D(ny))
-    if (allocated(T1D))  deallocate(T1D);  allocate(T1D(ny))
-    if (allocated(rho1D)) deallocate(rho1D); allocate(rho1D(ny))
+    if (allocated(tmp1))    deallocate(tmp1); allocate(tmp1(ny))
+    if (allocated(tmp2))    deallocate(tmp2); allocate(tmp2(ny))
+    if (allocated(p1D))     deallocate(p1D);  allocate(p1D(ny))
+    if (allocated(T1D))     deallocate(T1D);  allocate(T1D(ny))
+    if (allocated(rho1D))   deallocate(rho1D); allocate(rho1D(ny))
+    if (allocated(vm1D))    deallocate(vm1D); allocate(vm1D(ny))
     if (allocated(alpha))   deallocate(alpha);  allocate(alpha(ny))
     if (allocated(f))       deallocate(f);      allocate(f(ny))
     if (allocated(df))      deallocate(df);     allocate(df(ny))
-    
-    tmp1 = tanh(y(0,:,0)/dtheta0)
+    tmp1 = half*(1.d0-tanh(y(1,:,1)/dtheta0))
     tmp2 = 1.d0-tmp1 
     do j=1,ny 
-        u(:,j,:) = U1*tmp1(j) + U2*tmp2(j)
+        u(:,j,:)    = U1*tmp1(j) + U2*tmp2(j)
+        T1D(j)      = T1*tmp1(j) + T2*tmp2(j)
+        rho1D(j)    = rho1*tmp1(j) + rho2*tmp2(j)
+        vm1D(j)     = MW/rho1D(j) 
     enddo
     v = zero
     w = zero
-    p1D = P1*tmp1 + P2*tmp2 
-    T1D = T1*tmp1 + T2*tmp2 
-    rho1D = rho1D + rho1*tmp1 + rho2*tmp2
+    p1D = P1
 
-    ! Iteratre to get density for corresponding P1,P2,T1,T2
+    ! Iterate to get density for corresponding P1,P2,T1,T2
     ! tmp1,tmp2 are PR denominators
     ! tmp1 = D1 = vm-B
-    ! tmp2 = D2 = vm^2 - 2*vm*B - B^2
-    A = mix%material(1)%mat%PR_B
+    ! tmp2 = D2 = vm^2 + 2*vm*B - B^2
+    A = mix%material(1)%mat%PR_A
     B = mix%material(1)%mat%PR_B
     c = mix%material(1)%mat%PR_kappa
-    R = mix%material(1)%mat%Rgas
-    do i=1,100
-        tmp1 = 1d0/rho1D-B
-        tmp2 = rho1D**-2 + 2*B/rho1D - B**2
-        alpha = (1 + c*(1-(T1D/Tc)**0.5))**2 
-        f = R*T1D/tmp1 - A*alpha/tmp2 - p1d
-        df = R*T1D/tmp1*(rho1D**-2) + A*a/tmp2*(-2)*(rho1D**-3-rho1D**-2*B)
-        rho1D = rho1D - f/df
-        if (maxval(abs(f/df)).lt.1e-6) then
+    do i=1,50
+        tmp1 = vm1D-B
+        tmp2 = vm1D**2 + 2.d0*B*vm1D - B**2
+        alpha = (1.d0 + c*(1.d0-(T1D/Tc)**0.5))**2 
+        f = Ru*T1D/tmp1 - A*alpha/tmp2 - p1d
+        df = -Ru*T1D/tmp1**2 + A*alpha/tmp2**2 * 2.d0*(vm1D+B)
+        vm1D = vm1D - f/df
+        rho1D = MW/vm1D
+        !print *,'i=',i
+        !print *, 'min/max tmp1',minval(tmp1),maxval(tmp1)
+        !print *, 'min/max tmp2',minval(tmp2),maxval(tmp2)
+        !print *, 'min/max alpha',minval(alpha),maxval(alpha)
+        !print *, '  min/max f',minval(f),maxval(f)
+        !print *, '  min/max df',minval(df),maxval(df)
+        !print *, '  min/max f/df',minval(f/df),maxval(f/df)
+        !print *, '  min/max vm',minval(vm1d),maxval(vm1d)
+        !print *, '  min/max rho',minval(rho1d),maxval(rho1d)
+        if (maxval(abs(f/df)).lt.1e-10) then
             exit
         endif
     enddo
+    if (maxval(abs(f/df)).gt.1e-10) then
+        call GracefulExit("Unable to converge on density profile",4562)
+    else
+        if (nrank==0) print *, 'Converged density profile in iteration ',i
+    endif
+    
+    ! output data into a file 
+    open(1, file = 'data1.dat')
+    do j=1,ny 
+       write(1,*) p1D(j), T1D(j) ,rho1D(j) 
+    end do  
+    close(1)  
+    !call GracefulExit("Done writing to file",4562)
 
     ! Only set temperature and density
     ! Pressure and e will be set in cgrid initialization
@@ -239,19 +265,18 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         rho(:,j,:) = rho1D(j)
         T(:,j,:) = T1D(j)
     enddo
+    deallocate(tmp1,tmp2,p1D,T1D,rho1D,vm1d,alpha,f,df)
 
     ! Perturbations: this must be specific for each problem.
     if (noiseAmp.gt.0d0) then
         call perturb_potential(x,y,z,Lx,Lz,u,v,w)
     endif
 
-    deallocate(tmp1,tmp2,p1D,T1D,rho1D,alpha,f,df)
-    
-
     ! Initialize gaussian filter mygfil
     call mygfil%init(decomp, periodicx, periodicy, periodicz, &
                     "gaussian", "gaussian", "gaussian" )
     end associate
+
 end subroutine
 
 
