@@ -1,6 +1,6 @@
 &INPUT
 inputdir                      = "/work/05294/mhowland/stampede2/PadeOpsData/diurnal/long/init"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/dynamic_robust"   ! Directory for all output files
+outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_1200/aligned_acheck_off"   ! Directory for all output files
 nx                            = 480          ! Number of points in X
 ny                            = 320          ! Number of points in Y
 nz                            = 320          ! Number of points in Z
@@ -28,7 +28,7 @@ donot_dealias         = .FALSE.
 /
 /
 &IO 
-RunID                         = 1           ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 2           ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 400        ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump                    = 400         ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
@@ -77,13 +77,13 @@ useScalars                    = .false.     ! Do you want to use scalars? --Why 
 /
 /
 &PRESSURE_CALC
-fastCalcPressure              = .TRUE.     ! Compute and store pressure at every time step using the faster algorithm?
+fastCalcPressure              = .FALSE.     ! Compute and store pressure at every time step using the faster algorithm?
 storePressure                 = .FALSE.     ! Would you like to compute and store pressure?
 P_dumpFreq                    = 5000         ! How often (timesteps) do you want to dump pressure?
 P_compFreq                    = 10          ! How often (timesteps) do you want to compute pressure? 
-computeDNSPressure    = .TRUE.
-computeFringePressure = .TRUE.
-computeTurbinePressure    = .TRUE.
+computeDNSPressure    = .FALSE.
+computeFringePressure = .FALSE.
+computeTurbinePressure    = .FALSE.
 computeRapidSlowPressure  = .FALSE.
 /
 /
@@ -95,7 +95,7 @@ zstSponge                     = 0.75d0       ! Height above which the sponge lay
 SpongeTscale                  = 40.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 botBC_Temp                    = 2           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 topBC_temp                    = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
-useFringe             = .TRUE.     ! Use Fringe/Buffer region in x or y directions?
+useFringe             = .FALSE.     ! Use Fringe/Buffer region in x or y directions?
 usedoubleFringex      = .FALSE.      ! Use two fringes (in x)?
 usecontrol            = .FALSE.     ! Use frame angle controller?
 /
@@ -120,30 +120,30 @@ WM_MatchingIndex              = 1
 /
 /
 &FRINGE
-apply_x_fringe = .TRUE.
-apply_y_fringe = .TRUE.
-Fringe_xst           = 0.75d0 ! It starts at this point, the fringe is off before this point         
+apply_x_fringe = .FALSE.
+apply_y_fringe = .FALSE.
+Fringe_xst           = 0.85d0 ! It starts at this point, the fringe is off before this point         
 Fringe_xen           = 0.95d0 ! This is the end of the fringe, the fringe is zero after
 Fringe_delta_st_x    = 0.05d0 ! How much distance to use to ramp up
 Fringe_delta_en_x    = 0.05d0 ! How much distance to ramp down
-LambdaFact           = 2.0d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
-LambdaFactPotTemp    = 10.d0
-Fringe_yst           = 0.75d0 ! Same but for y        
+LambdaFact           = 0.6d0 ! If code is blowing up because of fringe, drop lambdafact and increase fringe size 
+LambdaFactPotTemp    = 10.0d0
+Fringe_yst           = 0.85d0 ! Same but for y        
 Fringe_yen           = 0.95d0
 Fringe_delta_st_y    = 0.05d0
 Fringe_delta_en_y    = 0.05d0
 /
 /
 &WINDTURBINES
-useWindTurbines               = .TRUE.     ! Do you want to use Wind turbines ?
-num_turbines                  = 9          ! How many turbines? 
+useWindTurbines               = .FALSE.     ! Do you want to use Wind turbines ?
+num_turbines                  = 0          ! How many turbines? 
 ADM                           = .TRUE.      ! Are these actuator disks?
 turbInfoDir           = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/turbInfo/4x2array_0"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/T_800/dynamic_robust/turbOut_higherLambda"
+powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0/aligned_acheck_off/turbOut"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 800
-inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_dynamic_robust_on_acheck_off.inp"
+yawUpdateInterval     = 400
+inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_aligned_acheck_off.inp"
 /
 /
 &KSPREPROCESS
