@@ -1078,7 +1078,7 @@ contains
         allocate(tmp2(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
         call transpose_y_to_z(this%k1,tmp1,this%spectdecomp)
         call transpose_y_to_z(this%k2,tmp2,this%spectdecomp)
-        allocate(this%Gsurfacefilter(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2)))
+        !allocate(this%Gsurfacefilter(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2)))
         kdealiasx = (one/three)*pi/this%dx*surfaceFilterFact
         kdealiasy = (one/three)*pi/this%dy*surfaceFilterFact
         do j = 1,size(tmp1,2)
