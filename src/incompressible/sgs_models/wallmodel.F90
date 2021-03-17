@@ -58,7 +58,10 @@ subroutine computeWallStress(this, u, v, T, uhat, vhat, That)
    call this%compute_and_bcast_surface_Mn(u, v, uhat, vhat, That)
    
    if (this%useFullyLocalWM) then
-        call this%getfilteredMatchingVelocity(uhat, vhat, T)
+        ! No temperature filter
+        !call this%getfilteredMatchingVelocity(uhat, vhat, T)
+        ! Filter temperature
+        call this%getfilteredMatchingVelocity(uhat, vhat, That)
         call this%compute_surface_stress()
    else
         
@@ -181,10 +184,10 @@ subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)
 
 end subroutine  
 
-subroutine getfilteredMatchingVelocity(this, uhatC, vhatC, T)
+subroutine getfilteredMatchingVelocity(this, uhatC, vhatC, That)
     class(sgs_igrid), intent(inout), target :: this
-    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC
-    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: T
+    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, That
+    !real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: T
     real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2
     complex(rkind), dimension(:,:,:), pointer :: cbuffy, tauWallH
 
@@ -208,9 +211,19 @@ subroutine getfilteredMatchingVelocity(this, uhatC, vhatC, T)
     this%vsurf_filt = this%rbuffzC(:,:,1,1) 
 
     if (this%isStratified) then
-        call transpose_x_to_y(T,this%rbuffyC(:,:,:,1),this%gpC)
+        ! Filter for temperature
+        call transpose_y_to_z(That,tauWallH,this%sp_gpC)
+        call this%spectC%SurfaceFilter_ip(tauWallH(:,:,1))
+        call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
+        call this%spectC%ifft(cbuffy,rbuffx1)
+        call transpose_x_to_y(rbuffx1,this%rbuffyC(:,:,:,1),this%gpC)
         call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1), this%gpC)
         this%Tmatch_filt = this%rbuffzC(:,:,1,1) 
+        
+        ! No filter for temperature
+        !call transpose_x_to_y(T,this%rbuffyC(:,:,:,1),this%gpC)
+        !call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1), this%gpC)
+        !this%Tmatch_filt = this%rbuffzC(:,:,1,1) 
     else
         this%Tmatch_filt = 0.d0 
     end if 

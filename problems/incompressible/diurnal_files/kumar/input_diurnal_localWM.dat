@@ -104,7 +104,7 @@ z0                            = 2.0d-5      ! Roughness length scale (CAUTION: t
 DynamicProcedureType          = 0           ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.  
 WallModelType                 = 1            ! 0: no wall model, 1: Moeng's wall model, 2: Bou-zeid wall model
 useFullyLocalWM               = .true.
-SurfaceFilterFact             = 0.1d-8       ! Define wall velocity filter for the local wall model. 0.d0 should be the same as useFullyLocalWM=.false.
+SurfaceFilterFact             = 0.05d0       ! Define wall velocity filter for the local wall model. 0.d0 should be the same as useFullyLocalWM=.false.
 useVerticalTfilter            = .false.     ! Use test filtering in vertical direction for dynamic procedure? 
 DynProcFreq                   = 5           ! Dynamic procedure used every DYNPROCFREQ timesteps. 
 useWallDamping                = .FALSE.     ! Use the Wall Damping Function 
