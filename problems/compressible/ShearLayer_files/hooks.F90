@@ -4,6 +4,7 @@ module ShearLayer_data
     use FiltersMod,       only: filters
     use decomp_2d,        only: decomp_info, nrank
     use basic_io,         only: read_2d_ascii 
+    use reductions,       only: P_MAXVAL,P_MINVAL
     use exits,            only: message
     use mpi
     implicit none
@@ -20,7 +21,8 @@ module ShearLayer_data
     real(rkind) :: dtheta0 = 1._rkind       ! Base profile thickness 
     real(rkind) :: noiseAmp = 1D-6          ! white noise amplitude
     character(len=clen) :: fname_prefix
-    logical :: use_lstab = .true. 
+    logical :: use_lstab = .false. 
+    logical :: no_pert = .false. 
     
     ! Parameters for the 2 materials
     real(rkind):: gam=1.4_rkind
@@ -111,7 +113,8 @@ contains
         real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: tmp 
         complex(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: e 
         real(rkind) :: kx, kz, k, ph, qmax_local, qmax
-        integer(rkind) :: j, m, mx, mz, mpi_ierr
+        integer(rkind) :: j, m, mx, mz
+        integer :: mpi_ierr
 
         ! Add modes to field q
         do m = 3,3+nmodes 
@@ -126,7 +129,7 @@ contains
 
         ! Get maxval and scale
         qmax_local = maxval(q)
-        call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD)
+        call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD,mpi_ierr)
         tmp = maxAmp*exp(-abs(y)/maskWidth)
         q = q/qmax * tmp
 
@@ -146,7 +149,7 @@ contains
 
             ! Get maxval and scale. Make oscillatory mask
             qmax_local = maxval(tmp)
-            call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD)
+            call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD,mpi_ierr)
             q = q + tmp/qmax * 0.5*maxAmp*exp(-abs(y)/maxval(y))*sin(y*2.D0*pi/maskWidth/2)
         endif
 
@@ -159,7 +162,8 @@ contains
         real(rkind), intent(in)                     :: Lx,Lz
 
         real(rkind) :: kx, kz, phx, phz, A, eps=0.15, sigma=5.D0
-        integer(rkind) :: i,j, m, mx, mz, nmodes=75, mpi_ierr
+        integer(rkind) :: i,j, m, mx, mz, nmodes=10
+        integer :: mpi_ierr
 
         do i = 1, nmodes 
         do j = 1, nmodes
@@ -184,6 +188,54 @@ contains
         enddo
 
     end subroutine 
+    
+    subroutine perturb_potential_v2(gp,x,y,z,Lx,Lz,u,v,w)
+        type(decomp_info), intent(in)               :: gp
+        real(rkind), dimension(:,:,:), intent(in)   :: x,y,z
+        real(rkind), dimension(:,:,:), intent(inout):: u,v,w
+        real(rkind), intent(in)                     :: Lx,Lz
+
+        real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: &
+            siny,cosy,tmpx,tmpz,tmpy,tmpy2 
+        real(rkind) :: kx, kz, phx, phz, A, eps=0.15, sigma=5.D0
+        integer(rkind) :: i,j, m, mx, mz, nmodes=50
+        integer :: mpi_ierr
+        character(len=8) :: c1,c2
+
+        tmpy = exp(-sigma*y*y)
+        siny = sin(y)
+        cosy = cos(y)
+        tmpy2 = -two*sigma*y*(siny+two*sigma*y*cosy ) + (cosy+two*sigma*(cosy-y*siny))
+        tmpy2 = tmpy2*tmpy
+
+        call message(0,"Making perturbations")
+        do i = 1, nmodes 
+        do j = 1, nmodes
+            call message(0,"")
+
+            kx = two*pi/Lx * (5+i) 
+            kz = two*pi/Lz * (5+j)
+            call random_number(phx)
+            call random_number(phz)
+            call mpi_bcast(phx,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+            call mpi_bcast(phz,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+
+            A = eps/(four*pi**two*kx*kz)
+            tmpx = kx*x+phx*two*pi
+            tmpz = kz*z+phz*two*pi
+            u = u + A*kx*sin(tmpx)*cos(tmpz)*tmpy*( siny + two*sigma*y*cosy )
+            w = w + A*cos(tmpx)*kz*sin(tmpz)*tmpy*( siny + two*sigma*y*cosy )
+            v = v + A*cos(tmpx)*cos(tmpz)*tmpy2
+            call message(2,"Maximum tmpx", P_MAXVAL(abs(tmpz)))
+            call message(2,"Maximum tmpz", P_MAXVAL(abs(tmpx)))
+            call message(2,"Maximum u", P_MAXVAL(abs(u)))
+            call message(2,"Maximum v", P_MAXVAL(abs(v)))
+            call message(2,"Maximum w", P_MAXVAL(abs(w)))
+        enddo
+        enddo
+
+        call message(0,"Done making perturbations")
+    end subroutine 
 end module
 
 
@@ -202,7 +254,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ref, rho_ratio,&
-                        noiseAmp, fname_prefix, use_lstab
+                        noiseAmp, fname_prefix, use_lstab, no_pert
     ioUnit = 11
     open(unit=ioUnit, file='input.dat', form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -280,7 +332,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ratio, rho_ref, &
-                        noiseAmp, fname_prefix, use_lstab 
+                        noiseAmp, fname_prefix, use_lstab, no_pert 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -333,8 +385,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             call lstab_pert(decomp,x,z,fname_prefix,v,3)
             call lstab_pert(decomp,x,z,fname_prefix,w,4)
             call lstab_pert(decomp,x,z,fname_prefix,rho,1)
+        else if (no_pert) then
+            call message(0,"No perturbations")
         else
-            call perturb_potential(decomp,x,y,z,Lx,Lz,u,v,w)
+            call perturb_potential_v2(decomp,x,y,z,Lx,Lz,u,v,w)
             !maskWidth = two*dtheta0
             !maxAmp = 1.D-3*du
             !nModes = 10 
@@ -544,6 +598,9 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     integer :: ny
     integer :: iounit = 229
     character(len=clen) :: outputfile
+    integer :: ETDNS=0
+
+    if (ETDNS) then
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -560,14 +617,17 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
         call message(2,"Maximum diffusivity",P_MAXVAL(diff))
 
     end associate
+
+    endif
 end subroutine
 
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
-    use kind_parameters, only: rkind
-    use decomp_2d,       only: decomp_info
-    use MixtureEOSMod,    only: mixture
-
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,tkeb,tsim0,dtheta_0)
+    use kind_parameters,    only: rkind
+    use decomp_2d,          only: decomp_info
+    use MixtureEOSMod,      only: mixture
+    use AveragingMod,       only: averaging
+    use TKEBudgetMod,       only: tkeBudget
     use ShearLayer_data
 
     implicit none
@@ -577,5 +637,43 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,rhsg)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-    real(rkind), dimension(:,:,:,:), optional, intent(inout) ::rhsg
+    
+    !type(averaging), optional,       intent(in)    :: avg
+    type(tkeBudget), optional,       intent(inout) :: tkeb
+    real(rkind), optional,           intent(inout) :: tsim0 ! the previous time 
+    real(rkind), optional,           intent(inout) :: dtheta_0 ! the previous L99 
+    
+    !real(rkind), dimension(1,size(fields,2),1) :: utilde_p ! on each proc
+    real(rkind), dimension(1,decomp%ysz(2),1) :: rbar,utilde,buf ! full size, assuming ystencil  
+    real(rkind) :: factor=0.d0, U1,U2,rho0, dtheta=0.d0
+    integer :: j,dy,ny,iavg=5
+   
+    ny = decomp%ysz(2)
+    dy = abs(mesh(1,1,1,2)-mesh(1,2,1,2))
+    print *, 'dy:',dy 
+
+    ! Compute the momentum thickness:
+    ! dtheta = 1/(r0*dU^2) \int{ rbar(U1-utilde)(U2-utilde) }dy
+    call tkeb%reynolds_avg(fields(:,:,:,1),rbar)
+    call tkeb%favre_avg(fields(:,:,:,1),fields(:,:,:,2)/fields(:,:,:,1),utilde)
+    print *, 'Shape of utilde and buf:', size(utilde), size(buf)
+    rho0    = rbar  (1,1 ,1)
+    U1      = Utilde(1,1 ,1)
+    U2      = Utilde(1,ny,1)
+    print *, 'rho0:',rho0 
+    print *, 'U1:',U2 
+    print *, 'U2:',U2 
+    buf     = rbar*(U1-utilde)*(U2-utilde) 
+    dtheta  = sum(buf)*dy 
+    factor  = (dtheta-dtheta0)/(tsim-tsim0) / dtheta
+    print *, 'dtheta0:',dtheta_0
+    print *, 'dtheta:',dtheta 
+    print *, 'factor:',factor
+    pause
+
+    rhs(:,:,:,1) = rhs(:,:,:,1) - factor*fields(:,:,:,1)
+    rhs(:,:,:,2) = rhs(:,:,:,2) - factor*fields(:,:,:,2)
+    rhs(:,:,:,3) = rhs(:,:,:,3) - factor*fields(:,:,:,3)
+    rhs(:,:,:,4) = rhs(:,:,:,4) - factor*fields(:,:,:,4)
+    rhs(:,:,:,5) = rhs(:,:,:,5) - factor*fields(:,:,:,5)
 end subroutine
