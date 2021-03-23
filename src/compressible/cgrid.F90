@@ -118,9 +118,6 @@ module CompressibleGrid
             procedure, private :: write_viz
             procedure, private :: write_restart
             procedure          :: read_restart
-            procedure          :: seed_turb 
-            ! procedure, private :: read_restart
-            procedure          :: setup_postprocessing
     end type
 
 contains
@@ -2007,6 +2004,7 @@ contains
 
     end subroutine
     
+<<<<<<< HEAD
     subroutine seed_turb(this, seed)
         use exits, only: message
         use reductions, only: P_MEAN
@@ -2068,6 +2066,8 @@ contains
 
     end subroutine
 
+=======
+>>>>>>> a9de8278a9d90fc5a4ead482cf6899de9dc91c37
     subroutine setup_postprocessing(this, nrestarts)
         use mpi
         class(cgrid), intent(inout) :: this

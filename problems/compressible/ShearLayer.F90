@@ -8,8 +8,8 @@ program ShearLayer
     use exits,            only: GracefulExit
     implicit none
 
-    type(cgrid) :: cgp
-    character(len=clen) :: inputfile
+    type(cgrid) :: cgp,seed
+    character(len=clen) :: inputfile,seedfile
     integer :: ierr, error 
 
     ! Start MPI
@@ -23,9 +23,11 @@ program ShearLayer
 
     ! Get file location 
     call GETARG(1,inputfile)
+    call GETARG(2,seedfile)
     
     ! Initialize the grid object
     call cgp%init(inputfile)
+    call seed%init(seedfile)
 
     ! Time advance
     call cgp%simulate()
