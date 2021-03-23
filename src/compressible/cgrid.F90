@@ -67,6 +67,8 @@ module CompressibleGrid
 
         logical                  :: compute_scale_decomposition
         type(scaleDecomposition) :: scaledecomp
+        
+        logical                  :: forcing 
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -171,6 +173,7 @@ contains
         integer     :: vizramp = 5
         logical     :: compute_tke_budget = .false.
         logical     :: compute_scale_decomposition = .false.
+        logical     :: forcing = .true. ! KVM 2021
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
@@ -182,7 +185,7 @@ contains
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
                              inviscid, nrestart, rewrite_viz, vizramp, &
                       compute_tke_budget, compute_scale_decomposition, &
-                           x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
+                           x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, forcing
 
 
         ioUnit = 11
@@ -212,6 +215,7 @@ contains
 
         this%compute_tke_budget = compute_tke_budget
         this%compute_scale_decomposition = compute_scale_decomposition
+        this%forcing = forcing 
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -1262,8 +1266,12 @@ contains
                                qz, Jz )
 
         ! Call problem source hook
-        call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
-
+        if (this%forcing) then
+            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs, &
+                this%budget)
+        else
+            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
+        endif
     end subroutine
 
     subroutine getRHS_x(       this,  rhs,&
@@ -2004,70 +2012,6 @@ contains
 
     end subroutine
     
-<<<<<<< HEAD
-    subroutine seed_turb(this, seed)
-        use exits, only: message
-        use reductions, only: P_MEAN
-        use timer, only: tic, toc
-        class(cgrid), intent(inout) :: this, seed
-        character(len=clen) :: charout
-        real(rkind) :: cputime
-        integer :: vizcount=0, ny, i, j
-
-        ! Start reading restart file
-        write(charout,'(A,A)') "Reading seed restart dump from ", adjustl(trim(seed%restart%filename))
-        call message(charout)
-        call seed%restart%start_reading(vizcount)
-        call tic()
-
-        ! Read conserved variables
-        if (seed%mix%ns > 1) then
-            do i = 1,seed%mix%ns
-                write(charout,'(I4.4)') i
-                call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,i), 'rhoY_'//adjustl(trim(charout)) )
-            end do
-        else
-            call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,mass_index), 'rho' )
-        end if
-        call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,mom_index  ), 'rhou')
-        call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,mom_index+1), 'rhov')
-        call seed%restart%read_dataset(seed%Wcnsrv(:,:,:,mom_index+2), 'rhow')
-        call seed%restart%read_dataset(seed%Wcnsrv(:,:,:, TE_index  ), 'TE')
-
-        ! update the current step
-        this%step = 0
-        this%tsim = 0.D0
-
-        ! End visualization dump
-        call seed%restart%end_reading()
-        call toc(cputime)
-        write(charout,'(A,ES11.3,A)') "Finished reading seed restart dump in ", cputime, " seconds"
-        call message(charout)
-
-        ! Get primitive variables from conserved
-        !call seed%get_primitive()
-
-        ! Check that the grid sizes are the same?
-        !nx = this%nxp; if (seed%nxp .ne. nx) call message("Nx mismatch")
-        !ny = this%nyp; if (seed%nyp .ne. ny) call message("Ny mismatch")
-        !nz = this%nzp; if (seed%nzp .ne. nz) call message("Nz mismatch")
-
-        ! Add the fluctuations
-        do j=1,ny
-            do i=1,5
-                this%Wcnsrv(:,j,:,i) = this%Wcnsrv(:,j,:,i) &
-                    + seed%Wcnsrv(:,j,:,i) &
-                    - P_MEAN(seed%Wcnsrv(:,j,:,i ))
-            enddo
-        enddo
-
-        ! write restart file
-        call this%write_restart()
-
-    end subroutine
-
-=======
->>>>>>> a9de8278a9d90fc5a4ead482cf6899de9dc91c37
     subroutine setup_postprocessing(this, nrestarts)
         use mpi
         class(cgrid), intent(inout) :: this
