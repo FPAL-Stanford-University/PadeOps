@@ -14,7 +14,6 @@ module CompressibleGrid
     use PowerLawViscosityMod,  only: powerLawViscosity
     use TKEBudgetMod,          only: tkeBudget
     use ScaleDecompositionMod, only: scaleDecomposition
-   
     implicit none
 
     integer, parameter :: rho_index    = 1 
@@ -69,7 +68,7 @@ module CompressibleGrid
         type(scaleDecomposition) :: scaledecomp
         
         logical                  :: forcing 
-
+        real(rkind)              :: tsim_0, dtheta_0
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
@@ -173,7 +172,7 @@ contains
         integer     :: vizramp = 5
         logical     :: compute_tke_budget = .false.
         logical     :: compute_scale_decomposition = .false.
-        logical     :: forcing = .true. ! KVM 2021
+        logical     :: forcing = .false. ! KVM 2021
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
@@ -466,6 +465,14 @@ contains
             call this%scaledecomp%init(this%decomp, this%der, this%gfil, this%mesh, this%dx, this%dy, this%dz, this%mix%ns, &
                                        this%x_bc, this%y_bc, this%z_bc, inputfile)
         end if
+        
+        ! KVM 2021 Initialize for ddt(dtheta)
+        if (this%forcing) then
+            call this%budget%get_dtheta(this%decomp,this%mesh(:,:,:,2), &
+                this%rho,this%u,this%dtheta_0)
+            this%tsim_0 = 0.d0
+            call message(0,"Initial delta_theta = ",this%dtheta_0)
+        endif
 
     end subroutine
 
@@ -938,6 +945,7 @@ contains
             end if
         end if
 
+
         do isub = 1,RK45_steps
             call this%get_conserved()
 
@@ -1071,7 +1079,15 @@ contains
             end if
                 
         end do
-
+        
+        ! KVM 2021 Update tsim_0,dthet_0
+        if (this%forcing) then
+            call this%budget%get_dtheta(this%decomp,this%mesh(:,:,:,2), &
+                this%rho,this%u,this%dtheta_0)
+            this%tsim_0 = this%tsim 
+            call message(1,"Updated dtheta = ",this%dtheta_0)
+        endif
+            
         !this%tsim = this%tsim + this%dt
         this%step = this%step + 1
             
@@ -1265,10 +1281,11 @@ contains
                            tauxz,tauyz,tauzz,&
                                qz, Jz )
 
-        ! Call problem source hook
+        ! KVM 2021 Call problem source hook
         if (this%forcing) then
-            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs, &
-                this%budget)
+            call hook_source(this%decomp, this%mesh, this%fields, &
+                this%mix, this%tsim, rhs, &
+                this%Wcnsrv,this%budget,this%tsim_0,this%dtheta_0)
         else
             call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
         endif

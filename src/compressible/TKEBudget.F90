@@ -50,6 +50,7 @@ module TKEBudgetMod
         procedure          :: tke_budget
         procedure          :: get_rhoPsi_bar
         procedure          :: mixing_budget
+        procedure          :: get_dtheta !KVM 2021 
         final              :: destructor
 
     end type
@@ -862,6 +863,63 @@ contains
         call this%mix_viz%end_viz()
 
     end subroutine
+   
+    ! KVM 2021
+    subroutine get_dtheta(this,decomp,y,rho,u,delta,rate,v)
+        class(tkeBudget),             intent(inout) :: this
+        type(decomp_info), intent(in)               :: decomp
+        real(rkind), dimension(:,:,:), intent(in)   :: y
+        real(rkind), dimension(:,:,:), intent(in)   :: rho,u
+        real(rkind),                   intent(out)  :: delta
 
+        ! For computing growth rate
+        real(rkind), optional,                   intent(out) :: rate
+        real(rkind), dimension(:,:,:), optional, intent(in)  :: v 
+        real(rkind), dimension(:,:,:), allocatable :: upp,vpp
+         
+        real(rkind), dimension(1,decomp%ysz(2),1) :: rbar,utilde,buf
+        real(rkind), dimension(1,decomp%ysz(2),1) :: vtilde, R12
+        real(rkind) :: dy,U1,U2,du,rho0=1.0
+        integer :: j,ni,nj,nk, mpi_ierr 
 
+        ni = decomp%ysz(1)
+        nj = decomp%ysz(2)
+        nk = decomp%ysz(3)
+        dy = abs(y(1,1,1)-y(1,2,1))
+
+        ! Compute the momentum thickness:
+        ! dtheta = 1/(r0*dU^2) \int{ rbar(U1-utilde)(U2-utilde) }dy
+        call this%reynolds_avg(rho,rbar)
+        call this%favre_avg(rho,u,utilde)
+        U1 = Utilde(1,1 ,1)
+        U2 = Utilde(1,nj,1)
+        dU = abs(U2-U1)
+        buf   = rbar*(U1-utilde)*(U2-utilde) 
+        delta = -sum(buf(1,:,1))*dy / (rho0*du*du) 
+        call mpi_bcast(delta,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+        
+        if (present(rate)) then
+            allocate(upp(ni,nj,nk))
+            allocate(vpp(ni,nj,nk))
+
+            ! Get velocity favre average and fluctuations
+            call this%favre_avg_and_fluct(rho, u, utilde, upp)
+            call this%favre_avg_and_fluct(rho, v, vtilde, vpp)
+            call this%reynolds_avg(rho*upp*vpp,R12)
+
+            ! dU/dy: O(h^4) centered diff
+            !http://www.dam.brown.edu/people/alcyew/handouts/numdiff.pdf 
+            buf = 0
+            do j=2,nj-2
+                buf(1,j,1) = ( -utilde(1,j+2,1) + utilde(1,j-2,1) &
+                           + 8.d0*utilde(1,j+1,1) - 8.d0*utilde(1,j-1,1)) / (12.d0*dy)
+            enddo
+            
+            ! Production, integrated
+            buf = rbar*buf*R12
+            rate = sum(buf(1,:,1))*dy * -2d0/rho0/du**3
+            deallocate(upp)
+            deallocate(vpp)
+        endif
+    end subroutine 
 end module

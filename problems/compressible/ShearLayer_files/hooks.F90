@@ -37,205 +37,80 @@ module ShearLayer_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 contains
-    subroutine lstab_pert(gp,x,z,fname_prefix,q,qi)
-        type(decomp_info), intent(in)   :: gp
-        character(len=*), intent(in)    :: fname_prefix 
-        real(rkind), dimension(:,:,:), intent(in) :: x, z
-        real(rkind), dimension(:,:,:), intent(inout) :: q!the primitive var
-        integer, intent(in)       :: qi ! the primitive var col idx in input
-    
-        complex(rkind), dimension(:,:), allocatable :: qhat
-        real(rkind), dimension(:,:), allocatable :: &
-            qhat_real, qhat_imag, data2read
-        real(rkind), dimension(:), allocatable :: kx, kz
-        real(rkind) :: ph 
-        complex(rkind) :: e
-        character(len=clen) :: fname 
-        integer :: nmodes=1, ny, modeID, i, j, k, nx, nz
-       
-        ! Read mode info in x and y
-        fname = trim(fname_prefix)//"_mode_info.dat"
-        call read_2d_ascii(data2read,fname)
-        nmodes = size(data2read,1)
-        allocate(kx(nmodes), kz(nmodes))
-        kx = data2read(:,1)!alpha
-        kz = data2read(:,2)!beta
-        deallocate(data2read)
-       
-        ! Local sizes of the chunk of domain on this proc:
-        ! Assuming y-decomp
-        ny = gp%ysz(2)
-        nx = size(x,1)
-        nz = size(x,3)
-        
-        ! Allocate based on global domain height
-        allocate(qhat_real(ny,nmodes),qhat_imag(ny,nmodes),qhat(ny,nmodes))
-    
-        ! Read imaginary mode datai
-        fname = trim(fname_prefix)//"_init_info_imag.dat"
-        call read_2d_ascii(data2read,fname)
-        qhat_imag = reshape(data2read(:,qi),[ny,nmodes])
-        deallocate(data2read)
-    
-        ! Read real mode data 
-        fname = trim(fname_prefix)//"_init_info_real.dat"
-        call read_2d_ascii(data2read,fname)
-        qhat_real = reshape(data2read(:,qi),[ny,nmodes])
-        deallocate(data2read)
-        
-        ! Init perturbation fields
-        qhat = qhat_real + imi*qhat_imag
-
-        do modeID = 1,nmodes
-            do j = 1,ny
-                do k = 1,nz
-                    do i = 1,nx
-                        e = exp(imi*(kx(modeID)*x(i,1,1) + kz(modeID)*z(1,1,k)))
-                        q(i,j,k) = q(i,j,k) + real(qhat(j,modeID)*e,rkind) 
-                    end do !x 
-                end do !z 
-            end do !y
-        end do !modes
-    
-        deallocate(kx, kz)
-        deallocate(qhat_real,qhat_imag,qhat)
-    end subroutine 
-    
-    subroutine make_pert(gp,x,y,z,Lx,Lz,q,maskWidth,maxAmp,nmodes,Mc)
-        type(decomp_info), intent(in)               :: gp
-        real(rkind), dimension(:,:,:), intent(in)   :: x,y,z ! a 3D grid
-        real(rkind), intent(in)                     :: Lx,Lz  ! grid length
-        real(rkind), intent(in)                     :: maskWidth,maxAmp 
-        integer, intent(in)                         :: nmodes 
-        real(rkind), intent(in)                     :: Mc ! should we use supersonic modes? 
-        real(rkind), dimension(:,:,:), intent(inout) :: q !the primitive var
-
-        real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: tmp 
-        complex(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: e 
-        real(rkind) :: kx, kz, k, ph, qmax_local, qmax
-        integer(rkind) :: j, m, mx, mz
-        integer :: mpi_ierr
-
-        ! Add modes to field q
-        do m = 3,3+nmodes 
-            kx = two*pi/Lx * m
-            kz = two*pi/Lz * m
-            k  = (kx**two+kz**two)**half
-            call random_number(ph)
-            call mpi_bcast(ph,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-            e = exp(imi*(kx*x + kz*z)+ph*2*pi)
-            q = q + real(k**(-5._rkind/3._rkind)*e,rkind) 
-        enddo
-
-        ! Get maxval and scale
-        qmax_local = maxval(q)
-        call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD,mpi_ierr)
-        tmp = maxAmp*exp(-abs(y)/maskWidth)
-        q = q/qmax * tmp
-
-        ! We also need more oscillatory modes at higher Mc
-        if (Mc > 0.8) then
-            tmp = 0.D0
-            do mx = 3,6
-            do mz = 3,6
-                kx = two*pi/Lx * mx
-                kz = two*pi/Lz * mz
-                call random_number(ph)
-                call mpi_bcast(ph,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-                e = exp(imi*(kx*x + kz*z)+ph*2*pi)
-                tmp = tmp + real(e,rkind) 
-            enddo
-            enddo
-
-            ! Get maxval and scale. Make oscillatory mask
-            qmax_local = maxval(tmp)
-            call mpi_allreduce(qmax_local, qmax, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD,mpi_ierr)
-            q = q + tmp/qmax * 0.5*maxAmp*exp(-abs(y)/maxval(y))*sin(y*2.D0*pi/maskWidth/2)
-        endif
-
-    end subroutine 
-    
-    subroutine perturb_potential(gp,x,y,z,Lx,Lz,u,v,w)
-        type(decomp_info), intent(in)               :: gp
-        real(rkind), dimension(:,:,:), intent(in)   :: x,y,z
-        real(rkind), dimension(:,:,:), intent(inout):: u,v,w 
-        real(rkind), intent(in)                     :: Lx,Lz
-
-        real(rkind) :: kx, kz, phx, phz, A, eps=0.15, sigma=5.D0
-        integer(rkind) :: i,j, m, mx, mz, nmodes=10
-        integer :: mpi_ierr
-
-        do i = 1, nmodes 
-        do j = 1, nmodes
-
-            kx = two*pi/Lx * i 
-            kz = two*pi/Lx * j
-            call random_number(phx)
-            call random_number(phz)
-            call mpi_bcast(phx,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-            call mpi_bcast(phz,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-
-            A = eps/(four*pi**2*kx*kz)
-            u = u + A * kx*sin(kx*x+phx*two*pi) * cos(kz*z+phz*two*pi) *&
-                exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) )
-            w = w + A * cos(kx*x+phx*two*pi) * kz*sin(kz*z+phz*two*pi) *&
-                exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) )
-            v = v + A * cos(kx*x+phx*two*pi) * kz*sin(kz*z+phz*two*pi) *&
-                ( -two*sigma*y*exp(-(sigma*y**2))*( sin(y) + 2*sigma*y*cos(y) ) + &
-                exp(-(sigma*y**2))*( cos(y) - 2*sigma*y*sin(y) ) )
-
-        enddo
-        enddo
-
-    end subroutine 
-    
     subroutine perturb_potential_v2(gp,x,y,z,Lx,Lz,u,v,w)
+        use decomp_2d,        only: nrank
         type(decomp_info), intent(in)               :: gp
         real(rkind), dimension(:,:,:), intent(in)   :: x,y,z
         real(rkind), dimension(:,:,:), intent(inout):: u,v,w
         real(rkind), intent(in)                     :: Lx,Lz
 
-        real(rkind), dimension(gp%ysz(1),gp%ysz(2),gp%ysz(3)) :: &
-            siny,cosy,tmpx,tmpz,tmpy,tmpy2 
-        real(rkind) :: kx, kz, phx, phz, A, eps=0.15, sigma=5.D0
-        integer(rkind) :: i,j, m, mx, mz, nmodes=50
-        integer :: mpi_ierr
-        character(len=8) :: c1,c2
+        real, dimension(:), allocatable :: A,e,x1d,y1d,z1d
+        real :: kx, kz, phx, phz, kmin, Amax, du
+        real :: sigma=10,pi = 3.14159265358
+        integer :: ni,nj,nk,i, j, k, m, mx, mz, mode_min=4, nmodes_max=4, &
+            nxmodes, nzmodes, mpi_ierr, ix1,iz1,ixn,izn
+   
+        ! Global size
+        ni  = gp%xsz(1)
+        nj  = gp%ysz(2)
+        nk  = gp%zsz(3)
 
-        tmpy = exp(-sigma*y*y)
-        siny = sin(y)
-        cosy = cos(y)
-        tmpy2 = -two*sigma*y*(siny+two*sigma*y*cosy ) + (cosy+two*sigma*(cosy-y*siny))
-        tmpy2 = tmpy2*tmpy
+        ! If base decomposition is in Y
+        ix1 = gp%yst(1); 
+        iz1 = gp%yst(3)
+        ixn = gp%yen(1); 
+        izn = gp%yen(3)
+
+        ! Store radius, theta, z 
+        allocate(x1D(ni),y1D(nj),z1D(nk))
+        x1d = x(:,1,1)
+        y1D = y(1,:,1) 
+        z1d = z(1,1,:)
+
+        ! Transverse mask 
+        allocate(e(nj),A(nj))
+        e = exp(-sigma*(y1D**2));
+        du = P_MAXVAL(u)-P_MINVAL(u)
+        Amax = 0.01*(du)
+        call mpi_bcast(Amax,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+        A = Amax*e
 
         call message(0,"Making perturbations")
-        do i = 1, nmodes 
-        do j = 1, nmodes
-            call message(0,"")
-
-            kx = two*pi/Lx * (5+i) 
-            kz = two*pi/Lz * (5+j)
+        call message(2,"Maximum u", P_MAXVAL(abs(u)))
+        call message(2,"Maximum v", P_MAXVAL(abs(v)))
+        call message(2,"Maximum w", P_MAXVAL(abs(w)))
+    
+        nxmodes = min(nmodes_max, ni/4)
+        nzmodes = min(nmodes_max, nk/4)
+        
+        do mx=mode_min,mode_min+nxmodes
+        do mz=mode_min,mode_min+nzmodes
+            kx = 2.D0*pi/Lx * mx
+            kz = 2.D0*pi/Lz * mz
             call random_number(phx)
             call random_number(phz)
             call mpi_bcast(phx,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
             call mpi_bcast(phz,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-
-            A = eps/(four*pi**two*kx*kz)
-            tmpx = kx*x+phx*two*pi
-            tmpz = kz*z+phz*two*pi
-            u = u + A*kx*sin(tmpx)*cos(tmpz)*tmpy*( siny + two*sigma*y*cosy )
-            w = w + A*cos(tmpx)*kz*sin(tmpz)*tmpy*( siny + two*sigma*y*cosy )
-            v = v + A*cos(tmpx)*cos(tmpz)*tmpy2
-            call message(2,"Maximum tmpx", P_MAXVAL(abs(tmpz)))
-            call message(2,"Maximum tmpz", P_MAXVAL(abs(tmpx)))
-            call message(2,"Maximum u", P_MAXVAL(abs(u)))
-            call message(2,"Maximum v", P_MAXVAL(abs(v)))
-            call message(2,"Maximum w", P_MAXVAL(abs(w)))
+            phx = phx*2.D0*pi
+            phz = phz*2.D0*pi
+            do i=ix1,ixn
+            do k=iz1,izn
+            u(i,:,k) = u(i,:,k) + A*sin(kx*x1D(i)+phx)*sin(kz*z1D(k)+phz)
+            w(i,:,k) = w(i,:,k) + A*cos(kx*x1D(i)+phx)*cos(kz*z1D(k)+phz)
+            v(i,:,k) = v(i,:,k) + A/kz * sin(kx*x1D(i)+phx) * &
+                ( (-2d0*sigma*y1d)*cos(kz*z1D(k)+phz) + kx*sin(kz*z1D(k)+phz) )
+            enddo
+            enddo
         enddo
         enddo
-
+        deallocate(A,e,x1d,y1d,z1d)
+        
         call message(0,"Done making perturbations")
+        call message(2,"Maximum u", P_MAXVAL(abs(u)))
+        call message(2,"Maximum v", P_MAXVAL(abs(v)))
+        call message(2,"Maximum w", P_MAXVAL(abs(w)))
     end subroutine 
+
 end module
 
 
@@ -246,17 +121,17 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use ShearLayer_data
 
     implicit none
-    character(clen)                                :: inputfile
     type(decomp_info),               intent(in)    :: decomp
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    character(clen) :: inputfile='input.dat'
 
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ref, rho_ratio,&
                         noiseAmp, fname_prefix, use_lstab, no_pert
     ioUnit = 11
-    open(unit=ioUnit, file='input.dat', form='FORMATTED')
+    open(unit=ioUnit, file=inputfile, form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
     
@@ -323,12 +198,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
-    real(rkind), dimension(:,:), allocatable :: tmp2D
-    real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda,maskWidth,maxAmp
-    integer :: i,j, iounit, nx, ny, nz, nModes
-        
-    real(rkind) :: kx, kz, ph 
-    integer(rkind) :: m, mpi_ierr
+    !real(rkind), dimension(:,:), allocatable :: tmp2D
+    real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda,kx, kz, ph 
+    integer :: i,iounit, nx, ny, nz
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ratio, rho_ref, &
@@ -378,26 +250,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         Ys(:,:,:,1)  = one - half*(one+lambda*tanh(y/(two*dtheta0)))
         Ys(:,:,:,2)  = one - Ys(:,:,:,1)
         call mix%update(Ys)
-		
-        ! Perturbations: this must be specific for each problem.
-        if (use_lstab) then
-            call lstab_pert(decomp,x,z,fname_prefix,u,2)
-            call lstab_pert(decomp,x,z,fname_prefix,v,3)
-            call lstab_pert(decomp,x,z,fname_prefix,w,4)
-            call lstab_pert(decomp,x,z,fname_prefix,rho,1)
-        else if (no_pert) then
-            call message(0,"No perturbations")
-        else
-            call perturb_potential_v2(decomp,x,y,z,Lx,Lz,u,v,w)
-            !maskWidth = two*dtheta0
-            !maxAmp = 1.D-3*du
-            !nModes = 10 
-            !call make_pert(decomp,x,y,z,Lx,Lz,u,maskWidth,maxAmp,nModes,Mc)
-            !call make_pert(decomp,x,y,z,Lx,Lz,v,maskWidth,maxAmp,nModes,Mc)
-            !call make_pert(decomp,x,y,z,Lx,Lz,w,maskWidth,maxAmp,nModes,Mc)
-            !call make_pert(decomp,x,y,z,Lx,Lz,p,maskWidth,maxAmp,nModes,Mc)
-            !call make_pert(decomp,x,y,z,Lx,Lz,rho,maskWidth,maxAmp,nModes,Mc)
-        endif
 
         ! Add base flow profiles
         lambda = (rho_ratio-1)/(rho_ratio+1)
@@ -407,6 +259,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         p = p + p_ref
         rho = rho + rho_ref*(1 + lambda*tanh(y/(two*dtheta0)))
         T = p/(rho*mix%Rgas) 
+		
+        ! Perturbations: this must be specific for each problem.
+        if (use_lstab) then
+            call GracefulExit("LSTAB init is deprecated.",4562)
+            !call lstab_pert(decomp,x,z,fname_prefix,u,2)
+            !call lstab_pert(decomp,x,z,fname_prefix,v,3)
+            !call lstab_pert(decomp,x,z,fname_prefix,w,4)
+            !call lstab_pert(decomp,x,z,fname_prefix,rho,1)
+        else if (no_pert) then
+            call message(0,"No perturbations")
+        else
+            call perturb_potential_v2(decomp,x,y,z,Lx,Lz,u,v,w)
+        endif
 
         ! Initialize gaussian filter mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, &
@@ -616,15 +481,15 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
 
     end associate
 
-    endif
 end subroutine
 
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,tkeb,tsim0,dtheta_0)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta_0)
+    use CompressibleGrid,   only: rho_index,u_index,v_index,w_index,&
+                                  p_index,T_index,e_index,Ys_index
     use kind_parameters,    only: rkind
     use decomp_2d,          only: decomp_info
     use MixtureEOSMod,      only: mixture
-    use AveragingMod,       only: averaging
     use TKEBudgetMod,       only: tkeBudget
     use ShearLayer_data
 
@@ -635,43 +500,40 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,tkeb,tsim0,dtheta_0)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-    
-    !type(averaging), optional,       intent(in)    :: avg
+
+    real(rkind), dimension(:,:,:,:), optional,intent(in)    :: Wcnsrv
     type(tkeBudget), optional,       intent(inout) :: tkeb
-    real(rkind), optional,           intent(inout) :: tsim0 ! the previous time 
-    real(rkind), optional,           intent(inout) :: dtheta_0 ! the previous L99 
+    real(rkind), optional,           intent(in)    :: tsim_0 ! the previous time 
+    real(rkind), optional,           intent(in)    :: dtheta_0 ! the previous L99 
+    real(rkind) :: factor=0.d0, dtheta=0.d0, rate=0.d0
+    integer :: i,mpi_ierr
+    integer :: mass_index, mom_index, TE_index
+    logical :: forcing
     
-    !real(rkind), dimension(1,size(fields,2),1) :: utilde_p ! on each proc
-    real(rkind), dimension(1,decomp%ysz(2),1) :: rbar,utilde,buf ! full size, assuming ystencil  
-    real(rkind) :: factor=0.d0, U1,U2,rho0, dtheta=0.d0
-    integer :: j,dy,ny,iavg=5
-   
-    ny = decomp%ysz(2)
-    dy = abs(mesh(1,1,1,2)-mesh(1,2,1,2))
-    print *, 'dy:',dy 
+    if (present(tkeb)) then
+        forcing=.true.
+    else 
+        forcing = .false.
+    endif
+    if (forcing) then
+    
+    call tkeb%get_dtheta(decomp,mesh(:,:,:,2),fields(:,:,:,rho_index),&
+        fields(:,:,:,u_index),dtheta,rate,fields(:,:,:,v_index))
+    factor  = rate/dtheta
+    call mpi_bcast(factor,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+    call message(3,'Factor',factor)
+    
+    ! Set mass, momentum and energy indices in Wcnsrv
+    mass_index = 1
+    mom_index  = mass_index + ns
+    TE_index   = mom_index + 3
+    do i = 1,ns
+        rhs(:,:,:,i) = rhs(:,:,:,i) - factor*Wcnsrv(:,:,:,Ys_index+i) 
+    enddo 
+    rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - factor*Wcnsrv(:,:,:,mom_index  )
+    rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - factor*Wcnsrv(:,:,:,mom_index+1)
+    rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - factor*Wcnsrv(:,:,:,mom_index+2)
+    rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) - factor*Wcnsrv(:,:,:,TE_index   )
 
-    ! Compute the momentum thickness:
-    ! dtheta = 1/(r0*dU^2) \int{ rbar(U1-utilde)(U2-utilde) }dy
-    call tkeb%reynolds_avg(fields(:,:,:,1),rbar)
-    call tkeb%favre_avg(fields(:,:,:,1),fields(:,:,:,2)/fields(:,:,:,1),utilde)
-    print *, 'Shape of utilde and buf:', size(utilde), size(buf)
-    rho0    = rbar  (1,1 ,1)
-    U1      = Utilde(1,1 ,1)
-    U2      = Utilde(1,ny,1)
-    print *, 'rho0:',rho0 
-    print *, 'U1:',U2 
-    print *, 'U2:',U2 
-    buf     = rbar*(U1-utilde)*(U2-utilde) 
-    dtheta  = sum(buf)*dy 
-    factor  = (dtheta-dtheta0)/(tsim-tsim0) / dtheta
-    print *, 'dtheta0:',dtheta_0
-    print *, 'dtheta:',dtheta 
-    print *, 'factor:',factor
-    pause
-
-    rhs(:,:,:,1) = rhs(:,:,:,1) - factor*fields(:,:,:,1)
-    rhs(:,:,:,2) = rhs(:,:,:,2) - factor*fields(:,:,:,2)
-    rhs(:,:,:,3) = rhs(:,:,:,3) - factor*fields(:,:,:,3)
-    rhs(:,:,:,4) = rhs(:,:,:,4) - factor*fields(:,:,:,4)
-    rhs(:,:,:,5) = rhs(:,:,:,5) - factor*fields(:,:,:,5)
+    endif
 end subroutine
