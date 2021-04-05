@@ -517,12 +517,10 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta
     endif
     if (forcing) then
     
-    call tkeb%get_dtheta(decomp,mesh(:,:,:,2),fields(:,:,:,rho_index),&
-        fields(:,:,:,u_index),dtheta,rate,fields(:,:,:,v_index))
-    factor  = rate/dtheta
-    call mpi_bcast(factor,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-    call message(3,'Factor',factor)
+    !call mpi_bcast(factor,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
     
+
+
     ! Set mass, momentum and energy indices in Wcnsrv
     mass_index = 1
     mom_index  = mass_index + ns
