@@ -82,11 +82,11 @@ module cgrid_hooks
     end interface
 
     interface hook_source
-        subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,avg,tsim0,dtheta0)
+        subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,tkeb,tsim0,dtheta0)
             use kind_parameters, only: rkind
             use decomp_2d,       only: decomp_info
             use MixtureEOSMod,    only: mixture
-            use AveragingMod,     only: averaging
+            use TKEBudgetMod,       only: tkeBudget
 
             implicit none
             type(decomp_info),               intent(in)    :: decomp
@@ -95,9 +95,9 @@ module cgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(in)    :: fields
             real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-            ! KVM 2021
-            type(averaging), optional,       intent(in)    :: avg
-            real(rkind), optional,           intent(in)    :: tsim0 ! the previous time 
+            !type(averaging), optional,       intent(in)    :: avg
+            type(tkeBudget), optional,       intent(inout) :: tkeb
+            real(rkind), optional,           intent(inout) :: tsim0! the previous L99 
             real(rkind), optional,           intent(inout) :: dtheta0 ! the previous L99 
 
         end subroutine
