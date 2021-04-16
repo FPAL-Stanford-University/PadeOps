@@ -468,10 +468,10 @@ contains
         
         ! KVM 2021 Initialize for ddt(dtheta)
         if (this%forcing) then
-            call this%budget%get_dtheta(this%decomp,this%mesh(:,:,:,2), &
-                this%rho,this%u,this%dtheta_0)
-            this%tsim_0 = 0.d0
-            call message(0,"Initial delta_theta = ",this%dtheta_0)
+            !call this%budget%get_dtheta(this%decomp,this%mesh(:,:,:,2), &
+            !    this%rho,this%u,this%dtheta_0)
+            !this%tsim_0 = 0.d0
+            call message(0,"Forcing terms ON")
         endif
 
     end subroutine
@@ -1081,11 +1081,12 @@ contains
         end do
         
         ! KVM 2021 Update tsim_0,dthet_0
-        if (this%forcing) then
+        !if (this%forcing) then
+        if (.true.) then
             call this%budget%get_dtheta(this%decomp,this%mesh(:,:,:,2), &
                 this%rho,this%u,this%dtheta_0)
             this%tsim_0 = this%tsim 
-            call message(1,"Updated dtheta = ",this%dtheta_0)
+            call message(1,"dtheta = ",this%dtheta_0)
         endif
             
         !this%tsim = this%tsim + this%dt

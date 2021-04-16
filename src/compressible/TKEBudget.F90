@@ -236,7 +236,7 @@ contains
         real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3)),       intent(in)    :: rho, f
         real(rkind), dimension(this%avg%avg_size(1),this%avg%avg_size(2),this%avg%avg_size(3)), intent(out)   :: f_tilde
         real(rkind), dimension(this%avg%sz(1),      this%avg%sz(2),      this%avg%sz(3)),       intent(out)   :: f_pprime
-
+        
         call this%favre_avg(rho, f, f_tilde)
         call this%avg%get_fluctuations(f, f_tilde, f_pprime)
 

@@ -111,6 +111,30 @@ contains
         call message(2,"Maximum w", P_MAXVAL(abs(w)))
     end subroutine 
 
+    ! KVM 2021
+    subroutine my_ddy(decomp,dy,f,dfdy)
+        type(decomp_info), intent(in)               :: decomp
+        real(rkind),intent(in)                      :: dy
+        real(rkind), dimension(:,:,:), intent(in)   :: f
+        real(rkind), dimension(:,:,:), intent(inout):: dfdy
+
+        integer :: j,ni,nj,nk, iy1,iyn,mpi_ierr 
+
+        nj = decomp%ysz(2)
+        ! If base decomposition is in Y
+        iy1 = decomp%yst(2)
+        iyn = decomp%yen(2)
+         
+        ! df/dy: O(h^4) centered diff
+        !http://www.dam.brown.edu/people/alcyew/handouts/numdiff.pdf 
+        dfdy = 0.d0
+        do j=3+iy1,iyn-3
+            dfdy(:,j,:) = ( -f(:,j+2,:) + f(:,j-2,:) &
+                       + 8.d0*f(:,j+1,:) - 8.d0*f(:,j-1,:)) / (12.d0*dy)
+        enddo
+            
+    end subroutine 
+
 end module
 
 
@@ -463,7 +487,6 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     integer :: ny
     integer :: iounit = 229
     character(len=clen) :: outputfile
-    integer :: ETDNS=0
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -488,8 +511,9 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta
     use CompressibleGrid,   only: rho_index,u_index,v_index,w_index,&
                                   p_index,T_index,e_index,Ys_index
     use kind_parameters,    only: rkind
-    use decomp_2d,          only: decomp_info
+    use decomp_2d,          only: decomp_info,nrank
     use MixtureEOSMod,      only: mixture
+    use reductions,         only: P_MAXVAL,P_MINVAL
     use TKEBudgetMod,       only: tkeBudget
     use ShearLayer_data
 
@@ -505,8 +529,12 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta
     type(tkeBudget), optional,       intent(inout) :: tkeb
     real(rkind), optional,           intent(in)    :: tsim_0 ! the previous time 
     real(rkind), optional,           intent(in)    :: dtheta_0 ! the previous L99 
-    real(rkind) :: factor=0.d0, dtheta=0.d0, rate=0.d0
-    integer :: i,mpi_ierr
+        
+    real(rkind), dimension(:,:,:), allocatable :: &
+        rbar,qtilde,vtilde,Rij,src,rhs_mn
+    real(rkind), dimension(:,:,:), allocatable :: qpp,vpp
+    real(rkind) :: dy
+    integer :: i,j,nx,ny,nz,iy1,iyn,mpi_ierr
     integer :: mass_index, mom_index, TE_index
     logical :: forcing
     
@@ -515,23 +543,160 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta
     else 
         forcing = .false.
     endif
-    if (forcing) then
+
+    if (forcing) then   
     
-    !call mpi_bcast(factor,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+    ! If base decomposition is in Y
+    iy1 = decomp%yst(2)
+    iyn = decomp%yen(2)
+
+    nx = tkeb%avg%avg_size(1)
+    ny = tkeb%avg%avg_size(2)
+    nz = tkeb%avg%avg_size(3)
+    allocate(rbar   (nx,ny,nz))
+    allocate(qtilde (nx,ny,nz))
+    allocate(vtilde (nx,ny,nz))
+    allocate(Rij    (nx,ny,nz))
+    allocate(src    (nx,ny,nz))
+    allocate(rhs_mn (nx,ny,nz))
+    nx = tkeb%avg%sz(1)
+    ny = tkeb%avg%sz(2)
+    nz = tkeb%avg%sz(3)
+    allocate(qpp(nx,ny,nz))
+    allocate(vpp(nx,ny,nz))
     
+    associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
+                 v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
+                 p => fields(:,:,:,  p_index), T  => fields(:,:,:,T_index),&
+                 e => fields(:,:,:,  e_index), &
+                Ys => fields(:,:,:,Ys_index:Ys_index+mix%ns-1), &
+                 y => mesh(:,:,:,2) )
+     
+    !mpi_bcast(factor,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+    !reynolds_avg_and_fluct(this, f, f_bar, f_prime)
+    !favre_avg_and_fluct(this, rho, f, f_tilde, f_pprime)
+    !my_ddy(decomp,y,f,dfdy)
+       
+    ! 1: Y1
+    ! 2: Y2
+    ! 3: rhou
+    ! 4: rhov
+    ! 5: rhow
+    ! 6: TE
+    mass_index = ns
+    mom_index = ns+1
+    TE_index = mom_index+3
 
+    dy = abs(y(1,iy1,1)-y(1,iy1+1,1))
+    call tkeb%reynolds_avg(rho, rbar)
+    call tkeb%favre_avg_and_fluct(rho, v, vtilde, vpp)
 
-    ! Set mass, momentum and energy indices in Wcnsrv
-    mass_index = 1
-    mom_index  = mass_index + ns
-    TE_index   = mom_index + 3
-    do i = 1,ns
-        rhs(:,:,:,i) = rhs(:,:,:,i) - factor*Wcnsrv(:,:,:,Ys_index+i) 
-    enddo 
-    rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - factor*Wcnsrv(:,:,:,mom_index  )
-    rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - factor*Wcnsrv(:,:,:,mom_index+1)
-    rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - factor*Wcnsrv(:,:,:,mom_index+2)
-    rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) - factor*Wcnsrv(:,:,:,TE_index   )
-
+    ! Mass (fraction) source:
+    call tkeb%reynolds_avg(rhs(:,:,:,2),rhs_mn) 
+    if (ns.gt.1) then
+        do i = 1,ns
+            call tkeb%favre_avg_and_fluct(rho, Ys(:,:,:,i), qtilde, qpp) 
+            call tkeb%favre_avg(rho,qpp*vpp, Rij)
+            call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
+            do j=iy1,iyn 
+                rhs(:,j,:,i) = rhs(:,j,:,i) - src(1,j,1)
+            enddo
+        enddo 
+    else
+        call my_ddy(decomp,dy,rbar*vtilde,src)
+        do j=iy1,iyn 
+            rhs(:,j,:,mass_index) = rhs(:,j,:,mass_index) - src(1,j,1)
+        enddo
     endif
+    !call message(4,"Maximum src rho",P_MAXVAL(src))
+   
+    if (nrank==0) then
+        open(1,file='./src_Y2.txt')
+        write (1,*) qtilde, src,rhs_mn
+        close(1)
+    endif
+    
+    ! X momentum source:
+    call tkeb%reynolds_avg(rhs(:,:,:,mom_index),rhs_mn) 
+    call tkeb%favre_avg_and_fluct(rho, u, qtilde, qpp)
+    call tkeb%favre_avg(rho,qpp*vpp, Rij)
+    call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
+    do j=iy1,iyn 
+        rhs(:,j,:,mom_index) = rhs(:,j,:,mom_index) - src(1,j,1)
+    enddo
+    !call message(4,"Maximum src momx",P_MAXVAL(src))
+    if (nrank==0) then
+        open(1,file='./src_ru.txt')
+        write (1,*) qtilde, src,rhs_mn
+        close(1)
+    endif
+    
+    ! Y momentum source:
+    call tkeb%reynolds_avg(rhs(:,:,:,mom_index+1),rhs_mn) 
+    call tkeb%favre_avg(rho,vpp*vpp, Rij)
+    call my_ddy(decomp,dy,rbar*(vtilde*vtilde+Rij),src)
+    do j=iy1,iyn 
+        rhs(:,j,:,mom_index+1) = rhs(:,j,:,mom_index+1) - src(1,j,1)
+    enddo
+    !call message(4,"Maximum src momy",P_MAXVAL(src))
+    if (nrank==0) then
+        open(1,file='./src_rv.txt')
+        write (1,*) vtilde, src,rhs_mn
+        close(1)
+    endif
+    
+    
+    ! Z momentum source:
+    call tkeb%reynolds_avg(rhs(:,:,:,mom_index+2),rhs_mn) 
+    call tkeb%favre_avg_and_fluct(rho, w, qtilde, qpp)
+    call tkeb%favre_avg(rho,qpp*vpp, Rij)
+    call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
+    do j=iy1,iyn 
+        !print *, j,rhs(1,j,1,mom_index+2),src(1,j,1)
+        rhs(:,j,:,mom_index+2) = rhs(:,j,:,mom_index+2) - src(1,j,1)
+    enddo
+    !call message(4,"Maximum qtilde momz",P_MAXVAL(Rij))
+    !call message(4,"Maximum src momz",P_MAXVAL(src))
+    if (nrank==0) then
+        open(1,file='./src_rw.txt')
+        write (1,*) qtilde, src,rhs_mn
+
+        close(1)
+    endif
+
+    
+    ! Energy source: e
+    call tkeb%reynolds_avg(rhs(:,:,:,TE_index),rhs_mn) 
+    call tkeb%favre_avg_and_fluct(rho, e, qtilde, qpp)
+    call tkeb%favre_avg(rho,qpp*vpp, Rij)
+    call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
+    do j=iy1,iyn 
+        rhs(:,j,:,TE_index) = rhs(:,j,:,TE_index) - src(1,j,1)
+    enddo
+    !call message(4,"Maximum src TE(e)",P_MAXVAL(src))
+    if (nrank==0) then
+        open(1,file='./src_re.txt')
+        write (1,*) qtilde, src, rhs_mn
+        close(1)
+    endif
+    ! Energy source: p
+    call tkeb%reynolds_avg_and_fluct(p, qtilde, qpp)
+    call tkeb%reynolds_avg(qpp*vpp, Rij)
+    call my_ddy(decomp,dy,qtilde*vtilde+Rij,src)
+    do j=iy1,iyn 
+        rhs(:,j,:,TE_index) = rhs(:,j,:,TE_index) - src(1,j,1)
+    enddo
+
+    !call message(4,"Maximum src TE(p)",P_MAXVAL(src))
+    if (nrank==0) then
+        open(1,file='./src_rp.txt')
+        write (1,*) qtilde, src, rhs_mn
+        close(1)
+    endif
+
+    deallocate(rbar,qtilde,vtilde,Rij,src,rhs_mn)
+    deallocate(qpp,vpp)
+
+    end associate
+    endif !if forcing
 end subroutine
