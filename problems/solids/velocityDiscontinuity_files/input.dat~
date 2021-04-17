@@ -1,5 +1,5 @@
 &INPUT
-outputdir  =  "output"
+outputdir  =  "./data"
 
 nx=101                  ! Number of points in X
 ny = 1                    ! Number of points in Y

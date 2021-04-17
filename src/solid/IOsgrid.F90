@@ -213,7 +213,146 @@ contains
             call update_halo(mix%material(imat)%diff,tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_diff',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
-        end do
+
+            call update_halo(mix%material(imat)%diff_g,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_diff_g',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%elastic%yield,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_yield',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%elastic%mu,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_mu',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%e_p,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_ep',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%e_pp,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_epp',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            !call update_halo((mix%material(imat)%e_pp-mix%material(imat)%e_p)/max(mix%material(imat)%e_p,1.0e-16),tmp1,1,gp,.FALSE.)
+            call update_halo(mix%material(imat)%e_pp-mix%material(imat)%e_p,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_epdiff',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            !call update_halo(mix%material(imat)%pe/primary(:,:,:,1),tmp1,1,gp,.FALSE.) !pe/rho
+            call update_halo(mix%material(imat)%pe,tmp1,1,gp,.FALSE.) !pe
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_pe',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%det_e,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_det_e',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%det_t,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_det_t',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%det_p,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_det_p',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%curl_e,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_curl_e',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%curl_t,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_curl_t',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%curl_p,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_curl_p',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gt11,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gt11',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gt12,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gt12',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gt13,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gt13',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gt21,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gt21',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gt22,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gt22',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gt23,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gt23',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gt31,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gt31',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gt32,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gt32',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gt33,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gt33',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%diff_gt,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_diff_gt',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gp11,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gp11',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gp12,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gp12',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gp13,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gp13',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gp21,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gp21',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gp22,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gp22',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gp23,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gp23',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gp31,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gp31',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gp32,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gp32',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%gp33,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_gp33',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%diff_gp,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_diff_gp',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%diff_pe,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_diff_pe',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+               
+         end do
 
         E_IO = VTK_DAT_XML(var_location='node',var_block_action='close')
         E_IO = VTK_GEO_XML_WRITE()
@@ -261,6 +400,41 @@ contains
                 E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_eel', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_kap', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_diff',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_diff_g',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_yield',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_mu',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_ep',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_epp',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_epdiff',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_pe',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_det_e',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_det_t',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_det_p',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_curl_e',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_curl_t',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_curl_p',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gt11', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gt12', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gt13', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gt21', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gt22', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gt23', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gt31', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gt32', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gt33', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_diff_gt', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gp11', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gp12', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gp13', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gp21', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gp22', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gp23', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gp31', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gp32', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_gp33', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_diff_gp', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_diff_pe', tp='Float64')
+
             end do
 
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='close')

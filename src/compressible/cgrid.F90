@@ -61,7 +61,7 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
-        real(rkind) :: Cmu, Cbeta, Ckap, Cdiff, CY
+        real(rkind) :: Cmu, Cbeta, Ckap, Cdiff, CY, Cdiff_g, Cdiff_gt
 
         real(rkind), dimension(:,:,:), pointer :: x 
         real(rkind), dimension(:,:,:), pointer :: y 
@@ -78,7 +78,7 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:), pointer :: bulk 
         real(rkind), dimension(:,:,:), pointer :: kap
         real(rkind), dimension(:,:,:,:), pointer :: Ys
-        real(rkind), dimension(:,:,:,:), pointer :: diff
+        real(rkind), dimension(:,:,:,:), pointer :: diff,diff_g,diff_gt
          
         contains
             procedure          :: init
@@ -143,6 +143,8 @@ contains
         real(rkind) :: Cbeta = 1.75_rkind
         real(rkind) :: Ckap = 0.01_rkind
         real(rkind) :: Cdiff = 0.003_rkind
+        real(rkind) :: Cdiff_g = 0.003_rkind
+        real(rkind) :: Cdiff_gt = 0.003_rkind
         real(rkind) :: CY = 100.0_rkind
         character(len=clen) :: charout
         real(rkind) :: Ys_error
@@ -181,6 +183,8 @@ contains
         this%Cbeta = Cbeta
         this%Ckap = Ckap
         this%Cdiff = Cdiff
+        this%Cdiff_g = Cdiff_g
+        this%Cdiff_gt = Cdiff_gt
         this%CY = CY
 
         ! Allocate decomp

@@ -31,16 +31,23 @@ module Sep1SolidEOSMod
 
 contains
 
-    function init(gam,Rgas,PInf,rho0,mu,yield,tau0,usegTg) result(this)
+  !function init(gam,Rgas,PInf,rho0,mu,yield,tau0,usegTg) result(this)
+  function init(gam,Rgas,PInf,rho0,mu,yield,tau0,eta_det_ge,eta_det_gp,eta_det_gt,diff_c_ge,diff_c_gp,diff_c_gt,usegTg,melt_t,melt_c,kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e,kos_sh,nxd,nyd,nzd) result(this) 
         type(sep1solideos_abstract)             :: this
-        real(rkind),                 intent(in) :: gam, Rgas, PInf, rho0, mu, yield, tau0
-        logical,                     intent(in) :: usegTg
+        !real(rkind),                 intent(in) :: gam, Rgas, PInf, rho0, mu, yield, tau0
+        real(rkind),                 intent(in) :: gam, Rgas, PInf
+        real(rkind), intent(in) :: rho0, mu, yield, tau0,eta_det_ge,eta_det_gp,eta_det_gt,diff_c_ge,diff_c_gp,diff_c_gt, melt_t, melt_c, kos_b, kos_t, kos_h, kos_g, kos_m, kos_q, kos_f, kos_alpha, kos_beta, kos_e 
+        integer, intent(in) :: nxd,nyd,nzd,kos_sh 
+
+        logical, intent(in) :: usegTg
 
         this%rho0 = rho0
         this%usegTg = usegTg
 
         allocate(this%hydro,source=stiffgas(gam,Rgas,PInf))
-        allocate(this%elastic,source=sep1solid(this%rho0,mu,yield,tau0))
+        !allocate(this%elastic,source=sep1solid(this%rho0,mu,yield,tau0))
+        allocate(this%elastic,source=sep1solid(rho0,mu,yield,tau0,eta_det_ge,eta_det_gp,eta_det_gt,diff_c_ge,diff_c_gp,diff_c_gt,melt_t,melt_c,kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e,kos_sh,nxd,nyd,nzd))
+
     end function
 
     pure elemental subroutine destroy(this)

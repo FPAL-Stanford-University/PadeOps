@@ -9,11 +9,35 @@ module Sep1SolidEOS
     type, extends(elasticeos) :: sep1solid
 
         real(rkind) :: rho0 = one                    ! Reference density
-        real(rkind) :: mu = zero                     ! Shear Modulus
-        real(rkind) :: yield = one                   ! Yield Stress
         real(rkind) :: tau0 = 1.0d-10                ! Plastic relaxation time scale
+        real(rkind) :: melt_t = 3.0d0                ! Melt temperature
+        real(rkind) :: melt_c = 0.2d0                ! Melt model coefficient
+        real(rkind) :: kos_b = 0.0d0                 ! LANL Kospall model coefficient
+        real(rkind) :: kos_t = 0.0d0                 ! LANL Kospall model coefficient
+        real(rkind) :: kos_h = 0.0d0                 ! LANL Kospall model coefficient
+        real(rkind) :: kos_g = 0.0d0                 ! LANL Kospall model coefficient
+        real(rkind) :: kos_m = 0.0d0                 ! LANL Kospall model coefficient
+        real(rkind) :: kos_q = 0.0d0                 ! LANL Kospall model coefficient
+        real(rkind) :: kos_f = 0.0d0                 ! LANL Kospall model coefficient
+        real(rkind) :: kos_alpha = 1.0d0             ! LANL Kospall model coefficient
+        real(rkind) :: kos_beta = 0.0d0              ! LANL Kospall model coefficient
+        real(rkind) :: kos_e = 0.0d0                 ! LANL Kospall model coefficient
+        real(rkind) :: mu0 = zero                    ! Shear Modulus initial
+        real(rkind) :: yield0 = one                  ! Yield Stress initial
+        real(rkind) :: eta_det_ge = 1.0d0               ! Density preserving factor in g eqns.
+        real(rkind) :: eta_det_gp = 1.0d0               ! Density preserving factor in g eqns.
+        real(rkind) :: eta_det_gt = 1.0d0               ! Density preserving factor in g eqns.
+        real(rkind) :: diff_c_ge = 1.0d0               ! Curl preserving factor in g eqns.
+        real(rkind) :: diff_c_gp = 1.0d0               ! Curl preserving factor in g eqns.
+        real(rkind) :: diff_c_gt = 1.0d0               ! Curl preserving factor in g eqns.
+
+
+        real(rkind), dimension(:,:,:), allocatable :: mu, yield ! Shear Modulus and Yield Stress
 
         real(rkind), dimension(:), allocatable :: svdwork     ! Work array for SVD stuff
+
+        integer :: nxd,nyd,nzd,kos_sh
+
 
     contains
 
@@ -36,18 +60,48 @@ module Sep1SolidEOS
 
 contains
 
-    function init(rho0_,mu_,yield_,tau0_) result(this)
+    function init(rho0_,mu_,yield_,tau0_,eta_det_ge_,eta_det_gp_,eta_det_gt_,diff_c_ge_,diff_c_gp_,diff_c_gt_,melt_t_,melt_c_,kos_b_,kos_t_,kos_h_,kos_g_,kos_m_,kos_q_,kos_f_,kos_alpha_,kos_beta_,kos_e_,kos_sh_,nxd_,nyd_,nzd_) result(this)
         type(sep1solid) :: this
-        real(rkind), intent(in) :: rho0_,mu_, yield_, tau0_
+        real(rkind), intent(in) :: rho0_, mu_, yield_, tau0_, eta_det_ge_, eta_det_gp_, eta_det_gt_, diff_c_ge_, diff_c_gp_, diff_c_gt_, melt_t_, melt_c_, kos_b_, kos_t_, kos_h_, kos_g_, kos_m_, kos_q_, kos_f_, kos_alpha_, kos_beta_, kos_e_
+        integer, intent(in) :: nxd_,nyd_,nzd_,kos_sh_
 
         integer :: info, lwork
         real(rkind), dimension(3,3) :: g, u, vt
         real(rkind), dimension(3)   :: sval
 
+
+        this%nxd = nxd_
+        this%nyd = nyd_
+        this%nzd = nzd_
         this%rho0 = rho0_
-        this%mu = mu_
-        this%yield = yield_
+        this%mu0 = mu_
+        this%yield0 = yield_
         this%tau0 = tau0_
+        this%eta_det_ge = eta_det_ge_
+        this%eta_det_gp = eta_det_gp_
+        this%eta_det_gt = eta_det_gt_
+        this%diff_c_ge = diff_c_ge_
+        this%diff_c_gp = diff_c_gp_
+        this%diff_c_gt = diff_c_gt_
+        this%melt_t = melt_t_
+        this%melt_c = melt_c_
+        this%kos_b = kos_b_
+        this%kos_t = kos_t_
+        this%kos_h = kos_h_
+        this%kos_g = kos_g_
+        this%kos_m = kos_m_
+        this%kos_q = kos_q_
+        this%kos_f = kos_f_
+        this%kos_alpha = kos_alpha_
+        this%kos_beta = kos_beta_
+        this%kos_e = kos_e_
+        this%kos_sh = kos_sh_
+
+
+        if (allocated(this%mu)) deallocate(this%mu); allocate(this%mu(this%nxd,this%nyd,this%nzd))
+        if (allocated(this%yield)) deallocate(this%yield); allocate(this%yield(this%nxd,this%nyd,this%nzd))
+        this%mu = this%mu0
+        this%yield = this%yield0
 
         if (allocated(this%svdwork)) deallocate(this%svdwork); allocate(this%svdwork(1))
 
@@ -142,7 +196,10 @@ contains
               devstress(:,:,:,i) = devstress(:,:,:,i)*mumix
             enddo
         else
-            devstress = devstress*this%mu
+           !devstress = devstress*this%mu
+           do i = 1, 6
+              devstress(:,:,:,i) = devstress(:,:,:,i)*this%mu
+           enddo
         endif
 
     end subroutine
@@ -189,40 +246,49 @@ contains
 
     end subroutine
 
-    subroutine plastic_deformation(this, gfull, use_gTg, mumix, yieldmix)
+    subroutine plastic_deformation(this, gfull, gpfull, pe, rho, Temp, sxx, sxy, sxz, syy, syz, szz,use_gTg,useOneG,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe, mumix, yieldmix, rho0mix)
         use kind_parameters, only: clen
         use constants,       only: eps, twothird
         use decomp_2d,       only: nrank
         use exits,           only: GracefulExit, nancheck, message
         class(sep1solid), target, intent(inout) :: this
-        real(rkind), dimension(:,:,:,:), intent(inout) :: gfull
-        logical, intent(in) :: use_gTg
-        real(rkind), dimension(:,:,:), intent(in), optional :: mumix, yieldmix
+        real(rkind), dimension(:,:,:,:), intent(inout) :: gfull,gpfull
+        real(rkind), dimension(:,:,:), intent(inout) :: pe
+        real(rkind), dimension(:,:,:), intent(in) :: sxx,sxy,sxz,syy,syz,szz
 
-        real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new
+        real(rkind), dimension(:,:,:), intent(in), optional :: mumix, yieldmix, rho0mix
+        real(rkind), dimension(:,:,:), intent(in) :: rho,Temp
+
+        real(rkind), dimension(3,3) :: g, u, vt, gradf, gradf_new,sigma,gpt1,gpt2,geinv,gedlt,gp,gpt3,gpt4!,gpdlt!,gpinv!,alms,
         real(rkind), dimension(3)   :: sval, beta, Sa, f, f1, f2, dbeta, beta_new, dbeta_new
         real(rkind) :: sqrt_om, betasum, Sabymu_sq, ycrit, C0, t
         real(rkind) :: tol = real(1.D-12,rkind), residual, residual_new
-        integer :: i,j,k
+        real(rkind) :: asq,xsq,tot,adiv, detg,detgp,almsn,almsn0,almsnd,lpn,lpn2,sigman
+        !real(rkind) :: dtsub,qtsub
+        integer :: i,j,k!,n
         integer :: iters
         integer, parameter :: niters = 500
         integer :: lwork, info
         integer, dimension(3) :: ipiv
         integer :: nxp, nyp, nzp
         character(len=clen) :: charout
-        real(rkind), dimension(size(gfull,1),size(gfull,2),size(gfull,3)) :: mulocal, yieldlocal
+        real(rkind), dimension(size(gfull,1),size(gfull,2),size(gfull,3)) :: mulocal, yieldlocal,rho0local
+
+        logical, intent(in) :: use_gTg,useOneG,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
 
         nxp = size(gfull,1); nyp = size(gfull,2); nzp = size(gfull,3);
 
-        if(present(yieldmix) .and. present(mumix)) then
+        if(present(yieldmix) .and. present(mumix) .and. present(rho0mix)) then
             mulocal = mumix
             yieldlocal = yieldmix
+            rho0local = rho0mix
         else
             mulocal = this%mu
             yieldlocal = this%yield
+            rho0local = this%rho0
         endif
 
-        if (use_gTg) then
+        if (use_gTg.and.(.not.strainHard)) then
             ! Get optimal lwork
             lwork = -1
             call dsyev('V', 'U', 3, G, 3, sval, this%svdwork, lwork, info)
@@ -245,11 +311,12 @@ contains
         do k = 1,nzp
             do j = 1,nyp
                 do i = 1,nxp
+
                     g(1,1) = gfull(i,j,k,1); g(1,2) = gfull(i,j,k,2); g(1,3) = gfull(i,j,k,3)
                     g(2,1) = gfull(i,j,k,4); g(2,2) = gfull(i,j,k,5); g(2,3) = gfull(i,j,k,6)
                     g(3,1) = gfull(i,j,k,7); g(3,2) = gfull(i,j,k,8); g(3,3) = gfull(i,j,k,9)
 
-                    if (use_gTg) then
+                    if (use_gTg.and.(.not.strainHard)) then
                         ! Get eigenvalues and eigenvectors of G
                         call dsyev('V', 'U', 3, G, 3, sval, this%svdwork, lwork, info)
                         if(info .ne. 0) print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
@@ -267,23 +334,36 @@ contains
                     beta = sval**two / sqrt_om**(two/three)
 
                     betasum = sum( beta*(beta-one) ) / three
-                    Sa = -mulocal(i,j,k)*sqrt_om * ( beta*(beta-one) - betasum )
 
-                    Sabymu_sq = sum(Sa**two) / mulocal(i,j,k)**two
-                    ycrit = Sabymu_sq - (two/three)*(yieldlocal(i,j,k)/mulocal(i,j,k))**two
+                    ! mca: old
+                    ! Sa = -mulocal(i,j,k)*sqrt_om * ( beta*(beta-one) - betasum )
+                    ! Sabymu_sq = sum(Sa**two) / mulocal(i,j,k)**two
+                    ! ycrit = Sabymu_sq - (two/three)*(yieldlocal(i,j,k)/mulocal(i,j,k))**two
+                    ! C0 = Sabymu_sq / ycrit
+                    ! Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
+                    ! f = Sa / (mulocal(i,j,k)*sqrt_om); f(3) = beta(1)*beta(2)*beta(3) 
 
-                    if (ycrit .LE. zero) then
-                        ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
-                        cycle
+                    Sabymu_sq = sqrt( sum( (beta*(beta-one) - betasum)**two ) )
+
+                    !if (ycrit .LE. zero) then !mca: old
+                    if (mulocal(i,j,k)*Sabymu_sq*sqrt_om .LE. sqrt(two/three)*yieldlocal(i,j,k)) then
+                       ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
+                       cycle
                     end if
 
-                    C0 = Sabymu_sq / ycrit
-                    Sa = Sa*( sqrt(C0 - one)/sqrt(C0) )
+                    !if( (yieldlocal(i,j,k).LE.eps) .OR. (mulocal(i,j,k).LE.eps) ) then !with condition: 4.48313318030560; without condition:8.00000000 why less?? 
+                    !   C0 = 1.0d0
+                    !else
+                       C0 = yieldlocal(i,j,k)/mulocal(i,j,k)
+                       !if(use_gTg) C0 = 2.0*C0
+                    !endif
+                    f = -C0*sqrt(two/three)/(sqrt_om*Sabymu_sq)*( beta*(beta-one) - betasum ); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
 
-                    ! Now get new beta
-                    f = Sa / (mulocal(i,j,k)*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
-                    
-                    betasum = sum( beta*(beta-one) ) / three
+                    ! mca: old
+                    ! ! Now get new beta
+                    ! f = Sa / (mulocal(i,j,k)*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
+                    ! betasum = sum( beta*(beta-one) ) / three
+
                     f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value
 
                     ! Get newton step
@@ -301,6 +381,7 @@ contains
                     do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
                         ! Backtracking line search
                         t = 1._rkind
+
                         beta_new = beta + t * dbeta
 
                         ! Get new residual
@@ -359,25 +440,30 @@ contains
                             print '(A)', 'Newton solve in plastic_deformation did not converge'
                             exit
                         end if
+
+
                     end do
+
                     if ((iters >= niters) .OR. (t <= eps)) then
+                    !if ((iters >= niters) .OR. ((t <= eps).and.(iters.ge.50))) then !mca
                         write(charout,'(4(A,I0))') 'Newton solve in plastic_deformation did not converge at index ',i,',',j,',',k,' of process ',nrank
                         print '(A)', charout
                         print '(A)', 'g = '
                         print '(4X,3(ES15.5))', gfull(i,j,k,1), gfull(i,j,k,2), gfull(i,j,k,3)
                         print '(4X,3(ES15.5))', gfull(i,j,k,4), gfull(i,j,k,5), gfull(i,j,k,6)
                         print '(4X,3(ES15.5))', gfull(i,j,k,7), gfull(i,j,k,8), gfull(i,j,k,9)
-                        print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
+                        !print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
 
                         print '(A,ES15.5)', 'Relaxation, t = ', t
                         print '(A,ES15.5)', 'Residual = ', residual
+                        print '(A,2(I6))', 'iters, niters = ', iters,niters
                         call GracefulExit(charout,6382)
                     end if
 
                     ! Then get new svals
                     sval = sqrt(beta) * sqrt_om**(one/three)
 
-                    if (use_gTg) then
+                    if (use_gTg.and.(.not.strainHard)) then
                         sval = sval*sval ! New eigenvalues of G
                         
                         ! Get g = v*sval*vt
@@ -389,11 +475,386 @@ contains
                         vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
                         g = MATMUL(u,vt) ! u*sval*vt
                     end if
+                    
+                    
+                    
+                    if(strainHard) then
+                       !update plastic g: delta g^p_{im} = - g^p_{ik}*(delta g^e_{kj})*(g^e_{jm})^(-1) 
+                       ! !using pre-updated values
+                       ! detg = -gfull(i,j,k,3)*gfull(i,j,k,5)*gfull(i,j,k,7) + gfull(i,j,k,2)*gfull(i,j,k,6)*gfull(i,j,k,7) + gfull(i,j,k,3)*gfull(i,j,k,4)*gfull(i,j,k,8) - gfull(i,j,k,1)*gfull(i,j,k,6)*gfull(i,j,k,8) - gfull(i,j,k,2)*gfull(i,j,k,4)*gfull(i,j,k,9) + gfull(i,j,k,1)*gfull(i,j,k,5)*gfull(i,j,k,9)
+
+                       ! geinv(1,1) = (gfull(i,j,k,5)*gfull(i,j,k,9) - gfull(i,j,k,6)*gfull(i,j,k,8))/detg
+                       ! geinv(1,2) = (gfull(i,j,k,3)*gfull(i,j,k,8) - gfull(i,j,k,2)*gfull(i,j,k,9))/detg
+                       ! geinv(1,3) = (gfull(i,j,k,2)*gfull(i,j,k,6) - gfull(i,j,k,3)*gfull(i,j,k,5))/detg
+                       ! geinv(2,1) = (gfull(i,j,k,6)*gfull(i,j,k,7) - gfull(i,j,k,4)*gfull(i,j,k,9))/detg
+                       ! geinv(2,2) = (gfull(i,j,k,1)*gfull(i,j,k,9) - gfull(i,j,k,3)*gfull(i,j,k,7))/detg
+                       ! geinv(2,3) = (gfull(i,j,k,3)*gfull(i,j,k,4) - gfull(i,j,k,1)*gfull(i,j,k,6))/detg
+                       ! geinv(3,1) = (gfull(i,j,k,4)*gfull(i,j,k,8) - gfull(i,j,k,5)*gfull(i,j,k,7))/detg
+                       ! geinv(3,2) = (gfull(i,j,k,2)*gfull(i,j,k,7) - gfull(i,j,k,1)*gfull(i,j,k,8))/detg
+                       ! geinv(3,3) = (gfull(i,j,k,1)*gfull(i,j,k,5) - gfull(i,j,k,2)*gfull(i,j,k,4))/detg
 
 
+                       !using post-updated values
+                       detg = -g(1,3)*g(2,2)*g(3,1) + g(1,2)*g(2,3)*g(3,1) + g(1,3)*g(2,1)*g(3,2) - g(1,1)*g(2,3)*g(3,2) - g(1,2)*g(2,1)*g(3,3) + g(1,1)*g(2,2)*g(3,3)
+
+                       geinv(1,1) = (g(2,2)*g(3,3) - g(2,3)*g(3,2))/detg
+                       geinv(1,2) = (g(1,3)*g(3,2) - g(1,2)*g(3,3))/detg
+                       geinv(1,3) = (g(1,2)*g(2,3) - g(1,3)*g(2,2))/detg
+                       geinv(2,1) = (g(2,3)*g(3,1) - g(2,1)*g(3,3))/detg
+                       geinv(2,2) = (g(1,1)*g(3,3) - g(1,3)*g(3,1))/detg
+                       geinv(2,3) = (g(1,3)*g(2,1) - g(1,1)*g(2,3))/detg
+                       geinv(3,1) = (g(2,1)*g(3,2) - g(2,2)*g(3,1))/detg
+                       geinv(3,2) = (g(1,2)*g(3,1) - g(1,1)*g(3,2))/detg
+                       geinv(3,3) = (g(1,1)*g(2,2) - g(1,2)*g(2,1))/detg
+
+
+                       gedlt(1,1) = g(1,1) - gfull(i,j,k,1)
+                       gedlt(1,2) = g(1,2) - gfull(i,j,k,2)
+                       gedlt(1,3) = g(1,3) - gfull(i,j,k,3)
+                       gedlt(2,1) = g(2,1) - gfull(i,j,k,4)
+                       gedlt(2,2) = g(2,2) - gfull(i,j,k,5)
+                       gedlt(2,3) = g(2,3) - gfull(i,j,k,6)
+                       gedlt(3,1) = g(3,1) - gfull(i,j,k,7)
+                       gedlt(3,2) = g(3,2) - gfull(i,j,k,8)
+                       gedlt(3,3) = g(3,3) - gfull(i,j,k,9)
+
+
+                       if (use_gTg) then
+                          ! !old: close but needs improvment
+                          ! !(j,m) or (i,m)
+                          ! gpt1(1,1) = gpfull(i,j,k,1)*gedlt(1,1) + gpfull(i,j,k,4)*gedlt(2,1) + gpfull(i,j,k,7)*gedlt(3,1) 
+                          ! gpt1(1,2) = gpfull(i,j,k,1)*gedlt(1,2) + gpfull(i,j,k,4)*gedlt(2,2) + gpfull(i,j,k,7)*gedlt(3,2) 
+                          ! gpt1(1,3) = gpfull(i,j,k,1)*gedlt(1,3) + gpfull(i,j,k,4)*gedlt(2,3) + gpfull(i,j,k,7)*gedlt(3,3) 
+
+                          ! gpt1(2,1) = gpfull(i,j,k,2)*gedlt(1,1) + gpfull(i,j,k,5)*gedlt(2,1) + gpfull(i,j,k,8)*gedlt(3,1) 
+                          ! gpt1(2,2) = gpfull(i,j,k,2)*gedlt(1,2) + gpfull(i,j,k,5)*gedlt(2,2) + gpfull(i,j,k,8)*gedlt(3,2) 
+                          ! gpt1(2,3) = gpfull(i,j,k,2)*gedlt(1,3) + gpfull(i,j,k,5)*gedlt(2,3) + gpfull(i,j,k,8)*gedlt(3,3) 
+
+                          ! gpt1(3,1) = gpfull(i,j,k,3)*gedlt(1,1) + gpfull(i,j,k,6)*gedlt(2,1) + gpfull(i,j,k,9)*gedlt(3,1) 
+                          ! gpt1(3,2) = gpfull(i,j,k,3)*gedlt(1,2) + gpfull(i,j,k,6)*gedlt(2,2) + gpfull(i,j,k,9)*gedlt(3,2) 
+                          ! gpt1(3,3) = gpfull(i,j,k,3)*gedlt(1,3) + gpfull(i,j,k,6)*gedlt(2,3) + gpfull(i,j,k,9)*gedlt(3,3) 
+
+
+                          ! gpt2(1,1) =    2.0*(gpt1(1,1)*geinv(1,1) + gpt1(1,2)*geinv(2,1) + gpt1(1,3)*geinv(3,1))
+
+                          ! gpt2(1,2) =    (gpt1(1,1)*geinv(1,2) + gpt1(1,2)*geinv(2,2) + gpt1(1,3)*geinv(3,2)) &
+                          !              + (gpt1(2,1)*geinv(1,1) + gpt1(2,2)*geinv(2,1) + gpt1(2,3)*geinv(3,1))
+
+                          ! gpt2(1,3) =    (gpt1(1,1)*geinv(1,3) + gpt1(1,2)*geinv(2,3) + gpt1(1,3)*geinv(3,3)) &
+                          !              + (gpt1(3,1)*geinv(1,1) + gpt1(3,2)*geinv(2,1) + gpt1(3,3)*geinv(3,1))
+
+                          ! gpt2(2,1) =    gpt2(1,2)
+
+                          ! gpt2(2,2) =    2.0*(gpt1(2,1)*geinv(1,2) + gpt1(2,2)*geinv(2,2) + gpt1(2,3)*geinv(3,2))
+
+                          ! gpt2(2,3) =    (gpt1(2,1)*geinv(1,3) + gpt1(2,2)*geinv(2,3) + gpt1(2,3)*geinv(3,3)) &
+                          !              + (gpt1(3,1)*geinv(1,2) + gpt1(3,2)*geinv(2,2) + gpt1(3,3)*geinv(3,2))
+
+                          ! gpt2(3,1) =    gpt2(1,3)                               
+
+                          ! gpt2(3,2) =    gpt2(2,3)                               
+
+                          ! gpt2(3,3) =    2.0*(gpt1(3,1)*geinv(1,3) + gpt1(3,2)*geinv(2,3) + gpt1(3,3)*geinv(3,3))
+
+
+
+                          !new
+                          gpt1(1,1) = gpfull(i,j,k,1)*gfull(i,j,k,1) + gpfull(i,j,k,4)*gfull(i,j,k,4) + gpfull(i,j,k,7)*gfull(i,j,k,7) 
+                          gpt1(1,2) = gpfull(i,j,k,1)*gfull(i,j,k,2) + gpfull(i,j,k,4)*gfull(i,j,k,5) + gpfull(i,j,k,7)*gfull(i,j,k,8) 
+                          gpt1(1,3) = gpfull(i,j,k,1)*gfull(i,j,k,3) + gpfull(i,j,k,4)*gfull(i,j,k,6) + gpfull(i,j,k,7)*gfull(i,j,k,9) 
+
+                          gpt1(2,1) = gpfull(i,j,k,2)*gfull(i,j,k,1) + gpfull(i,j,k,5)*gfull(i,j,k,4) + gpfull(i,j,k,8)*gfull(i,j,k,7) 
+                          gpt1(2,2) = gpfull(i,j,k,2)*gfull(i,j,k,2) + gpfull(i,j,k,5)*gfull(i,j,k,5) + gpfull(i,j,k,8)*gfull(i,j,k,8) 
+                          gpt1(2,3) = gpfull(i,j,k,2)*gfull(i,j,k,3) + gpfull(i,j,k,5)*gfull(i,j,k,6) + gpfull(i,j,k,8)*gfull(i,j,k,9) 
+
+                          gpt1(3,1) = gpfull(i,j,k,3)*gfull(i,j,k,1) + gpfull(i,j,k,6)*gfull(i,j,k,4) + gpfull(i,j,k,9)*gfull(i,j,k,7) 
+                          gpt1(3,2) = gpfull(i,j,k,3)*gfull(i,j,k,2) + gpfull(i,j,k,6)*gfull(i,j,k,5) + gpfull(i,j,k,9)*gfull(i,j,k,8) 
+                          gpt1(3,3) = gpfull(i,j,k,3)*gfull(i,j,k,3) + gpfull(i,j,k,6)*gfull(i,j,k,6) + gpfull(i,j,k,9)*gfull(i,j,k,9) 
+
+
+                          gpt2(1,1) = gpt1(1,1)*gfull(i,j,k,1) + gpt1(2,1)*gfull(i,j,k,4) + gpt1(3,1)*gfull(i,j,k,7) 
+                          gpt2(1,2) = gpt1(1,1)*gfull(i,j,k,2) + gpt1(2,1)*gfull(i,j,k,5) + gpt1(3,1)*gfull(i,j,k,8) 
+                          gpt2(1,3) = gpt1(1,1)*gfull(i,j,k,3) + gpt1(2,1)*gfull(i,j,k,6) + gpt1(3,1)*gfull(i,j,k,9)
+ 
+                          gpt2(2,1) = gpt1(1,2)*gfull(i,j,k,1) + gpt1(2,2)*gfull(i,j,k,4) + gpt1(3,2)*gfull(i,j,k,7) 
+                          gpt2(2,2) = gpt1(1,2)*gfull(i,j,k,2) + gpt1(2,2)*gfull(i,j,k,5) + gpt1(3,2)*gfull(i,j,k,8) 
+                          gpt2(2,3) = gpt1(1,2)*gfull(i,j,k,3) + gpt1(2,2)*gfull(i,j,k,6) + gpt1(3,2)*gfull(i,j,k,9) 
+
+                          gpt2(3,1) = gpt1(1,3)*gfull(i,j,k,1) + gpt1(2,3)*gfull(i,j,k,4) + gpt1(3,3)*gfull(i,j,k,7) 
+                          gpt2(3,2) = gpt1(1,3)*gfull(i,j,k,2) + gpt1(2,3)*gfull(i,j,k,5) + gpt1(3,3)*gfull(i,j,k,8) 
+                          gpt2(3,3) = gpt1(1,3)*gfull(i,j,k,3) + gpt1(2,3)*gfull(i,j,k,6) + gpt1(3,3)*gfull(i,j,k,9) 
+
+
+                          gpt3(1,1) = geinv(1,1)*gpt2(1,1) + geinv(2,1)*gpt2(2,1) + geinv(3,1)*gpt2(3,1) 
+                          gpt3(1,2) = geinv(1,1)*gpt2(1,2) + geinv(2,1)*gpt2(2,2) + geinv(3,1)*gpt2(3,2) 
+                          gpt3(1,3) = geinv(1,1)*gpt2(1,3) + geinv(2,1)*gpt2(2,3) + geinv(3,1)*gpt2(3,3)
+ 
+                          gpt3(2,1) = geinv(1,2)*gpt2(1,1) + geinv(2,2)*gpt2(2,1) + geinv(3,2)*gpt2(3,1) 
+                          gpt3(2,2) = geinv(1,2)*gpt2(1,2) + geinv(2,2)*gpt2(2,2) + geinv(3,2)*gpt2(3,2) 
+                          gpt3(2,3) = geinv(1,2)*gpt2(1,3) + geinv(2,2)*gpt2(2,3) + geinv(3,2)*gpt2(3,3) 
+
+                          gpt3(3,1) = geinv(1,3)*gpt2(1,1) + geinv(2,3)*gpt2(2,1) + geinv(3,3)*gpt2(3,1) 
+                          gpt3(3,2) = geinv(1,3)*gpt2(1,2) + geinv(2,3)*gpt2(2,2) + geinv(3,3)*gpt2(3,2) 
+                          gpt3(3,3) = geinv(1,3)*gpt2(1,3) + geinv(2,3)*gpt2(2,3) + geinv(3,3)*gpt2(3,3) 
+
+
+                          gpt4(1,1) = gpt3(1,1)*geinv(1,1) + gpt3(1,2)*geinv(2,1) + gpt3(1,3)*geinv(3,1) 
+                          gpt4(1,2) = gpt3(1,1)*geinv(1,2) + gpt3(1,2)*geinv(2,2) + gpt3(1,3)*geinv(3,2) 
+                          gpt4(1,3) = gpt3(1,1)*geinv(1,3) + gpt3(1,2)*geinv(2,3) + gpt3(1,3)*geinv(3,3)
+ 
+                          gpt4(2,1) = gpt3(2,1)*geinv(1,1) + gpt3(2,2)*geinv(2,1) + gpt3(2,3)*geinv(3,1) 
+                          gpt4(2,2) = gpt3(2,1)*geinv(1,2) + gpt3(2,2)*geinv(2,2) + gpt3(2,3)*geinv(3,2) 
+                          gpt4(2,3) = gpt3(2,1)*geinv(1,3) + gpt3(2,2)*geinv(2,3) + gpt3(2,3)*geinv(3,3) 
+
+                          gpt4(3,1) = gpt3(3,1)*geinv(1,1) + gpt3(3,2)*geinv(2,1) + gpt3(3,3)*geinv(3,1) 
+                          gpt4(3,2) = gpt3(3,1)*geinv(1,2) + gpt3(3,2)*geinv(2,2) + gpt3(3,3)*geinv(3,2) 
+                          gpt4(3,3) = gpt3(3,1)*geinv(1,3) + gpt3(3,2)*geinv(2,3) + gpt3(3,3)*geinv(3,3) 
+
+
+                          ! gpt4(1,1) = gpt3(1,1)*geinv(1,1) + gpt3(2,1)*geinv(2,1) + gpt3(3,1)*geinv(3,1) 
+                          ! gpt4(1,2) = gpt3(1,1)*geinv(1,2) + gpt3(2,1)*geinv(2,2) + gpt3(3,1)*geinv(3,2) 
+                          ! gpt4(1,3) = gpt3(1,1)*geinv(1,3) + gpt3(2,1)*geinv(2,3) + gpt3(3,1)*geinv(3,3)
+ 
+                          ! gpt4(2,1) = gpt3(1,2)*geinv(1,1) + gpt3(2,2)*geinv(2,1) + gpt3(3,2)*geinv(3,1) 
+                          ! gpt4(2,2) = gpt3(1,2)*geinv(1,2) + gpt3(2,2)*geinv(2,2) + gpt3(3,2)*geinv(3,2) 
+                          ! gpt4(2,3) = gpt3(1,2)*geinv(1,3) + gpt3(2,2)*geinv(2,3) + gpt3(3,2)*geinv(3,3) 
+
+                          ! gpt4(3,1) = gpt3(1,3)*geinv(1,1) + gpt3(2,3)*geinv(2,1) + gpt3(3,3)*geinv(3,1) 
+                          ! gpt4(3,2) = gpt3(1,3)*geinv(1,2) + gpt3(2,3)*geinv(2,2) + gpt3(3,3)*geinv(3,2) 
+                          ! gpt4(3,3) = gpt3(1,3)*geinv(1,3) + gpt3(2,3)*geinv(2,3) + gpt3(3,3)*geinv(3,3) 
+
+
+                          gpt2(1,1) = gpt4(1,1)
+                          gpt2(1,2) = gpt4(1,2)
+                          gpt2(1,3) = gpt4(1,3)
+                          gpt2(2,1) = gpt4(2,1)
+                          gpt2(2,2) = gpt4(2,2)
+                          gpt2(2,3) = gpt4(2,3)
+                          gpt2(3,1) = gpt4(3,1)
+                          gpt2(3,2) = gpt4(3,2)
+                          gpt2(3,3) = gpt4(3,3)
+
+                       else
+                          ! !old good
+                          ! gpt1(1,1) = gpfull(i,j,k,1)*gedlt(1,1) + gpfull(i,j,k,2)*gedlt(2,1) + gpfull(i,j,k,3)*gedlt(3,1) 
+                          ! gpt1(1,2) = gpfull(i,j,k,1)*gedlt(1,2) + gpfull(i,j,k,2)*gedlt(2,2) + gpfull(i,j,k,3)*gedlt(3,2) 
+                          ! gpt1(1,3) = gpfull(i,j,k,1)*gedlt(1,3) + gpfull(i,j,k,2)*gedlt(2,3) + gpfull(i,j,k,3)*gedlt(3,3) 
+
+                          ! gpt1(2,1) = gpfull(i,j,k,4)*gedlt(1,1) + gpfull(i,j,k,5)*gedlt(2,1) + gpfull(i,j,k,6)*gedlt(3,1) 
+                          ! gpt1(2,2) = gpfull(i,j,k,4)*gedlt(1,2) + gpfull(i,j,k,5)*gedlt(2,2) + gpfull(i,j,k,6)*gedlt(3,2) 
+                          ! gpt1(2,3) = gpfull(i,j,k,4)*gedlt(1,3) + gpfull(i,j,k,5)*gedlt(2,3) + gpfull(i,j,k,6)*gedlt(3,3) 
+
+                          ! gpt1(3,1) = gpfull(i,j,k,7)*gedlt(1,1) + gpfull(i,j,k,8)*gedlt(2,1) + gpfull(i,j,k,9)*gedlt(3,1) 
+                          ! gpt1(3,2) = gpfull(i,j,k,7)*gedlt(1,2) + gpfull(i,j,k,8)*gedlt(2,2) + gpfull(i,j,k,9)*gedlt(3,2) 
+                          ! gpt1(3,3) = gpfull(i,j,k,7)*gedlt(1,3) + gpfull(i,j,k,8)*gedlt(2,3) + gpfull(i,j,k,9)*gedlt(3,3) 
+
+
+                          ! gpt2(1,1) = gpt1(1,1)*geinv(1,1) + gpt1(1,2)*geinv(2,1) + gpt1(1,3)*geinv(3,1)
+                          ! gpt2(1,2) = gpt1(1,1)*geinv(1,2) + gpt1(1,2)*geinv(2,2) + gpt1(1,3)*geinv(3,2)
+                          ! gpt2(1,3) = gpt1(1,1)*geinv(1,3) + gpt1(1,2)*geinv(2,3) + gpt1(1,3)*geinv(3,3)
+
+                          ! gpt2(2,1) = gpt1(2,1)*geinv(1,1) + gpt1(2,2)*geinv(2,1) + gpt1(2,3)*geinv(3,1)
+                          ! gpt2(2,2) = gpt1(2,1)*geinv(1,2) + gpt1(2,2)*geinv(2,2) + gpt1(2,3)*geinv(3,2)
+                          ! gpt2(2,3) = gpt1(2,1)*geinv(1,3) + gpt1(2,2)*geinv(2,3) + gpt1(2,3)*geinv(3,3)
+
+                          ! gpt2(3,1) = gpt1(3,1)*geinv(1,1) + gpt1(3,2)*geinv(2,1) + gpt1(3,3)*geinv(3,1)
+                          ! gpt2(3,2) = gpt1(3,1)*geinv(1,2) + gpt1(3,2)*geinv(2,2) + gpt1(3,3)*geinv(3,2)
+                          ! gpt2(3,3) = gpt1(3,1)*geinv(1,3) + gpt1(3,2)*geinv(2,3) + gpt1(3,3)*geinv(3,3)
+
+
+                          !new
+                          gpt1(1,1) = gpfull(i,j,k,1)*gfull(i,j,k,1) + gpfull(i,j,k,2)*gfull(i,j,k,4) + gpfull(i,j,k,3)*gfull(i,j,k,7) 
+                          gpt1(1,2) = gpfull(i,j,k,1)*gfull(i,j,k,2) + gpfull(i,j,k,2)*gfull(i,j,k,5) + gpfull(i,j,k,3)*gfull(i,j,k,8) 
+                          gpt1(1,3) = gpfull(i,j,k,1)*gfull(i,j,k,3) + gpfull(i,j,k,2)*gfull(i,j,k,6) + gpfull(i,j,k,3)*gfull(i,j,k,9) 
+
+                          gpt1(2,1) = gpfull(i,j,k,4)*gfull(i,j,k,1) + gpfull(i,j,k,5)*gfull(i,j,k,4) + gpfull(i,j,k,6)*gfull(i,j,k,7) 
+                          gpt1(2,2) = gpfull(i,j,k,4)*gfull(i,j,k,2) + gpfull(i,j,k,5)*gfull(i,j,k,5) + gpfull(i,j,k,6)*gfull(i,j,k,8) 
+                          gpt1(2,3) = gpfull(i,j,k,4)*gfull(i,j,k,3) + gpfull(i,j,k,5)*gfull(i,j,k,6) + gpfull(i,j,k,6)*gfull(i,j,k,9) 
+
+                          gpt1(3,1) = gpfull(i,j,k,7)*gfull(i,j,k,1) + gpfull(i,j,k,8)*gfull(i,j,k,4) + gpfull(i,j,k,9)*gfull(i,j,k,7) 
+                          gpt1(3,2) = gpfull(i,j,k,7)*gfull(i,j,k,2) + gpfull(i,j,k,8)*gfull(i,j,k,5) + gpfull(i,j,k,9)*gfull(i,j,k,8) 
+                          gpt1(3,3) = gpfull(i,j,k,7)*gfull(i,j,k,3) + gpfull(i,j,k,8)*gfull(i,j,k,6) + gpfull(i,j,k,9)*gfull(i,j,k,9) 
+
+
+                          gpt2(1,1) = gpt1(1,1)*geinv(1,1) + gpt1(1,2)*geinv(2,1) + gpt1(1,3)*geinv(3,1)
+                          gpt2(1,2) = gpt1(1,1)*geinv(1,2) + gpt1(1,2)*geinv(2,2) + gpt1(1,3)*geinv(3,2)
+                          gpt2(1,3) = gpt1(1,1)*geinv(1,3) + gpt1(1,2)*geinv(2,3) + gpt1(1,3)*geinv(3,3)
+
+                          gpt2(2,1) = gpt1(2,1)*geinv(1,1) + gpt1(2,2)*geinv(2,1) + gpt1(2,3)*geinv(3,1)
+                          gpt2(2,2) = gpt1(2,1)*geinv(1,2) + gpt1(2,2)*geinv(2,2) + gpt1(2,3)*geinv(3,2)
+                          gpt2(2,3) = gpt1(2,1)*geinv(1,3) + gpt1(2,2)*geinv(2,3) + gpt1(2,3)*geinv(3,3)
+
+                          gpt2(3,1) = gpt1(3,1)*geinv(1,1) + gpt1(3,2)*geinv(2,1) + gpt1(3,3)*geinv(3,1)
+                          gpt2(3,2) = gpt1(3,1)*geinv(1,2) + gpt1(3,2)*geinv(2,2) + gpt1(3,3)*geinv(3,2)
+                          gpt2(3,3) = gpt1(3,1)*geinv(1,3) + gpt1(3,2)*geinv(2,3) + gpt1(3,3)*geinv(3,3)
+
+                       endif
+
+
+
+                       !gp -- before implicit update
+                       gp(1,1) = gpfull(i,j,k,1)
+                       gp(1,2) = gpfull(i,j,k,2)
+                       gp(1,3) = gpfull(i,j,k,3)
+                       gp(2,1) = gpfull(i,j,k,4)
+                       gp(2,2) = gpfull(i,j,k,5)
+                       gp(2,3) = gpfull(i,j,k,6)
+                       gp(3,1) = gpfull(i,j,k,7)
+                       gp(3,2) = gpfull(i,j,k,8)
+                       gp(3,3) = gpfull(i,j,k,9)
+
+                       ! !Almansi plastic strain -- before implicit update
+                       ! alms(1,1) = 0.5*(1.0 - (gp(1,1)*gp(1,1) + gp(2,1)*gp(2,1) + gp(3,1)*gp(3,1)) )
+                       ! alms(1,2) = 0.5*(0.0 - (gp(1,1)*gp(1,2) + gp(2,1)*gp(2,2) + gp(3,1)*gp(3,2)) )
+                       ! alms(1,3) = 0.5*(0.0 - (gp(1,1)*gp(1,3) + gp(2,1)*gp(2,3) + gp(3,1)*gp(3,3)) )
+                       ! alms(2,1) = 0.5*(0.0 - (gp(1,2)*gp(1,1) + gp(2,2)*gp(2,1) + gp(3,2)*gp(3,1)) )
+                       ! alms(2,2) = 0.5*(1.0 - (gp(1,2)*gp(1,2) + gp(2,2)*gp(2,2) + gp(3,2)*gp(3,2)) )
+                       ! alms(2,3) = 0.5*(0.0 - (gp(1,2)*gp(1,3) + gp(2,2)*gp(2,3) + gp(3,2)*gp(3,3)) )
+                       ! alms(3,1) = 0.5*(0.0 - (gp(1,3)*gp(1,1) + gp(2,3)*gp(2,1) + gp(3,3)*gp(3,1)) )
+                       ! alms(3,2) = 0.5*(0.0 - (gp(1,3)*gp(1,2) + gp(2,3)*gp(2,2) + gp(3,3)*gp(3,2)) )
+                       ! alms(3,3) = 0.5*(1.0 - (gp(1,3)*gp(1,3) + gp(2,3)*gp(2,3) + gp(3,3)*gp(3,3)) )
+
+                       !Eulerian-Almansi strain tensor: ea = (I-(g_p)^T.g_p)/2 --- not explicitly calculated
+                       !strain norm: e_p = sqrt(2/3*ea_ij*ea_ij)
+                       if (use_gTg) then
+                          almsn0 = sqrt(( (1.0d0 - gp(1,1))**2 + gp(1,2)**2 + gp(1,3)**2 + gp(2,1)**2 + (1.0d0 - gp(2,2))**2 + gp(2,3)**2 + gp(3,1)**2 + gp(3,2)**2 + (1.0d0 - gp(3,3))**2 )/6.0d0)
+                       else
+                          almsn0 = sqrt( ( (1.0 - gp(1,1)**2 - gp(2,1)**2 - gp(3,1)**2)**2 + (1.0 - gp(1,2)**2 - gp(2,2)**2 - gp(3,2)**2)**2 + (1.0 - gp(1,3)**2 - gp(2,3)**2 - gp(3,3)**2)**2 )/6.0d0 + ( (-gp(1,1)*gp(1,2) - gp(2,1)*gp(2,2) - gp(3,1)*gp(3,2))**2 + (-gp(1,1)*gp(1,3) - gp(2,1)*gp(2,3) - gp(3,1)*gp(3,3))**2 + (-gp(1,2)*gp(1,3) - gp(2,2)*gp(2,3) - gp(3,2)*gp(3,3))**2 )/3.0d0 ) !same as solidmod
+                       endif
+
+                       !update plastic g
+                       ! !old
+                       ! gpfull(i,j,k,1) = gpfull(i,j,k,1) - gpt2(1,1)
+                       ! gpfull(i,j,k,2) = gpfull(i,j,k,2) - gpt2(1,2)
+                       ! gpfull(i,j,k,3) = gpfull(i,j,k,3) - gpt2(1,3)
+                       ! gpfull(i,j,k,4) = gpfull(i,j,k,4) - gpt2(2,1)
+                       ! gpfull(i,j,k,5) = gpfull(i,j,k,5) - gpt2(2,2)
+                       ! gpfull(i,j,k,6) = gpfull(i,j,k,6) - gpt2(2,3)
+                       ! gpfull(i,j,k,7) = gpfull(i,j,k,7) - gpt2(3,1)
+                       ! gpfull(i,j,k,8) = gpfull(i,j,k,8) - gpt2(3,2)
+                       ! gpfull(i,j,k,9) = gpfull(i,j,k,9) - gpt2(3,3)
+
+                       !new
+                       gpfull(i,j,k,1) = gpt2(1,1)
+                       gpfull(i,j,k,2) = gpt2(1,2)
+                       gpfull(i,j,k,3) = gpt2(1,3)
+                       gpfull(i,j,k,4) = gpt2(2,1)
+                       gpfull(i,j,k,5) = gpt2(2,2)
+                       gpfull(i,j,k,6) = gpt2(2,3)
+                       gpfull(i,j,k,7) = gpt2(3,1)
+                       gpfull(i,j,k,8) = gpt2(3,2)
+                       gpfull(i,j,k,9) = gpt2(3,3)
+
+
+                       !for plastic entropy
+                       ! !delta gp
+                       ! gpdlt(1,1) = gpfull(i,j,k,1) - gp(1,1)
+                       ! gpdlt(1,2) = gpfull(i,j,k,2) - gp(1,2)
+                       ! gpdlt(1,3) = gpfull(i,j,k,3) - gp(1,3)
+                       ! gpdlt(2,1) = gpfull(i,j,k,4) - gp(2,1)
+                       ! gpdlt(2,2) = gpfull(i,j,k,5) - gp(2,2)
+                       ! gpdlt(2,3) = gpfull(i,j,k,6) - gp(2,3)
+                       ! gpdlt(3,1) = gpfull(i,j,k,7) - gp(3,1)
+                       ! gpdlt(3,2) = gpfull(i,j,k,8) - gp(3,2)
+                       ! gpdlt(3,3) = gpfull(i,j,k,9) - gp(3,3)
+
+                       !gp -- after implicit update
+                       gp(1,1) = gpfull(i,j,k,1)
+                       gp(1,2) = gpfull(i,j,k,2)
+                       gp(1,3) = gpfull(i,j,k,3)
+                       gp(2,1) = gpfull(i,j,k,4)
+                       gp(2,2) = gpfull(i,j,k,5)
+                       gp(2,3) = gpfull(i,j,k,6)
+                       gp(3,1) = gpfull(i,j,k,7)
+                       gp(3,2) = gpfull(i,j,k,8)
+                       gp(3,3) = gpfull(i,j,k,9)
+
+                       ! !using post-updated values
+                       ! detgp = -gp(1,3)*gp(2,2)*gp(3,1) + gp(1,2)*gp(2,3)*gp(3,1) + gp(1,3)*gp(2,1)*gp(3,2) - gp(1,1)*gp(2,3)*gp(3,2) - gp(1,2)*gp(2,1)*gp(3,3) + gp(1,1)*gp(2,2)*gp(3,3)
+
+                       ! gpinv(1,1) = (gp(2,2)*gp(3,3) - gp(2,3)*gp(3,2))/detgp
+                       ! gpinv(1,2) = (gp(1,3)*gp(3,2) - gp(1,2)*gp(3,3))/detgp
+                       ! gpinv(1,3) = (gp(1,2)*gp(2,3) - gp(1,3)*gp(2,2))/detgp
+                       ! gpinv(2,1) = (gp(2,3)*gp(3,1) - gp(2,1)*gp(3,3))/detgp
+                       ! gpinv(2,2) = (gp(1,1)*gp(3,3) - gp(1,3)*gp(3,1))/detgp
+                       ! gpinv(2,3) = (gp(1,3)*gp(2,1) - gp(1,1)*gp(2,3))/detgp
+                       ! gpinv(3,1) = (gp(2,1)*gp(3,2) - gp(2,2)*gp(3,1))/detgp
+                       ! gpinv(3,2) = (gp(1,2)*gp(3,1) - gp(1,1)*gp(3,2))/detgp
+                       ! gpinv(3,3) = (gp(1,1)*gp(2,2) - gp(1,2)*gp(2,1))/detgp
+
+
+                       ! !Almansi plastic strain -- after implicit update
+                       ! alms(1,1) = 0.5*(1.0 - (gp(1,1)*gp(1,1) + gp(2,1)*gp(2,1) + gp(3,1)*gp(3,1)) )
+                       ! alms(1,2) = 0.5*(0.0 - (gp(1,1)*gp(1,2) + gp(2,1)*gp(2,2) + gp(3,1)*gp(3,2)) )
+                       ! alms(1,3) = 0.5*(0.0 - (gp(1,1)*gp(1,3) + gp(2,1)*gp(2,3) + gp(3,1)*gp(3,3)) )
+                       ! alms(2,1) = 0.5*(0.0 - (gp(1,2)*gp(1,1) + gp(2,2)*gp(2,1) + gp(3,2)*gp(3,1)) )
+                       ! alms(2,2) = 0.5*(1.0 - (gp(1,2)*gp(1,2) + gp(2,2)*gp(2,2) + gp(3,2)*gp(3,2)) )
+                       ! alms(2,3) = 0.5*(0.0 - (gp(1,2)*gp(1,3) + gp(2,2)*gp(2,3) + gp(3,2)*gp(3,3)) )
+                       ! alms(3,1) = 0.5*(0.0 - (gp(1,3)*gp(1,1) + gp(2,3)*gp(2,1) + gp(3,3)*gp(3,1)) )
+                       ! alms(3,2) = 0.5*(0.0 - (gp(1,3)*gp(1,2) + gp(2,3)*gp(2,2) + gp(3,3)*gp(3,2)) )
+                       ! alms(3,3) = 0.5*(1.0 - (gp(1,3)*gp(1,3) + gp(2,3)*gp(2,3) + gp(3,3)*gp(3,3)) )
+
+                       !Eulerian-Almansi strain tensor: ea = (I-(g_p)^T.g_p)/2 --- not explicitly calculated
+                       !strain norm: e_p = sqrt(2/3*ea_ij*ea_ij)
+                       if (use_gTg) then 
+                          almsn = sqrt(( (1.0d0 - gp(1,1))**2 + gp(1,2)**2 + gp(1,3)**2 + gp(2,1)**2 + (1.0d0 - gp(2,2))**2 + gp(2,3)**2 + gp(3,1)**2 + gp(3,2)**2 + (1.0d0 - gp(3,3))**2 )/6.0d0)
+                       else
+                          almsn = sqrt( ( (1.0 - gp(1,1)**2 - gp(2,1)**2 - gp(3,1)**2)**2 + (1.0 - gp(1,2)**2 - gp(2,2)**2 - gp(3,2)**2)**2 + (1.0 - gp(1,3)**2 - gp(2,3)**2 - gp(3,3)**2)**2 )/6.0d0 + ( (-gp(1,1)*gp(1,2) - gp(2,1)*gp(2,2) - gp(3,1)*gp(3,2))**2 + (-gp(1,1)*gp(1,3) - gp(2,1)*gp(2,3) - gp(3,1)*gp(3,3))**2 + (-gp(1,2)*gp(1,3) - gp(2,2)*gp(2,3) - gp(3,2)*gp(3,3))**2 )/3.0d0 ) !same as solidmod
+                       endif
+
+                       !update pe -- note this is called after g and pe are converted back to primitive
+                       !pe(i,j,k) =  pe(i,j,k) + (almsn-almsn0) !correct dimensinos for strain - compare this with e_p and e_pp
+                       pe(i,j,k) =  pe(i,j,k) + (almsn-almsn0)*yieldlocal(i,j,k) !correct dimensions for energy
+                       !pe(i,j,k) =  pe(i,j,k) + (almsn-almsn0)*yieldlocal(i,j,k)/Temp(i,j,k) !correct dimensions for entropy
+
+                    endif
+
+
+                    !update elastic g
                     gfull(i,j,k,1) = g(1,1); gfull(i,j,k,2) = g(1,2); gfull(i,j,k,3) = g(1,3)
                     gfull(i,j,k,4) = g(2,1); gfull(i,j,k,5) = g(2,2); gfull(i,j,k,6) = g(2,3)
                     gfull(i,j,k,7) = g(3,1); gfull(i,j,k,8) = g(3,2); gfull(i,j,k,9) = g(3,3)
+
+
+
+                    ! ! old
+                    ! !plastic entropy RHS
+ 
+                    ! ! Get eigenvalues and eigenvectors of deviatoric stress
+                    ! sigma(1,1) = sxx(i,j,k); sigma(1,2) = sxy(i,j,k); sigma(1,3) = sxz(i,j,k)
+                    ! sigma(2,1) = sxy(i,j,k); sigma(2,2) = syy(i,j,k); sigma(2,3) = syz(i,j,k)
+                    ! sigma(3,1) = sxz(i,j,k); sigma(3,2) = syz(i,j,k); sigma(3,3) = szz(i,j,k)
+
+                    ! call dsyev('V', 'U', 3, sigma, 3, sval, this%svdwork, lwork, info)
+                    ! if(info .ne. 0) then
+                    !    print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
+                    !    call GracefulExit(charout,3475)
+                    ! end if
+
+                    ! asq = (sval(1)**2+sval(2)**2+sval(3)**2)*mulocal(i,j,k)**2
+                    ! xsq = 2.0d0/3.0d0*(yieldlocal(i,j,k)/mulocal(i,j,k))**2
+                    ! tot = tdel/this%tau0
+                    
+                    ! !if((asq.lt.1.e-10).or.(xsq.lt.1.e-10)) then
+                    ! !   print*,asq,xsq
+                    ! !endif
+
+                    ! adiv = (xsq-asq)*exp(-2.0d0*xsq*tot)+asq
+                    ! adiv = sign(max(abs(adiv),eps),adiv)
+
+                    ! !!!!!!pe = pe + max( (mulocal(i,j,k)*asq*(asq-xsq)) / (4.0d0*rho(i,j,k)**2/rho0local(i,j,k)*Temp(i,j,k)) * (1.0d0 - exp(-2.0d0*xsq*tot)) / (asq-(asq-xsq)*exp(-2.0d0*xsq*tot)) , 0.0d0)
+                    
+                    ! !!old
+                    ! !pe = pe + max( ( (mulocal(i,j,k)*asq*(asq-xsq)) / (4.0d0*rho(i,j,k)**2/rho0local(i,j,k)*Temp(i,j,k)) ) * ( (1.0d0 - exp(-2.0d0*xsq*tot)) /  adiv ) , 0.0d0)
+
+
+                    
+                    ! !!!tmp  = (rho*this%Ys + this%elastic%rho0*detg *epssmall)/(this%VF + epssmall)   
+                    ! !need to check correct rho below
+                    ! pe(i,j,k) = pe(i,j,k) + max( ( (mulocal(i,j,k)*asq*(asq-xsq)) / (4.0d0*rho(i,j,k)/rho0local(i,j,k)*Temp(i,j,k)) ) * ( (1.0d0 - exp(-2.0d0*xsq*tot)) /  adiv ) , 0.0d0)
+                    
+                    
+
                 end do
             end do
         end do

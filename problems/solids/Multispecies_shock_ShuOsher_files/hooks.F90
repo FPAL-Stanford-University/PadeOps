@@ -12,14 +12,15 @@ module Multispecies_shock_data
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
     real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR
-    real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind, a_ratio = 1.0_rkind
+    real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind, eta0x = 0.1_rkind
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
     real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e
     real(rkind) :: kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    !real(rkind) :: Ly = one, Lx = six, interface_init = 0.75_rkind, fluc_init = 0.0_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind, xwave = 4.0_rkind
+    real(rkind) :: Ly = one, Lx = 20.0_rkind, interface_init = 0.0_rkind, fluc_init = -5.0_rkind, shock_init = -10.0_rkind, kwave = 4.0_rkind, xwave = 4.0_rkind
 
     type(filters) :: mygfil
 
@@ -162,7 +163,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - two  ! x \in (-2,4]
+                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - Lx*3.0_rkind/4.0_rkind!two  ! x \in (-2,4]
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -195,19 +196,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum,dum2
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac
     integer, dimension(2) :: iparams
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 
-    integer :: nx,ny,nz
+    integer :: nx,ny,nz,i,j,k
     nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
-                          plastic2, explPlast2, yield2, interface_init, kwave, a_ratio,&
+                          plastic2, explPlast2, yield2, interface_init, fluc_init, shock_init, kwave, xwave, &
                           melt_t, melt_c, melt_t2, melt_c2, &
                           kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e,kos_sh, &
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
@@ -224,7 +225,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                      .FALSE.,     .TRUE.,    .TRUE., &
                   "gaussian", "gaussian", "gaussian" )
 
-    associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
+    associate( u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
         if (mix%ns /= 2) then
@@ -362,22 +363,143 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         u1 = u1 / rho1
         u2 = u2 / rho2
 
-        shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
+        !shock_init = interface_init - 1.0_rkind  ! (10*thick) grid points away from the interface
         dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
 
         u   = (u2-u1)*dum
         v   = zero
         w   = zero
 
-        !original
-        !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
-        tmp = half * ( one - erf( (x-(interface_init+a_ratio*eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
+
+        do i = 1,decomp%ysz(1)
+           do j = 1,decomp%ysz(2)
+              do k = 1,decomp%ysz(3)
+                 if(x(i,j,k).ge.fluc_init) then
+                    ! !single mode
+                    ! dum2(i,j,k) = (1.0+eta0x*sin(2.0_rkind*xwave*pi*x(i,j,k)))
+                    
+                    !multimode -- now ppw = 2:128
+                    dum2(i,j,k) = 1.0 + eta0x*max(0.0,min(1.0,10.0-2.0*abs(0.0-x(i,j,k))))*0.2*( &
+                         sin(8.50647*(0.0355197 + x(i,j,k))) + & 
+                         sin(7.27527*(0.0926478 + x(i,j,k))) + & 
+                         sin(11.0584*(0.147596  + x(i,j,k))) + & 
+                         sin(9.21534*(0.183856  + x(i,j,k))) + & 
+                         sin(6.07605*(0.557204  + x(i,j,k))) + & 
+                         sin(12.0200*(0.58444   + x(i,j,k))) + & 
+                         sin(8.13118*(0.736903  + x(i,j,k))) + & 
+                         sin(42.5323*(0.770923  + x(i,j,k))) + & 
+                         sin(9.87358*(0.89037   + x(i,j,k))) + & 
+                         sin(6.66169*(0.90022   + x(i,j,k))) + & 
+                         sin(10.0531*(0.939618  + x(i,j,k))) + & 
+                         sin(5.47446*(1.12107   + x(i,j,k))) + & 
+                         sin(27.6460*(1.13981   + x(i,j,k))) + & 
+                         sin(5.11963*(1.25191   + x(i,j,k))) + & 
+                         sin(32.5247*(1.33436   + x(i,j,k))) + & 
+                         sin(5.64204*(1.54096   + x(i,j,k))) + & 
+                         sin(11.5192*(1.57138   + x(i,j,k))) + & 
+                         sin(6.74293*(1.71852   + x(i,j,k))) + & 
+                         sin(16.7552*(1.74646   + x(i,j,k))) + & 
+                         sin(22.1168*(1.76919   + x(i,j,k))) + & 
+                         sin(13.4859*(1.83014   + x(i,j,k))) + & 
+                         sin(9.53311*(1.84537   + x(i,j,k))) + & 
+                         sin(30.7178*(1.98406   + x(i,j,k))) + & 
+                         sin(6.35541*(2.0024    + x(i,j,k))) + & 
+                         sin(39.4943*(2.06287   + x(i,j,k))) + & 
+                         sin(16.2624*(2.09878   + x(i,j,k))) + & 
+                         sin(9.70036*(2.16112   + x(i,j,k))) + & 
+                         sin(6.42931*(2.20579   + x(i,j,k))) + & 
+                         sin(20.4785*(2.20683   + x(i,j,k))) + & 
+                         sin(50.2655*(2.20792   + x(i,j,k))) + & 
+                         sin(7.18078*(2.24779   + x(i,j,k))) + & 
+                         sin(5.42079*(2.25321   + x(i,j,k))) + & 
+                         sin(10.8416*(2.26522   + x(i,j,k))) + & 
+                         sin(7.47190*(2.27956   + x(i,j,k))) + & 
+                         sin(6.01000*(2.28552   + x(i,j,k))) + & 
+                         sin(9.06427*(2.44218   + x(i,j,k))) + & 
+                         sin(12.2871*(2.49898   + x(i,j,k))) + & 
+                         sin(6.14356*(2.52394   + x(i,j,k))) + & 
+                         sin(8.77651*(2.56158   + x(i,j,k))) + & 
+                         sin(8.37758*(2.63845   + x(i,j,k))) + & 
+                         sin(6.99899*(2.69099   + x(i,j,k))) + & 
+                         sin(17.8361*(2.70083   + x(i,j,k))) + & 
+                         sin(34.5575*(2.7222    + x(i,j,k))) + & 
+                         sin(13.8230*(2.72933   + x(i,j,k))) + & 
+                         sin(7.08872*(2.8012    + x(i,j,k))) + & 
+                         sin(7.37227*(2.9242    + x(i,j,k))) + & 
+                         sin(5.16748*(2.97921   + x(i,j,k))) + & 
+                         sin(14.5505*(3.09977   + x(i,j,k))) + & 
+                         sin(5.94538*(3.11533   + x(i,j,k))) + & 
+                         sin(14.9438*(3.18368   + x(i,j,k))) + & 
+                         sin(7.89886*(3.19334   + x(i,j,k))) + & 
+                         sin(12.8586*(3.43824   + x(i,j,k))) + & 
+                         sin(5.88213*(3.56575   + x(i,j,k))) + & 
+                         sin(6.28319*(3.58156   + x(i,j,k))) + & 
+                         sin(12.5664*(3.58792   + x(i,j,k))) + & 
+                         sin(7.78761*(3.67084   + x(i,j,k))) + & 
+                         sin(6.21259*(3.77001   + x(i,j,k))) + & 
+                         sin(14.1774*(3.81042   + x(i,j,k))) + & 
+                         sin(9.37153*(3.83186   + x(i,j,k))) + & 
+                         sin(6.58238*(3.88509   + x(i,j,k))) + & 
+                         sin(5.07266*(3.93279   + x(i,j,k))) + & 
+                         sin(13.1648*(3.94155   + x(i,j,k))) + & 
+                         sin(5.58505*(3.97383   + x(i,j,k))) + & 
+                         sin(5.82021*(4.11483   + x(i,j,k))) + & 
+                         sin(10.4325*(4.1772    + x(i,j,k))) + & 
+                         sin(19.0662*(4.35823   + x(i,j,k))) + & 
+                         sin(19.7472*(4.43235   + x(i,j,k))) + & 
+                         sin(11.2841*(4.43779   + x(i,j,k))) + & 
+                         sin(6.82618*(4.48386   + x(i,j,k))) + & 
+                         sin(10.2393*(4.58392   + x(i,j,k))) + & 
+                         sin(7.57425*(4.65212   + x(i,j,k))) + & 
+                         sin(29.1011*(4.6986    + x(i,j,k))) + & 
+                         sin(26.3295*(4.79739   + x(i,j,k))) + & 
+                         sin(6.91150*(4.82723   + x(i,j,k))) + & 
+                         sin(5.70021*(4.84467   + x(i,j,k))) + & 
+                         sin(8.63938*(4.86571   + x(i,j,k))) + & 
+                         sin(5.75959*(4.89045   + x(i,j,k))) + & 
+                         sin(8.25254*(4.90604   + x(i,j,k))) + & 
+                         sin(5.26591*(5.01454   + x(i,j,k))) + & 
+                         sin(23.0383*(5.02276   + x(i,j,k))) + & 
+                         sin(46.0767*(5.21409   + x(i,j,k))) + & 
+                         sin(6.50494*(5.23512   + x(i,j,k))) + & 
+                         sin(5.21623*(5.27339   + x(i,j,k))) + & 
+                         sin(5.36816*(5.40719   + x(i,j,k))) + & 
+                         sin(5.31654*(5.48401   + x(i,j,k))) + & 
+                         sin(11.7643*(5.5299    + x(i,j,k))) + & 
+                         sin(5.02655*(5.56933   + x(i,j,k))) + & 
+                         sin(21.2662*(5.57097   + x(i,j,k))) + & 
+                         sin(25.1327*(5.6437    + x(i,j,k))) + & 
+                         sin(15.7977*(5.69352   + x(i,j,k))) + & 
+                         sin(7.67945*(5.69725   + x(i,j,k))) + & 
+                         sin(36.8614*(5.719     + x(i,j,k))) + & 
+                         sin(15.3589*(5.89562   + x(i,j,k))) + & 
+                         sin(17.2788*(5.9403    + x(i,j,k))) + & 
+                         sin(5.52920*(5.98474   + x(i,j,k))) + & 
+                         sin(8.01334*(5.98739   + x(i,j,k))) + & 
+                         sin(10.6331*(5.9957    + x(i,j,k))) + & 
+                         sin(18.4307*(6.02307   + x(i,j,k))) + & 
+                         sin(24.0400*(6.1196    + x(i,j,k))) + & 
+                         sin(8.91807*(6.14629   + x(i,j,k))))
+                     ! if((j.eq.1).and.(k.eq.1)) then
+                     !    !print*,i,rho(i,j,k),dum2(i,j,k)
+                     !    print*,i,x(i,j,k),dum2(i,j,k)
+                     ! endif
+                    ! rho(i,j,k) = dum2(i,j,k)
+                 else
+                    dum2(i,j,k) = 1.0
+                 endif
+              enddo
+           enddo
+        enddo
+        
+
+        tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
         mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
         
-        mix%material(1)%g11 = (rho2*dum + rho1*(one-dum))/rho_0
+        mix%material(1)%g11 = (rho2*dum + rho1*(one-dum))/rho_0 *dum2
         if (mix%use_gTg.and.(.not.mix%strainHard)) then
             mix%material(1)%g11 = mix%material(1)%g11**2
         end if
@@ -415,7 +537,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%gt21 = zero; mix%material(1)%gt22 = one;  mix%material(1)%gt23 = zero
         mix%material(1)%gt31 = zero; mix%material(1)%gt32 = zero; mix%material(1)%gt33 = one
         
-        mix%material(1)%gt11 = (rho2*dum + rho1*(one-dum))/rho_0
+        !mix%material(1)%gt11 = (rho2*dum + rho1*(one-dum))/rho_0
+        mix%material(1)%gt11 = mix%material(1)%g11
         if (mix%use_gTg.and.(mix%strainHard)) then
            mix%material(1)%gt11 = mix%material(1)%gt11**2
         end if
@@ -574,7 +697,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        curl_e = P_MEAN(mix%material(1)%curl_e)*six*one
        curl_t = P_MEAN(mix%material(1)%curl_t)*six*one
        curl_p = P_MEAN(mix%material(1)%curl_p)*six*one
-
+ 
           
        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Multispecies_shock_statistics.dat"
 
@@ -671,7 +794,8 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
            close(outputunit)
         endif
 
-        if(.false.) then !write P3D
+        !if(.false.) then !write P3D
+        if(.true.) then !write P3D
            nfcns=15 + 50*2
            write(str2,*) vizcount
            str2 = adjustl(str2)
@@ -751,10 +875,19 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
         !mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
+
+
+
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then
               ! rho( 1,:,:) = rhoL
               ! u  ( 1,:,:) = (u2-u1)
+
+              do i=1,5
+                 rho( i,:,:) = rhoL
+                 u  ( i,:,:) = (u2-u1)
+              end do
+
               v  ( 1,:,:) = zero
               w  ( 1,:,:) = zero
               do i=1,5
@@ -778,7 +911,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           end if
         endif
 
-        xspng = -two + half
+
+        xspng = -14.0_rkind !-two + half
         tspng = 0.2_rkind
         dx = x(2,1,1) - x(1,1,1)
         dum = half*(one - tanh( (x-xspng)/(tspng) ))
@@ -869,6 +1003,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
 
         end do
+
 
         if(decomp%yen(1)==decomp%xsz(1)) then
           if(x_bc(2)==0) then

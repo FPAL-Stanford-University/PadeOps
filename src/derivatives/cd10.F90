@@ -1453,7 +1453,8 @@ contains
     
     end subroutine
 
-    pure subroutine ComputeZD1RHS(this, f, RHS, n1, n2, bc1, bcn)
+    !pure subroutine ComputeZD1RHS(this, f, RHS, n1, n2, bc1, bcn)
+    subroutine ComputeZD1RHS(this, f, RHS, n1, n2, bc1, bcn)
     
         class( cd10 ), intent(in) :: this
         integer, intent(in) :: n1, n2
@@ -1466,7 +1467,7 @@ contains
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
-        integer :: j
+        integer :: j,i,k
 
 
         select case (this%periodic)
@@ -1474,6 +1475,7 @@ contains
             a10 = a10d1 * this%onebydx
             b10 = b10d1 * this%onebydx
             c10 = c10d1 * this%onebydx
+
             ! RHS(:,:,1) = a10 * ( f(:,:,2)   - f(:,:,this%n  ) ) &
             !                    + b10 * ( f(:,:,3)   - f(:,:,this%n-1) ) &
             !                    + c10 * ( f(:,:,4)   - f(:,:,this%n-2) )
@@ -2230,7 +2232,7 @@ contains
             df = zero
             return
         end if
-        
+
         if (present(bc1_)) then
             bc1 = bc1_
             if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
