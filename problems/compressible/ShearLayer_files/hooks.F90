@@ -592,77 +592,76 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta
     call tkeb%favre_avg_and_fluct(rho, v, vtilde, vpp)
 
     ! Mass (fraction) source:
-    call tkeb%reynolds_avg(rhs(:,:,:,2),rhs_mn) 
     if (ns.gt.1) then
         do i = 1,ns
             call tkeb%favre_avg_and_fluct(rho, Ys(:,:,:,i), qtilde, qpp) 
             call tkeb%favre_avg(rho,qpp*vpp, Rij)
             call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
             do j=iy1,iyn 
-                rhs(:,j,:,i) = rhs(:,j,:,i) - src(1,j,1)
+                rhs(:,j,:,i) = rhs(:,j,:,i) + src(1,j,1)
             enddo
         enddo 
     else
         call my_ddy(decomp,dy,rbar*vtilde,src)
         do j=iy1,iyn 
-            rhs(:,j,:,mass_index) = rhs(:,j,:,mass_index) - src(1,j,1)
+            rhs(:,j,:,mass_index) = rhs(:,j,:,mass_index) + src(1,j,1)
         enddo
     endif
     !call message(4,"Maximum src rho",P_MAXVAL(src))
    
-    if (nrank==0) then
-        open(1,file='./src_Y2.txt')
-        write (1,*) qtilde, src,rhs_mn
-        close(1)
-    endif
+    !call tkeb%reynolds_avg(rhs(:,:,:,2),rhs_mn) 
+    !if (nrank==0) then
+    !    open(1,file='./src_Y2.txt')
+    !    write (1,*) qtilde, src,rhs_mn
+    !    close(1)
+    !endif
     
     ! X momentum source:
-    call tkeb%reynolds_avg(rhs(:,:,:,mom_index),rhs_mn) 
     call tkeb%favre_avg_and_fluct(rho, u, qtilde, qpp)
     call tkeb%favre_avg(rho,qpp*vpp, Rij)
     call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
     do j=iy1,iyn 
-        rhs(:,j,:,mom_index) = rhs(:,j,:,mom_index) - src(1,j,1)
+        rhs(:,j,:,mom_index) = rhs(:,j,:,mom_index) + src(1,j,1)
     enddo
     !call message(4,"Maximum src momx",P_MAXVAL(src))
-    if (nrank==0) then
-        open(1,file='./src_ru.txt')
-        write (1,*) qtilde, src,rhs_mn
-        close(1)
-    endif
+    !call tkeb%reynolds_avg(rhs(:,:,:,mom_index),rhs_mn) 
+    !if (nrank==0) then
+    !    open(1,file='./src_ru.txt')
+    !    write (1,*) qtilde, src,rhs_mn
+    !    close(1)
+    !endif
     
     ! Y momentum source:
-    call tkeb%reynolds_avg(rhs(:,:,:,mom_index+1),rhs_mn) 
     call tkeb%favre_avg(rho,vpp*vpp, Rij)
     call my_ddy(decomp,dy,rbar*(vtilde*vtilde+Rij),src)
     do j=iy1,iyn 
-        rhs(:,j,:,mom_index+1) = rhs(:,j,:,mom_index+1) - src(1,j,1)
+        rhs(:,j,:,mom_index+1) = rhs(:,j,:,mom_index+1) + src(1,j,1)
     enddo
     !call message(4,"Maximum src momy",P_MAXVAL(src))
-    if (nrank==0) then
-        open(1,file='./src_rv.txt')
-        write (1,*) vtilde, src,rhs_mn
-        close(1)
-    endif
+    !call tkeb%reynolds_avg(rhs(:,:,:,mom_index+1),rhs_mn) 
+    !if (nrank==0) then
+    !    open(1,file='./src_rv.txt')
+    !    write (1,*) vtilde, src,rhs_mn
+    !    close(1)
+    !endif
     
     
     ! Z momentum source:
-    call tkeb%reynolds_avg(rhs(:,:,:,mom_index+2),rhs_mn) 
     call tkeb%favre_avg_and_fluct(rho, w, qtilde, qpp)
     call tkeb%favre_avg(rho,qpp*vpp, Rij)
     call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
     do j=iy1,iyn 
         !print *, j,rhs(1,j,1,mom_index+2),src(1,j,1)
-        rhs(:,j,:,mom_index+2) = rhs(:,j,:,mom_index+2) - src(1,j,1)
+        rhs(:,j,:,mom_index+2) = rhs(:,j,:,mom_index+2) + src(1,j,1)
     enddo
-    !call message(4,"Maximum qtilde momz",P_MAXVAL(Rij))
+    call tkeb%reynolds_avg(rhs(:,:,:,mom_index+2),rhs_mn) 
     !call message(4,"Maximum src momz",P_MAXVAL(src))
-    if (nrank==0) then
-        open(1,file='./src_rw.txt')
-        write (1,*) qtilde, src,rhs_mn
+    !if (nrank==0) then
+    !    open(1,file='./src_rw.txt')
+    !    write (1,*) qtilde, src,rhs_mn
 
-        close(1)
-    endif
+    !    close(1)
+    !endif
 
     
     ! Energy source: e
@@ -671,28 +670,29 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta
     call tkeb%favre_avg(rho,qpp*vpp, Rij)
     call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
     do j=iy1,iyn 
-        rhs(:,j,:,TE_index) = rhs(:,j,:,TE_index) - src(1,j,1)
+        rhs(:,j,:,TE_index) = rhs(:,j,:,TE_index) + src(1,j,1)
     enddo
     !call message(4,"Maximum src TE(e)",P_MAXVAL(src))
-    if (nrank==0) then
-        open(1,file='./src_re.txt')
-        write (1,*) qtilde, src, rhs_mn
-        close(1)
-    endif
+    !if (nrank==0) then
+    !    open(1,file='./src_re.txt')
+    !    write (1,*) qtilde, src, rhs_mn
+    !    close(1)
+    !endif
     ! Energy source: p
     call tkeb%reynolds_avg_and_fluct(p, qtilde, qpp)
     call tkeb%reynolds_avg(qpp*vpp, Rij)
     call my_ddy(decomp,dy,qtilde*vtilde+Rij,src)
     do j=iy1,iyn 
-        rhs(:,j,:,TE_index) = rhs(:,j,:,TE_index) - src(1,j,1)
+        rhs(:,j,:,TE_index) = rhs(:,j,:,TE_index) + src(1,j,1)
     enddo
 
+    call tkeb%reynolds_avg(rhs(:,:,:,mom_index+2),rhs_mn) 
     !call message(4,"Maximum src TE(p)",P_MAXVAL(src))
-    if (nrank==0) then
-        open(1,file='./src_rp.txt')
-        write (1,*) qtilde, src, rhs_mn
-        close(1)
-    endif
+    !if (nrank==0) then
+    !    open(1,file='./src_rp.txt')
+    !    write (1,*) qtilde, src, rhs_mn
+    !    close(1)
+    !endif
 
     deallocate(rbar,qtilde,vtilde,Rij,src,rhs_mn)
     deallocate(qpp,vpp)
