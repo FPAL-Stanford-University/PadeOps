@@ -113,8 +113,13 @@ program concurrentSimulation
 
     else
         ! Link the target velocity array to igp 
-        prec_ixen_2 = prec%fringe_x%get_ixen_2()
-        call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w, xen_targ=prec_ixen_2)
+        if(prec%useFringe) then
+            prec_ixen_2 = prec%fringe_x%get_ixen_2()
+            print *, 'In problem file: ', prec_ixen_2
+            call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w, xen_targ=prec_ixen_2)
+        else
+            call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w)
+        endif
     endif
 
     call budg_xyavg1%init(precInputFile, prec)   !<-- Budget class initialization 

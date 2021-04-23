@@ -483,6 +483,8 @@ contains
           endif 
 
           call message(0, "Shifted periodic BC successfully set up in fringe init.")
+      else
+          this%ixen_2 = nx
       endif
 
       call message(0, "Fringe initialized successfully.")
