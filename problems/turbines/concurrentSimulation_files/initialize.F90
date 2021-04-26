@@ -9,7 +9,7 @@ module concurrentSimulation_parameters
     integer :: seedw = 131344
     real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
     integer :: nxg, nyg, nzg
-    logical :: isPrecursor = .true.
+    logical :: isPrecursor = .true., prbabl= .false.
     
     real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
     real(rkind), parameter :: timeDim = xdim/udim
@@ -110,15 +110,27 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     x => mesh(:,:,:,1)
  
     if(isPrecursor) then
-       epsnd = 5.0_rkind 
-       u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-       v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-       wC= zero  
+      if(prbabl)then
+          epsnd = 5.0_rkind 
+          u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+          v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+          wC= zero
+       else
+          u=one-(z-4.0D0)*(z-4.0D0)/16.0D0
+          v=zero
+          wC=zero
+       endif  
     else
-       epsnd = zero
-       u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-       v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-       wC= zero  
+       if(prbabl)then
+          epsnd = zero
+          u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+          v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+          wC= zero 
+       else
+          u=one-(z-4.0D0)*(z-4.0D0)/16.0D0
+          v=zero
+          wC=zero
+       endif 
     endif
     isPrecursor = .false.
 

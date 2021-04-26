@@ -362,6 +362,11 @@ contains
          call S_fringe(x2, S2)
          Fringe_func = S1 - S2
 
+         if(nrank==0) then
+           do i = 1, nx
+             write(100,'(i4,1x,2(e19.12,1x))') i, x(i), Fringe_func(i)
+           enddo
+         endif
          threshold_val = 1.0d-4
          ! find xst_forc
          do i = 1, nx-1

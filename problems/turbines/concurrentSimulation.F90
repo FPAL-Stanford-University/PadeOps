@@ -14,7 +14,7 @@ program concurrentSimulation
     use budgets_xy_avg_mod, only: budgets_xy_avg  
     use decomp_2d, only: nrank
     use interpolatorMod, only: interpolator 
-    use constants, only: zero, half, eps
+    use constants, only: zero, half, eps, one
 
     implicit none
 
@@ -114,7 +114,7 @@ program concurrentSimulation
     else
         ! Link the target velocity array to igp 
         prec_ixen_2 = prec%fringe_x%get_ixen_2()
-        call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w, xen_targ=prec_ixen_2)
+        call igp%fringe_x%associateFringeTargets(prec%u, prec%v, prec%w)
     endif
 
     call budg_xyavg1%init(precInputFile, prec)   !<-- Budget class initialization 
@@ -141,6 +141,8 @@ program concurrentSimulation
     do while (igp%tsim < igp%tstop) 
        call prec%timeAdvance()                                           !<- Time stepping scheme + Pressure Proj. (see igrid.F90)
        call budg_xyavg1%doBudgets()       
+
+       prec%u=one;prec%v=zero;prec%w=zero; 
 
        if(useInterpolator) then
            call doTemporalStuff_prec(prec)                                   !<-- Go to the temporal hook (see temporalHook.F90)

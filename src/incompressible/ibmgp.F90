@@ -422,7 +422,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   call this%compute_image_points(Lx, Ly, zBot, zTop)
 
   dx = xlinepart(2)-xlinepart(1); dy = ylinepart(2)-ylinepart(1)
-  call this%setup_interpolation(dx,dy,dz, zBot, xlinepart, ylinepart, zlinepart)
+  call this%setup_interpolation(dx,dy,dz, zBot, xlinepart, ylinepart, zlinepart, zlinepartE)
 
   deallocate(flagE, flagC, mapC, mapE, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE)
 
@@ -882,13 +882,13 @@ subroutine interp_imptsC(this, u, v, wC)
 
 end subroutine
 
-subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zlinepart)
+subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zlinepart, zlinepartE)
   class(ibmgp),              intent(inout) :: this
   real(rkind),               intent(in)    :: dx, dy, dz, zBot
-  real(rkind), dimension(:), intent(in)    :: xlinepart, ylinepart, zlinepart
+  real(rkind), dimension(:), intent(in)    :: xlinepart, ylinepart, zlinepart, zlinepartE
 
   integer :: ii, itmp, jtmp, ktmp, nxloc, nyloc, nzloc, point_number, ierr
-  real(rkind) :: xdom_left, xdom_right, ydom_left, ydom_right, zdom_left, zdom_right
+  real(rkind) :: xdom_left, xdom_right, ydom_left, ydom_right, zdom_left, zdom_right, zdom_leftE, zdom_rightE
   real(rkind) :: xloc, yloc, zloc, facx, facy, facz, onemfacx, onemfacy, onemfacz
   character(len=clen) :: fname, dumstr
   integer    , allocatable, dimension(:)    :: psum_numonproc
@@ -901,9 +901,10 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
   nxloc = this%gpC%xsz(1);  nyloc = this%gpC%xsz(2);  nzloc = this%gpC%xsz(3)
 
   ! note :: padded domain extents
-  xdom_left = xlinepart(1)-dx;   xdom_right = xlinepart(nxloc)+dx
-  ydom_left = ylinepart(1)-dy;   ydom_right = ylinepart(nyloc)+dy
-  zdom_left = zlinepart(1)-dz;   zdom_right = zlinepart(nzloc)+dz
+  xdom_left  = xlinepart(1)  - dx;   xdom_right  = xlinepart(nxloc)  + dx
+  ydom_left  = ylinepart(1)  - dy;   ydom_right  = ylinepart(nyloc)  + dy
+  zdom_left  = zlinepart(1)  - dz;   zdom_right  = zlinepart(nzloc)  + dz
+  zdom_leftE = zlinepartE(1) - dz;   zdom_rightE = zlinepartE(nzloc) + dz
 
   do ii = 1, this%num_imptsC_glob  !this%num_gptsC
       ! first check if this point is on this processor
@@ -914,9 +915,9 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
           (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
           (zloc>=zdom_left) .and. (zloc<=zdom_right) ) then
 
-        itmp = floor((xloc-xdom_left)/dx);        
-        jtmp = floor((yloc-ydom_left)/dy);        
-        ktmp = floor((zloc-zdom_left)/dz);        
+        itmp = floor((xloc-xdom_left)/dx); if(itmp==nxloc+1) itmp = itmp-1 
+        jtmp = floor((yloc-ydom_left)/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
+        ktmp = floor((zloc-zdom_left)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
 
         ! determine facx, facy, facz
         if(itmp==0) then
@@ -988,15 +989,15 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
   do ii = 1, this%num_imptsE_glob ! this%num_gptsE
       ! first check if this point is on this processor
       !xloc = this%gptsE_img(ii,1);  yloc = this%gptsE_img(ii,2);  zloc = this%gptsE_img(ii,3);
-      xloc = this%imptsC_xyz(ii,1);  yloc = this%imptsC_xyz(ii,2);  zloc = this%imptsC_xyz(ii,3);
+      xloc = this%imptsE_xyz(ii,1);  yloc = this%imptsE_xyz(ii,2);  zloc = this%imptsE_xyz(ii,3);
 
-      if( (xloc>=xdom_left) .and. (xloc<=xdom_right) .and. &
-          (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
-          (zloc>=zdom_left) .and. (zloc<=zdom_right) ) then
+      if( (xloc>=xdom_left ) .and. (xloc<=xdom_right ) .and. &
+          (yloc>=ydom_left ) .and. (yloc<=ydom_right ) .and. &
+          (zloc>=zdom_leftE) .and. (zloc<=zdom_rightE) ) then
 
-        itmp = floor((xloc-xdom_left)/dx);        
-        jtmp = floor((yloc-ydom_left)/dy);        
-        ktmp = floor((zloc-zdom_left)/dz);        
+        itmp = floor((xloc-xdom_left )/dx); if(itmp==nxloc+1) itmp = itmp-1 
+        jtmp = floor((yloc-ydom_left )/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
+        ktmp = floor((zloc-zdom_leftE)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
 
         ! determine facx, facy, facz
         if(itmp==0) then
@@ -1005,15 +1006,15 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
             facx = one - (xloc-xlinepart(itmp))/dx
         endif
 
-        if(jtmp==5) then
+        if(jtmp==9) then
             print *, '-----nrank = ', nrank 
             print '(a,2(i5,1x),3(e19.12,1x))', '--nrank: ', nrank, ii, xloc, yloc, zloc
-            print '(a,1(i5,1x),3(e19.12,1x))', '--xdom : ', itmp, xdom_left, xdom_right, dx
-            print '(a,1(i5,1x),3(e19.12,1x))', '--ydom : ', jtmp, ydom_left, ydom_right, dy
-            print '(a,1(i5,1x),3(e19.12,1x))', '--zdom : ', ktmp, zdom_left, zdom_right, dz
+            print '(a,1(i5,1x),3(e19.12,1x))', '--xdom : ', itmp, xdom_left , xdom_right, dx
+            print '(a,1(i5,1x),3(e19.12,1x))', '--ydom : ', jtmp, ydom_left , ydom_right, dy
+            print '(a,1(i5,1x),3(e19.12,1x))', '--zdom : ', ktmp, zdom_leftE, zdom_right, dz
             print '(a,       100(e19.12,1x))', '--xline: ', xlinepart
             print '(a,       100(e19.12,1x))', '--yline: ', ylinepart
-            print '(a,       100(e19.12,1x))', '--zline: ', zlinepart
+            print '(a,       100(e19.12,1x))', '--zline: ', zlinepartE
         endif
 
         if(jtmp==0) then
@@ -1023,9 +1024,9 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
         endif
 
         if(ktmp==0) then
-            facz = one - (zlinepart(1)-zloc)/dz
+            facz = one - (zlinepartE(1)-zloc)/dz
         else
-            facz = one - (zloc-zlinepart(ktmp))/dz
+            facz = one - (zloc-zlinepartE(ktmp))/dz
         endif
 
         onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
