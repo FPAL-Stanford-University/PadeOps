@@ -1150,6 +1150,8 @@ stop
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,antiDiff,mask,RhoYsbound,filt,antiDiffFV,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT
 
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i, VF_RHS_i, Kij_coeff_i
+
         real(rkind) :: intSharp_alp = 0.1, intSharp_adm = 1.0D-1, intSharp_exp = -1.0D0,gradDiff,md1,md2 !, intSharp_tnh = 0.1 !1.0D-2
 
         integer :: i,j,ii,jj,kk,iflag = one,im,jm,km,k
@@ -2002,24 +2004,38 @@ stop
            if(this%intSharp_cpl.AND.this%intSharp_cpg) then
                if(this%intSharp_cpg_west) then !new implementation based on Jacob's derivation
 
-                   !TODO: calculate sum of species mass fluxes: sum(J_m) 
-                   !TODO: retrieve RHS for VF eqn?
-                   if(this%intSharp_spf) then !use Shukla-Pantano-Freund sharpening (gradient form)
-                       !sum_JM = spf_f 
-                       CONTINUE
-                   else                       !use Jain-Mani-Moin sharpening (divergence form)
-                       CONTINUE
-                   endif
+                   !Retrieve species mass flux (J_i) and RHS for VF eqn (VF_RHS_i)
+                   do i=1,this%ns
+                       J_i(:,:,:,i)      = this%material(i)%intSharp_R(:,:,:,1) + this%material(i)%intSharp_R(:,:,:,2) + this%material(i)%intSharp_R(:,:,:,3)
+                       VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(:,:,:,1) + this%material(i)%intSharp_a(:,:,:,2) + this%material(i)%intSharp_a(:,:,:,3)
+                   enddo     
 
-                   !TODO: calculate coefficient to multiply by gtotal or gelastic tensor     
+                   !Calculate coefficient to multiply by gtotal or gelastic tensor     
+                   Kij_coeff_i = 0.0d0
                    if(this%useOneG) then
-                       CONTINUE
+                       !accumulate J_i in last index
+                       do i=1,this%ns
+                           Kij_coeff_i(:,:,:,this%ns) = Kij_coeff_i(:,:,:,i) + J_i(:,:,:,i)
+                       enddo 
+                       !assign to all species
+                       do i=1,this%ns
+                           Kij_coeff_i(:,:,:,i) = third/rho * Kij_coeff_i(:,:,:,this%ns)
+                       enddo 
                    else
-                       CONTINUE
-                       !TODO: Loop thru species, calculate species specific correction
+                       do i=1,this%ns
+                           Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
+                       enddo 
                    endif
 
-                   !TODO: Loop thru components of gtotal and gelastic tensors, multiply by coeff
+                   !Loop thru components of gtotal and gelastic tensors, multiply by coeff*rho
+                   do i=1,this%ns
+                      do j=1,9
+                          do k=1,3
+                              this%material(i)%intSharp_rg (:,:,:,j,k) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
+                              this%material(i)%intSharp_rgt(:,:,:,j,k) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
+                          enddo      
+                      enddo  
+                   enddo
 
                    !TODO: Do something about finite volume version?     
                    !TODO: Do something about high order vs low order
