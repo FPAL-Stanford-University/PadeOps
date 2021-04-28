@@ -2028,6 +2028,7 @@ stop
                    endif
 
                    !Loop thru components of gtotal and gelastic tensors, multiply by coeff*rho
+                   !Plastic tensor does not need this correction      
                    do i=1,this%ns
                       do j=1,9
                           do k=1,3
