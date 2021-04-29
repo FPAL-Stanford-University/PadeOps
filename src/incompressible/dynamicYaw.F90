@@ -69,6 +69,8 @@ module dynamicYawMod
         integer :: Tf_init, Tf_min
         logical :: use_alpha_check
         real(rkind) :: dalpha_max
+        ! Lookup table
+        character(len=clen) :: input_LUT = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/turbInfo/yawLookupTables/4x2array_0/empirical.txt"
 
     contains
         procedure :: init
@@ -106,6 +108,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     integer, intent(out) :: dynamicStart, dirType
     logical :: useInitialParams, secondary, uncertain, ref_turbine, use_alpha_check
     real(rkind) :: dir_std, gamma_std, ws_std, MaxModelError, dalpha_max
+    character(len=clen) :: input_LUT = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/turbInfo/yawLookupTables/4x2array_0/empirical.txt"
 
     ! Read input file for this turbine    
     namelist /DYNAMIC_YAW/ var_p, var_k, var_sig, epochsYaw, stateEstimationEpochs, & 
@@ -113,7 +116,8 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
                            fixedYaw, dynamicStart, dirType, considerAdvection, lookup, &
                            useInitialParams, powerExp, superposition, secondary, uncertain, &
                            p_bins, dir_bins, gamma_bins, ws_bins, ref_turbine, &
-                           dir_std, gamma_std, ws_std, MaxModelError, use_alpha_check, dalpha_max
+                           dir_std, gamma_std, ws_std, MaxModelError, use_alpha_check, dalpha_max, &
+                           input_LUT 
     ioUnit = 534
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=DYNAMIC_YAW)
@@ -145,6 +149,7 @@ subroutine init(this, inputfile, xLoc, yLoc, diam, Nt, fixedYaw, dynamicStart, d
     this%MaxModelError = MaxModelError
     this%use_alpha_check = use_alpha_check
     this%dalpha_max = dalpha_max ! degrees
+    this%input_LUT = input_LUT
 
     ! Is there an adjacent reference turbine which we are not yawing?
     if (this%ref_turbine) then
@@ -1118,7 +1123,7 @@ subroutine alpha_check(this, alpha, t, alpha_m, alpha_std, Tf_out)
     integer, dimension(:), allocatable :: p_in
     real(rkind) :: dalpha, eps_f, eps_m, ym, t_future, dt, Tint, SStot, SSres, Rsq_min = 0.2d0
     integer :: tstart, Tf
-    logical :: check, stationary
+    logical :: check, stationary, add_error
     ! Allocate
     allocate(p_in(2))
     allocate(Rsq(2))
@@ -1159,6 +1164,8 @@ subroutine alpha_check(this, alpha, t, alpha_m, alpha_std, Tf_out)
 
         ! Step 2
         stationary = .true.; dalpha = 0.d0; x=0.d0; y = 0.d0;
+        ! Do you want to add the prediction error to the standard deviation?
+        add_error = .false.
         if (Rsq(1)>Rsq_min .and. Rsq(2)>Rsq_min) then
             ! Step 3
             y(1:Tf) = p(2,1)*t(tstart - 1*Tf+1 : tstart) + p(1,1);
@@ -1172,9 +1179,14 @@ subroutine alpha_check(this, alpha, t, alpha_m, alpha_std, Tf_out)
                 y(1:Tf) = p(2,1)*t(tstart - 1*Tf+1 : tstart) + p(1,1);
                 alpha_std = std( alpha(tstart - 1*Tf+1 : tstart) - y(1:Tf) );
                 ! Add previous predictive error to the STD
-                alpha_std = alpha_std + sqrt(eps_f);
+                if (add_error) then
+                    alpha_std = alpha_std + sqrt(eps_f);
+                endif
                 ! Time
-                t_future = t(tstart - 1*Tf+1) + real(Tf/2,rkind) * dt
+                ! This is a bug! It should be t(tstart) + Tf/2
+                !t_future = t(tstart - 1*Tf+1) + real(Tf/2,rkind) * dt
+                ! MFH, 4/19/21: This should be the correct future time
+                t_future = t(tstart) + real(Tf/2,rkind) * dt
                 Tint = t(tstart) - t(tstart - 1*Tf+1)
                 ! Predicted mean
                 alpha_m = p(2,2)*t_future + p(1,2);
@@ -1184,7 +1196,9 @@ subroutine alpha_check(this, alpha, t, alpha_m, alpha_std, Tf_out)
                 ! Steps 9 & 10
                 alpha_std = std( alpha(tstart - 1*Tf+1 : tstart) );
                 ! Add previous predictive error to the STD
-                alpha_std = alpha_std + sqrt(eps_m);
+                if (add_error) then
+                    alpha_std = alpha_std + sqrt(eps_m);
+                endif
                 ! Mean
                 alpha_m = mean( alpha(tstart - 1*Tf+1 : tstart) );
                 dalpha = abs(alpha_m - mean( alpha(tstart - 2*Tf+1 : tstart - 1*Tf) ));
@@ -1195,7 +1209,9 @@ subroutine alpha_check(this, alpha, t, alpha_m, alpha_std, Tf_out)
             ! Steps 12 & 13
             alpha_std = std( alpha(tstart - 1*Tf+1 : tstart) );
             ! Add previous predictive error to the STD
-            alpha_std = alpha_std + sqrt(eps_m);
+            if (add_error) then
+                alpha_std = alpha_std + sqrt(eps_m);
+            end if
             ! Mean
             alpha_m = mean( alpha(tstart - 1*Tf+1 : tstart) );
             dalpha = abs(alpha_m - mean( alpha(tstart - 2*Tf+1 : tstart - 1*Tf) ));

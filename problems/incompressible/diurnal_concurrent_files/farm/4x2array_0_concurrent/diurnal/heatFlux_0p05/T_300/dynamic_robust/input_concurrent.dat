@@ -1,0 +1,5 @@
+&concurrent
+primary_InputFile                 = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/farm/4x2array_0_concurrent/diurnal/heatFlux_0p05/T_600/dynamic_robust/input_primary.dat"
+precursor_InputFile                  = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/farm/4x2array_0_concurrent/diurnal/heatFlux_0p05/T_600/dynamic_robust/input_precursor.dat"
+synchronize_RK_fringe = .true.
+/

@@ -14,6 +14,7 @@ module turbineMod
     use mpi 
     use reductions, only: p_maxval, p_sum
     use timer, only: tic, toc
+    use basic_io, only: read_2d_ascii
 
     implicit none
 
@@ -68,6 +69,11 @@ module turbineMod
         real(rkind), dimension(:,:,:,:), pointer :: rbuffyC_ref_sim, rbuffzC_ref_sim
         type(decomp_info), pointer :: gpC_ref_sim
         logical :: ref_domain_link = .false.
+
+        ! Lookup table stuff
+        real(rkind), dimension(:,:), allocatable :: data2read, yaw_LUT
+        real(rkind), dimension(:), allocatable :: alpha_LUT, diffv, yaw_setpoints
+
     contains
 
         procedure :: init
@@ -265,6 +271,14 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              this%dirUpdate = 0.d0
              this%hubDirection = 0.d0
              this%firstStep = .TRUE.
+             ! Lookup table stuff
+             ! Size of the lookup table is num_wind_directions by num_turbines
+             ! Be sure to remember the reference turbine convention
+             allocate(this%data2read(17, this%nTurbines))
+             allocate(this%yaw_LUT(17, this%nTurbines-1))
+             allocate(this%alpha_LUT(17))
+             allocate(this%diffv(17))
+             allocate(this%yaw_setpoints(this%nTurbines-1))
          end if
          do i = 1, this%nTurbines
              call this%turbArrayADM_Tyaw(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
@@ -506,6 +520,9 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     real(rkind) :: alpha_m, tmp, dirStd = 0.d0
     real(rkind), dimension(this%nTurbines) :: angleIn
     logical :: file_exists
+    ! Lookup table stuff
+    real(rkind) :: alpha_input
+    integer :: alpha_index
 
     if (newTimeStep) then
          this%fx = zero; this%fy = zero; this%fz = zero
@@ -630,9 +647,30 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            else
                                ! These angles were taken after one step of
                                ! online yaw, this is meant to simulate the
-                               ! lookup table approach
-                               this%gamma(1) = 0.2935d0; this%gamma(2) = 0.2973d0; this%gamma(3) = 0.2949d0;
-                               this%gamma(4) = 0.2576d0; this%gamma(5) = 0.0490d0; this%gamma(6) = 0.0000d0;
+                               ! lookup table approach (Howland et al. WES 2020)
+                               !this%gamma(1) = 0.2935d0; this%gamma(2) = 0.2973d0; this%gamma(3) = 0.2949d0;
+                               !this%gamma(4) = 0.2576d0; this%gamma(5) = 0.0490d0; this%gamma(6) = 0.0000d0;
+                               
+                               ! Load lookup table, diurnal cycle
+                               call read_2d_ascii(this%data2read, this%dyaw%input_LUT)
+                               this%alpha_LUT = this%data2read(:,1)
+                               this%yaw_LUT = this%data2read(:,2:this%nTurbines)
+                               ! Apply lookup table
+                               alpha_input = alpha_m
+                               this%diffv = abs(alpha_input - this%alpha_LUT) 
+                               alpha_index = minloc(this%diffv, 1)
+                               this%yaw_setpoints = this%yaw_LUT(alpha_index,:)
+                               ! Create yaw setpoints with reference
+                               if (this%dyaw%ref_turbine) then
+                                   this%gamma(1) = 0.d0
+                                   this%gamma(2:this%nTurbines) = this%yaw_setpoints*pi/180.d0
+                               else
+                                   this%gamma = this%yaw_setpoints*pi/180.d0
+                               endif
+                               write(*,*) "Lookup table information"
+                               write(*,*) alpha_m
+                               write(*,*) alpha_index
+                               write(*,*) this%gamma
                            end if
                        endif
                        ! Add the hub height wind direction to the yaw
