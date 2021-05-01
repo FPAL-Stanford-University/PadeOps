@@ -18,7 +18,7 @@ module SolidMod
         logical :: plast = .FALSE.
         logical :: explPlast = .FALSE.
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .TRUE., includeSources = .FALSE.
-        logical :: use_gTg = .FALSE.,useOneG = .FALSE.,intSharp = .FALSE.,intSharp_spf = .TRUE.,intSharp_ufv = .TRUE.,intSharp_d02 = .TRUE.,strainHard = .TRUE.,cnsrv_g = .FALSE.,cnsrv_gt = .FALSE.,cnsrv_gp = .FALSE.,cnsrv_pe = .FALSE.
+        logical :: use_gTg = .FALSE.,useOneG = .FALSE.,intSharp = .FALSE.,intSharp_spf = .TRUE.,intSharp_ufv = .TRUE.,intSharp_d02 = .TRUE.,strainHard = .TRUE.,cnsrv_g = .FALSE.,cnsrv_gt = .FALSE.,cnsrv_gp = .FALSE.,cnsrv_pe = .FALSE., intSharp_cpg_west = .FALSE.
 
         class(stiffgas ), allocatable :: hydro
         class(sep1solid), allocatable :: elastic
@@ -220,13 +220,13 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,derD02,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns)
+    subroutine init(this,decomp,der,derD02,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der,derD02
         type(filters),     target, intent(in) :: fil, gfil
         logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot
-        logical, intent(in) :: use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
+        logical, intent(in) :: use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cpg_west,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
         integer, intent(in) :: ns
         real(rkind), intent(in) :: intSharp_cut
 
@@ -247,6 +247,7 @@ contains
         this%intSharp_ufv = intSharp_ufv
         this%intSharp_d02 = intSharp_d02
         this%intSharp_cut = intSharp_cut
+        this%intSharp_cpg_west = intSharp_cpg_west
         this%updateEtot  = updateEtot
 
         this%strainHard = strainHard
@@ -1116,6 +1117,11 @@ contains
 
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
+           if(this%intSharp_cpg_west) then
+               !TODO: finish implementation of new sharpening term
+               CONTINUE     
+           else
+           endif
            if(this%intSharp_spf) then
               do i=1,9
                  rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
@@ -1629,6 +1635,11 @@ contains
 
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
+           if(this%intSharp_cpg_west) then
+               !TODO: finish implementation of new sharpening term
+               CONTINUE     
+           else
+           endif
            if(this%intSharp_spf) then
               do i=1,9
                  rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
@@ -2111,6 +2122,11 @@ contains
 
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
+           if(this%intSharp_cpg_west) then
+               !TODO: finish implementation of new sharpening term
+               CONTINUE     
+           else
+           endif
            if(this%intSharp_spf) then
               do i=1,9
                  rhsgp(:,:,:,i) = rhsgp(:,:,:,i) + this%intSharp_rgp(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
@@ -2602,6 +2618,11 @@ contains
 
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
+           if(this%intSharp_cpg_west) then
+               !TODO: finish implementation of new sharpening term
+               CONTINUE     
+           else
+           endif
            if(this%intSharp_spf) then
               do i=1,9
                  rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
@@ -2990,6 +3011,11 @@ contains
 
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
+           if(this%intSharp_cpg_west) then
+               !TODO: finish implementation of new sharpening term
+               CONTINUE     
+           else
+           endif
            if(this%intSharp_spf) then
               do i=1,9
                  rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
@@ -3377,6 +3403,11 @@ contains
 
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
+           if(this%intSharp_cpg_west) then
+               !TODO: finish implementation of new sharpening term
+               CONTINUE     
+           else
+           endif
            if(this%intSharp_spf) then
               do i=1,9
                  rhsgp(:,:,:,i) = rhsgp(:,:,:,i) + this%intSharp_rgp(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form

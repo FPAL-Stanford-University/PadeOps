@@ -170,12 +170,12 @@ contains
 
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
         allocate(dummy)
-        call dummy%init(decomp,der,derD02,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns)
+        call dummy%init(decomp,der,derD02,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns)
 
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns))!, source=dummy)
         do i=1,this%ns
-            call this%material(i)%init(decomp,der,derD02,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns)
+            call this%material(i)%init(decomp,der,derD02,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns)
         end do
         deallocate(dummy)
 
@@ -1800,7 +1800,7 @@ stop
            !fix momentum and energy above
            !add kinematic below
 
-        else
+        else ! i.e. NOT:  if(this%intSharp_spf.and.useNewSPF.and.useNewSPFfull)  
 
 
            !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
@@ -2005,10 +2005,17 @@ stop
                if(this%intSharp_cpg_west) then !new implementation based on Jacob's derivation
 
                    !Retrieve species mass flux (J_i) and RHS for VF eqn (VF_RHS_i)
-                   do i=1,this%ns
-                       J_i(:,:,:,i)      = this%material(i)%intSharp_R(:,:,:,1) + this%material(i)%intSharp_R(:,:,:,2) + this%material(i)%intSharp_R(:,:,:,3)
-                       VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(:,:,:,1) + this%material(i)%intSharp_a(:,:,:,2) + this%material(i)%intSharp_a(:,:,:,3)
-                   enddo     
+                   if (this%intSharp_spf) then
+                       do i=1,this%ns
+                           J_i(:,:,:,i)      = this%material(i)%intSharp_R(:,:,:,1) !other components are zero for SPF
+                           VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(:,:,:,1) !other components are zero for SPF 
+                       enddo     
+                   else
+                       do i=1,this%ns
+                           J_i(:,:,:,i)      = this%material(i)%intSharp_R(:,:,:,1) + this%material(i)%intSharp_R(:,:,:,2) + this%material(i)%intSharp_R(:,:,:,3)
+                           VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(:,:,:,1) + this%material(i)%intSharp_a(:,:,:,2) + this%material(i)%intSharp_a(:,:,:,3)
+                       enddo     
+                   endif     
 
                    !Calculate coefficient to multiply by gtotal or gelastic tensor     
                    Kij_coeff_i = 0.0d0
@@ -2029,14 +2036,24 @@ stop
 
                    !Loop thru components of gtotal and gelastic tensors, multiply by coeff*rho
                    !Plastic tensor does not need this correction      
-                   do i=1,this%ns
-                      do j=1,9
-                          do k=1,3
-                              this%material(i)%intSharp_rg (:,:,:,j,k) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
-                              this%material(i)%intSharp_rgt(:,:,:,j,k) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
-                          enddo      
-                      enddo  
-                   enddo
+
+                   if(this%intSharp_spf) then 
+                      do i=1,this%ns
+                         do j=1,9 !only component 1 is non-zero for gradient form TODO: is a factor of 3x needed?
+                             this%material(i)%intSharp_rg (:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
+                             this%material(i)%intSharp_rgt(:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
+                         enddo
+                      enddo
+                   else     
+                      do i=1,this%ns
+                         do j=1,9
+                             do k=1,3
+                                 this%material(i)%intSharp_rg (:,:,:,j,k) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
+                                 this%material(i)%intSharp_rgt(:,:,:,j,k) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
+                             enddo      
+                         enddo  
+                      enddo
+                   endif
 
                    !TODO: Do something about finite volume version?     
                    !TODO: Do something about high order vs low order
