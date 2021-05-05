@@ -2035,25 +2035,13 @@ stop
                    endif
 
                    !Loop thru components of gtotal and gelastic tensors, multiply by coeff*rho
-                   !Plastic tensor does not need this correction      
-
-                   if(this%intSharp_spf) then 
-                      do i=1,this%ns
-                         do j=1,9 !only component 1 is non-zero for gradient form TODO: is a factor of 3x needed?
-                             this%material(i)%intSharp_rg (:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
-                             this%material(i)%intSharp_rgt(:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
-                         enddo
+                   do i=1,this%ns
+                      do j=1,9 !only component 1 is used in Jacob's method
+                          this%material(i)%intSharp_rg (:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
+                          this%material(i)%intSharp_rgt(:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
+                          !Plastic tensor does not need sharpening
                       enddo
-                   else     
-                      do i=1,this%ns
-                         do j=1,9
-                             do k=1,3
-                                 this%material(i)%intSharp_rg (:,:,:,j,k) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
-                                 this%material(i)%intSharp_rgt(:,:,:,j,k) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
-                             enddo      
-                         enddo  
-                      enddo
-                   endif
+                   enddo
 
                    !TODO: Do something about finite volume version?     
                    !TODO: Do something about high order vs low order
