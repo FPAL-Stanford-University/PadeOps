@@ -242,11 +242,12 @@ contains
     end subroutine
 
     ! pure subroutine get_transport_properties(this, p, T, Ys, mu, bulk, kappa, diff)
-    subroutine get_transport_properties(this, p, T, Ys, mu, bulk, kappa, diff)
+    subroutine get_transport_properties(this, p, T, Ys, simtime, mu, bulk, kappa, diff)
         ! class(mixture), target,                                     intent(in)  :: this
         class(mixture),                                             intent(in)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(in)  :: p, T
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns), intent(in)  :: Ys
+        real(rkind),                                                intent(in)  :: simtime
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),         intent(out) :: mu, bulk, kappa
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns), intent(out) :: diff
 
@@ -266,9 +267,9 @@ contains
                 ! mat  => this%material(1)%mat
                 ! visc => this%material(1)%visc
                 Cp = this%material(1)%mat%gam * this%material(1)%mat%Rgas * this%material(1)%mat%onebygam_m1 ! Cp
-                call this%material(1)%shearvisc%get_mu(T, mu)
+                call this%material(1)%shearvisc%get_mu(T, simtime, mu)
                 call this%material(1)%bulkvisc%get_beta(T, mu, bulk)
-                call this%material(1)%thermcond%get_kappa(T, Cp, mu, kappa)
+                call this%material(1)%thermcond%get_kappa(T, Cp, mu, simtime, kappa)
                 diff = zero
             case default
                 den = zero
@@ -282,10 +283,10 @@ contains
                     Cp = this%material(i)%mat%gam * this%material(i)%mat%Rgas * this%material(i)%mat%onebygam_m1 ! Cp
                     den = den + Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
-                    call this%material(i)%shearvisc%get_mu(T, mu_i)
+                    call this%material(i)%shearvisc%get_mu(T, simtime, mu_i)
                     mu = mu + mu_i*Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
-                    call this%material(i)%thermcond%get_kappa(T, Cp, mu_i, tmp)
+                    call this%material(i)%thermcond%get_kappa(T, Cp, mu_i, simtime, tmp)
                     kappa = kappa + tmp*Ys(:,:,:,i)*sqrt(this%material(i)%mat%Rgas)
 
                     call this%material(i)%bulkvisc%get_beta(T, mu_i, tmp)
@@ -299,7 +300,7 @@ contains
                 do i = 1,this%ns
                     Xs(:,:,:,i) = this%material(i)%mat%Rgas * Ys(:,:,:,i) / this%Rgas
                 end do
-                call this%massdiff%get_diff(p, T, Xs, diff)
+                call this%massdiff%get_diff(p, T, Xs, simtime, diff)
             end select
         end select
     end subroutine

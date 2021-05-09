@@ -45,9 +45,10 @@ contains
 
     end function
 
-    pure subroutine get_mu(this, T, mu)
+    pure subroutine get_mu(this, T, simtime, mu)
         class(chapmanEnskogViscosity), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: T
+        real(rkind),                   intent(in)  :: simtime
         real(rkind), dimension(:,:,:), intent(out) :: mu
 
         real(rkind), dimension(size(T,1), size(T,2), size(T,3)) :: T_star, Omega

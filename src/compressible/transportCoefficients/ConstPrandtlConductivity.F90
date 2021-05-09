@@ -29,9 +29,10 @@ contains
 
     end function
 
-    pure subroutine get_kappa(this, T, Cp, mu, kappa)
+    pure subroutine get_kappa(this, T, Cp, mu, simtime, kappa)
         class(constPrandtlConductivity), intent(in) :: this
         real(rkind), dimension(:,:,:),           intent(in)  :: T, Cp, mu
+        real(rkind),                             intent(in)  :: simtime
         real(rkind), dimension(:,:,:),           intent(out) :: kappa
 
         kappa = Cp * mu / this%Pr

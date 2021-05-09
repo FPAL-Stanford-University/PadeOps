@@ -94,10 +94,11 @@ contains
     end subroutine
 
     !pure subroutine get_diff(this, p, T, Xs, diff)
-    subroutine get_diff(this, p, T, Xs, diff)
+    subroutine get_diff(this, p, T, Xs, simtime, diff)
         class(reidRamshawDiffusivity),   intent(in)  :: this
         real(rkind), dimension(:,:,:),   intent(in)  :: p, T
         real(rkind), dimension(:,:,:,:), intent(in)  :: Xs
+        real(rkind),                     intent(in)  :: simtime
         real(rkind), dimension(:,:,:,:), intent(out) :: diff
 
         real(rkind), dimension(size(T,1),size(T,2),size(T,3)) :: diff_ij

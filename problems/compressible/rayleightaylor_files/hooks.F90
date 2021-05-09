@@ -20,9 +20,10 @@ module rayleightaylor_data
     real(rkind) :: bulk_Ratio = 1.0_rkind     ! Constant ratio B2/B1 (may later be T-dependent)
     real(rkind) :: mu_Ratio = 1.0_rkind       ! Constant ratio mu2/mu1 (may later be T-dependent)
     real(rkind) :: kap_Ratio = 1.0_rkind      ! Constant ratio k2/k1 (may later be T-dependent)
+    real(rkind) :: p_back = 10.0_rkind        ! Background pressure to be added
     ! Parameters for the 2 materials:               Nitrogen            CO2
     !                                        --------------------------------
-    real(rkind), dimension(ns) :: gam      = [     1.4_rkind,    1.4_rkind ]
+    real(rkind), dimension(ns) :: gam      = [     1.66667_rkind,    1.66667_rkind ]
     !real(rkind), dimension(ns) :: gam      = [     1.4_rkind,    1.28_rkind ]
     real(rkind), dimension(ns) :: Pr       = [    0.72_rkind,    0.77_rkind ]
     real(rkind), dimension(ns) :: molwt    = [ 28.0130_rkind,  44.010_rkind ] ! g/mol
@@ -33,8 +34,10 @@ module rayleightaylor_data
 
 
     ! Domain size data
-    real(rkind) :: L_z = 11.0_rkind
-    real(rkind) :: L_x = 2.0_rkind, L_y = 2.0_rkind
+    !real(rkind) :: L_z = 11.0_rkind
+    !real(rkind) :: L_x = 2.0_rkind, L_y = 2.0_rkind
+    real(rkind) :: L_z = 5.0_rkind
+    real(rkind) :: L_x = 1.0_rkind, L_y = 1.0_rkind
     real(rkind) :: x1, y1, z1
 
     logical :: periodicx = .true., periodicy = .true., periodicz = .false.
@@ -153,7 +156,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
     integer :: nx, ny, nz
 
-    namelist /PROBINPUT/  threeD, rhoRatio, Re, Sc, Pr1, gravity, z_interface, L_int, amp, bulk_Ratio, mu_Ratio, kap_Ratio
+    namelist /PROBINPUT/  threeD, rhoRatio, Re, Sc, Pr1, gravity, z_interface, L_int, amp, bulk_Ratio, mu_Ratio, kap_Ratio, p_back
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -191,10 +194,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         call mix%set_massdiffusivity( constSchmidtDiffusivity(mu_ref(1), rho_ref, Sc) )
 
         do k = 1,decomp%ysz(3)
-            tmp(:,:,k) = half*(one+erf((z(:,:,k)-z_interface-amp*cos(2_rkind*3.1415_rkind/L_x*x(:,:,k)))/(2.0_rkind*L_int/6.58_rkind)))
+            tmp(:,:,k) = z(:,:,k)-amp*cos(two*pi/L_x*x(:,:,k))*exp(-two*pi/one*abs(z(:,:,k)-z_interface));
+            Ys(:,:,k,2) = half*(one+erf((tmp(:,:,k)-z_interface)/L_int))
         end do
-        Ys(:,:,:,1)  = one - tmp
-        Ys(:,:,:,2)  = one - Ys(:,:,:,1)
+        
+        Ys(:,:,:,1)  = one - Ys(:,:,:,2)
         call mix%update(Ys)
 
         u   = zero
@@ -202,10 +206,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         w   = zero
 
         rho = (1.0_rkind-1.0_rkind/gam(1)) / (mix%Rgas)
+
         ! Hydrostatic Pressure
-        p(:,:,decomp%ysz(3)) = p_pre/9.81_rkind
-        do k = (decomp%ysz(3)-1), 1, -1
-            p(:,:,k) = p(:,:,k+1)+half*(rho(:,:,k+1)+rho(:,:,k))*dz
+        ! EXAMPLE BACKGROUND PRESSURES
+        ! Pressure set to 0 at top boundary
+        ! p_back = -half*(rhoRatio-one)*z_interface + half*(rhoRatio-one)*(L_z-z_interface) + (rhoRatio-one+two)*L_z
+        ! Background pressure set to match exponential density case in Creurer+Gauthier paper
+        ! p_back = 26.75_rkind
+        do k = 1,decomp%ysz(3)
+            p(:,:,k) = p_back + half*(rhoRatio-one)*z_interface - half*((rhoRatio-one)*L_int*exp(-(tmp(:,:,k)-z_interface)**two/L_int**two)/sqrt(pi) &
+                + (rhoRatio-one)*(tmp(:,:,k)-z_interface)*erf((tmp(:,:,k)-z_interface)/L_int) + (rhoRatio-one+two)*tmp(:,:,k))
         end do
         T   = p/(rho*mix%Rgas)
 
@@ -296,6 +306,24 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  Ys   => fields(:,:,:,Ys_index:Ys_index+mix%ns-1),                 &
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        if (decomp%yst(3) == 1) then
+             w(:,:,1)  = zero                  ! No Penetration at bottom
+             u(:,:,1) = u(:,:,2)               ! First order d/dz(..) = 0 approximation
+             Ys(:,:,1,1) = Ys(:,:,2,1)
+             Ys(:,:,1,2) = Ys(:,:,2,2)
+             T(:,:,1) = T(:,:,2)
+        end if
+
+
+        ! zsz(3)=nz_global  
+        if (decomp%yen(3) == decomp%zsz(3)) then
+             w(:,:,decomp%ysz(3))  = zero                    ! No Penetration at top
+             u(:,:,decomp%ysz(3)) = u(:,:,decomp%ysz(3)-1)   ! First order d/dz(..) = 0 approximation
+             Ys(:,:,decomp%ysz(3),1) = Ys(:,:,decomp%ysz(3)-1,1)
+             Ys(:,:,decomp%ysz(3),2) = Ys(:,:,decomp%ysz(3)-1,2)
+             T(:,:,decomp%ysz(3)) = T(:,:,decomp%ysz(3)-1)
+        end if
 
     end associate
 end subroutine

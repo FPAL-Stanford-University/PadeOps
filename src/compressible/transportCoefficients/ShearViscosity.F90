@@ -14,11 +14,12 @@ module ShearViscosityMod
 
     abstract interface
 
-        pure subroutine get_mu_interface(this, T, mu)
+        pure subroutine get_mu_interface(this, T, simtime, mu)
             import :: shearViscosity
             import :: rkind
             class(shearViscosity),         intent(in)  :: this
             real(rkind), dimension(:,:,:), intent(in)  :: T
+            real(rkind),                   intent(in)  :: simtime
             real(rkind), dimension(:,:,:), intent(out) :: mu
         end subroutine
 

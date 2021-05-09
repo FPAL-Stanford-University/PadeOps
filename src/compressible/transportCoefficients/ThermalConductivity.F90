@@ -14,11 +14,12 @@ module ThermalConductivityMod
 
     abstract interface
 
-        pure subroutine get_kappa_interface(this, T, Cp, mu, kappa)
+        pure subroutine get_kappa_interface(this, T, Cp, mu, simtime, kappa)
             import :: thermalConductivity
             import :: rkind
             class(thermalConductivity),    intent(in)  :: this
             real(rkind), dimension(:,:,:), intent(in)  :: T, Cp, mu
+            real(rkind),                   intent(in)  :: simtime
             real(rkind), dimension(:,:,:), intent(out) :: kappa
         end subroutine
 

@@ -33,9 +33,10 @@ contains
         this%n      = n
     end function
 
-    pure subroutine get_mu(this, T, mu)
+    pure subroutine get_mu(this, T, simtime, mu)
         class(powerLawViscosity), intent(in) :: this
         real(rkind), dimension(:,:,:), intent(in)  :: T
+        real(rkind),                   intent(in)  :: simtime
         real(rkind), dimension(:,:,:), intent(out) :: mu
 
         mu = this%mu_ref * ( T/this%T_ref )**this%n

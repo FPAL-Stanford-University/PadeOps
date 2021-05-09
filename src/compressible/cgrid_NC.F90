@@ -1,10 +1,10 @@
-module CompressibleGrid
+module CompressibleGridNC
     use kind_parameters,       only: rkind, clen
     use constants,             only: zero,eps,third,half,one,two,three,four
     use FiltersMod,            only: filters
     use GridMod,               only: grid
     use gridtools,             only: alloc_buffs, destroy_buffs
-    use cgrid_hooks,           only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
+    use cgrid_hooks,           only: meshgen, initfields, hook_output, hook_bc, hook_filmask, hook_timestep, hook_source
     use decomp_2d,             only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                                      transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,        only: derivatives
@@ -49,12 +49,12 @@ module CompressibleGrid
     integer, parameter :: qzidx = 9
 
 
-    ! Number of buffers to create
+    ! Number of buffers to create  (extra for y pencils because of nonconservative formulation)
     integer, parameter :: nbufsx = 2
     integer, parameter :: nbufsy = 6
     integer, parameter :: nbufsz = 2
 
-    type, extends(grid) :: cgrid
+    type, extends(grid) :: cgridNC
        
         type(filters), allocatable :: gfil
         type(mixture), allocatable :: mix
@@ -68,9 +68,16 @@ module CompressibleGrid
         logical                  :: compute_scale_decomposition
         type(scaleDecomposition) :: scaledecomp
 
-        real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv             ! Conserved variables
-        real(rkind), dimension(:,:,:,:), allocatable :: Wbackground        ! Background State
-        real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
+        logical :: use_nonconservative     !new options
+        logical :: use_skewsym_conv
+        logical :: useLAD
+        logical :: usefilter
+        logical :: usepartfilter
+        logical :: useforcezone
+
+        real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
+        real(rkind), dimension(:,:,:,:), allocatable :: Wbackground                          ! Background State
+        real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf                     ! Buffers
        
         real(rkind) :: Cmu, Cbeta, Ckap, Cdiff, CY
 
@@ -98,7 +105,8 @@ module CompressibleGrid
             procedure          :: init
             procedure          :: destroy_grid
             procedure          :: laplacian
-            procedure          :: gradient 
+            procedure          :: gradient
+            procedure          :: secondder
             procedure          :: advance_RK45
             procedure          :: simulate
             procedure          :: get_dt
@@ -106,6 +114,7 @@ module CompressibleGrid
             procedure, private :: get_primitive
             procedure, private :: get_conserved
             procedure, private :: post_bc
+            procedure, private :: getRHS_NC
             procedure, private :: getRHS
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
@@ -128,7 +137,7 @@ contains
         use mpi
         use reductions, only: P_MAXVAL, P_MINVAL
         use exits, only: message, nancheck, GracefulExit
-        class(cgrid),target, intent(inout) :: this
+        class(cgridNC),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
@@ -174,6 +183,13 @@ contains
         integer     :: vizramp = 5
         logical     :: compute_tke_budget = .false.
         logical     :: compute_scale_decomposition = .false.
+        ! new options
+        logical     :: use_nonconservative = .true.
+        logical     :: use_skewsym_conv = .true.
+        logical     :: useLAD = .true.
+        logical     :: usefilter = .true.
+        logical     :: usepartfilter = .false.
+        logical     :: useforcezone = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
@@ -185,6 +201,8 @@ contains
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
                              inviscid, nrestart, rewrite_viz, vizramp, &
                       compute_tke_budget, compute_scale_decomposition, &
+                        use_nonconservative, use_skewsym_conv, useLAD, &
+                               usefilter, usepartfilter, useforcezone, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn
 
 
@@ -215,6 +233,12 @@ contains
 
         this%compute_tke_budget = compute_tke_budget
         this%compute_scale_decomposition = compute_scale_decomposition
+        this%use_nonconservative = use_nonconservative
+        this%use_skewsym_conv = use_skewsym_conv
+        this%useLAD = useLAD
+        this%usefilter = usefilter
+        this%usepartfilter = usepartfilter
+        this%useforcezone = useforcezone
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -279,8 +303,12 @@ contains
         ! Allocate fields
         if ( allocated(this%fields) ) deallocate(this%fields) 
         call alloc_buffs(this%fields,nfields,'y',this%decomp)
+        if (this%useforcezone) then
+             call alloc_buffs(this%Wbackground,nfields,'y',this%decomp)
+        else
+             allocate(this%Wbackground(1,1,1,1))
+        end if
         call alloc_buffs(this%Wcnsrv,ncnsrv ,'y',this%decomp)
-        call alloc_buffs(this%Wbackground,nfields,'y',this%decomp)
         
         ! Associate pointers for ease of use
         this%rho  => this%fields(:,:,:, rho_index) 
@@ -304,24 +332,6 @@ contains
         this%nxp = this%decomp%ysz(1)
         this%nyp = this%decomp%ysz(2)
         this%nzp = this%decomp%ysz(3)
-
-        ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%der, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, this%Wbackground, &
-                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
-        
-        ! Check for correct initialization of the mixture object
-        call this%mix%check_initialization()
-
-        ! Update mix
-        call this%mix%update(this%Ys)
-        call this%mix%get_e_from_p(this%rho,this%p,this%e)
-        call this%mix%get_T(this%e,this%T)
-
-        ! print *, "Cp(1,1,1) = ", this%mix%Cp(1,1,1)
-        ! print *, "Cp(-1,1,1) = ", this%mix%Cp(this%nxp,1,1)
-
-        ! print *, "T(1,1,1) = ", this%T(1,1,1)
-        ! print *, "T(-1,1,1) = ", this%T(this%nxp,1,1)
 
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
@@ -375,7 +385,20 @@ contains
                         "gaussian",    "gaussian",     "gaussian"  )      
 
 
-        ! Allocate 2 buffers for each of the three decompositions
+        ! Go to hooks if a different initialization is desired (now moved to after initialization of der) 
+        call initfields(this%decomp, this%der, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, this%Wbackground, &
+                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
+
+        ! Check for correct initialization of the mixture object
+        call this%mix%check_initialization()
+
+        ! Update mix
+        call this%mix%update(this%Ys)
+        call this%mix%get_e_from_p(this%rho,this%p,this%e)
+        call this%mix%get_T(this%e,this%T)
+
+
+        ! Allocate at least 2 buffers for each of the three decompositions
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
         call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
         call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
@@ -458,15 +481,23 @@ contains
                                        this%x_bc, this%y_bc, this%z_bc, inputfile)
         end if
 
+        if (this%useforcezone) then
+            this%Wbackground(:,:,:,1) = this%rho*this%Ys(:,:,:,1)
+            this%Wbackground(:,:,:,2) = this%rho*this%Ys(:,:,:,2)
+            this%Wbackground(:,:,:,mom_index  ) = this%rho*this%u
+            this%Wbackground(:,:,:,mom_index+1) = this%rho*this%v
+            this%Wbackground(:,:,:,mom_index+2) = this%rho*this%w
+            this%Wbackground(:,:,:, TE_index  ) = this%rho*( this%e + half*(this%u*this%u + this%v*this%v + this%w*this%w) )
+        end if
+
     end subroutine
 
 
     subroutine destroy_grid(this)
-        class(cgrid), intent(inout) :: this
+        class(cgridNC), intent(inout) :: this
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
-        if (allocated(this%Wbackground)) deallocate(this%Wbackground)
         
         call this%der%destroy()
         if (allocated(this%der)) deallocate(this%der) 
@@ -484,7 +515,8 @@ contains
         call this%mix%destroy()
         if (allocated(this%mix)) deallocate(this%mix)
         
-        if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
+        if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv)
+        if (allocated(this%Wbackground)) deallocate(this%Wbackground)
         
         ! if (allocated(this%budget)) deallocate(this%budget)
 
@@ -500,7 +532,7 @@ contains
     end subroutine
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
-        class(cgrid),target, intent(inout) :: this
+        class(cgridNC),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
@@ -533,14 +565,48 @@ contains
 
     end subroutine 
 
+    subroutine secondder(this, f, d2fdx2, d2fdy2, d2fdz2, x_bc, y_bc, z_bc)
+        class(cgridNC),target, intent(inout) :: this
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdx2
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdy2
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdz2
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
+
+        der => this%der
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+
+        ! Get Y derivative
+        call der%d2dy2(f,d2fdy2,y_bc(1),y_bc(2))
+
+        ! Get X derivative
+        call transpose_y_to_x(f,xtmp,decomp)
+        call this%der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xdum,d2fdx2,decomp)
+
+        ! Get Z derivative
+        call transpose_y_to_z(f,ztmp,decomp)
+        call this%der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
+        call transpose_z_to_y(zdum,d2fdz2,decomp)
+
+    end subroutine
+
     subroutine laplacian(this, f, lapf, x_bc, y_bc, z_bc)
         use timer
-        class(cgrid),target, intent(inout) :: this
+        class(cgridNC),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         
-        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum,ytmp
         type(derivatives), pointer :: der
         type(decomp_info), pointer :: decomp
         
@@ -578,7 +644,7 @@ contains
         use exits,      only: GracefulExit, message
         use reductions, only: P_MAXVAL, P_MINVAL
         use RKCoeffs,   only: RK45_steps
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
         character(len=clen) :: stability
@@ -621,7 +687,7 @@ contains
         ! call this%getPhysicalProperties()
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%tsim, this%mu, this%bulk, this%kap, this%diff)
 
-        if (this%mix%ns .GT. 1) then
+        if ((this%mix%ns .GT. 1) .AND. (this%useLAD)) then
             dYsdx => gradYs(:,:,:,              1:  this%mix%ns)
             dYsdy => gradYs(:,:,:,  this%mix%ns+1:2*this%mix%ns)
             dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns)
@@ -634,7 +700,7 @@ contains
                              dvdx, dvdy, dvdz,&
                              dwdx, dwdy, dwdz,&
                             dYsdx,dYsdy,dYsdz )
-        else
+        else if (this%useLAD) then
             call this%getLAD(dudx, dudy, dudz,&
                              dvdx, dvdy, dvdz,&
                              dwdx, dwdy, dwdz )
@@ -853,7 +919,7 @@ contains
     subroutine advance_RK45(this, vizcond)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
         use exits,      only: message,nancheck,GracefulExit
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         logical,              intent(in)    :: vizcond
 
         real(rkind)                                               :: Qtmpt
@@ -872,6 +938,7 @@ contains
         real(rkind), dimension(:,:,:),     allocatable :: rhoPsi_SD_old        ! Temporary variable for large scale KE rate
         real(rkind), dimension(:,:,:,:),   allocatable :: rhoPsi_SD_prefilter  ! Temporary variable for large scale KE dissipation
         real(rkind), dimension(:,:,:,:),   allocatable :: rhoPsi_SD_postfilter ! Temporary variable for large scale KE dissipation
+        real(rkind), dimension(:,:,:),     allocatable :: filtmask, W_filt ! Temporary variables for diffusion zone
         ! real(rkind)                                    :: dt_tke
 
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -913,6 +980,11 @@ contains
             end if
         end if
 
+        if (this%usepartfilter) then
+            allocate( filtmask(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+            allocate( W_filt(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) )
+        end if
+
         Qtmp = zero
         Qtmpt = zero
 
@@ -940,7 +1012,11 @@ contains
                 call GracefulExit(trim(charout), 999)
             end if
 
-            call this%getRHS(rhs)
+            if (this%use_nonconservative) then
+                call this%getRHS_NC(rhs)
+            else
+                call this%getRHS(rhs)
+            end if
             Qtmp = this%dt*rhs + RK45_A(isub)*Qtmp
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
@@ -964,13 +1040,38 @@ contains
             end if
 
             ! Filter the conserved variables
-            do i = 1,this%mix%ns
-                call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-            end do
-            call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-            call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
-            call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
-            call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+            if (this%usefilter) then
+                do i = 1,this%mix%ns
+                    call this%filter(this%Wcnsrv(:,:,:,i), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+                end do
+                call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+                call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+                call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+                call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+            end if
+
+            ! Filter the conserved variables only in diffusion zone
+            if (this%usepartfilter) then
+                ! makes the mask function
+                call hook_filmask(this%decomp, this%mesh, this%Wcnsrv, filtmask, this%tsim, this%x_bc, this%y_bc, this%z_bc)
+                do i = 1,this%mix%ns
+                    W_filt = this%Wcnsrv(:,:,:,i)
+                    call this%filter(W_filt, this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+                    this%Wcnsrv(:,:,:,i) = (one-filtmask)*this%Wcnsrv(:,:,:,i) + filtmask*W_filt
+                end do
+                W_filt = this%Wcnsrv(:,:,:,mom_index)
+                call this%filter(W_filt, this%fil, 1, -this%x_bc, this%y_bc, this%z_bc)
+                this%Wcnsrv(:,:,:,mom_index) = (one-filtmask)*this%Wcnsrv(:,:,:,mom_index) + filtmask*W_filt
+                W_filt = this%Wcnsrv(:,:,:,mom_index+1)
+                call this%filter(W_filt, this%fil, 1, this%x_bc, -this%y_bc, this%z_bc)
+                this%Wcnsrv(:,:,:,mom_index+1) = (one-filtmask)*this%Wcnsrv(:,:,:,mom_index+1) + filtmask*W_filt
+                W_filt = this%Wcnsrv(:,:,:,mom_index+2)
+                call this%filter(W_filt, this%fil, 1, this%x_bc, this%y_bc, -this%z_bc)
+                this%Wcnsrv(:,:,:,mom_index+2) = (one-filtmask)*this%Wcnsrv(:,:,:,mom_index+2) + filtmask*W_filt
+                W_filt = this%Wcnsrv(:,:,:,TE_index)
+                call this%filter(W_filt, this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+                this%Wcnsrv(:,:,:,TE_index) = (one-filtmask)*this%Wcnsrv(:,:,:,TE_index) + filtmask*W_filt
+            end if
             
             call this%get_primitive()
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
@@ -1008,7 +1109,7 @@ contains
                     ! call this%getPhysicalProperties()
                     call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%tsim, this%mu, this%bulk, this%kap, this%diff)
 
-                    if (this%mix%ns .GT. 1) then
+                    if ((this%mix%ns .GT. 1) .AND. (this%useLAD)) then
                         dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
                         do i = 1,this%mix%ns
                             call this%gradient(this%Ys(:,:,:,i),dYsdx(:,:,:,i),dYsdy(:,:,:,i),dYsdz(:,:,:,i), this%x_bc, this%y_bc, this%z_bc)
@@ -1017,7 +1118,7 @@ contains
                                          dvdx, dvdy, dvdz,&
                                          dwdx, dwdy, dwdz,&
                                         dYsdx,dYsdy,dYsdz )
-                    else
+                    else if (this%useLAD) then
                         call this%getLAD(dudx, dudy, dudz,&
                                          dvdx, dvdy, dvdz,&
                                          dwdx, dwdy, dwdz )
@@ -1082,11 +1183,14 @@ contains
         if ( allocated( rhoPsi_SD_old        ) ) deallocate( rhoPsi_SD_old        )
         if ( allocated( rhoPsi_SD_prefilter  ) ) deallocate( rhoPsi_SD_prefilter  )
         if ( allocated( rhoPsi_SD_postfilter ) ) deallocate( rhoPsi_SD_postfilter )
+
+        if ( allocated( filtmask ) ) deallocate( filtmask )
+        if ( allocated( W_filt ) ) deallocate( W_filt )
     end subroutine
 
     subroutine get_dt(this,stability)
         use reductions, only : P_MAXVAL
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
         real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtdiff
@@ -1130,7 +1234,7 @@ contains
     end subroutine
 
     pure subroutine get_primitive(this)
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(:,:,:), pointer :: onebyrho
         real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
         integer :: i
@@ -1165,7 +1269,7 @@ contains
     end subroutine
 
     pure subroutine get_conserved(this)
-        class(cgrid), intent(inout) :: this
+        class(cgridNC), intent(inout) :: this
         integer :: i
 
         do i = 1,this%mix%ns
@@ -1179,7 +1283,7 @@ contains
     end subroutine
 
     subroutine post_bc(this)
-        class(cgrid), intent(inout) :: this
+        class(cgridNC), intent(inout) :: this
 
         call this%mix%update(this%Ys)
         call this%mix%get_e_from_p(this%rho,this%p,this%e)
@@ -1187,8 +1291,555 @@ contains
 
     end subroutine
 
+    subroutine getRHS_NC(this, rhs)
+        use exits, only: GracefulExit
+        class(cgridNC), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj 
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,3*this%mix%ns), target :: gradYs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: NCbuff                  ! extra buffers for nonconservative
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: flux, tmp
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:), pointer :: d2udx2,d2udy2,d2udz2,d2vdx2,d2vdy2,d2vdz2,d2wdx2,d2wdy2,d2wdz2
+        real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
+        real(rkind), dimension(:,:,:,:), pointer :: d2Ysdx2, d2Ysdy2, d2Ysdz2
+        real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
+        real(rkind), dimension(:,:,:), pointer :: dTdx,dTdy,dTdz,d2Tdx2,d2Tdy2,d2Tdz2
+        real(rkind), dimension(:,:,:), pointer :: drhou_dx, drhov_dy, drhow_dz
+        real(rkind), dimension(:,:,:), pointer :: dmudx,dmudy,dmudz
+        real(rkind), dimension(:,:,:), pointer :: totale,bambda,lambda
+        real(rkind), dimension(:,:,:), pointer :: dbulkdx,dbulkdy,dbulkdz
+        real(rkind), dimension(:,:,:), pointer :: dkapdx,dkapdy,dkapdz
+        real(rkind), dimension(:,:,:,:), pointer :: Jx,Jy,Jz
+        real(rkind), dimension(:,:,:), pointer :: dsumJxdx, dsumJydy, dsumJzdz
+        real(rkind), dimension(:,:,:), pointer :: dJxdx, dJydy, dJzdz
+        integer :: i,k
+
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2,ztmp1,ztmp2
+
+        der => this%der
+        decomp => this%decomp
+        xtmp1 => this%xbuf(:,:,:,1)
+        xtmp2 => this%xbuf(:,:,:,2)
+        ztmp1 => this%zbuf(:,:,:,1)
+        ztmp2 => this%zbuf(:,:,:,2)
+
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+
+        call this%gradient(this%u,dudx,dudy,dudz, [0,0], this%y_bc, this%z_bc)
+        call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc, [0,0], this%z_bc)
+        call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc, [0,0])
+
+        ! call this%getPhysicalProperties()
+        call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%tsim, this%mu, this%bulk, this%kap, this%diff)
+
+        if (this%mix%ns .GT. 1) then
+            dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
+            do i = 1,this%mix%ns
+                call this%gradient(this%Ys(:,:,:,i),dYsdx(:,:,:,i),dYsdy(:,:,:,i),dYsdz(:,:,:,i), this%x_bc, this%y_bc, this%z_bc)
+            end do
+            if (this%useLAD) then
+                call this%getLAD(dudx, dudy, dudz,&
+                                 dvdx, dvdy, dvdz,&
+                                 dwdx, dwdy, dwdz,&
+                                dYsdx,dYsdy,dYsdz )
+            else
+                call this%getLAD(dudx, dudy, dudz,&
+                                 dvdx, dvdy, dvdz,&
+                                 dwdx, dwdy, dwdz )
+            end if
+        end if
+
+        rhs = zero
+
+        ! convection and pressure terms for skew-symmetric version
+        if (this%use_skewsym_conv) then
+            drhou_dx => this%ybuf(:,:,:,1)
+            drhov_dy => this%ybuf(:,:,:,2)
+            drhow_dz => this%ybuf(:,:,:,3)
+            totale => this%ybuf(:,:,:,4)
+            totale = this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w )    ! e without rho
+            call transpose_y_to_x(this%Wcnsrv(:,:,:,mom_index),xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,drhou_dx,this%decomp)
+            call this%der%ddy(this%Wcnsrv(:,:,:,mom_index+1),drhov_dy,0,0)
+            call transpose_y_to_z(this%Wcnsrv(:,:,:,mom_index+2),ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,drhow_dz,this%decomp)
+            ! x-derivatives, convective conservative form and pressure portion
+            select case(this%mix%ns)
+            case(1)
+                rhs(:,:,:,1) = rhs(:,:,:,1) - drhou_dx
+            case default
+                do i = 1,this%mix%ns
+                    flux = this%Wcnsrv(:,:,:,i)*this%u   ! mass
+                    call transpose_y_to_x(flux,xtmp1,this%decomp)
+                    call this%der%ddx(xtmp1,xtmp2,0,0)
+                    call transpose_x_to_y(xtmp2,flux,this%decomp)
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - half*flux
+                end do
+            end select
+            flux = this%Wcnsrv(:,:,:,mom_index)*this%u*half + this%p
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - flux
+            flux = this%Wcnsrv(:,:,:,mom_index+1)*this%u
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - half*flux
+            flux = this%Wcnsrv(:,:,:,mom_index+2)*this%u
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - half*flux
+            flux = (half*this%Wcnsrv(:,:,:, TE_index) + this%p)*this%u
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index) - flux
+
+            ! y-derivatives, convective conservative form and pressure portion
+            select case(this%mix%ns)
+            case(1)
+                rhs(:,:,:,1) = rhs(:,:,:,1) - drhov_dy
+            case default
+                do i = 1,this%mix%ns
+                    flux = this%Wcnsrv(:,:,:,i)*this%v   ! mass
+                    call this%der%ddy(flux,tmp,0,0)
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - half*tmp
+                end do
+            end select
+            flux = this%Wcnsrv(:,:,:,mom_index)*this%v   ! x-momentum
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - half*tmp
+            flux = this%Wcnsrv(:,:,:,mom_index+1)*this%v*half + this%p  ! y-momentum
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - tmp
+            flux = this%Wcnsrv(:,:,:,mom_index+2)*this%v   ! z-momentum
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - half*tmp
+            flux = (half*this%Wcnsrv(:,:,:, TE_index) + this%p)*this%v  ! Total Energy
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - tmp
+
+            ! z-derivatives, convective conservative form and pressure portion
+            select case(this%mix%ns)
+            case(1)
+                rhs(:,:,:,1) = rhs(:,:,:,1) - drhow_dz
+            case default
+                do i = 1,this%mix%ns
+                    flux = this%Wcnsrv(:,:,:,i)*this%w   ! mass
+                    call transpose_y_to_z(flux,ztmp1,this%decomp)
+                    call this%der%ddz(ztmp1,ztmp2,0,0)
+                    call transpose_z_to_y(ztmp2,flux,this%decomp)
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - half*flux
+                end do
+            end select
+            flux = this%Wcnsrv(:,:,:,mom_index)*this%w     ! x-momentum
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - half*flux
+            flux = this%Wcnsrv(:,:,:,mom_index+1)*this%w   ! y-momentum
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - half*flux
+            flux = this%Wcnsrv(:,:,:,mom_index+2)*this%w*half + this%p  ! z-momentum
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
+            flux = (half*this%Wcnsrv(:,:,:, TE_index) + this%p)*this%w   ! Total Energy
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - flux
+
+            ! other portions of the convective terms
+            ! species
+            select case(this%mix%ns)
+            case(1)
+                do i = 1,this%mix%ns
+                ! already covered previously if ns=1
+                end do
+            case default
+                do i = 1,this%mix%ns
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - half*this%Ys(:,:,:,i)*drhou_dx - half*this%Ys(:,:,:,i)*drhov_dy - half*this%Ys(:,:,:,i)*drhow_dz
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - half*this%Wcnsrv(:,:,:,mom_index)*dYsdx(:,:,:,i)
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - half*this%Wcnsrv(:,:,:,mom_index+1)*dYsdy(:,:,:,i)
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - half*this%Wcnsrv(:,:,:,mom_index+2)*dYsdz(:,:,:,i)
+                end do
+            end select
+            ! x-momentum
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - half*this%u*drhou_dx - half*this%u*drhov_dy - half*this%u*drhow_dz
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - half*this%Wcnsrv(:,:,:,mom_index)*dudx
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - half*this%Wcnsrv(:,:,:,mom_index+1)*dudy
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - half*this%Wcnsrv(:,:,:,mom_index+2)*dudz
+            ! y-momentum
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - half*this%v*drhou_dx - half*this%v*drhov_dy - half*this%v*drhow_dz
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - half*this%Wcnsrv(:,:,:,mom_index)*dvdx
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - half*this%Wcnsrv(:,:,:,mom_index+1)*dvdy
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - half*this%Wcnsrv(:,:,:,mom_index+2)*dvdz
+            ! z-momentum
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - half*this%w*drhou_dx - half*this%w*drhov_dy - half*this%w*drhow_dz
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - half*this%Wcnsrv(:,:,:,mom_index)*dwdx
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - half*this%Wcnsrv(:,:,:,mom_index+1)*dwdy
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - half*this%Wcnsrv(:,:,:,mom_index+2)*dwdz
+            ! energy
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - half*(totale)*(drhou_dx+drhov_dy+drhow_dz)
+            call transpose_y_to_x(totale,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+            call transpose_x_to_y(xtmp2,tmp,this%decomp)
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - half*this%Wcnsrv(:,:,:,mom_index)*tmp
+            call this%der%ddy(totale,tmp,this%y_bc(1),this%y_bc(2))
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - half*this%Wcnsrv(:,:,:,mom_index+1)*tmp
+            call transpose_y_to_z(totale,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+            call transpose_z_to_y(ztmp2,tmp,this%decomp)
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - half*this%Wcnsrv(:,:,:,mom_index+2)*tmp
+        else
+        ! regular convection and pressure terms
+            ! x-derivatives, convective conservative form
+            select case(this%mix%ns)
+            case(1)
+                flux = this%Wcnsrv(:,:,:,mom_index)   ! mass
+                call transpose_y_to_x(flux,xtmp1,this%decomp)
+                call this%der%ddx(xtmp1,xtmp2,0,0)
+                call transpose_x_to_y(xtmp2,flux,this%decomp)
+                rhs(:,:,:,1) = rhs(:,:,:,1) - flux
+            case default
+                do i = 1,this%mix%ns
+                    flux = this%Wcnsrv(:,:,:,i)*this%u   ! mass
+                    call transpose_y_to_x(flux,xtmp1,this%decomp)
+                    call this%der%ddx(xtmp1,xtmp2,0,0)
+                    call transpose_x_to_y(xtmp2,flux,this%decomp)
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - flux
+                end do
+            end select
+            flux = this%Wcnsrv(:,:,:,mom_index)*this%u + this%p
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - flux
+            flux = this%Wcnsrv(:,:,:,mom_index+1)*this%u
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
+            flux = this%Wcnsrv(:,:,:,mom_index+2)*this%u
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
+            flux = (this%Wcnsrv(:,:,:, TE_index) + this%p)*this%u
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index) - flux
+
+            ! y-derivatives, convective conservative form
+            select case(this%mix%ns)
+            case(1)
+                flux = this%Wcnsrv(:,:,:,mom_index+1)   ! mass
+                call this%der%ddy(flux,tmp,0,0)
+                rhs(:,:,:,1) = rhs(:,:,:,1) - tmp
+            case default
+                do i = 1,this%mix%ns
+                    flux = this%Wcnsrv(:,:,:,i)*this%v   ! mass
+                    call this%der%ddy(flux,tmp,0,0)
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - tmp
+                end do
+            end select
+            flux = this%Wcnsrv(:,:,:,mom_index)*this%v     ! x-momentum
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - tmp
+            flux = this%Wcnsrv(:,:,:,mom_index+1)*this%v + this%p  ! y-momentum
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - tmp
+            flux = this%Wcnsrv(:,:,:,mom_index+2)*this%v    ! z-momentum
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - tmp
+            flux = (this%Wcnsrv(:,:,:, TE_index) + this%p)*this%v  ! Total Energy
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - tmp
+
+            ! z-derivatives, convective conservative form
+            select case(this%mix%ns)
+            case(1)
+                flux = this%Wcnsrv(:,:,:,mom_index+2)   ! mass
+                call transpose_y_to_z(flux,ztmp1,this%decomp)
+                call this%der%ddz(ztmp1,ztmp2,0,0)
+                call transpose_z_to_y(ztmp2,flux,this%decomp)
+                rhs(:,:,:,1) = rhs(:,:,:,1) - flux
+            case default
+                do i = 1,this%mix%ns
+                    flux = this%Wcnsrv(:,:,:,i)*this%w   ! mass
+                    call transpose_y_to_z(flux,ztmp1,this%decomp)
+                    call this%der%ddz(ztmp1,ztmp2,0,0)
+                    call transpose_z_to_y(ztmp2,flux,this%decomp)
+                    rhs(:,:,:,i) = rhs(:,:,:,i) - flux
+                end do
+            end select
+            flux = this%Wcnsrv(:,:,:,mom_index)*this%w     ! x-momentum
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - flux
+            flux = this%Wcnsrv(:,:,:,mom_index+1)*this%w   ! y-momentum
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
+            flux = this%Wcnsrv(:,:,:,mom_index+2)*this%w + this%p  ! z-momentum
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
+            flux = (this%Wcnsrv(:,:,:, TE_index) + this%p)*this%w   ! Total Energy
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - flux
+        end if
+
+        ! heat conduction (kap) terms, for energy equation
+        dTdx => this%ybuf(:,:,:,1)
+        dTdy => this%ybuf(:,:,:,2)
+        dTdz => this%ybuf(:,:,:,3)
+        d2Tdx2 => this%ybuf(:,:,:,4)
+        d2Tdy2 => this%ybuf(:,:,:,5)
+        d2Tdz2 => this%ybuf(:,:,:,6)
+        dkapdx => NCbuff(:,:,:,1)
+        dkapdy => NCbuff(:,:,:,2)
+        dkapdz => NCbuff(:,:,:,3)
+        call this%gradient(this%T,dTdx,dTdy,dTdz, this%x_bc, this%y_bc, this%z_bc)
+        call this%secondder(this%T,d2Tdx2,d2Tdy2,d2Tdz2,[0,0],[0,0],[0,0])
+        call this%gradient(this%kap,dkapdx,dkapdy,dkapdz, this%x_bc, this%y_bc, this%z_bc)
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + dkapdx*dTdx+dkapdy*dTdy+dkapdz*dTdz+this%kap*(d2Tdx2+d2Tdy2+d2Tdz2)
+
+        ! stress (mu/bulk) terms
+        bambda => NCbuff(:,:,:,8)             ! used for tauxx,tauyy,tauzz
+        lambda => NCbuff(:,:,:,9)
+        bambda = (four/three)*this%mu + this%bulk
+        lambda = this%bulk - (two/three)*this%mu
+        dmudx => this%ybuf(:,:,:,1)
+        dmudy => this%ybuf(:,:,:,2)
+        dmudz => this%ybuf(:,:,:,3)
+        dbulkdx => this%ybuf(:,:,:,4)
+        dbulkdy => this%ybuf(:,:,:,5)
+        dbulkdz => this%ybuf(:,:,:,6)
+        call this%gradient(this%mu,dmudx,dmudy,dmudz, this%x_bc, this%y_bc, this%z_bc)
+        call this%gradient(this%bulk,dbulkdx,dbulkdy,dbulkdz, this%x_bc, this%y_bc, this%z_bc)
+        !tau_xx,tau_xy,tau_xz setup
+        d2udx2 => NCbuff(:,:,:,1)
+        d2udy2 => NCbuff(:,:,:,2)
+        d2udz2 => NCbuff(:,:,:,3)
+        call this%secondder(this%u,d2udx2,d2udy2,d2udz2,[0,0],[0,0],[0,0])
+        !tau_xx in x-momentum and energy eq
+        flux = (four/three*dmudx+dbulkdx)*dudx+(dbulkdx-two/three*dmudx)*(dvdy+dwdz)+bambda*d2udx2
+        tmp = dvdy+dwdz
+        call transpose_y_to_x(tmp,xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,0,0)
+        call transpose_x_to_y(xtmp2,tmp,this%decomp)                   !tmp = ddx(dvdy+dwdz)
+        flux = flux+lambda*tmp
+        rhs(:,:,:, mom_index) = rhs(:,:,:, mom_index) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%u*flux
+        !tau_xy in x-momentum and energy eq
+        call this%der%ddy(dvdx,tmp,0,0)        !tmp = ddy(dvdx)
+        flux = dmudy*(dudy+dvdx)+this%mu*(d2udy2+tmp)
+        rhs(:,:,:, mom_index) = rhs(:,:,:, mom_index) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%u*flux
+        !tau_xz in x-momentum and energy eq
+        call transpose_y_to_z(dwdx,ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,0,0)
+        call transpose_z_to_y(ztmp2,tmp,this%decomp)                   !tmp = ddz(dwdx)
+        flux = dmudz*(dudz+dwdx)+this%mu*(d2udz2+tmp)
+        rhs(:,:,:, mom_index) = rhs(:,:,:, mom_index) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%u*flux
+        !tau_yy,tau_yx,tau_yz setup
+        d2vdx2 => NCbuff(:,:,:,1)
+        d2vdy2 => NCbuff(:,:,:,2)
+        d2vdz2 => NCbuff(:,:,:,3)
+        call this%secondder(this%v,d2vdx2,d2vdy2,d2vdz2,[0,0],[0,0],[0,0])
+        !tau_yy in y-momentum and energy eq
+        flux = (four/three*dmudy+dbulkdy)*dvdy+(dbulkdy-two/three*dmudy)*(dudx+dwdz)+bambda*d2vdy2
+        call this%der%ddy(dudx+dwdz,tmp,0,0)     !tmp = ddy(dudx+dwdz)
+        flux = flux+lambda*tmp
+        rhs(:,:,:, mom_index+1) = rhs(:,:,:, mom_index+1) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%v*flux
+        !tau_yx in y-momentum and energy eq
+        call transpose_y_to_x(dudy,xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,0,0)
+        call transpose_x_to_y(xtmp2,tmp,this%decomp)                   !tmp = ddx(dudy)
+        flux = dmudx*(dvdx+dudy)+this%mu*(d2vdx2+tmp)
+        rhs(:,:,:, mom_index+1) = rhs(:,:,:, mom_index+1) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%v*flux
+        !tau_yz in y-momentum and energy eq
+        call transpose_y_to_z(dwdy,ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,0,0)
+        call transpose_z_to_y(ztmp2,tmp,this%decomp)                   !tmp = ddz(dwdy)
+        flux = dmudz*(dvdz+dwdy)+this%mu*(d2vdz2+tmp)
+        rhs(:,:,:, mom_index+1) = rhs(:,:,:, mom_index+1) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%v*flux
+        !tau_zz,tau_zx,tau_zy setup
+        d2wdx2 => NCbuff(:,:,:,1)
+        d2wdy2 => NCbuff(:,:,:,2)
+        d2wdz2 => NCbuff(:,:,:,3)
+        call this%secondder(this%w,d2wdx2,d2wdy2,d2wdz2,[0,0],[0,0],[0,0])
+        !tau_zz in z-momentum and energy eq
+        flux = (four/three*dmudz+dbulkdz)*dwdz+(dbulkdz-two/three*dmudz)*(dudx+dvdy)+bambda*d2wdz2
+        tmp = dudx+dvdy
+        call transpose_y_to_z(tmp,ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,0,0)
+        call transpose_z_to_y(ztmp2,tmp,this%decomp)                   !tmp = ddz(dudx+dvdy)
+        flux = flux+lambda*tmp
+        rhs(:,:,:, mom_index+2) = rhs(:,:,:, mom_index+2) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%w*flux
+        !tau_zx in z-momentum and energy eq
+        call transpose_y_to_x(dudz,xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,0,0)
+        call transpose_x_to_y(xtmp2,tmp,this%decomp)                   !tmp = ddx(dudz)
+        flux = dmudx*(dwdx+dudz)+this%mu*(d2wdx2+tmp)
+        rhs(:,:,:, mom_index+2) = rhs(:,:,:, mom_index+2) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%w*flux
+        !tau_zy in z-momentum and energy eq
+        call this%der%ddy(dvdz,tmp,0,0)        !tmp = ddy(dvdz)
+        flux = dmudy*(dwdy+dvdz)+this%mu*(d2wdy2+tmp)
+        rhs(:,:,:, mom_index+2) = rhs(:,:,:, mom_index+2) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%w*flux
+        !finish terms in energy eq
+        NCbuff = duidxj
+        dudx => NCbuff(:,:,:,1); dudy => NCbuff(:,:,:,2); dudz => NCbuff(:,:,:,3);
+        dvdx => NCbuff(:,:,:,4); dvdy => NCbuff(:,:,:,5); dvdz => NCbuff(:,:,:,6);
+        dwdx => NCbuff(:,:,:,7); dwdy => NCbuff(:,:,:,8); dwdz => NCbuff(:,:,:,9);
+        call this%get_tau( duidxj )
+        tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx)
+        tauxz => duidxj(:,:,:,tauxzidx); tauyy => duidxj(:,:,:,tauyyidx) 
+        tauyz => duidxj(:,:,:,tauyzidx); tauzz => duidxj(:,:,:,tauzzidx)
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + dudx*tauxx+dudy*tauxy+dudz*tauxz
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + dvdx*tauxy+dvdy*tauyy+dvdz*tauyz
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + dwdx*tauxz+dwdy*tauyz+dwdz*tauzz
+     
+
+        !molecular diffusion (diff) terms
+        !need to increase buffer size if greater than 3 species
+        if (this%mix%ns .GT. 3) then
+            call GracefulExit("Only up to 3 species are currently supported", 3214)
+        end if
+        ! calculating dJ/dx terms
+        if (this%mix%ns .GT. 1) then
+            d2Ysdx2 => NCbuff(:,:,:,1:this%mix%ns)
+            d2Ysdy2 => NCbuff(:,:,:,this%mix%ns+1:2*this%mix%ns)
+            d2Ysdz2 => NCbuff(:,:,:,2*this%mix%ns+1:3*this%mix%ns)
+            dsumJxdx => this%ybuf(:,:,:,1); dsumJydy => this%ybuf(:,:,:,2); dsumJzdz => this%ybuf(:,:,:,3); 
+            dJxdx => this%ybuf(:,:,:,4); dJydy => this%ybuf(:,:,:,5); dJzdz => this%ybuf(:,:,:,6);
+            do i = 1,this%mix%ns
+                call this%secondder(this%Ys(:,:,:,i),d2Ysdx2(:,:,:,i),d2Ysdy2(:,:,:,i),d2Ysdz2(:,:,:,i),[0,0],[0,0],[0,0])
+            end do
+            !x-derivatives
+            do i = 1,this%mix%ns
+                dsumJxdx = zero
+                if (this%mix%ns .GT. 2) then
+                    do k = 1,this%mix%ns
+                    ! this calculates the molecular diffusion flux correction
+                        flux = this%Wcnsrv(:,:,:,i)*this%diff(:,:,:,k)
+                        call transpose_y_to_x(flux,xtmp1,this%decomp)
+                        call this%der%ddx(xtmp1,xtmp2,0,0)
+                        call transpose_x_to_y(xtmp2,tmp,this%decomp)
+                        dsumJxdx = dsumJxdx+tmp*dYsdx(:,:,:,k)+flux*d2Ysdx2(:,:,:,k)
+                    end do
+                end if
+                flux = this%rho*this%diff(:,:,:,i)
+                call transpose_y_to_x(flux,xtmp1,this%decomp)
+                call this%der%ddx(xtmp1,xtmp2,0,0)
+                call transpose_x_to_y(xtmp2,tmp,this%decomp)
+                dJxdx = tmp*dYsdx(:,:,:,i) + flux*d2Ysdx2(:,:,:,i) - dsumJxdx
+                !species
+                rhs(:,:,:,i) = rhs(:,:,:,i) + dJxdx
+                !energy
+                call this%mix%material(i)%mat%get_enthalpy(this%T,tmp)    ! tmp = h_i
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*dJxdx
+            end do
+            !y-derivatives
+            do i = 1,this%mix%ns
+                dsumJydy = zero
+                if (this%mix%ns .GT. 2) then
+                    do k = 1,this%mix%ns
+                    ! this calculates the molecular diffusion flux correction
+                        flux = this%Wcnsrv(:,:,:,i)*this%diff(:,:,:,k)
+                        call this%der%ddy(flux,tmp,0,0)
+                        dsumJydy = dsumJydy+tmp*dYsdy(:,:,:,k)+flux*d2Ysdy2(:,:,:,k)
+                    end do
+                end if
+                flux = this%rho*this%diff(:,:,:,i)
+                call this%der%ddy(flux,tmp,0,0)
+                dJydy = tmp*dYsdy(:,:,:,i) + flux*d2Ysdy2(:,:,:,i) - dsumJydy
+                !species
+                rhs(:,:,:,i) = rhs(:,:,:,i) + dJydy
+                !energy
+                call this%mix%material(i)%mat%get_enthalpy(this%T,tmp)    ! tmp = h_i
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*dJydy
+            end do
+            !z-derivatives
+            do i = 1,this%mix%ns
+                dsumJzdz = zero
+                if (this%mix%ns .GT. 2) then
+                    do k = 1,this%mix%ns
+                    ! this calculates the molecular diffusion flux correction
+                        flux = this%Wcnsrv(:,:,:,i)*this%diff(:,:,:,k)
+                        call transpose_y_to_z(flux,ztmp1,this%decomp)
+                        call this%der%ddz(ztmp1,ztmp2,0,0)
+                        call transpose_z_to_y(ztmp2,tmp,this%decomp)
+                        dsumJzdz = dsumJzdz+tmp*dYsdz(:,:,:,k)+flux*d2Ysdz2(:,:,:,k)
+                    end do
+                end if
+                flux = this%rho*this%diff(:,:,:,i)
+                call transpose_y_to_z(flux,ztmp1,this%decomp)
+                call this%der%ddz(ztmp1,ztmp2,0,0)
+                call transpose_z_to_y(ztmp2,tmp,this%decomp)
+                dJzdz = tmp*dYsdz(:,:,:,i) + flux*d2Ysdz2(:,:,:,i) - dsumJzdz
+                !species
+                rhs(:,:,:,i) = rhs(:,:,:,i) + dJzdz
+                !energy
+                call this%mix%material(i)%mat%get_enthalpy(this%T,tmp)    ! tmp = h_i
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*dJzdz
+            end do
+
+            !final J terms in energy equation:
+            call this%get_J(gradYs)
+            Jx => gradYs(:,:,:,1:this%mix%ns)
+            Jy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns)
+            Jz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns)
+            do i = 1,this%mix%ns
+                call this%mix%material(i)%mat%get_enthalpy(this%T,flux)
+                call transpose_y_to_x(flux,xtmp1,this%decomp)
+                call this%der%ddx(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+                call transpose_x_to_y(xtmp2,tmp,this%decomp)
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*Jx(:,:,:,i)
+                call this%der%ddy(flux,tmp,this%y_bc(1),this%y_bc(2))
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*Jy(:,:,:,i)
+                call transpose_y_to_z(flux,ztmp1,this%decomp)
+                call this%der%ddz(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+                call transpose_z_to_y(ztmp2,tmp,this%decomp)
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*Jz(:,:,:,i)
+            end do
+        end if 
+
+        ! Call problem source hook
+        call hook_source(this%decomp, this%der, this%mesh, this%fields, this%Wcnsrv, this%Wbackground, this%mix, this%tsim, this%dt, rhs)
+        
+    end subroutine
+
+
     subroutine getRHS(this, rhs)
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,3*this%mix%ns), target :: gradYs
@@ -1203,9 +1854,9 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
-        call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
-        call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
-        call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
+        call this%gradient(this%u,dudx,dudy,dudz, [0,0], this%y_bc, this%z_bc)
+        call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc, [0,0], this%z_bc)
+        call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc, [0,0])
 
         ! call this%getPhysicalProperties()
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%tsim, this%mu, this%bulk, this%kap, this%diff)
@@ -1215,15 +1866,18 @@ contains
             do i = 1,this%mix%ns
                 call this%gradient(this%Ys(:,:,:,i),dYsdx(:,:,:,i),dYsdy(:,:,:,i),dYsdz(:,:,:,i), this%x_bc, this%y_bc, this%z_bc)
             end do
-            call this%getLAD(dudx, dudy, dudz,&
-                             dvdx, dvdy, dvdz,&
-                             dwdx, dwdy, dwdz,&
-                            dYsdx,dYsdy,dYsdz )
-        else
-            call this%getLAD(dudx, dudy, dudz,&
-                             dvdx, dvdy, dvdz,&
-                             dwdx, dwdy, dwdz )
+            if (this%useLAD) then
+                call this%getLAD(dudx, dudy, dudz,&
+                                 dvdx, dvdy, dvdz,&
+                                 dwdx, dwdy, dwdz,&
+                                dYsdx,dYsdy,dYsdz )
+            else
+                call this%getLAD(dudx, dudy, dudz,&
+                                 dvdx, dvdy, dvdz,&
+                                 dwdx, dwdy, dwdz )
+            end if
         end if
+
         
         ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
         call this%get_tau( duidxj )
@@ -1263,7 +1917,7 @@ contains
     subroutine getRHS_x(       this,  rhs,&
                         tauxx,tauxy,tauxz,&
                             qx, Jx )
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
@@ -1279,14 +1933,14 @@ contains
         case(1)
             flux = this%Wcnsrv(:,:,:,mom_index  )   ! mass
             call transpose_y_to_x(flux,xtmp1,this%decomp)
-            call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
+            call this%der%ddx(xtmp1,xtmp2,0,0)
             call transpose_x_to_y(xtmp2,flux,this%decomp)
             rhs(:,:,:,1) = rhs(:,:,:,1) - flux
         case default
             do i = 1,this%mix%ns
                 flux = this%Wcnsrv(:,:,:,i)*this%u + Jx(:,:,:,i)   ! mass
                 call transpose_y_to_x(flux,xtmp1,this%decomp)
-                call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
+                call this%der%ddx(xtmp1,xtmp2,0,0)
                 call transpose_x_to_y(xtmp2,flux,this%decomp)
                 rhs(:,:,:,i) = rhs(:,:,:,i) - flux
             end do
@@ -1294,25 +1948,25 @@ contains
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%u + this%p - tauxx ! x-momentum
         call transpose_y_to_x(flux,xtmp1,this%decomp)
-        call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2)) ! Symmetric for x-momentum
+        call this%der%ddx(xtmp1,xtmp2,0,0)
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%v          - tauxy ! y-momentum
         call transpose_y_to_x(flux,xtmp1,this%decomp)
-        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
+        call this%der%ddx(xtmp1,xtmp2,0,0)
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%w          - tauxz ! z-momentum
         call transpose_y_to_x(flux,xtmp1,this%decomp)
-        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
+        call this%der%ddx(xtmp1,xtmp2,0,0)
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
         flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz + qx ! Total Energy
         call transpose_y_to_x(flux,xtmp1,this%decomp)
-        call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
+        call this%der%ddx(xtmp1,xtmp2,0,0)
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
 
@@ -1321,7 +1975,7 @@ contains
     subroutine getRHS_y(       this,  rhs,&
                         tauxy,tauyy,tauyz,&
                             qy, Jy )
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxy,tauyy,tauyz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
@@ -1336,30 +1990,30 @@ contains
         select case(this%mix%ns)
         case(1)
             flux = this%Wcnsrv(:,:,:,mom_index+1)   ! mass
-            call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
+            call this%der%ddy(flux,ytmp1,0,0)
             rhs(:,:,:,1) = rhs(:,:,:,1) - ytmp1
         case default
             do i = 1,this%mix%ns
                 flux = this%Wcnsrv(:,:,:,i)*this%v + Jy(:,:,:,i) ! mass
-                call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
+                call this%der%ddy(flux,ytmp1,0,0)
                 rhs(:,:,:,i) = rhs(:,:,:,i) - ytmp1
             end do
         end select
 
         flux = this%Wcnsrv(:,:,:,mom_index+1)*this%u          - tauxy ! x-momentum
-        call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
+        call this%der%ddy(flux,ytmp1,0,0)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - ytmp1
 
         flux = this%Wcnsrv(:,:,:,mom_index+1)*this%v + this%p - tauyy ! y-momentum
-        call this%der%ddy(flux,ytmp1, this%y_bc(1), this%y_bc(2)) ! Symmetric for y-momentum
+        call this%der%ddy(flux,ytmp1,0,0)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - ytmp1
 
         flux = this%Wcnsrv(:,:,:,mom_index+1)*this%w          - tauyz ! z-momentum
-        call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
+        call this%der%ddy(flux,ytmp1,0,0)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - ytmp1
 
         flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz + qy ! Total Energy
-        call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
+        call this%der%ddy(flux,ytmp1,0,0)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - ytmp1
 
     end subroutine
@@ -1367,7 +2021,7 @@ contains
     subroutine getRHS_z(       this,  rhs,&
                         tauxz,tauyz,tauzz,&
                             qz, Jz )
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxz,tauyz,tauzz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
@@ -1383,7 +2037,7 @@ contains
         case(1)
             flux = this%Wcnsrv(:,:,:,mom_index+2)   ! mass
             call transpose_y_to_z(flux,ztmp1,this%decomp)
-            call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
+            call this%der%ddz(ztmp1,ztmp2,0,0)
             call transpose_z_to_y(ztmp2,flux,this%decomp)
             rhs(:,:,:,1) = rhs(:,:,:,1) - flux
         case default
@@ -1398,25 +2052,25 @@ contains
 
         flux = this%Wcnsrv(:,:,:,mom_index+2)*this%u          - tauxz ! x-momentum
         call transpose_y_to_z(flux,ztmp1,this%decomp)
-        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
+        call this%der%ddz(ztmp1,ztmp2,0,0)
         call transpose_z_to_y(ztmp2,flux,this%decomp)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
 
         flux = this%Wcnsrv(:,:,:,mom_index+2)*this%v          - tauyz ! y-momentum
         call transpose_y_to_z(flux,ztmp1,this%decomp)
-        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
+        call this%der%ddz(ztmp1,ztmp2,0,0)
         call transpose_z_to_y(ztmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
 
         flux = this%Wcnsrv(:,:,:,mom_index+2)*this%w + this%p - tauzz ! z-momentum
         call transpose_y_to_z(flux,ztmp1,this%decomp)
-        call this%der%ddz(ztmp1,ztmp2, this%z_bc(1), this%z_bc(2)) ! Symmetric for z-momentum
+        call this%der%ddz(ztmp1,ztmp2,0,0)
         call transpose_z_to_y(ztmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
         flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz + qz ! Total Energy
         call transpose_y_to_z(flux,ztmp1,this%decomp)
-        call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
+        call this%der%ddz(ztmp1,ztmp2,0,0)
         call transpose_z_to_y(ztmp2,flux,this%decomp)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
 
@@ -1427,7 +2081,7 @@ contains
                             dwdx, dwdy, dwdz,&
                            dYsdx,dYsdy,dYsdz )
         use reductions, only: P_MAXVAL
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, this%mix%ns), optional, intent(in) :: dYsdx,dYsdy,dYsdz
         
@@ -1624,7 +2278,7 @@ contains
     end subroutine
 
     subroutine filter(this,arr,myfil,numtimes, x_bc, y_bc, z_bc)
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
         type(filters), target, optional, intent(in) :: myfil
         integer, optional, intent(in) :: numtimes
@@ -1703,7 +2357,7 @@ contains
     end subroutine
    
     subroutine getPhysicalProperties(this)
-        class(cgrid), intent(inout) :: this
+        class(cgridNC), intent(inout) :: this
 
         ! TODO
         ! Hard code these values for now. Need to make a better interface for this later
@@ -1725,7 +2379,7 @@ contains
     end subroutine  
 
     subroutine get_tau(this,duidxj)
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), target, intent(inout) :: duidxj
 
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -1774,7 +2428,7 @@ contains
 
     subroutine get_q(this,duidxj,Jx,Jy,Jz)
         use exits, only: nancheck
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,this%mix%ns), intent(in) :: Jx,Jy,Jz
 
@@ -1822,7 +2476,7 @@ contains
     end subroutine 
 
     subroutine get_J(this,gradYs)
-        class(cgrid), target, intent(inout) :: this
+        class(cgridNC), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,3*this%mix%ns), target, intent(in) :: gradYs
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
         real(rkind), dimension(:,:,:), pointer :: sumJx, sumJy, sumJz
@@ -1841,8 +2495,12 @@ contains
             dYsdz(:,:,:,i) = dYsdz(:,:,:,i)*this%diff(:,:,:,i)
         end do
 
-        ! Get sum of diff*gradYs and correct so this sum becomes zero (No net diffusive flux)
-        sumJx = sum(dYsdx,4); sumJy = sum(dYsdy,4); sumJz = sum(dYsdz,4);
+        if (this%mix%ns .GT. 2) then
+            ! Get sum of diff*gradYs and correct so this sum becomes zero (No net diffusive flux)
+            sumJx = sum(dYsdx,4); sumJy = sum(dYsdy,4); sumJz = sum(dYsdz,4);
+        else
+            sumJx = zero; sumJy = zero; sumJz = zero;
+        end if
 
         ! Put the fluxes in dYsdx itself
         do i=1,this%mix%ns
@@ -1856,7 +2514,7 @@ contains
     subroutine write_viz(this)
         use exits, only: message
         use timer, only: tic, toc
-        class(cgrid), intent(inout) :: this
+        class(cgridNC), intent(inout) :: this
         character(len=clen) :: charout
         real(rkind) :: cputime
         integer :: i
@@ -1903,7 +2561,7 @@ contains
     subroutine write_restart(this)
         use exits, only: message
         use timer, only: tic, toc
-        class(cgrid), intent(inout) :: this
+        class(cgridNC), intent(inout) :: this
         character(len=clen) :: charout
         real(rkind) :: cputime
         integer :: i
@@ -1947,7 +2605,7 @@ contains
     subroutine read_restart(this, vizcount)
         use exits, only: message
         use timer, only: tic, toc
-        class(cgrid), intent(inout) :: this
+        class(cgridNC), intent(inout) :: this
         integer,      intent(in)    :: vizcount
         character(len=clen) :: charout
         real(rkind) :: cputime
@@ -1999,7 +2657,7 @@ contains
 
     subroutine setup_postprocessing(this, nrestarts)
         use mpi
-        class(cgrid), intent(inout) :: this
+        class(cgridNC), intent(inout) :: this
         integer,      intent(out)   :: nrestarts
 
         ! Destroy old restart object
