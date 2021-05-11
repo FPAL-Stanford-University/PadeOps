@@ -2003,9 +2003,15 @@ stop
                !Compute terms common to new (cpg_west) and old (used in brief) kinematic terms terms 
 
                !high order FD terms
-               this%material(i)%intSharp_rgDiff (:,:,:,j,k) = this%material(i)%intSharp_rgDiff (:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g  (:,:,:,j)
-               this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = this%material(i)%intSharp_rgtDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_t(:,:,:,j)
-               this%material(i)%intSharp_rgpDiff(:,:,:,j,k) = this%material(i)%intSharp_rgpDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_p(:,:,:,j)
+               do i=1,this%ns
+                  do j=1,9
+                     do k=1,3
+                       this%material(i)%intSharp_rgDiff (:,:,:,j,k) = this%material(i)%intSharp_rgDiff (:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g  (:,:,:,j)
+                       this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = this%material(i)%intSharp_rgtDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_t(:,:,:,j)
+                       this%material(i)%intSharp_rgpDiff(:,:,:,j,k) = this%material(i)%intSharp_rgpDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_p(:,:,:,j)
+                   enddo
+                 enddo
+               enddo
 
                if(this%intSharp_cpg_west) then !new implementation based on Jacob's derivation
 
