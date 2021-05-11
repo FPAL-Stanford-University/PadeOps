@@ -2596,7 +2596,7 @@ contains
            else
                if(this%intSharp_spf) then
                   do i=1,9
-                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
+                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + 2.0d0*this%intSharp_rg(:,:,:,i,1)/rho !only component 1 is used in Jacob's version, factor of 2 is for gTg
                   enddo
                   
                else
@@ -2975,7 +2975,7 @@ contains
                   
            if(this%intSharp_cpg_west) then
                do i=1,9
-                  rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho !only component 1 is used in Jacob's version
+                  rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + 2.0d0*this%intSharp_rgt(:,:,:,i,1)/rho !only component 1 is used in Jacob's version, factor of 2 is for gTg as opposed to g
                enddo
 
                !TODO: deal with FV terms 
