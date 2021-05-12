@@ -2020,11 +2020,12 @@ stop
                        !assign to all species
                        do i=1,this%ns
                            Kij_coeff_i(:,:,:,i) = third/rho * Kij_coeff_i(:,:,:,this%ns)
+                           !Kij_coeff_i(:,:,:,i) = one/rho * Kij_coeff_i(:,:,:,this%ns) !testing this because it is so similar to the version in the brief
                        enddo 
                    else
                        do i=1,this%ns
                            !Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
-                           Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF + eps) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
+                           Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF + eps) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i)) !preventing divide by zero
                        enddo 
                    endif
 
