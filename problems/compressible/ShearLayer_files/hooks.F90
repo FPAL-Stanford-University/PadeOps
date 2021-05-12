@@ -647,14 +647,14 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta
     
     
     ! Z momentum source:
-    call tkeb%favre_avg_and_fluct(rho, w, qtilde, qpp)
-    call tkeb%favre_avg(rho,qpp*vpp, Rij)
-    call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
-    do j=iy1,iyn 
-        !print *, j,rhs(1,j,1,mom_index+2),src(1,j,1)
-        rhs(:,j,:,mom_index+2) = rhs(:,j,:,mom_index+2) + src(1,j,1)
-    enddo
-    call tkeb%reynolds_avg(rhs(:,:,:,mom_index+2),rhs_mn) 
+    !call tkeb%favre_avg_and_fluct(rho, w, qtilde, qpp)
+    !call tkeb%favre_avg(rho,qpp*vpp, Rij)
+    !call my_ddy(decomp,dy,rbar*(qtilde*vtilde+Rij),src)
+    !do j=iy1,iyn 
+    !    !print *, j,rhs(1,j,1,mom_index+2),src(1,j,1)
+    !    rhs(:,j,:,mom_index+2) = rhs(:,j,:,mom_index+2) + src(1,j,1)
+    !enddo
+    !call tkeb%reynolds_avg(rhs(:,:,:,mom_index+2),rhs_mn) 
     !call message(4,"Maximum src momz",P_MAXVAL(src))
     !if (nrank==0) then
     !    open(1,file='./src_rw.txt')
@@ -686,7 +686,7 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta
         rhs(:,j,:,TE_index) = rhs(:,j,:,TE_index) + src(1,j,1)
     enddo
 
-    call tkeb%reynolds_avg(rhs(:,:,:,mom_index+2),rhs_mn) 
+    !call tkeb%reynolds_avg(rhs(:,:,:,mom_index+2),rhs_mn) 
     !call message(4,"Maximum src TE(p)",P_MAXVAL(src))
     !if (nrank==0) then
     !    open(1,file='./src_rp.txt')
