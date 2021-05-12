@@ -1118,26 +1118,6 @@ contains
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
 
-           !high order VF bounds diffusion terms
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,1,1)/rho,this%intSharp_rgDiff(:,:,:,1,2)/rho,this%intSharp_rgDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsg(:,:,:,1) = rhsg(:,:,:,1) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,2,1)/rho,this%intSharp_rgDiff(:,:,:,2,2)/rho,this%intSharp_rgDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
-           rhsg(:,:,:,2) = rhsg(:,:,:,2) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,3,1)/rho,this%intSharp_rgDiff(:,:,:,3,2)/rho,this%intSharp_rgDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
-           rhsg(:,:,:,3) = rhsg(:,:,:,3) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,4,1)/rho,this%intSharp_rgDiff(:,:,:,4,2)/rho,this%intSharp_rgDiff(:,:,:,4,3)/rho,tmp, x_bc, y_bc,-z_bc)
-           rhsg(:,:,:,4) = rhsg(:,:,:,4) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,5,1)/rho,this%intSharp_rgDiff(:,:,:,5,2)/rho,this%intSharp_rgDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsg(:,:,:,5) = rhsg(:,:,:,5) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,6,1)/rho,this%intSharp_rgDiff(:,:,:,6,2)/rho,this%intSharp_rgDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
-           rhsg(:,:,:,6) = rhsg(:,:,:,6) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,7,1)/rho,this%intSharp_rgDiff(:,:,:,7,2)/rho,this%intSharp_rgDiff(:,:,:,7,3)/rho,tmp, x_bc,-y_bc, z_bc)
-           rhsg(:,:,:,7) = rhsg(:,:,:,7) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,8,1)/rho,this%intSharp_rgDiff(:,:,:,8,2)/rho,this%intSharp_rgDiff(:,:,:,8,3)/rho,tmp,-x_bc, y_bc, z_bc)
-           rhsg(:,:,:,8) = rhsg(:,:,:,8) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,9,1)/rho,this%intSharp_rgDiff(:,:,:,9,2)/rho,this%intSharp_rgDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsg(:,:,:,9) = rhsg(:,:,:,9) + tmp
-                  
            if(this%intSharp_cpg_west) then
                do i=1,9
                   rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho !only component 1 is used in Jacob's version
@@ -1146,6 +1126,26 @@ contains
                !TODO: deal with FV terms 
 
            else
+               !high order VF bounds diffusion terms
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,1,1)/rho,this%intSharp_rgDiff(:,:,:,1,2)/rho,this%intSharp_rgDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsg(:,:,:,1) = rhsg(:,:,:,1) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,2,1)/rho,this%intSharp_rgDiff(:,:,:,2,2)/rho,this%intSharp_rgDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
+               rhsg(:,:,:,2) = rhsg(:,:,:,2) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,3,1)/rho,this%intSharp_rgDiff(:,:,:,3,2)/rho,this%intSharp_rgDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
+               rhsg(:,:,:,3) = rhsg(:,:,:,3) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,4,1)/rho,this%intSharp_rgDiff(:,:,:,4,2)/rho,this%intSharp_rgDiff(:,:,:,4,3)/rho,tmp, x_bc, y_bc,-z_bc)
+               rhsg(:,:,:,4) = rhsg(:,:,:,4) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,5,1)/rho,this%intSharp_rgDiff(:,:,:,5,2)/rho,this%intSharp_rgDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsg(:,:,:,5) = rhsg(:,:,:,5) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,6,1)/rho,this%intSharp_rgDiff(:,:,:,6,2)/rho,this%intSharp_rgDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
+               rhsg(:,:,:,6) = rhsg(:,:,:,6) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,7,1)/rho,this%intSharp_rgDiff(:,:,:,7,2)/rho,this%intSharp_rgDiff(:,:,:,7,3)/rho,tmp, x_bc,-y_bc, z_bc)
+               rhsg(:,:,:,7) = rhsg(:,:,:,7) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,8,1)/rho,this%intSharp_rgDiff(:,:,:,8,2)/rho,this%intSharp_rgDiff(:,:,:,8,3)/rho,tmp,-x_bc, y_bc, z_bc)
+               rhsg(:,:,:,8) = rhsg(:,:,:,8) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,9,1)/rho,this%intSharp_rgDiff(:,:,:,9,2)/rho,this%intSharp_rgDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsg(:,:,:,9) = rhsg(:,:,:,9) + tmp
+                  
                if(this%intSharp_spf) then
                   do i=1,9
                      rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
@@ -1620,26 +1620,6 @@ contains
 
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
-
-           !high order VF bounds diffusion terms
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,1,1)/rho,this%intSharp_rgtDiff(:,:,:,1,2)/rho,this%intSharp_rgtDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgt(:,:,:,1) = rhsgt(:,:,:,1) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,2,1)/rho,this%intSharp_rgtDiff(:,:,:,2,2)/rho,this%intSharp_rgtDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
-           rhsgt(:,:,:,2) = rhsgt(:,:,:,2) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,3,1)/rho,this%intSharp_rgtDiff(:,:,:,3,2)/rho,this%intSharp_rgtDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
-           rhsgt(:,:,:,3) = rhsgt(:,:,:,3) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,4,1)/rho,this%intSharp_rgtDiff(:,:,:,4,2)/rho,this%intSharp_rgtDiff(:,:,:,4,3)/rho,tmp, x_bc, y_bc,-z_bc)
-           rhsgt(:,:,:,4) = rhsgt(:,:,:,4) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,5,1)/rho,this%intSharp_rgtDiff(:,:,:,5,2)/rho,this%intSharp_rgtDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgt(:,:,:,5) = rhsgt(:,:,:,5) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,6,1)/rho,this%intSharp_rgtDiff(:,:,:,6,2)/rho,this%intSharp_rgtDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
-           rhsgt(:,:,:,6) = rhsgt(:,:,:,6) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,7,1)/rho,this%intSharp_rgtDiff(:,:,:,7,2)/rho,this%intSharp_rgtDiff(:,:,:,7,3)/rho,tmp, x_bc,-y_bc, z_bc)
-           rhsgt(:,:,:,7) = rhsgt(:,:,:,7) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,8,1)/rho,this%intSharp_rgtDiff(:,:,:,8,2)/rho,this%intSharp_rgtDiff(:,:,:,8,3)/rho,tmp,-x_bc, y_bc, z_bc)
-           rhsgt(:,:,:,8) = rhsgt(:,:,:,8) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,9,1)/rho,this%intSharp_rgtDiff(:,:,:,9,2)/rho,this%intSharp_rgtDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgt(:,:,:,9) = rhsgt(:,:,:,9) + tmp
                   
            if(this%intSharp_cpg_west) then
                do i=1,9
@@ -1649,6 +1629,26 @@ contains
                !TODO: deal with FV terms 
 
            else
+               !high order VF bounds diffusion terms
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,1,1)/rho,this%intSharp_rgtDiff(:,:,:,1,2)/rho,this%intSharp_rgtDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgt(:,:,:,1) = rhsgt(:,:,:,1) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,2,1)/rho,this%intSharp_rgtDiff(:,:,:,2,2)/rho,this%intSharp_rgtDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
+               rhsgt(:,:,:,2) = rhsgt(:,:,:,2) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,3,1)/rho,this%intSharp_rgtDiff(:,:,:,3,2)/rho,this%intSharp_rgtDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
+               rhsgt(:,:,:,3) = rhsgt(:,:,:,3) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,4,1)/rho,this%intSharp_rgtDiff(:,:,:,4,2)/rho,this%intSharp_rgtDiff(:,:,:,4,3)/rho,tmp, x_bc, y_bc,-z_bc)
+               rhsgt(:,:,:,4) = rhsgt(:,:,:,4) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,5,1)/rho,this%intSharp_rgtDiff(:,:,:,5,2)/rho,this%intSharp_rgtDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgt(:,:,:,5) = rhsgt(:,:,:,5) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,6,1)/rho,this%intSharp_rgtDiff(:,:,:,6,2)/rho,this%intSharp_rgtDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
+               rhsgt(:,:,:,6) = rhsgt(:,:,:,6) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,7,1)/rho,this%intSharp_rgtDiff(:,:,:,7,2)/rho,this%intSharp_rgtDiff(:,:,:,7,3)/rho,tmp, x_bc,-y_bc, z_bc)
+               rhsgt(:,:,:,7) = rhsgt(:,:,:,7) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,8,1)/rho,this%intSharp_rgtDiff(:,:,:,8,2)/rho,this%intSharp_rgtDiff(:,:,:,8,3)/rho,tmp,-x_bc, y_bc, z_bc)
+               rhsgt(:,:,:,8) = rhsgt(:,:,:,8) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,9,1)/rho,this%intSharp_rgtDiff(:,:,:,9,2)/rho,this%intSharp_rgtDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgt(:,:,:,9) = rhsgt(:,:,:,9) + tmp
+
                if(this%intSharp_spf) then
                   do i=1,9
                      rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
@@ -2092,26 +2092,6 @@ contains
 
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
-
-           !high order VF bounds diffusion terms
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,1,1)/rho,this%intSharp_rgpDiff(:,:,:,1,2)/rho,this%intSharp_rgpDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgp(:,:,:,1) = rhsgp(:,:,:,1) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,2,1)/rho,this%intSharp_rgpDiff(:,:,:,2,2)/rho,this%intSharp_rgpDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
-           rhsgp(:,:,:,2) = rhsgp(:,:,:,2) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,3,1)/rho,this%intSharp_rgpDiff(:,:,:,3,2)/rho,this%intSharp_rgpDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
-           rhsgp(:,:,:,3) = rhsgp(:,:,:,3) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,4,1)/rho,this%intSharp_rgpDiff(:,:,:,4,2)/rho,this%intSharp_rgpDiff(:,:,:,4,3)/rho,tmp, x_bc, y_bc,-z_bc)
-           rhsgp(:,:,:,4) = rhsgp(:,:,:,4) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,5,1)/rho,this%intSharp_rgpDiff(:,:,:,5,2)/rho,this%intSharp_rgpDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgp(:,:,:,5) = rhsgp(:,:,:,5) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,6,1)/rho,this%intSharp_rgpDiff(:,:,:,6,2)/rho,this%intSharp_rgpDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
-           rhsgp(:,:,:,6) = rhsgp(:,:,:,6) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,7,1)/rho,this%intSharp_rgpDiff(:,:,:,7,2)/rho,this%intSharp_rgpDiff(:,:,:,7,3)/rho,tmp, x_bc,-y_bc, z_bc)
-           rhsgp(:,:,:,7) = rhsgp(:,:,:,7) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,8,1)/rho,this%intSharp_rgpDiff(:,:,:,8,2)/rho,this%intSharp_rgpDiff(:,:,:,8,3)/rho,tmp,-x_bc, y_bc, z_bc)
-           rhsgp(:,:,:,8) = rhsgp(:,:,:,8) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,9,1)/rho,this%intSharp_rgpDiff(:,:,:,9,2)/rho,this%intSharp_rgpDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgp(:,:,:,9) = rhsgp(:,:,:,9) + tmp
                   
            if(this%intSharp_cpg_west) then
                CONTINUE !no sharpening term needed in gp equation
@@ -2119,6 +2099,26 @@ contains
                !TODO: deal with FV terms 
 
            else
+               !high order VF bounds diffusion terms
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,1,1)/rho,this%intSharp_rgpDiff(:,:,:,1,2)/rho,this%intSharp_rgpDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgp(:,:,:,1) = rhsgp(:,:,:,1) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,2,1)/rho,this%intSharp_rgpDiff(:,:,:,2,2)/rho,this%intSharp_rgpDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
+               rhsgp(:,:,:,2) = rhsgp(:,:,:,2) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,3,1)/rho,this%intSharp_rgpDiff(:,:,:,3,2)/rho,this%intSharp_rgpDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
+               rhsgp(:,:,:,3) = rhsgp(:,:,:,3) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,4,1)/rho,this%intSharp_rgpDiff(:,:,:,4,2)/rho,this%intSharp_rgpDiff(:,:,:,4,3)/rho,tmp, x_bc, y_bc,-z_bc)
+               rhsgp(:,:,:,4) = rhsgp(:,:,:,4) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,5,1)/rho,this%intSharp_rgpDiff(:,:,:,5,2)/rho,this%intSharp_rgpDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgp(:,:,:,5) = rhsgp(:,:,:,5) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,6,1)/rho,this%intSharp_rgpDiff(:,:,:,6,2)/rho,this%intSharp_rgpDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
+               rhsgp(:,:,:,6) = rhsgp(:,:,:,6) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,7,1)/rho,this%intSharp_rgpDiff(:,:,:,7,2)/rho,this%intSharp_rgpDiff(:,:,:,7,3)/rho,tmp, x_bc,-y_bc, z_bc)
+               rhsgp(:,:,:,7) = rhsgp(:,:,:,7) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,8,1)/rho,this%intSharp_rgpDiff(:,:,:,8,2)/rho,this%intSharp_rgpDiff(:,:,:,8,3)/rho,tmp,-x_bc, y_bc, z_bc)
+               rhsgp(:,:,:,8) = rhsgp(:,:,:,8) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,9,1)/rho,this%intSharp_rgpDiff(:,:,:,9,2)/rho,this%intSharp_rgpDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgp(:,:,:,9) = rhsgp(:,:,:,9) + tmp
+
                if(this%intSharp_spf) then
                   do i=1,9
                      rhsgp(:,:,:,i) = rhsgp(:,:,:,i) + this%intSharp_rgp(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
@@ -2572,20 +2572,6 @@ contains
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
 
-           !high order VF bounds diffusion terms
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,1,1)/rho,this%intSharp_rgDiff(:,:,:,1,2)/rho,this%intSharp_rgDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsg(:,:,:,1) = rhsg(:,:,:,1) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,2,1)/rho,this%intSharp_rgDiff(:,:,:,2,2)/rho,this%intSharp_rgDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
-           rhsg(:,:,:,2) = rhsg(:,:,:,2) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,3,1)/rho,this%intSharp_rgDiff(:,:,:,3,2)/rho,this%intSharp_rgDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
-           rhsg(:,:,:,3) = rhsg(:,:,:,3) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,5,1)/rho,this%intSharp_rgDiff(:,:,:,5,2)/rho,this%intSharp_rgDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsg(:,:,:,5) = rhsg(:,:,:,5) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,6,1)/rho,this%intSharp_rgDiff(:,:,:,6,2)/rho,this%intSharp_rgDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
-           rhsg(:,:,:,6) = rhsg(:,:,:,6) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,9,1)/rho,this%intSharp_rgDiff(:,:,:,9,2)/rho,this%intSharp_rgDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsg(:,:,:,9) = rhsg(:,:,:,9) + tmp
-                  
            if(this%intSharp_cpg_west) then
                do i=1,9
                   rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho !only component 1 is used in Jacob's version
@@ -2594,6 +2580,20 @@ contains
                !TODO: deal with FV terms 
 
            else
+               !high order VF bounds diffusion terms
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,1,1)/rho,this%intSharp_rgDiff(:,:,:,1,2)/rho,this%intSharp_rgDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsg(:,:,:,1) = rhsg(:,:,:,1) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,2,1)/rho,this%intSharp_rgDiff(:,:,:,2,2)/rho,this%intSharp_rgDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
+               rhsg(:,:,:,2) = rhsg(:,:,:,2) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,3,1)/rho,this%intSharp_rgDiff(:,:,:,3,2)/rho,this%intSharp_rgDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
+               rhsg(:,:,:,3) = rhsg(:,:,:,3) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,5,1)/rho,this%intSharp_rgDiff(:,:,:,5,2)/rho,this%intSharp_rgDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsg(:,:,:,5) = rhsg(:,:,:,5) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,6,1)/rho,this%intSharp_rgDiff(:,:,:,6,2)/rho,this%intSharp_rgDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
+               rhsg(:,:,:,6) = rhsg(:,:,:,6) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgDiff(:,:,:,9,1)/rho,this%intSharp_rgDiff(:,:,:,9,2)/rho,this%intSharp_rgDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsg(:,:,:,9) = rhsg(:,:,:,9) + tmp
+                  
                if(this%intSharp_spf) then
                   do i=1,9
                      rhsg(:,:,:,i) = rhsg(:,:,:,i) + 2.0d0*this%intSharp_rg(:,:,:,i,1)/rho !only component 1 is used in Jacob's version, factor of 2 is for gTg
@@ -2959,20 +2959,6 @@ contains
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
 
-           !high order VF bounds diffusion terms
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,1,1)/rho,this%intSharp_rgtDiff(:,:,:,1,2)/rho,this%intSharp_rgtDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgt(:,:,:,1) = rhsgt(:,:,:,1) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,2,1)/rho,this%intSharp_rgtDiff(:,:,:,2,2)/rho,this%intSharp_rgtDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
-           rhsgt(:,:,:,2) = rhsgt(:,:,:,2) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,3,1)/rho,this%intSharp_rgtDiff(:,:,:,3,2)/rho,this%intSharp_rgtDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
-           rhsgt(:,:,:,3) = rhsgt(:,:,:,3) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,5,1)/rho,this%intSharp_rgtDiff(:,:,:,5,2)/rho,this%intSharp_rgtDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgt(:,:,:,5) = rhsgt(:,:,:,5) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,6,1)/rho,this%intSharp_rgtDiff(:,:,:,6,2)/rho,this%intSharp_rgtDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
-           rhsgt(:,:,:,6) = rhsgt(:,:,:,6) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,9,1)/rho,this%intSharp_rgtDiff(:,:,:,9,2)/rho,this%intSharp_rgtDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgt(:,:,:,9) = rhsgt(:,:,:,9) + tmp
-                  
            if(this%intSharp_cpg_west) then
                do i=1,9
                   rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + 2.0d0*this%intSharp_rgt(:,:,:,i,1)/rho !only component 1 is used in Jacob's version, factor of 2 is for gTg as opposed to g
@@ -2981,6 +2967,20 @@ contains
                !TODO: deal with FV terms 
 
            else
+               !high order VF bounds diffusion terms
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,1,1)/rho,this%intSharp_rgtDiff(:,:,:,1,2)/rho,this%intSharp_rgtDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgt(:,:,:,1) = rhsgt(:,:,:,1) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,2,1)/rho,this%intSharp_rgtDiff(:,:,:,2,2)/rho,this%intSharp_rgtDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
+               rhsgt(:,:,:,2) = rhsgt(:,:,:,2) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,3,1)/rho,this%intSharp_rgtDiff(:,:,:,3,2)/rho,this%intSharp_rgtDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
+               rhsgt(:,:,:,3) = rhsgt(:,:,:,3) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,5,1)/rho,this%intSharp_rgtDiff(:,:,:,5,2)/rho,this%intSharp_rgtDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgt(:,:,:,5) = rhsgt(:,:,:,5) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,6,1)/rho,this%intSharp_rgtDiff(:,:,:,6,2)/rho,this%intSharp_rgtDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
+               rhsgt(:,:,:,6) = rhsgt(:,:,:,6) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgtDiff(:,:,:,9,1)/rho,this%intSharp_rgtDiff(:,:,:,9,2)/rho,this%intSharp_rgtDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgt(:,:,:,9) = rhsgt(:,:,:,9) + tmp
+                  
                if(this%intSharp_spf) then
                   do i=1,9
                      rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
@@ -3345,25 +3345,25 @@ contains
         !RHS update for interface sharpening terms -- once we settle on a version -- don't repeat the divergence calulations -- work it into the fluxes above
         if (this%intSharp) then
            
-           !high order VF bounds diffusion terms
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,1,1)/rho,this%intSharp_rgpDiff(:,:,:,1,2)/rho,this%intSharp_rgpDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgp(:,:,:,1) = rhsgp(:,:,:,1) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,2,1)/rho,this%intSharp_rgpDiff(:,:,:,2,2)/rho,this%intSharp_rgpDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
-           rhsgp(:,:,:,2) = rhsgp(:,:,:,2) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,3,1)/rho,this%intSharp_rgpDiff(:,:,:,3,2)/rho,this%intSharp_rgpDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
-           rhsgp(:,:,:,3) = rhsgp(:,:,:,3) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,5,1)/rho,this%intSharp_rgpDiff(:,:,:,5,2)/rho,this%intSharp_rgpDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgp(:,:,:,5) = rhsgp(:,:,:,5) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,6,1)/rho,this%intSharp_rgpDiff(:,:,:,6,2)/rho,this%intSharp_rgpDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
-           rhsgp(:,:,:,6) = rhsgp(:,:,:,6) + tmp
-           call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,9,1)/rho,this%intSharp_rgpDiff(:,:,:,9,2)/rho,this%intSharp_rgpDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
-           rhsgp(:,:,:,9) = rhsgp(:,:,:,9) + tmp
-
            if(this%intSharp_cpg_west) then
                CONTINUE 
                !TODO: deal with FV terms 
 
            else
+               !high order VF bounds diffusion terms
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,1,1)/rho,this%intSharp_rgpDiff(:,:,:,1,2)/rho,this%intSharp_rgpDiff(:,:,:,1,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgp(:,:,:,1) = rhsgp(:,:,:,1) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,2,1)/rho,this%intSharp_rgpDiff(:,:,:,2,2)/rho,this%intSharp_rgpDiff(:,:,:,2,3)/rho,tmp, x_bc, y_bc,-z_bc)
+               rhsgp(:,:,:,2) = rhsgp(:,:,:,2) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,3,1)/rho,this%intSharp_rgpDiff(:,:,:,3,2)/rho,this%intSharp_rgpDiff(:,:,:,3,3)/rho,tmp, x_bc,-y_bc, z_bc)
+               rhsgp(:,:,:,3) = rhsgp(:,:,:,3) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,5,1)/rho,this%intSharp_rgpDiff(:,:,:,5,2)/rho,this%intSharp_rgpDiff(:,:,:,5,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgp(:,:,:,5) = rhsgp(:,:,:,5) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,6,1)/rho,this%intSharp_rgpDiff(:,:,:,6,2)/rho,this%intSharp_rgpDiff(:,:,:,6,3)/rho,tmp,-x_bc, y_bc, z_bc)
+               rhsgp(:,:,:,6) = rhsgp(:,:,:,6) + tmp
+               call divergence(this%decomp,this%der,this%intSharp_rgpDiff(:,:,:,9,1)/rho,this%intSharp_rgpDiff(:,:,:,9,2)/rho,this%intSharp_rgpDiff(:,:,:,9,3)/rho,tmp,-x_bc,-y_bc,-z_bc)
+               rhsgp(:,:,:,9) = rhsgp(:,:,:,9) + tmp
+
                if(this%intSharp_spf) then
                   do i=1,9
                      rhsgp(:,:,:,i) = rhsgp(:,:,:,i) + this%intSharp_rgp(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form

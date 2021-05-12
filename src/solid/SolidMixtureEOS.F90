@@ -2000,33 +2000,15 @@ stop
 
 
            if(this%intSharp_cpl.AND.this%intSharp_cpg) then
-               !Compute terms common to new (cpg_west) and old (used in brief) kinematic terms terms 
-
-               !high order FD terms
-               do i=1,this%ns
-                  do j=1,9
-                     do k=1,3
-                       this%material(i)%intSharp_rgDiff (:,:,:,j,k) = this%material(i)%intSharp_rgDiff (:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g  (:,:,:,j)
-                       this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = this%material(i)%intSharp_rgtDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_t(:,:,:,j)
-                       this%material(i)%intSharp_rgpDiff(:,:,:,j,k) = this%material(i)%intSharp_rgpDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_p(:,:,:,j)
-                   enddo
-                 enddo
-               enddo
-
                if(this%intSharp_cpg_west) then !new implementation based on Jacob's derivation
 
                    !Retrieve species mass flux (J_i) and RHS for VF eqn (VF_RHS_i)
-                   if (this%intSharp_spf) then
-                       do i=1,this%ns
-                           J_i(:,:,:,i)      = this%material(i)%intSharp_R(:,:,:,1) !other components are zero for SPF
-                           VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(:,:,:,1) !other components are zero for SPF 
-                       enddo     
-                   else
-                       do i=1,this%ns
-                           J_i(:,:,:,i)      = this%material(i)%intSharp_R(:,:,:,1) + this%material(i)%intSharp_R(:,:,:,2) + this%material(i)%intSharp_R(:,:,:,3)
-                           VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(:,:,:,1) + this%material(i)%intSharp_a(:,:,:,2) + this%material(i)%intSharp_a(:,:,:,3)
-                       enddo     
-                   endif     
+                   do i=1,this%ns
+                       J_i(:,:,:,i)      = this%material(i)%intSharp_R(    :,:,:,1) + this%material(i)%intSharp_R(    :,:,:,2) + this%material(i)%intSharp_R(    :,:,:,3) + &
+                                           this%material(i)%intSharp_RDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,3)
+                       VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(    :,:,:,1) + this%material(i)%intSharp_a(    :,:,:,2) + this%material(i)%intSharp_a(    :,:,:,3) + &
+                                           this%material(i)%intSharp_aDiff(:,:,:,1) + this%material(i)%intSharp_aDiff(:,:,:,2) + this%material(i)%intSharp_aDiff(:,:,:,3)
+                   enddo     
 
                    !Calculate coefficient to multiply by gtotal or gelastic tensor     
                    Kij_coeff_i = 0.0d0
@@ -2041,7 +2023,8 @@ stop
                        enddo 
                    else
                        do i=1,this%ns
-                           Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
+                           !Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
+                           Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF + eps) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
                        enddo 
                    endif
 
@@ -2072,6 +2055,11 @@ stop
                                this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + this%intSharp_f(:,:,:,k)*this%material(i)%g_t(:,:,:,j)
                                this%material(i)%intSharp_rgp(:,:,:,j,k) = this%material(i)%intSharp_rgp(:,:,:,j,k) + this%intSharp_f(:,:,:,k)*this%material(i)%g_p(:,:,:,j)
                             endif
+
+                            !high order FD terms
+                            this%material(i)%intSharp_rgDiff (:,:,:,j,k) = this%material(i)%intSharp_rgDiff (:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g  (:,:,:,j)
+                            this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = this%material(i)%intSharp_rgtDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_t(:,:,:,j)
+                            this%material(i)%intSharp_rgpDiff(:,:,:,j,k) = this%material(i)%intSharp_rgpDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_p(:,:,:,j)
 
                          enddo
                       enddo
