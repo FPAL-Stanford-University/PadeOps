@@ -19,7 +19,8 @@ module Multispecies_KH_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = one, interface_init = 0.5d0, kwave = 4.0_rkind, delta = 0.01d0
+    real(rkind) :: Ly = one, Lx = one, interface_init = 0.5d0, kwave = 4.0_rkind, Nvel = 1d0, delta = 0.01d0, ksize = 10d0, etasize = 0.5d0 
+    real(rkind) :: Nrho = 3d0, delta_rho = 2d0
     type(filters) :: mygfil
 
         !TODO: delete all kos stuff and clean up in general
@@ -215,7 +216,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
                           diff_c_ge,diff_c_ge_2,diff_c_gp,diff_c_gp_2,diff_c_gt,diff_c_gt_2, &
-                          v0, v0_2, tau0, tau0_2, eta0k, delta
+                          v0, v0_2, tau0, tau0_2, eta0k, Nvel, etasize, ksize, delta_rho, Nrho, delta
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -273,33 +274,26 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         ! Set up smearing function for VF based on interface location and thickness
        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
-
-        !set mixture Volume fraction
-	where(x .ge. interface_init) 
-		mix%material(1)%VF = zero
-		mix%material(2)%VF = one
-	elsewhere(x .lt. interface_init)
-		mix%material(1)%VF = one
-                mix%material(2)%VF = zero
-	endwhere
-		
-      ! mix%material(1)%VF = minVF + (one-two*minVF)*tmp
-       ! mix%material(2)%VF = one - mix%material(1)%VF
-
-        !Set density profile based on volume fraction
-	where ( x .ge. interface_init  )
-       		 rho = rho_0_2
-        elsewhere( x .lt. interface_init)
-        	rho = rho_0
-	endwhere
-
-        !set mixture mass fraction
-        mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
-        mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
+	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
+	delta_rho = Nrho*0.275d0
+	tmp = (half - minVF) * ( one - erf( (x-(interface_init))/(delta_rho) ) )
+	
+	!set mixture Volume fraction
+	mix%material(1)%VF = tmp
+	mix%material(2)%VF = 1 - mix%material(1)%VF
+	
+               
+	!Set density profile and mass fraction based on volume fraction
+	rho = rho_0*mix%material(1)%VF + rho_0_2*mix%material(2)%VF
+	mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
+	mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
         !set velocities
-      eta = (x-interface_init)/delta        
-       ! eta =(x-interface_init-eta0k*sin(2*pi*y/kwave))/delta
+	!delta = Nvel*dx
+	eta0k = etasize*delta
+	kwave = ksize*delta
+      ! eta = (x-interface_init)/(half*delta)     
+        eta =(x-interface_init-eta0k*sin(2*pi*y/kwave))/(0.5*delta)
        	vc  = (rho_0*v0 + rho_0_2*v0_2)/(rho_0+rho_0_2)
         where(eta .ge. 1.0d0)
        		v = v0_2
