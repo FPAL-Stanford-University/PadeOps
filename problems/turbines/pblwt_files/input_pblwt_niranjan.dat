@@ -1,17 +1,17 @@
 &INPUT
-inputdir              = "/scratch/04076/tg833754/HIT_Interact/tall/pbl/r1l5"   ! Directory for any input files
-outputdir             = "/scratch/04076/tg833754/HIT_Interact/tall/pbl/r1l5"   ! Directory for all output files
+inputdir              = "/home1/04769/ghaisasn/demo/runs/pblwt"   ! Directory for any input files
+outputdir             = "/home1/04769/ghaisasn/demo/runs/pblwt"   ! Directory for all output files
 nx                    = 384         ! Number of points in X
-ny                    = 192        ! Number of points in Y
-nz                    = 96         ! Number of points in Z
-tstop                 = 50.D0     ! Physical time to stop the simulation
+ny                    = 192         ! Number of points in Y
+nz                    = 96          ! Number of points in Z
+tstop                 = 50.D0       ! Physical time to stop the simulation
 dt                    = -0.0001D0   ! Fixed time step value (only used if CFL is set to negative)
 CFL                   = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 prow                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID       = 20000      ! TimeID of the restart file being used
-restartFile_RID       = 1          ! RunID of the restart file being used
+restartFile_TID       = 20000       ! TimeID of the restart file being used
+restartFile_RID       = 1           ! RunID of the restart file being used
 nsteps                = 999999
 CviscDT               = 1.0d0
 /
@@ -77,26 +77,26 @@ Pr                    = 0.6D0           ! Turbulent Prandtl Number; used when
 Ro                    = 1.D10           ! Rossby Number used when Coriolis is ON
 Re                    = 1.D10           ! Reynolds Number; used when isInvisid is FALSE
 Fr                    = 1.D10           ! Froude number; used when isStratified is TRUE
-Ra = 1.0d14                             ! Rayleigh number used when BuoyancyTermType == 3
-PrandtlFluid = 1.0d0                    ! Prandtl number of the fluid
-BulkRichardson = 0.0d0                  ! Richardson number used when BuoyancyTermType == 2
+Ra                    = 1.0d14          ! Rayleigh number used when BuoyancyTermType == 3
+PrandtlFluid          = 1.0d0           ! Prandtl number of the fluid
+BulkRichardson        = 0.0d0           ! Richardson number used when BuoyancyTermType == 2
 G_geostrophic         = 1.D0            ! Geostrophic wind magnitude; used if useGeostrophicForcing is ON
 G_alpha               = 0.D0            ! Geostrophic wind direction with x axis; used if useGeostrophicForcing is ON
 dpFdx                 = 0.444381462D0   ! Additional Acceleration in X; used if useExtraForcing is ON
 dpFdy                 = 0.D0            ! Additional Acceleration in Y; used if useExtraForcing is ON
 dpFdz                 = 0.D0            ! Additional Acceleration in Z; used if useExtraForcing is ON
 useSGS                = .TRUE.          ! Do you want to use the SGS model?  
-BuoyancyTermType = 0                    ! 1 :: (Fr, ThetaRef); 2 :: (BulkRichardson); 3 :: (Re, Ra)
-buoyancyDirection = 3                   ! How is the gravity vector oriented?
-assume_fplane = .true.                  ! Ignore horizontal component of earth's rotation?
-latitude = 90.0d0                       ! Where is the pbl located?
-frameAngle = 0.0d0                      ! How is the pbl oriented?
-useHITForcing = .false.                 ! Do you want to add HIT forcing?
-useScalars = .false.                    ! Do you want to calculate passive scalars?
-useMoisture = .false.                   ! Do you want to calculate moisture transport?
+BuoyancyTermType      = 0               ! 1 :: (Fr, ThetaRef); 2 :: (BulkRichardson); 3 :: (Re, Ra)
+buoyancyDirection     = 3               ! How is the gravity vector oriented?
+assume_fplane         = .true.          ! Ignore horizontal component of earth's rotation?
+latitude              = 90.0d0          ! Where is the pbl located?
+frameAngle            = 0.0d0           ! How is the pbl oriented?
+useHITForcing         = .false.         ! Do you want to add HIT forcing?
+useScalars            = .false.         ! Do you want to calculate passive scalars?
+useMoisture           = .false.         ! Do you want to calculate moisture transport?
 useforcedStratification = .false.       ! Forcing the buoyancy term similar to HIT forcing??
 useHITRealSpaceLinearForcing = .false.  ! Some HIT forcing flag
-HITForceTimeScale = 10.0d0              ! Some HIT forcing parameter
+HITForceTimeScale      = 10.0d0         ! Some HIT forcing parameter
 /
 /
 &PRESSURE_CALC
@@ -241,5 +241,5 @@ Lx                    = 2.513274122871835d1 ! Domain Length (appropriate dimesni
 Ly                    = 6.283185307179586d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Lz                    = 1.5d0               ! Domain Height (appropriate dimesnions/non-dimensionalized)
 z0init                = 5.96d-5             ! Roughness scale used to initialize the profile
-ustarinit             = 0.8164387d0         ! Roughness scale used to initialize the profile
+ustarinit             = 0.8164387d0         ! Friction velocity used to initialize the profile
 /
