@@ -1681,124 +1681,124 @@ stop
               print*, "can't use Tiwari here"
               stop
            endif
-           !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
-           !i.e. conserve intSharp_a intSharp__r
+        !   !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
+        !   !i.e. conserve intSharp_a intSharp__r
 
-           ! do i = 1,this%ns
-           !    this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1) !this is still used in divergence form for OOB diffusion
-           !    this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
-           !    this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
-           ! enddo
-
-
-
-           !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
-
-           !out-of-bounds diffusion terms
-           tmp4 = zero
-           do j = 1,this%ns-1
-              tmp4(:,:,:,1) = tmp4(:,:,:,1) + this%material(j)%intSharp_aDiff(:,:,:,1)
-              tmp4(:,:,:,2) = tmp4(:,:,:,2) + this%material(j)%intSharp_aDiff(:,:,:,2)
-              tmp4(:,:,:,3) = tmp4(:,:,:,3) + this%material(j)%intSharp_aDiff(:,:,:,3)
-           enddo
-           this%material(this%ns)%intSharp_aDiff(:,:,:,1) = -tmp4(:,:,:,1)
-           this%material(this%ns)%intSharp_aDiff(:,:,:,2) = -tmp4(:,:,:,2)
-           this%material(this%ns)%intSharp_aDiff(:,:,:,3) = -tmp4(:,:,:,3)
-
-           !mass flux --  rho*Ys flux --  R_i
-           do i = 1,this%ns
-              if(useRhoLocal) then !use local component density --- recommended
-                 this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1)
-                 this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
-                 this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
-              else
-                 this%material(i)%intSharp_RDiff(:,:,:,1) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,1)
-                 this%material(i)%intSharp_RDiff(:,:,:,2) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,2)
-                 this%material(i)%intSharp_RDiff(:,:,:,3) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,3)
-              endif
-           enddo
+        !   ! do i = 1,this%ns
+        !   !    this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1) !this is still used in divergence form for OOB diffusion
+        !   !    this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
+        !   !    this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
+        !   ! enddo
 
 
-           ! momentum flux -- f_i
-           this%intSharp_f = zero
-           this%intSharp_fDiff = zero
 
-           !momentum term is nonzero if coupling is turned on
-           if(this%intSharp_cpl) then
-              !spf update term
+        !   !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
 
-              !net mass flux
-              spf_f = zero
-              do i = 1,this%ns
-                 spf_f = spf_f + spf_r(:,:,:,i)
-              enddo
+        !   !out-of-bounds diffusion terms
+        !   tmp4 = zero
+        !   do j = 1,this%ns-1
+        !      tmp4(:,:,:,1) = tmp4(:,:,:,1) + this%material(j)%intSharp_aDiff(:,:,:,1)
+        !      tmp4(:,:,:,2) = tmp4(:,:,:,2) + this%material(j)%intSharp_aDiff(:,:,:,2)
+        !      tmp4(:,:,:,3) = tmp4(:,:,:,3) + this%material(j)%intSharp_aDiff(:,:,:,3)
+        !   enddo
+        !   this%material(this%ns)%intSharp_aDiff(:,:,:,1) = -tmp4(:,:,:,1)
+        !   this%material(this%ns)%intSharp_aDiff(:,:,:,2) = -tmp4(:,:,:,2)
+        !   this%material(this%ns)%intSharp_aDiff(:,:,:,3) = -tmp4(:,:,:,3)
 
-              ! u
-              if (this%intSharp_d02)  then
-                 call gradient(this%decomp,this%derD02,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              else
-                 call gradient(this%decomp,this%der,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              endif
-              this%intSharp_f(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
-
-              ! v
-              if (this%intSharp_d02)  then
-                 call gradient(this%decomp,this%derD02,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              else
-                 call gradient(this%decomp,this%der,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              endif
-              this%intSharp_f(:,:,:,2) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
-
-              ! w
-              if (this%intSharp_d02)  then
-                 call gradient(this%decomp,this%derD02,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              else
-                 call gradient(this%decomp,this%der,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              endif
-              this%intSharp_f(:,:,:,3) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+        !   !mass flux --  rho*Ys flux --  R_i
+        !   do i = 1,this%ns
+        !      if(useRhoLocal) then !use local component density --- recommended
+        !         this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1)
+        !         this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
+        !         this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
+        !      else
+        !         this%material(i)%intSharp_RDiff(:,:,:,1) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,1)
+        !         this%material(i)%intSharp_RDiff(:,:,:,2) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,2)
+        !         this%material(i)%intSharp_RDiff(:,:,:,3) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,3)
+        !      endif
+        !   enddo
 
 
-              do i = 1,this%ns
-                 !high order FD terms
-                 this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,1)
-                 this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,2)  
-                 this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) + this%material(i)%intSharp_RDiff(:,:,:,3)
-              enddo
-           endif
+        !   ! momentum flux -- f_i
+        !   this%intSharp_f = zero
+        !   this%intSharp_fDiff = zero
+
+        !   !momentum term is nonzero if coupling is turned on
+        !   if(this%intSharp_cpl) then
+        !      !spf update term
+
+        !      !net mass flux
+        !      spf_f = zero
+        !      do i = 1,this%ns
+        !         spf_f = spf_f + spf_r(:,:,:,i)
+        !      enddo
+
+        !      ! u
+        !      if (this%intSharp_d02)  then
+        !         call gradient(this%decomp,this%derD02,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      else
+        !         call gradient(this%decomp,this%der,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      endif
+        !      this%intSharp_f(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+
+        !      ! v
+        !      if (this%intSharp_d02)  then
+        !         call gradient(this%decomp,this%derD02,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      else
+        !         call gradient(this%decomp,this%der,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      endif
+        !      this%intSharp_f(:,:,:,2) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+
+        !      ! w
+        !      if (this%intSharp_d02)  then
+        !         call gradient(this%decomp,this%derD02,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      else
+        !         call gradient(this%decomp,this%der,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      endif
+        !      this%intSharp_f(:,:,:,3) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
 
 
-           !enthalpy flux -- (intSharp_h)_j = sum_i ( rho_i h_i (a_i)_j)
-           this%intSharp_h = zero
-           this%intSharp_hDiff = zero
+        !      do i = 1,this%ns
+        !         !high order FD terms
+        !         this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,1)
+        !         this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,2)  
+        !         this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) + this%material(i)%intSharp_RDiff(:,:,:,3)
+        !      enddo
+        !   endif
 
-           !enthalpy term is nonzero if coupling is turned on
-           if(this%intSharp_cpl) then
-              !spf update term 
-              spf_h = zero
-              do i = 1,this%ns
-                 call this%material(i)%get_enthalpy(hi(:,:,:,i))
-                 spf_h = spf_h + spf_r(:,:,:,i)*(hi(:,:,:,i) + half*(u**two + v**two + w**two) )
-              enddo
-              if (this%intSharp_d02)  then
-                 call gradient(this%decomp,this%derD02,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              else
-                 call gradient(this%decomp,this%der,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              endif
-              this%intSharp_h(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
-              this%intSharp_h(:,:,:,2) = zero
-              this%intSharp_h(:,:,:,3) = zero
 
-              do i = 1,this%ns
-                 !high order FD terms
-                 this%intSharp_hDiff(:,:,:,1) = this%intSharp_hDiff(:,:,:,1) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,1)
-                 this%intSharp_hDiff(:,:,:,2) = this%intSharp_hDiff(:,:,:,2) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,2)
-                 this%intSharp_hDiff(:,:,:,3) = this%intSharp_hDiff(:,:,:,3) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,3)
-              enddo
+        !   !enthalpy flux -- (intSharp_h)_j = sum_i ( rho_i h_i (a_i)_j)
+        !   this%intSharp_h = zero
+        !   this%intSharp_hDiff = zero
 
-           endif
+        !   !enthalpy term is nonzero if coupling is turned on
+        !   if(this%intSharp_cpl) then
+        !      !spf update term 
+        !      spf_h = zero
+        !      do i = 1,this%ns
+        !         call this%material(i)%get_enthalpy(hi(:,:,:,i))
+        !         spf_h = spf_h + spf_r(:,:,:,i)*(hi(:,:,:,i) + half*(u**two + v**two + w**two) )
+        !      enddo
+        !      if (this%intSharp_d02)  then
+        !         call gradient(this%decomp,this%derD02,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      else
+        !         call gradient(this%decomp,this%der,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      endif
+        !      this%intSharp_h(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+        !      this%intSharp_h(:,:,:,2) = zero
+        !      this%intSharp_h(:,:,:,3) = zero
 
-           !fix momentum and energy above
-           !add kinematic below
+        !      do i = 1,this%ns
+        !         !high order FD terms
+        !         this%intSharp_hDiff(:,:,:,1) = this%intSharp_hDiff(:,:,:,1) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,1)
+        !         this%intSharp_hDiff(:,:,:,2) = this%intSharp_hDiff(:,:,:,2) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,2)
+        !         this%intSharp_hDiff(:,:,:,3) = this%intSharp_hDiff(:,:,:,3) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,3)
+        !      enddo
+
+        !   endif
+
+        !   !fix momentum and energy above
+        !   !add kinematic below
 
         else ! i.e. NOT:  if(this%intSharp_spf.and.useNewSPF.and.useNewSPFfull)  
 
@@ -2107,9 +2107,6 @@ stop
                                this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + spf_f*this%material(i)%g  (:,:,:,j) !OG
                                this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + spf_f*this%material(i)%g_t(:,:,:,j) !OG
                                this%material(i)%intSharp_rgp(:,:,:,j,k) = this%material(i)%intSharp_rgp(:,:,:,j,k) + spf_f*this%material(i)%g_p(:,:,:,j) !OG
-                               !this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + third * spf_f*this%material(i)%g  (:,:,:,j) !initial test 
-                               !this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + third * spf_f*this%material(i)%g_t(:,:,:,j) !initial test
-                               !this%material(i)%intSharp_rgp(:,:,:,j,k) = this%material(i)%intSharp_rgp(:,:,:,j,k) + third * spf_f*this%material(i)%g_p(:,:,:,j) !initial test
                             else
                                !low order FD terms
                                this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + this%intSharp_f(:,:,:,k)*this%material(i)%g  (:,:,:,j)
