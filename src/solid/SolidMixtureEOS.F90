@@ -2002,43 +2002,100 @@ stop
            if(this%intSharp_cpl.AND.this%intSharp_cpg) then
                if(this%intSharp_cpg_west) then !new implementation based on Jacob's derivation
 
-                   !Retrieve species mass flux (J_i) and RHS for VF eqn (VF_RHS_i)
-                   do i=1,this%ns
-                       J_i(:,:,:,i)      = this%material(i)%intSharp_R(    :,:,:,1) + this%material(i)%intSharp_R(    :,:,:,2) + this%material(i)%intSharp_R(    :,:,:,3) + &
-                                           this%material(i)%intSharp_RDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,3)
-                       VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(    :,:,:,1) + this%material(i)%intSharp_a(    :,:,:,2) + this%material(i)%intSharp_a(    :,:,:,3) + &
-                                           this%material(i)%intSharp_aDiff(:,:,:,1) + this%material(i)%intSharp_aDiff(:,:,:,2) + this%material(i)%intSharp_aDiff(:,:,:,3)
-                   enddo     
+                   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                   !!!!OG implementation (not doing so hot)          
+                   !!Retrieve species mass flux (J_i) and RHS for VF eqn (VF_RHS_i)
+                   !do i=1,this%ns
+                   !    J_i(:,:,:,i)      = this%material(i)%intSharp_R(    :,:,:,1) + this%material(i)%intSharp_R(    :,:,:,2) + this%material(i)%intSharp_R(    :,:,:,3) + &
+                   !                        this%material(i)%intSharp_RDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,3)
+                   !    VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(    :,:,:,1) + this%material(i)%intSharp_a(    :,:,:,2) + this%material(i)%intSharp_a(    :,:,:,3) + &
+                   !                        this%material(i)%intSharp_aDiff(:,:,:,1) + this%material(i)%intSharp_aDiff(:,:,:,2) + this%material(i)%intSharp_aDiff(:,:,:,3)
+                   !enddo     
 
-                   !Calculate coefficient to multiply by gtotal or gelastic tensor     
-                   Kij_coeff_i = 0.0d0
-                   if(this%useOneG) then
-                       !accumulate J_i in last index
-                       do i=1,this%ns
-                           Kij_coeff_i(:,:,:,this%ns) = Kij_coeff_i(:,:,:,i) + J_i(:,:,:,i)
-                       enddo 
-                       !assign to all species
-                       do i=1,this%ns
-                           Kij_coeff_i(:,:,:,i) = third/rho * Kij_coeff_i(:,:,:,this%ns)
-                           !Kij_coeff_i(:,:,:,i) = one/rho * Kij_coeff_i(:,:,:,this%ns) !testing this because it is so similar to the version in the brief
-                       enddo 
-                   else
-                       do i=1,this%ns
-                           !Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
-                           Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF + eps) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i)) !preventing divide by zero
-                       enddo 
-                   endif
+                   !!Calculate coefficient to multiply by gtotal or gelastic tensor     
+                   !Kij_coeff_i = 0.0d0
+                   !if(this%useOneG) then
+                   !    !accumulate J_i in last index
+                   !    do i=1,this%ns
+                   !        Kij_coeff_i(:,:,:,this%ns) = Kij_coeff_i(:,:,:,i) + J_i(:,:,:,i)
+                   !    enddo 
+                   !    !assign to all species
+                   !    do i=1,this%ns
+                   !        Kij_coeff_i(:,:,:,i) = third/rho * Kij_coeff_i(:,:,:,this%ns)
+                   !        !Kij_coeff_i(:,:,:,i) = one/rho * Kij_coeff_i(:,:,:,this%ns) !testing this because it is so similar to the version in the brief
+                   !    enddo 
+                   !else
+                   !    do i=1,this%ns
+                   !        !Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
+                   !        Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF + eps) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i)) !preventing divide by zero
+                   !    enddo 
+                   !endif
 
-                   !Loop thru components of gtotal and gelastic tensors, multiply by coeff*rho
+                   !!Loop thru components of gtotal and gelastic tensors, multiply by coeff*rho
+                   !do i=1,this%ns
+                   !   do j=1,9 !only component 1 is used in Jacob's method
+                   !       this%material(i)%intSharp_rg (:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
+                   !       this%material(i)%intSharp_rgt(:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
+                   !       !Plastic tensor does not need sharpening
+                   !   enddo
+                   !enddo
+                   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+                   !Incremental changes from baseline
                    do i=1,this%ns
-                      do j=1,9 !only component 1 is used in Jacob's method
-                          this%material(i)%intSharp_rg (:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
-                          this%material(i)%intSharp_rgt(:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
-                          !Plastic tensor does not need sharpening
+                      do j=1,9
+                         do k=1,3
+                            if(this%intSharp_spf) then
+                               !low order FD terms
+                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + third * spf_f*this%material(i)%g  (:,:,:,j) !initial test 
+                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + third * spf_f*this%material(i)%g_t(:,:,:,j) !initial test
+                            else
+                               !low order FD terms
+                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + this%intSharp_f(:,:,:,k)*this%material(i)%g  (:,:,:,j)
+                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + this%intSharp_f(:,:,:,k)*this%material(i)%g_t(:,:,:,j)
+                            endif
+
+                            !high order FD terms
+                            this%material(i)%intSharp_rgDiff (:,:,:,j,k) = this%material(i)%intSharp_rgDiff (:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g  (:,:,:,j)
+                            this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = this%material(i)%intSharp_rgtDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_t(:,:,:,j)
+
+                         enddo
                       enddo
                    enddo
 
-                   !TODO: Do something about finite volume terms
+
+                   if(this%intSharp_spf) then 
+                      do i=1,this%ns
+                         do j=1,9
+                            do k=2,3 !zero components 2 and 3 for gradient form
+                               this%material(i)%intSharp_rg (:,:,:,j,k) = zero
+                               this%material(i)%intSharp_rgt(:,:,:,j,k) = zero
+                            enddo
+                         enddo
+                      enddo
+                   endif
+
+
+                   !FV terms
+                   if(this%intSharp_ufv) then
+                      do i=1,this%ns
+                         do j=1,9
+                            !interpolate in loop to reduce storage
+                            call interpolateFV(this,this%material(i)%g  (:,:,:,j), gFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+                            call interpolateFV(this,this%material(i)%g_t(:,:,:,j),gtFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+                            !conservative form
+                            call divergenceFV(this,fv_f* gFVint,this%material(i)%intSharp_rgFV (:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+                            call divergenceFV(this,fv_f*gtFVint,this%material(i)%intSharp_rgtFV(:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+                            !non-conservative form
+                            call divergenceFV(this,fv_f/rhoFVint* gFVint,this%material(i)%intSharp_gFV (:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+                            call divergenceFV(this,fv_f/rhoFVint*gtFVint,this%material(i)%intSharp_gtFV(:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+                         enddo
+                      enddo
+                   endif
 
                else !implementation used in CTR brief
 
@@ -2047,9 +2104,12 @@ stop
                          do k=1,3
                             if(this%intSharp_spf) then
                                !low order FD terms
-                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + spf_f*this%material(i)%g  (:,:,:,j)
-                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + spf_f*this%material(i)%g_t(:,:,:,j)
-                               this%material(i)%intSharp_rgp(:,:,:,j,k) = this%material(i)%intSharp_rgp(:,:,:,j,k) + spf_f*this%material(i)%g_p(:,:,:,j)
+                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + spf_f*this%material(i)%g  (:,:,:,j) !OG
+                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + spf_f*this%material(i)%g_t(:,:,:,j) !OG
+                               this%material(i)%intSharp_rgp(:,:,:,j,k) = this%material(i)%intSharp_rgp(:,:,:,j,k) + spf_f*this%material(i)%g_p(:,:,:,j) !OG
+                               !this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + third * spf_f*this%material(i)%g  (:,:,:,j) !initial test 
+                               !this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + third * spf_f*this%material(i)%g_t(:,:,:,j) !initial test
+                               !this%material(i)%intSharp_rgp(:,:,:,j,k) = this%material(i)%intSharp_rgp(:,:,:,j,k) + third * spf_f*this%material(i)%g_p(:,:,:,j) !initial test
                             else
                                !low order FD terms
                                this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + this%intSharp_f(:,:,:,k)*this%material(i)%g  (:,:,:,j)
