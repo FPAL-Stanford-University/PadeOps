@@ -1,16 +1,16 @@
 &INPUT
-inputdir                      = "/scratch/05294/mhowland/diurnal/kumar/sensitivity/second_order"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal/kumar/sensitivity/second_order_48hrs_lambda_zero"   ! Directory for all output files
+inputdir                      = "/scratch/05294/mhowland/diurnal/kumar/sensitivity/tall/second_order"   ! Directory for any input files
+outputdir                     = "/scratch/05294/mhowland/diurnal/kumar/sensitivity/tall/second_order_48hrs_lambda_zero_restart_zero"   ! Directory for all output files
 nx                            = 160          ! Number of points in X
 ny                            = 160          ! Number of points in Y
-nz                            = 160          ! Number of points in Z
+nz                            = 240          ! Number of points in Z
 tstop                         = 172.8D0      ! Physical time to stop the simulation
 CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.025D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 1691           ! TimeID of the restart file being used
+restartFile_TID               = 1708           ! TimeID of the restart file being used
 restartFile_RID               = 1           ! RunID of the restart file being used
 /
 /
@@ -155,7 +155,7 @@ restart_counter       = 1000     ! Restart budget file counter
 &PROBLEM_INPUT
 Lx                            =  4.0d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
 Ly                            =  4.0d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
-Lz                            =  2.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lz                            =  3.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
 Tref                          =  290.D0      ! Reference Temp. 
 wTh_surf0                     =  0.1D0     ! Surface heat flux (at tsim=0) in K-m/s (need to take care of the dimensions)
 Tsurf0                        =  301.d0 ! Surface Temp. (at tsim=0) in K (need to take care of the dimensions)
