@@ -1892,7 +1892,7 @@ stop
                     this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) + this%material(i)%intSharp_RDiff(:,:,:,3)
                  enddo
 
-              else
+              else !i.e. if divergence method 
                  fv_f = zero
                  do i = 1,this%ns
                     !low order FD terms
@@ -2049,12 +2049,13 @@ stop
                          do k=1,3
                             if(this%intSharp_spf) then
                                !low order FD terms
-                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + third * spf_f*this%material(i)%g  (:,:,:,j) !initial test 
-                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + third * spf_f*this%material(i)%g_t(:,:,:,j) !initial test
+                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + third * spf_f * this%material(i)%g  (:,:,:,j)
+                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + third * spf_f * this%material(i)%g_t(:,:,:,j)
                             else
                                !low order FD terms
-                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + this%intSharp_f(:,:,:,k)*this%material(i)%g  (:,:,:,j)
-                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + this%intSharp_f(:,:,:,k)*this%material(i)%g_t(:,:,:,j)
+                               call divergence(this%decomp,this%derD02,this%intSharp_f(:,:,:,1),this%intSharp_f(:,:,:,2),this%intSharp_f(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc) ! mass fraction equation is anti-symmetric (because a symmetry boundary implies no mass flux across it)
+                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + third * tmp   * this%material(i)%g  (:,:,:,j)
+                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + third * tmp   * this%material(i)%g_t(:,:,:,j)
                             endif
 
                             !high order FD terms
@@ -2066,16 +2067,16 @@ stop
                    enddo
 
 
-                   if(this%intSharp_spf) then 
+                   !if(this%intSharp_spf) then 
                       do i=1,this%ns
                          do j=1,9
-                            do k=2,3 !zero components 2 and 3 for gradient form
+                            do k=2,3 !zero components 2 and 3 for all
                                this%material(i)%intSharp_rg (:,:,:,j,k) = zero
                                this%material(i)%intSharp_rgt(:,:,:,j,k) = zero
                             enddo
                          enddo
                       enddo
-                   endif
+                   !endif
 
 
                    !FV terms
@@ -2104,9 +2105,9 @@ stop
                          do k=1,3
                             if(this%intSharp_spf) then
                                !low order FD terms
-                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + spf_f*this%material(i)%g  (:,:,:,j) !OG
-                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + spf_f*this%material(i)%g_t(:,:,:,j) !OG
-                               this%material(i)%intSharp_rgp(:,:,:,j,k) = this%material(i)%intSharp_rgp(:,:,:,j,k) + spf_f*this%material(i)%g_p(:,:,:,j) !OG
+                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + spf_f*this%material(i)%g  (:,:,:,j)
+                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + spf_f*this%material(i)%g_t(:,:,:,j)
+                               this%material(i)%intSharp_rgp(:,:,:,j,k) = this%material(i)%intSharp_rgp(:,:,:,j,k) + spf_f*this%material(i)%g_p(:,:,:,j)
                             else
                                !low order FD terms
                                this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + this%intSharp_f(:,:,:,k)*this%material(i)%g  (:,:,:,j)
