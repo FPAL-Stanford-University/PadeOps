@@ -2046,7 +2046,7 @@ stop
                    !Incremental changes from baseline
                    do i=1,this%ns
                       do j=1,9
-                         do k=1,3
+                         do k=1,3 !TODO: git rid of k loop
                             if(this%intSharp_spf) then
                                !low order FD terms
                                this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + third * spf_f * this%material(i)%g  (:,:,:,j)
@@ -2059,20 +2059,23 @@ stop
                             endif
 
                             !high order FD terms
-                            this%material(i)%intSharp_rgDiff (:,:,:,j,k) = this%material(i)%intSharp_rgDiff (:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g  (:,:,:,j)
-                            this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = this%material(i)%intSharp_rgtDiff(:,:,:,j,k) + this%intSharp_fDiff(:,:,:,k)*this%material(i)%g_t(:,:,:,j)
-
+                            call divergence(this%decomp,this%der,this%intSharp_fDiff(:,:,:,1),this%intSharp_fDiff(:,:,:,2),this%intSharp_fDiff(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc) ! mass fraction equation is anti-symmetric (because a symmetry boundary implies no mass flux across it)
+                            this%material(i)%intSharp_rgDiff (:,:,:,j,k) = this%material(i)%intSharp_rgDiff (:,:,:,j,k) + third * tmp   * this%material(i)%g  (:,:,:,j)
+                            this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = this%material(i)%intSharp_rgtDiff(:,:,:,j,k) + third * tmp   * this%material(i)%g_t(:,:,:,j)
                          enddo
                       enddo
                    enddo
 
 
                    !if(this%intSharp_spf) then 
+                   !TODO: CLEANUP delete this section (should be obsolete)     
                       do i=1,this%ns
                          do j=1,9
                             do k=2,3 !zero components 2 and 3 for all
                                this%material(i)%intSharp_rg (:,:,:,j,k) = zero
                                this%material(i)%intSharp_rgt(:,:,:,j,k) = zero
+                               this%material(i)%intSharp_rgDiff (:,:,:,j,k) = zero
+                               this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = zero
                             enddo
                          enddo
                       enddo
