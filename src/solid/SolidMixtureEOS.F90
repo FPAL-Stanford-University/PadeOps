@@ -2086,8 +2086,9 @@ stop
                    if(this%intSharp_ufv) then
                       do i=1,this%ns
                          do j=1,9
-                            call divergenceFV(this,fv_f,this%material(i)%intSharp_rgFV (:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-                            call divergenceFV(this,fv_f,this%material(i)%intSharp_rgtFV(:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+                            call divergenceFV(this,fv_f,tmp,dx,dy,dz,periodicx,periodicy,periodicz,-this%x_bc,-this%y_bc,-this%z_bc)
+                            this%material(i)%intSharp_rgFV (:,:,:,j) = this%material(i)%intSharp_rgFV (:,:,:,j) + third * tmp * this%material(i)%g  (:,:,:,j)
+                            this%material(i)%intSharp_rgtFV(:,:,:,j) = this%material(i)%intSharp_rgtFV(:,:,:,j) + third * tmp * this%material(i)%g_t(:,:,:,j)
                          enddo
                       enddo
                    endif
