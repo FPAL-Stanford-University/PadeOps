@@ -2086,17 +2086,8 @@ stop
                    if(this%intSharp_ufv) then
                       do i=1,this%ns
                          do j=1,9
-                            !interpolate in loop to reduce storage
-                            call interpolateFV(this,this%material(i)%g  (:,:,:,j), gFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-                            call interpolateFV(this,this%material(i)%g_t(:,:,:,j),gtFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-                            !conservative form
-                            call divergenceFV(this,fv_f* gFVint,this%material(i)%intSharp_rgFV (:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-                            call divergenceFV(this,fv_f*gtFVint,this%material(i)%intSharp_rgtFV(:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-                            !non-conservative form
-                            call divergenceFV(this,fv_f/rhoFVint* gFVint,this%material(i)%intSharp_gFV (:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-                            call divergenceFV(this,fv_f/rhoFVint*gtFVint,this%material(i)%intSharp_gtFV(:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+                            call divergenceFV(this,fv_f,this%material(i)%intSharp_rgFV (:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+                            call divergenceFV(this,fv_f,this%material(i)%intSharp_rgtFV(:,:,:,j),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
                          enddo
                       enddo
                    endif

@@ -1142,10 +1142,8 @@ contains
                   
                else
                   do i=1,9
-                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho + this%intSharp_rgDiff(:,:,:,i,1)/rho !ignore components 2 and 3
+                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho + this%intSharp_rgDiff(:,:,:,i,1)/rho + this%intSharp_rgFV(:,:,:,i)/rho !ignore components 2 and 3 for non-FV terms
                   enddo
-                  !FV terms
-                  rhsg = rhsg + this%intSharp_gFV
                endif
 
            else
@@ -1664,11 +1662,8 @@ contains
                   
                else
                   do i=1,9
-                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho + this%intSharp_rgtDiff(:,:,:,i,1)/rho !ignore components 2 and 3
+                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho + this%intSharp_rgtDiff(:,:,:,i,1)/rho + this%intSharp_rgtFV(:,:,:,i)/rho !ignore components 2 and 3 for non-FV terms
                   enddo
-                  
-                  !FV terms
-                  rhsgt = rhsgt + this%intSharp_gtFV
                endif
 
            else
@@ -2632,12 +2627,8 @@ contains
                   
                else
                   do i=1,9
-                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + 2.0d0*this%intSharp_rg(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgDiff(:,:,:,i,1)/rho !only component 1 is used in Jacob's version, factor of 2 is for gTg
+                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + 2.0d0*this%intSharp_rg(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgDiff(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgFV(:,:,:,i)/rho !ignore components 2 and 3 for non-FV terms
                   enddo
-                  
-                  !FV terms
-                  rhsg = rhsg + this%intSharp_gFV
-
                endif
 
            else
@@ -3040,12 +3031,8 @@ contains
                   
                else
                   do i=1,9
-                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + 2.0d0*this%intSharp_rgt(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgtDiff(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
+                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + 2.0d0*this%intSharp_rgt(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgtDiff(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgtFV(:,:,:,i)/rho !ignore components 2 and 3 for non-FV terms
                   enddo
-                  
-                  !FV terms
-                  rhsgt = rhsgt + this%intSharp_gtFV
-
                endif
 
            else
