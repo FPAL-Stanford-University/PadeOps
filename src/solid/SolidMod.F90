@@ -1119,30 +1119,15 @@ contains
         if (this%intSharp) then
 
            if(this%intSharp_cpg_west) then
-               !TODO: CLEANUP get rid of comment blocks
-               !TODO: get rid of spf logic
-               !TODO: CLEANUP only divide by rho once
 
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!OG implementation (not doing so hot)          
-               !do i=1,9
-               !   rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho !only component 1 is used in Jacob's version
-               !enddo
+               !Add rho*sharpening (high order and lower terms) and divide by density
+               do i=1,9
+                  rhsg(:,:,:,i) = rhsg(:,:,:,i) + ( this%intSharp_rg(:,:,:,i,1) + this%intSharp_rgDiff(:,:,:,i,1) )/rho !ignore components 2 and 3
+               enddo
 
-               !!TODO: deal with FV terms 
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-               !Incremental changes from baseline
-               if(this%intSharp_spf) then
+               if(this%intSharp_ufv) then
                   do i=1,9
-                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho + this%intSharp_rgDiff(:,:,:,i,1)/rho !ignore components 2 and 3
-                  enddo
-                  
-               else
-                  do i=1,9
-                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho + this%intSharp_rgDiff(:,:,:,i,1)/rho + this%intSharp_rgFV(:,:,:,i)/rho !ignore components 2 and 3 for non-FV terms
+                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + ( this%intSharp_rgFV(:,:,:,i) )/rho !ignore components 2 and 3 for non-FV terms
                   enddo
                endif
 
@@ -1643,26 +1628,15 @@ contains
         if (this%intSharp) then
                   
            if(this%intSharp_cpg_west) then
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!OG implementation (not doing so hot)          
-               !do i=1,9
-               !   rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho !only component 1 is used in Jacob's version
-               !enddo
 
-               !!TODO: deal with FV terms 
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+               !Add rho*sharpening (high order and lower terms) and divide by density
+               do i=1,9
+                  rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + ( this%intSharp_rgt(:,:,:,i,1) + this%intSharp_rgtDiff(:,:,:,i,1) )/rho !ignore components 2 and 3
+               enddo
 
-               !Incremental changes from baseline
-               if(this%intSharp_spf) then
+               if(this%intSharp_ufv) then
                   do i=1,9
-                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho + this%intSharp_rgtDiff(:,:,:,i,1)/rho !ignore components 2 and 3
-                  enddo
-                  
-               else
-                  do i=1,9
-                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + this%intSharp_rgt(:,:,:,i,1)/rho + this%intSharp_rgtDiff(:,:,:,i,1)/rho + this%intSharp_rgtFV(:,:,:,i)/rho !ignore components 2 and 3 for non-FV terms
+                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + ( this%intSharp_rgtFV(:,:,:,i) )/rho !ignore components 2 and 3 for non-FV terms
                   enddo
                endif
 
@@ -2608,26 +2582,15 @@ contains
         if (this%intSharp) then
 
            if(this%intSharp_cpg_west) then
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!OG implementation (not doing so hot)          
-               !do i=1,9
-               !   rhsg(:,:,:,i) = rhsg(:,:,:,i) + this%intSharp_rg(:,:,:,i,1)/rho !only component 1 is used in Jacob's version
-               !enddo
 
-               !!TODO: deal with FV terms 
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+               !Add rho*sharpening (high order and lower terms) and divide by density, multiply by 2 because gTg formulation
+               do i=1,9
+                  rhsg(:,:,:,i) = rhsg(:,:,:,i) + 2.0d0*( this%intSharp_rg(:,:,:,i,1) + this%intSharp_rgDiff(:,:,:,i,1) )/rho !only component 1 is used in Jacob's version, factor of 2 is for gTg
+               enddo
 
-               !Incremental changes from baseline
-               if(this%intSharp_spf) then
+               if(this%intSharp_ufv) then
                   do i=1,9
-                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + 2.0d0*this%intSharp_rg(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgDiff(:,:,:,i,1)/rho !only component 1 is used in Jacob's version, factor of 2 is for gTg
-                  enddo
-                  
-               else
-                  do i=1,9
-                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + 2.0d0*this%intSharp_rg(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgDiff(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgFV(:,:,:,i)/rho !ignore components 2 and 3 for non-FV terms
+                     rhsg(:,:,:,i) = rhsg(:,:,:,i) + 2.0d0*( this%intSharp_rgFV(:,:,:,i) )/rho !ignore components 2 and 3 for non-FV terms
                   enddo
                endif
 
@@ -3012,26 +2975,15 @@ contains
         if (this%intSharp) then
 
            if(this%intSharp_cpg_west) then
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!OG implementation (not doing so hot)          
-               !do i=1,9
-               !   rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + 2.0d0*this%intSharp_rgt(:,:,:,i,1)/rho !only component 1 is used in Jacob's version, factor of 2 is for gTg as opposed to g
-               !enddo
 
-               !!TODO: deal with FV terms 
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-               !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+               !Add rho*sharpening (high order and lower terms) and divide by density, multiply by 2 because gTg formulation
+               do i=1,9
+                  rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + 2.0d0*( this%intSharp_rgt(:,:,:,i,1) + this%intSharp_rgtDiff(:,:,:,i,1) )/rho !only component 1 is used in Jacob's version, factor of 2 is for gTg
+               enddo
 
-               !Incremental changes from baseline
-               if(this%intSharp_spf) then
+               if(this%intSharp_ufv) then
                   do i=1,9
-                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + 2.0d0*this%intSharp_rgt(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgtDiff(:,:,:,i,1)/rho !ignore components 2 and 3 when not in divergence form
-                  enddo
-                  
-               else
-                  do i=1,9
-                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + 2.0d0*this%intSharp_rgt(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgtDiff(:,:,:,i,1)/rho + 2.0d0*this%intSharp_rgtFV(:,:,:,i)/rho !ignore components 2 and 3 for non-FV terms
+                     rhsgt(:,:,:,i) = rhsgt(:,:,:,i) + 2.0d0*( this%intSharp_rgtFV(:,:,:,i) )/rho !ignore components 2 and 3 for non-FV terms
                   enddo
                endif
 

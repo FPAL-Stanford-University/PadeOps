@@ -2002,91 +2002,33 @@ stop
            if(this%intSharp_cpl.AND.this%intSharp_cpg) then
                if(this%intSharp_cpg_west) then !new implementation based on Jacob's derivation
 
-                   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                   !!!!OG implementation (not doing so hot)          
-                   !!Retrieve species mass flux (J_i) and RHS for VF eqn (VF_RHS_i)
-                   !do i=1,this%ns
-                   !    J_i(:,:,:,i)      = this%material(i)%intSharp_R(    :,:,:,1) + this%material(i)%intSharp_R(    :,:,:,2) + this%material(i)%intSharp_R(    :,:,:,3) + &
-                   !                        this%material(i)%intSharp_RDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,3)
-                   !    VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(    :,:,:,1) + this%material(i)%intSharp_a(    :,:,:,2) + this%material(i)%intSharp_a(    :,:,:,3) + &
-                   !                        this%material(i)%intSharp_aDiff(:,:,:,1) + this%material(i)%intSharp_aDiff(:,:,:,2) + this%material(i)%intSharp_aDiff(:,:,:,3)
-                   !enddo     
-
-                   !!Calculate coefficient to multiply by gtotal or gelastic tensor     
-                   !Kij_coeff_i = 0.0d0
-                   !if(this%useOneG) then
-                   !    !accumulate J_i in last index
-                   !    do i=1,this%ns
-                   !        Kij_coeff_i(:,:,:,this%ns) = Kij_coeff_i(:,:,:,i) + J_i(:,:,:,i)
-                   !    enddo 
-                   !    !assign to all species
-                   !    do i=1,this%ns
-                   !        Kij_coeff_i(:,:,:,i) = third/rho * Kij_coeff_i(:,:,:,this%ns)
-                   !        !Kij_coeff_i(:,:,:,i) = one/rho * Kij_coeff_i(:,:,:,this%ns) !testing this because it is so similar to the version in the brief
-                   !    enddo 
-                   !else
-                   !    do i=1,this%ns
-                   !        !Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
-                   !        Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF + eps) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i)) !preventing divide by zero
-                   !    enddo 
-                   !endif
-
-                   !!Loop thru components of gtotal and gelastic tensors, multiply by coeff*rho
-                   !do i=1,this%ns
-                   !   do j=1,9 !only component 1 is used in Jacob's method
-                   !       this%material(i)%intSharp_rg (:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
-                   !       this%material(i)%intSharp_rgt(:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
-                   !       !Plastic tensor does not need sharpening
-                   !   enddo
-                   !enddo
-                   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-                   !Incremental changes from baseline
+                   ! Compute divergence of sharpening mass flux (low order)
+                   call divergence(this%decomp,this%derD02,this%intSharp_f(:,:,:,1),this%intSharp_f(:,:,:,2),this%intSharp_f(:,:,:,3),tmp4(:,:,:,1),-x_bc,-y_bc,-z_bc) ! mass fraction equation is anti-symmetric (because a symmetry boundary implies no mass flux across it)
+                   ! Compute divergence of sharpening mass flux (high order)
+                   call divergence(this%decomp,this%der,this%intSharp_fDiff(:,:,:,1),this%intSharp_fDiff(:,:,:,2),this%intSharp_fDiff(:,:,:,3),tmp4(:,:,:,2),-x_bc,-y_bc,-z_bc) ! mass fraction equation is anti-symmetric (because a symmetry boundary implies no mass flux across it)
                    do i=1,this%ns
                       do j=1,9
-                         do k=1,3 !TODO: git rid of k loop
-                            if(this%intSharp_spf) then
-                               !low order FD terms
-                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + third * spf_f * this%material(i)%g  (:,:,:,j)
-                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + third * spf_f * this%material(i)%g_t(:,:,:,j)
-                            else
-                               !low order FD terms
-                               call divergence(this%decomp,this%derD02,this%intSharp_f(:,:,:,1),this%intSharp_f(:,:,:,2),this%intSharp_f(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc) ! mass fraction equation is anti-symmetric (because a symmetry boundary implies no mass flux across it)
-                               this%material(i)%intSharp_rg (:,:,:,j,k) = this%material(i)%intSharp_rg (:,:,:,j,k) + third * tmp   * this%material(i)%g  (:,:,:,j)
-                               this%material(i)%intSharp_rgt(:,:,:,j,k) = this%material(i)%intSharp_rgt(:,:,:,j,k) + third * tmp   * this%material(i)%g_t(:,:,:,j)
-                            endif
+                         if(this%intSharp_spf) then
+                            !low order FD terms
+                            this%material(i)%intSharp_rg (:,:,:,j,1) = this%material(i)%intSharp_rg (:,:,:,j,1) + third * spf_f * this%material(i)%g  (:,:,:,j)
+                            this%material(i)%intSharp_rgt(:,:,:,j,1) = this%material(i)%intSharp_rgt(:,:,:,j,1) + third * spf_f * this%material(i)%g_t(:,:,:,j)
+                         else
+                            !low order FD terms
+                            this%material(i)%intSharp_rg (:,:,:,j,1) = this%material(i)%intSharp_rg (:,:,:,j,1) + third * tmp4(:,:,:,1)   * this%material(i)%g  (:,:,:,j)
+                            this%material(i)%intSharp_rgt(:,:,:,j,1) = this%material(i)%intSharp_rgt(:,:,:,j,1) + third * tmp4(:,:,:,1)   * this%material(i)%g_t(:,:,:,j)
+                         endif
 
-                            !high order FD terms
-                            call divergence(this%decomp,this%der,this%intSharp_fDiff(:,:,:,1),this%intSharp_fDiff(:,:,:,2),this%intSharp_fDiff(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc) ! mass fraction equation is anti-symmetric (because a symmetry boundary implies no mass flux across it)
-                            this%material(i)%intSharp_rgDiff (:,:,:,j,k) = this%material(i)%intSharp_rgDiff (:,:,:,j,k) + third * tmp   * this%material(i)%g  (:,:,:,j)
-                            this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = this%material(i)%intSharp_rgtDiff(:,:,:,j,k) + third * tmp   * this%material(i)%g_t(:,:,:,j)
-                         enddo
+                         !high order FD terms
+                         this%material(i)%intSharp_rgDiff (:,:,:,j,1) = this%material(i)%intSharp_rgDiff (:,:,:,j,1) + third * tmp4(:,:,:,2)   * this%material(i)%g  (:,:,:,j)
+                         this%material(i)%intSharp_rgtDiff(:,:,:,j,1) = this%material(i)%intSharp_rgtDiff(:,:,:,j,1) + third * tmp4(:,:,:,2)   * this%material(i)%g_t(:,:,:,j)
                       enddo
                    enddo
 
-
-                   !if(this%intSharp_spf) then 
-                   !TODO: CLEANUP delete this section (should be obsolete)     
-                      do i=1,this%ns
-                         do j=1,9
-                            do k=2,3 !zero components 2 and 3 for all
-                               this%material(i)%intSharp_rg (:,:,:,j,k) = zero
-                               this%material(i)%intSharp_rgt(:,:,:,j,k) = zero
-                               this%material(i)%intSharp_rgDiff (:,:,:,j,k) = zero
-                               this%material(i)%intSharp_rgtDiff(:,:,:,j,k) = zero
-                            enddo
-                         enddo
-                      enddo
-                   !endif
-
-
                    !FV terms
                    if(this%intSharp_ufv) then
+                      call divergenceFV(this,fv_f,tmp,dx,dy,dz,periodicx,periodicy,periodicz,-this%x_bc,-this%y_bc,-this%z_bc)
                       do i=1,this%ns
                          do j=1,9
-                            call divergenceFV(this,fv_f,tmp,dx,dy,dz,periodicx,periodicy,periodicz,-this%x_bc,-this%y_bc,-this%z_bc)
                             this%material(i)%intSharp_rgFV (:,:,:,j) = this%material(i)%intSharp_rgFV (:,:,:,j) + third * tmp * this%material(i)%g  (:,:,:,j)
                             this%material(i)%intSharp_rgtFV(:,:,:,j) = this%material(i)%intSharp_rgtFV(:,:,:,j) + third * tmp * this%material(i)%g_t(:,:,:,j)
                          enddo
