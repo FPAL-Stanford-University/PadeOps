@@ -726,12 +726,15 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+                 p =>  fields(:,:,:, p_index), e => fields(:,:,:, e_index), T => fields(:,:,:, T_index), & 
+		x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3))
          ! set u and v
-       ! IF (tsim .LT. 4) THEN
 	u = -  ((sin(pi*x))**two)*(sin(two*pi*y))*(cos(pi*tsim/Tp))
 	v =  ((sin(pi*y))**two)*(sin(two*pi*x))*(cos(pi*tsim/Tp))
-	w = 0   
+	w = 0
+	p = p_amb
+	e = 60
+	T = 40   
 	!ELSE IF ((tsim .GE. 4) .AND. (tsim .LT. 8)) THEN
  	!u = -  ((sin(pi*x))**2)*(sin(2*pi*y))*(cos(pi*(tsim-4)/Tp))
         !v =  ((sin(pi*y))**2)*(sin(2*pi*x))*(cos(pi*(tsim-4)/Tp))
