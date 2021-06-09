@@ -678,9 +678,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         !!! Hack to stop liquid's g from blowing up
-        !mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
-        !mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
-        !mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
+
+        mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
+        mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
+        mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
+
+        mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
+        mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
+        mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         !if(decomp%yst(1)==1) then
          !if(x_bc(1)==0) then
@@ -881,7 +886,10 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
        ! IF (tsim .LT. 4) THEN
 	u = -  ((sin(pi*x))**two)*(sin(two*pi*y))*(cos(pi*tsim/Tp))
 	v =  ((sin(pi*y))**two)*(sin(two*pi*x))*(cos(pi*tsim/Tp))
-	w = 0   
+	w = 0
+	p = p_amb
+	T =40
+	e = 60  
         ! ! determine interface velocity
         ! ind = minloc(abs(mix%material(1)%VF(:,1,1)-0.5d0))
         ! imin = ind(1)
