@@ -341,21 +341,21 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         !TODO: delete this block
         !Set gt and gp to identity
-        !mix%material(1)%gt11 = one;  mix%material(1)%gt12 = zero; mix%material(1)%gt13 = zero
-        !mix%material(1)%gt21 = zero; mix%material(1)%gt22 = one;  mix%material(1)%gt23 = zero
-        !mix%material(1)%gt31 = zero; mix%material(1)%gt32 = zero; mix%material(1)%gt33 = one
+        mix%material(1)%gt11 = one;  mix%material(1)%gt12 = zero; mix%material(1)%gt13 = zero
+        mix%material(1)%gt21 = zero; mix%material(1)%gt22 = one;  mix%material(1)%gt23 = zero
+        mix%material(1)%gt31 = zero; mix%material(1)%gt32 = zero; mix%material(1)%gt33 = one
         !
-        !mix%material(1)%gp11 = one;  mix%material(1)%gp12 = zero; mix%material(1)%gp13 = zero
-        !mix%material(1)%gp21 = zero; mix%material(1)%gp22 = one;  mix%material(1)%gp23 = zero
-        !mix%material(1)%gp31 = zero; mix%material(1)%gp32 = zero; mix%material(1)%gp33 = one
+        mix%material(1)%gp11 = one;  mix%material(1)%gp12 = zero; mix%material(1)%gp13 = zero
+        mix%material(1)%gp21 = zero; mix%material(1)%gp22 = one;  mix%material(1)%gp23 = zero
+        mix%material(1)%gp31 = zero; mix%material(1)%gp32 = zero; mix%material(1)%gp33 = one
         !
-        !mix%material(2)%gt11 = one;  mix%material(2)%gt12 = zero; mix%material(2)%gt13 = zero
-        !mix%material(2)%gt21 = zero; mix%material(2)%gt22 = one;  mix%material(2)%gt23 = zero
-        !mix%material(2)%gt31 = zero; mix%material(2)%gt32 = zero; mix%material(2)%gt33 = one
+        mix%material(2)%gt11 = one;  mix%material(2)%gt12 = zero; mix%material(2)%gt13 = zero
+        mix%material(2)%gt21 = zero; mix%material(2)%gt22 = one;  mix%material(2)%gt23 = zero
+        mix%material(2)%gt31 = zero; mix%material(2)%gt32 = zero; mix%material(2)%gt33 = one
         !
-        !mix%material(2)%gp11 = one;  mix%material(2)%gp12 = zero; mix%material(2)%gp13 = zero
-        !mix%material(2)%gp21 = zero; mix%material(2)%gp22 = one;  mix%material(2)%gp23 = zero
-        !mix%material(2)%gp31 = zero; mix%material(2)%gp32 = zero; mix%material(2)%gp33 = one
+        mix%material(2)%gp11 = one;  mix%material(2)%gp12 = zero; mix%material(2)%gp13 = zero
+        mix%material(2)%gp21 = zero; mix%material(2)%gp22 = one;  mix%material(2)%gp23 = zero
+        mix%material(2)%gp31 = zero; mix%material(2)%gp32 = zero; mix%material(2)%gp33 = one
         
     end associate
 
@@ -554,6 +554,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     !print *,rhoR, rhoL, VFL, VFR, YsL, YsR
 
     nx = decomp%ysz(1)
+associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
+                 v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
+                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
+                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
+                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
+                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
 
 
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
@@ -564,12 +571,22 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-    associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
-                 v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
-                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
-                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
-                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+        mix%material(1)%gt11 = one;  mix%material(1)%gt12 = zero; mix%material(1)%gt13 = zero
+        mix%material(1)%gt21 = zero; mix%material(1)%gt22 = one;  mix%material(1)%gt23 = zero
+        mix%material(1)%gt31 = zero; mix%material(1)%gt32 = zero; mix%material(1)%gt33 = one
+        !
+        mix%material(1)%gp11 = one;  mix%material(1)%gp12 = zero; mix%material(1)%gp13 = zero
+        mix%material(1)%gp21 = zero; mix%material(1)%gp22 = one;  mix%material(1)%gp23 = zero
+        mix%material(1)%gp31 = zero; mix%material(1)%gp32 = zero; mix%material(1)%gp33 = one
+        !
+        mix%material(2)%gt11 = one;  mix%material(2)%gt12 = zero; mix%material(2)%gt13 = zero
+        mix%material(2)%gt21 = zero; mix%material(2)%gt22 = one;  mix%material(2)%gt23 = zero
+        mix%material(2)%gt31 = zero; mix%material(2)%gt32 = zero; mix%material(2)%gt33 = one
+        !
+        mix%material(2)%gp11 = one;  mix%material(2)%gp12 = zero; mix%material(2)%gp13 = zero
+        mix%material(2)%gp21 = zero; mix%material(2)%gp22 = one;  mix%material(2)%gp23 = zero
+        mix%material(2)%gp31 = zero; mix%material(2)%gp32 = zero; mix%material(2)%gp33 = one
+
 
 
         !if(decomp%yst(1)==1) then

@@ -277,7 +277,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
 	eta = (x - 0.5)**2 + (y - 0.75)**2
-	 tmp = (half - minVF) * ( one - erf( (eta-(R**2))/(thick) ) )
+	 tmp = (half - minVF) * ( one + tanh( (eta-(R**2))/(thick) ) )
 
 
 	!set mixture Volume fraction
