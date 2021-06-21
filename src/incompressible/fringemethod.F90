@@ -207,7 +207,7 @@ contains
           call GracefulExit("Fringe targets already associated at setup if &
             ShiftedPeriodicBC is true. Check input and problem files",999)
       endif
- 
+
       this%u_target => utarget
       this%v_target => vtarget
       this%w_target => wtarget

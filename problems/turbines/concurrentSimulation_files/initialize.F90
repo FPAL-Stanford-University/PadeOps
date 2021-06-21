@@ -116,7 +116,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
           v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
           wC= zero
        else
-          u=one-(z-4.0D0)*(z-4.0D0)/16.0D0
+          u=one-(z-4.0d0)*(z-4.0d0)/16.0D0
           v=zero
           wC=zero
        endif  
@@ -127,7 +127,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
           v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
           wC= zero 
        else
-          u=one-(z-4.0D0)*(z-4.0D0)/16.0D0
+          u=one-(z-4.0d0)*(z-4.0d0)/16.0D0
           v=zero
           wC=zero
        endif 

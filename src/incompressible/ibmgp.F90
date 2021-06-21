@@ -1,7 +1,7 @@
 module ibmgpmod
     use kind_parameters, only: rkind, clen, mpiinteg, mpirkind
     use constants      , only: zero, one, third, half, two, kappa
-    use exits          , only: GracefulExit
+    use exits          , only: GracefulExit, message
     use reductions     , only: p_maxval, p_minval
     use kdtree_wrapper , only: initialize_kdtree_ib, create_kdtree_ib, probe_nearest_points_kdtree_ib, finalize_kdtree_ib
     use spectralMod    , only: spectral  
@@ -69,6 +69,8 @@ module ibmgpmod
             procedure, private :: smooth_solidptsCE
             procedure, private :: set_interpfac_imptsC
             procedure, private :: set_interpfac_imptsE
+            procedure, private :: process_image_pointC
+            procedure, private :: process_image_pointE
             procedure, private :: smooth_along_x
             procedure, private :: smooth_along_y
             procedure, private :: smooth_along_z
@@ -88,7 +90,8 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
 
   character(len=clen)    :: surfaceMeshFile, fname, dumstr
   integer :: io, ii, jj, k, ioUnit, nlines, nlayers = 2, ibwm = 1, ierr
-  real(rkind) :: rnum1, rnum2, rnum3, Lscale = one, invLscale, dotprod, dx, dy
+  real(rkind) :: rnum1, rnum2, rnum3, Lscale_x = one, invLscale_x, dotprod, dx, dy
+  real(rkind) :: Lscale_y = one, invLscale_y, Lscale_z = one, invLscale_z
   real(rkind) :: translate_x = zero, translate_y = zero, translate_z = zero
   real(rkind) :: xmax_ib, xmin_ib, ymax_ib, ymin_ib, zmax_ib, zmin_ib, xkmag
   real(rkind) :: solidpt_x = zero, solidpt_y = zero, solidpt_z = zero
@@ -98,7 +101,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   real(rkind), dimension(3) :: vec1, vec2, xk
   real(rkind) :: ibwm_ustar = one, ibwm_z0 = 1.0d-4
 
-  namelist /IBMGP/ surfaceMeshFile, Lscale, translate_x, translate_y, translate_z, &
+  namelist /IBMGP/ surfaceMeshFile, Lscale_x, Lscale_y, Lscale_z, translate_x, translate_y, translate_z, &
                    solidpt_x, solidpt_y, solidpt_z, nlayers, ibwm, ibwm_ustar, ibwm_z0
 
   this%runID = runID
@@ -187,8 +190,12 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   ! IB may be generated at a scale and position that is inconsistent with the
   ! problem setup. Modify the IB surface elements to be consistent with problem
   ! --- First  :: scale the IB surface mesh
-  invLscale = one/Lscale
-  this%surfelem = invLscale*this%surfelem
+  invLscale_x = one/Lscale_x
+  invLscale_y = one/Lscale_y
+  invLscale_z = one/Lscale_z
+  this%surfelem(:,:,1) = invLscale_x*this%surfelem(:,:,1)
+  this%surfelem(:,:,2) = invLscale_y*this%surfelem(:,:,2)
+  this%surfelem(:,:,3) = invLscale_z*this%surfelem(:,:,3)
 
   ! --- Second :: translate the IB surface mesh
   this%surfelem(:,:,1) = this%surfelem(:,:,1) + translate_x
@@ -408,12 +415,12 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   this%imptsC_v = zero;      this%imptsE_v = zero;
   this%imptsC_w = zero;      this%imptsE_w = zero;
 
-  if(nrank==7) then
-      write(*,'(a,i4,1x,3(e19.12,1x))') 'testing: ', nrank, xlinepart(32), ylinepart(4), zlinepart(18)
-      write(*,'(a,i4,1x,100(e19.12,1x))') 'ylinepart: ', nrank, ylinepart(:)
-      write(*,'(a,i4,1x,100(i4,1x))') 'mapC: ', nrank, mapC(32,:,18)
-      write(*,'(a,i4,1x,100(i4,1x))') 'numptsC, numptsE: ', this%num_gptsC, this%num_gptsE
-  endif
+  !if(nrank==7) then
+  !    write(*,'(a,i4,1x,3(e19.12,1x))') 'testing: ', nrank, xlinepart(32), ylinepart(4), zlinepart(18)
+  !    write(*,'(a,i4,1x,100(e19.12,1x))') 'ylinepart: ', nrank, ylinepart(:)
+  !    write(*,'(a,i4,1x,100(i4,1x))') 'mapC: ', nrank, mapC(32,:,18)
+  !    write(*,'(a,i4,1x,100(i4,1x))') 'numptsC, numptsE: ', this%num_gptsC, this%num_gptsE
+  !endif
 
   call this%save_ghost_points(flagC, flagE, mapC, mapE, xlinepart, ylinepart, zlinepart, zlinepartE)
 
@@ -422,7 +429,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   call this%compute_image_points(Lx, Ly, zBot, zTop)
 
   dx = xlinepart(2)-xlinepart(1); dy = ylinepart(2)-ylinepart(1)
-  call this%setup_interpolation(dx,dy,dz, zBot, xlinepart, ylinepart, zlinepart, zlinepartE)
+  call this%setup_interpolation(dx,dy,dz, zBot, Lx, Ly, xlinepart, ylinepart, zlinepart, zlinepartE)
 
   deallocate(flagE, flagC, mapC, mapE, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE)
 
@@ -882,9 +889,9 @@ subroutine interp_imptsC(this, u, v, wC)
 
 end subroutine
 
-subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zlinepart, zlinepartE)
+subroutine setup_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinepart, zlinepart, zlinepartE)
   class(ibmgp),              intent(inout) :: this
-  real(rkind),               intent(in)    :: dx, dy, dz, zBot
+  real(rkind),               intent(in)    :: dx, dy, dz, zBot, Lx, Ly
   real(rkind), dimension(:), intent(in)    :: xlinepart, ylinepart, zlinepart, zlinepartE
 
   integer :: ii, itmp, jtmp, ktmp, nxloc, nyloc, nzloc, point_number, ierr
@@ -909,48 +916,65 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
   do ii = 1, this%num_imptsC_glob  !this%num_gptsC
       ! first check if this point is on this processor
       !xloc = this%gptsC_img(ii,1);  yloc = this%gptsC_img(ii,2);  zloc = this%gptsC_img(ii,3);
+
+
+      ! first do (xl, yl, zl)
       xloc = this%imptsC_xyz(ii,1);  yloc = this%imptsC_xyz(ii,2);  zloc = this%imptsC_xyz(ii,3);
+      call this%process_image_pointC(xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
 
-      if( (xloc>=xdom_left) .and. (xloc<=xdom_right) .and. &
-          (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
-          (zloc>=zdom_left) .and. (zloc<=zdom_right) ) then
+      ! (x-image) 
+      xloc = this%imptsC_xyz(ii,1) - Lx;  yloc = this%imptsC_xyz(ii,2);  zloc = this%imptsC_xyz(ii,3);
+      call this%process_image_pointC(xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
 
-        itmp = floor((xloc-xdom_left)/dx); if(itmp==nxloc+1) itmp = itmp-1 
-        jtmp = floor((yloc-ydom_left)/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
-        ktmp = floor((zloc-zdom_left)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
+      ! (y-image) 
+      xloc = this%imptsC_xyz(ii,1);  yloc = this%imptsC_xyz(ii,2) - Ly;  zloc = this%imptsC_xyz(ii,3);
+      call this%process_image_pointC(xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
 
-        ! determine facx, facy, facz
-        if(itmp==0) then
-            facx = one - (xlinepart(1)-xloc)/dx
-        else
-            facx = one - (xloc-xlinepart(itmp))/dx
-        endif
+      ! (x- and y-image) 
+      xloc = this%imptsC_xyz(ii,1) - Lx;  yloc = this%imptsC_xyz(ii,2) - Ly;  zloc = this%imptsC_xyz(ii,3);
+      call this%process_image_pointC(xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
 
-        if(jtmp==0) then
-            facy = one - (ylinepart(1)-yloc)/dy
-        else
-            facy = one - (yloc-ylinepart(jtmp))/dy
-        endif
 
-        if(ktmp==0) then
-            facz = one - (zlinepart(1)-zloc)/dz
-        else
-            facz = one - (zloc-zlinepart(ktmp))/dz
-        endif
+      !!if( (xloc>=xdom_left) .and. (xloc<=xdom_right) .and. &
+      !!    (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
+      !!    (zloc>=zdom_left) .and. (zloc<=zdom_right) ) then
 
-        onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
+      !!  itmp = floor((xloc-xdom_left)/dx); if(itmp==nxloc+1) itmp = itmp-1 
+      !!  jtmp = floor((yloc-ydom_left)/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
+      !!  ktmp = floor((zloc-zdom_left)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
 
-        ! now consider 8 points separately
-        point_number = 0
-        call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
-        call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
-        call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
-        call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
-        call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
-        call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
-        call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
-        call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
-      endif
+      !!  ! determine facx, facy, facz
+      !!  if(itmp==0) then
+      !!      facx = one - (xlinepart(1)-xloc)/dx
+      !!  else
+      !!      facx = one - (xloc-xlinepart(itmp))/dx
+      !!  endif
+
+      !!  if(jtmp==0) then
+      !!      facy = one - (ylinepart(1)-yloc)/dy
+      !!  else
+      !!      facy = one - (yloc-ylinepart(jtmp))/dy
+      !!  endif
+
+      !!  if(ktmp==0) then
+      !!      facz = one - (zlinepart(1)-zloc)/dz
+      !!  else
+      !!      facz = one - (zloc-zlinepart(ktmp))/dz
+      !!  endif
+
+      !!  onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
+
+      !!  ! now consider 8 points separately
+      !!  point_number = 0
+      !!  call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
+      !!  call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
+      !!  call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
+      !!  call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
+      !!  call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
+      !!  call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
+      !!  call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
+      !!  call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
+      !!endif
 
       !this%gptsC_ileft(ii) = max(1, min(itmp+1, this%gpC%xsz(1)-1))
       !this%gptsC_ifacx(ii) = (this%gptsC_img(ii,1)-real(itmp, rkind)*dx)/dx
@@ -967,13 +991,27 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
   ! Check p_sum imptsC_numonproc. This should be either 0 or 8
   allocate(psum_numonproc(this%num_imptsC_glob), psum_multfac(this%num_imptsC_glob), lsum_multfac(this%num_imptsC_glob))
   do ii = 1, this%num_imptsC_glob
-    lsum_multfac = sum(this%imptsC_multfac(:,ii))
+    lsum_multfac(ii) = sum(this%imptsC_multfac(:,ii))
   enddo
   call MPI_AllReduce(this%imptsC_numonproc, psum_numonproc, this%num_imptsC_glob, mpiinteg, MPI_SUM, MPI_COMM_WORLD, ierr)
   call MPI_AllReduce(lsum_multfac         , psum_multfac  , this%num_imptsC_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
   if(nrank==0) then
     print *, 'psum_numonproc :=', maxval(psum_numonproc), minval(psum_numonproc)
+    print *, 'loc_numonproc :=', maxloc(psum_numonproc), minloc(psum_numonproc)
     print *, 'psum_multfac   :=', maxval(psum_multfac  ), minval(psum_multfac  )
+    print *, 'loc_multfac   :=', maxloc(psum_multfac  ), minloc(psum_multfac  )
+
+    write(dumstr,"(A3,I2.2,A31,I4.4,A4)") "Run",this%runID,"_ibm_imptsC_psum_numonproc_.dat"
+    fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+    open(11,file=fname,status='unknown',action='write')
+    do ii = 1, this%num_imptsC_glob
+        !write(11, '(i4,1x,i4,1x,20(e19.12,1x))') ii, psum_numonproc(ii), psum_multfac(ii)
+        write(11, *) ii, psum_numonproc(ii), psum_multfac(ii)
+    enddo
+    close(11)
+  endif
+  if(abs(maxval(psum_multfac)-1.0d0) > 1.0d-12) then
+      call GracefulExit("IBM Interpolation Factors at Cells do not add up to 1. Check details.", 111)
   endif
   deallocate(psum_numonproc, psum_multfac, lsum_multfac)
 
@@ -990,83 +1028,110 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
       ! first check if this point is on this processor
       !xloc = this%gptsE_img(ii,1);  yloc = this%gptsE_img(ii,2);  zloc = this%gptsE_img(ii,3);
       xloc = this%imptsE_xyz(ii,1);  yloc = this%imptsE_xyz(ii,2);  zloc = this%imptsE_xyz(ii,3);
+      call this%process_image_pointE(xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii)
 
-      if( (xloc>=xdom_left ) .and. (xloc<=xdom_right ) .and. &
-          (yloc>=ydom_left ) .and. (yloc<=ydom_right ) .and. &
-          (zloc>=zdom_leftE) .and. (zloc<=zdom_rightE) ) then
+      ! (x-image)
+      xloc = this%imptsE_xyz(ii,1) - Lx;  yloc = this%imptsE_xyz(ii,2);  zloc = this%imptsE_xyz(ii,3);
+      call this%process_image_pointE(xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii)
 
-        itmp = floor((xloc-xdom_left )/dx); if(itmp==nxloc+1) itmp = itmp-1 
-        jtmp = floor((yloc-ydom_left )/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
-        ktmp = floor((zloc-zdom_leftE)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
+      ! (y-image)
+      xloc = this%imptsE_xyz(ii,1);  yloc = this%imptsE_xyz(ii,2) - Ly;  zloc = this%imptsE_xyz(ii,3);
+      call this%process_image_pointE(xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii)
 
-        ! determine facx, facy, facz
-        if(itmp==0) then
-            facx = one - (xlinepart(1)-xloc)/dx
-        else
-            facx = one - (xloc-xlinepart(itmp))/dx
-        endif
+      ! (x- and y-image)
+      xloc = this%imptsE_xyz(ii,1) - Lx;  yloc = this%imptsE_xyz(ii,2) - Ly;  zloc = this%imptsE_xyz(ii,3);
+      call this%process_image_pointE(xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii)
 
-        if(jtmp==9) then
-            print *, '-----nrank = ', nrank 
-            print '(a,2(i5,1x),3(e19.12,1x))', '--nrank: ', nrank, ii, xloc, yloc, zloc
-            print '(a,1(i5,1x),3(e19.12,1x))', '--xdom : ', itmp, xdom_left , xdom_right, dx
-            print '(a,1(i5,1x),3(e19.12,1x))', '--ydom : ', jtmp, ydom_left , ydom_right, dy
-            print '(a,1(i5,1x),3(e19.12,1x))', '--zdom : ', ktmp, zdom_leftE, zdom_right, dz
-            print '(a,       100(e19.12,1x))', '--xline: ', xlinepart
-            print '(a,       100(e19.12,1x))', '--yline: ', ylinepart
-            print '(a,       100(e19.12,1x))', '--zline: ', zlinepartE
-        endif
+      !!if( (xloc>=xdom_left ) .and. (xloc<=xdom_right ) .and. &
+      !!    (yloc>=ydom_left ) .and. (yloc<=ydom_right ) .and. &
+      !!    (zloc>=zdom_leftE) .and. (zloc<=zdom_rightE) ) then
 
-        if(jtmp==0) then
-            facy = one - (ylinepart(1)-yloc)/dy
-        else
-            facy = one - (yloc-ylinepart(jtmp))/dy
-        endif
+      !!  itmp = floor((xloc-xdom_left )/dx); if(itmp==nxloc+1) itmp = itmp-1 
+      !!  jtmp = floor((yloc-ydom_left )/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
+      !!  ktmp = floor((zloc-zdom_leftE)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
 
-        if(ktmp==0) then
-            facz = one - (zlinepartE(1)-zloc)/dz
-        else
-            facz = one - (zloc-zlinepartE(ktmp))/dz
-        endif
+      !!  ! determine facx, facy, facz
+      !!  if(itmp==0) then
+      !!      facx = one - (xlinepart(1)-xloc)/dx
+      !!  else
+      !!      facx = one - (xloc-xlinepart(itmp))/dx
+      !!  endif
 
-        onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
+      !!  if(jtmp==9) then
+      !!      print *, '-----nrank = ', nrank 
+      !!      print '(a,2(i5,1x),3(e19.12,1x))', '--nrank: ', nrank, ii, xloc, yloc, zloc
+      !!      print '(a,1(i5,1x),3(e19.12,1x))', '--xdom : ', itmp, xdom_left , xdom_right, dx
+      !!      print '(a,1(i5,1x),3(e19.12,1x))', '--ydom : ', jtmp, ydom_left , ydom_right, dy
+      !!      print '(a,1(i5,1x),3(e19.12,1x))', '--zdom : ', ktmp, zdom_leftE, zdom_right, dz
+      !!      print '(a,       100(e19.12,1x))', '--xline: ', xlinepart
+      !!      print '(a,       100(e19.12,1x))', '--yline: ', ylinepart
+      !!      print '(a,       100(e19.12,1x))', '--zline: ', zlinepartE
+      !!  endif
 
-        ! now consider 8 points separately
-        point_number = 0
-        call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
-        call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
-        call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
-        call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
-        call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
-        call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
-        call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
-        call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
+      !!  if(jtmp==0) then
+      !!      facy = one - (ylinepart(1)-yloc)/dy
+      !!  else
+      !!      facy = one - (yloc-ylinepart(jtmp))/dy
+      !!  endif
 
-        !itmp = floor(this%gptsE_img(ii,1)/dx);
-        !this%gptsE_ileft(ii) = max(1, min(itmp+1, this%gpE%xsz(1)-1))
-        !this%gptsE_ifacx(ii) = (this%gptsE_img(ii,1)-real(itmp, rkind)*dx)/dx
+      !!  if(ktmp==0) then
+      !!      facz = one - (zlinepartE(1)-zloc)/dz
+      !!  else
+      !!      facz = one - (zloc-zlinepartE(ktmp))/dz
+      !!  endif
 
-        !itmp = floor(this%gptsE_img(ii,2)/dy);
-        !this%gptsE_jleft(ii) = max(1, min(itmp+1, this%gpE%ysz(2)-1))
-        !this%gptsE_jfacy(ii) = (this%gptsE_img(ii,2)-real(itmp, rkind)*dy)/dy
+      !!  onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
 
-        !itmp = floor((this%gptsE_img(ii,3)-zBot)/dz);
-        !this%gptsE_kleft(ii) = max(1, min(itmp+1, this%gpE%zsz(3)-1))
-        !this%gptsE_kfacz(ii) = (this%gptsE_img(ii,3)-real(itmp, rkind)*dz - zBot)/dz
+      !!  ! now consider 8 points separately
+      !!  point_number = 0
+      !!  call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
+      !!  call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
+      !!  call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
+      !!  call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
+      !!  call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
+      !!  call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
+      !!  call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
+      !!  call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
 
-      endif
+      !!  !itmp = floor(this%gptsE_img(ii,1)/dx);
+      !!  !this%gptsE_ileft(ii) = max(1, min(itmp+1, this%gpE%xsz(1)-1))
+      !!  !this%gptsE_ifacx(ii) = (this%gptsE_img(ii,1)-real(itmp, rkind)*dx)/dx
+
+      !!  !itmp = floor(this%gptsE_img(ii,2)/dy);
+      !!  !this%gptsE_jleft(ii) = max(1, min(itmp+1, this%gpE%ysz(2)-1))
+      !!  !this%gptsE_jfacy(ii) = (this%gptsE_img(ii,2)-real(itmp, rkind)*dy)/dy
+
+      !!  !itmp = floor((this%gptsE_img(ii,3)-zBot)/dz);
+      !!  !this%gptsE_kleft(ii) = max(1, min(itmp+1, this%gpE%zsz(3)-1))
+      !!  !this%gptsE_kfacz(ii) = (this%gptsE_img(ii,3)-real(itmp, rkind)*dz - zBot)/dz
+
+      !!endif
   enddo
 
   ! Check p_sum imptsE_numonproc. This should be either 0 or 8
   allocate(psum_numonproc(this%num_imptsE_glob), psum_multfac(this%num_imptsE_glob), lsum_multfac(this%num_imptsE_glob))
   do ii = 1, this%num_imptsE_glob
-    lsum_multfac = sum(this%imptsE_multfac(:,ii))
+    lsum_multfac(ii) = sum(this%imptsE_multfac(:,ii))
   enddo
   call MPI_AllReduce(this%imptsE_numonproc, psum_numonproc, this%num_imptsE_glob, mpiinteg, MPI_SUM, MPI_COMM_WORLD, ierr)
   call MPI_AllReduce(lsum_multfac         , psum_multfac  , this%num_imptsE_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
   if(nrank==0) then
     print *, 'psum_numonprocE:=', maxval(psum_numonproc), minval(psum_numonproc)
+    print *, 'loc_numonproc E:=', maxloc(psum_numonproc), minloc(psum_numonproc)
     print *, 'psum_multfac  E:=', maxval(psum_multfac  ), minval(psum_multfac  )
+    print *, 'loc_multfac   E:=', maxloc(psum_multfac  ), minloc(psum_multfac  )
+
+    write(dumstr,"(A3,I2.2,A31,I4.4,A4)") "Run",this%runID,"_ibm_imptsE_psum_numonproc_.dat"
+    fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+    open(11,file=fname,status='unknown',action='write')
+    do ii = 1, this%num_imptsE_glob
+        !write(11, '(i4,1x,i4,1x,40(e19.12,1x))') ii, psum_numonproc(ii), psum_multfac(ii)
+        write(11, *) ii, psum_numonproc(ii), psum_multfac(ii)
+    enddo
+    close(11)
+  endif
+  if(abs(maxval(psum_multfac)-1.0d0) > 1.0d-12) then
+      call GracefulExit("IBM Interpolation Factors at Edges do not add up to 1. Check details.", 111)
   endif
   deallocate(psum_numonproc, psum_multfac, lsum_multfac)
 
@@ -1080,21 +1145,189 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, xlinepart, ylinepart, zli
 
 end subroutine
 
-subroutine set_interpfac_imptsC(this, ip, jp, kp, ii, point_number, multfac)
+subroutine process_image_pointC(this, xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), intent(in)     :: xloc, yloc, zloc, xdom_left, xdom_right, ydom_left, ydom_right, zdom_left, zdom_right, dx, dy, dz
+  real(rkind), dimension(:), intent(in)   :: xlinepart, ylinepart, zlinepart
+  integer,     intent(in)     :: ii, nxloc, nyloc, nzloc
+
+  integer :: itmp, jtmp, ktmp, point_number
+  real(rkind) :: facx, facy, facz, onemfacx, onemfacy, onemfacz
+
+  if( (xloc>=xdom_left) .and. (xloc<=xdom_right) .and. &
+      (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
+      (zloc>=zdom_left) .and. (zloc<=zdom_right) ) then
+
+    itmp = floor((xloc-xdom_left)/dx); if(itmp==nxloc+1) itmp = itmp-1 
+    jtmp = floor((yloc-ydom_left)/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
+    ktmp = floor((zloc-zdom_left)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
+
+    ! determine facx, facy, facz
+    if(itmp==0) then
+        !facx = one - (xlinepart(1)-xloc)/dx
+        facx = (xlinepart(1)-xloc)/dx                ! note :: 1 - (.. ) has been changed
+    else
+        facx = one - (xloc-xlinepart(itmp))/dx
+    endif
+
+    if(jtmp==0) then
+        !facy = one - (ylinepart(1)-yloc)/dy
+        facy = (ylinepart(1)-yloc)/dy
+    else
+        facy = one - (yloc-ylinepart(jtmp))/dy
+    endif
+
+    if(ktmp==0) then
+        !facz = one - (zlinepart(1)-zloc)/dz
+        facz = (zlinepart(1)-zloc)/dz
+    else
+        facz = one - (zloc-zlinepart(ktmp))/dz
+    endif
+
+    onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
+
+    !if((ii==94)) then
+    !    write(500+nrank,*) '------ii=', ii, '-------'
+    !    write(500+nrank,'(a,3(e19.12,1x))') 'xl, yl, zl      : ', xloc, yloc, zloc
+    !    write(500+nrank,'(a,3(e19.12,1x))') 'dx, dy, dz      : ', dx, dy, dz
+    !    write(500+nrank,'(a,3(i4 ,1x))')    'itmp, jtmp, ktmp: ', itmp, jtmp, ktmp
+    !    if(jtmp==0) then
+    !        write(500+nrank,'(a,3(e19.12,1x))') 'xi, yj, zk      : ', xlinepart(itmp), ylinepart(jtmp+1), zlinepart(ktmp)
+    !    else
+    !        write(500+nrank,'(a,3(e19.12,1x))') 'xi, yj, zk      : ', xlinepart(itmp), ylinepart(jtmp), zlinepart(ktmp)
+    !    endif
+    !    write(500+nrank,'(a,3(e19.12,1x))') 'fx, fy, fz      : ', facx, facy, facz
+    !    write(500+nrank,'(a,4(e19.12,1x))') 'f-z1            : ', facx*facy*facz, onemfacx*facy*facz, facx*onemfacy*facz, onemfacx*onemfacy*facz
+    !    write(500+nrank,'(a,4(e19.12,1x))') 'f-z2            : ', facx*facy*onemfacz, onemfacx*facy*onemfacz, facx*onemfacy*onemfacz, onemfacx*onemfacy*onemfacz
+    !    write(500+nrank,*) '-Done-ii=', ii, '-------'
+    !endif
+
+    ! now consider 8 points separately
+    !point_number = this%imptsC_numonproc(ii)
+    call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
+    call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
+    call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
+    call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
+    call this%set_interpfac_imptsC(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
+    call this%set_interpfac_imptsC(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
+    call this%set_interpfac_imptsC(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
+    call this%set_interpfac_imptsC(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
+  endif
+
+
+end subroutine 
+
+subroutine process_image_pointE(this, xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), intent(in)     :: xloc, yloc, zloc, xdom_left, xdom_right, ydom_left, ydom_right, zdom_leftE, zdom_rightE, dx, dy, dz
+  real(rkind), dimension(:), intent(in)   :: xlinepart, ylinepart, zlinepartE
+  integer,     intent(in)     :: ii, nxloc, nyloc, nzloc
+
+  integer :: itmp, jtmp, ktmp, point_number
+  real(rkind) :: facx, facy, facz, onemfacx, onemfacy, onemfacz
+
+  if( (xloc>=xdom_left ) .and. (xloc<=xdom_right ) .and. &
+      (yloc>=ydom_left ) .and. (yloc<=ydom_right ) .and. &
+      (zloc>=zdom_leftE) .and. (zloc<=zdom_rightE) ) then
+
+    itmp = floor((xloc-xdom_left )/dx); if(itmp==nxloc+1) itmp = itmp-1 
+    jtmp = floor((yloc-ydom_left )/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
+    ktmp = floor((zloc-zdom_leftE)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
+
+    ! determine facx, facy, facz
+    if(itmp==0) then
+        !facx = one - (xlinepart(1)-xloc)/dx
+        facx = (xlinepart(1)-xloc)/dx
+    else
+        facx = one - (xloc-xlinepart(itmp))/dx
+    endif
+
+    !if(jtmp==9) then
+    !    print *, '-----nrank = ', nrank 
+    !    print '(a,2(i5,1x),3(e19.12,1x))', '--nrank: ', nrank, ii, xloc, yloc, zloc
+    !    print '(a,1(i5,1x),3(e19.12,1x))', '--xdom : ', itmp, xdom_left , xdom_right, dx
+    !    print '(a,1(i5,1x),3(e19.12,1x))', '--ydom : ', jtmp, ydom_left , ydom_right, dy
+    !    print '(a,1(i5,1x),3(e19.12,1x))', '--zdom : ', ktmp, zdom_leftE, zdom_rightE, dz
+    !    print '(a,       100(e19.12,1x))', '--xline: ', xlinepart
+    !    print '(a,       100(e19.12,1x))', '--yline: ', ylinepart
+    !    print '(a,       100(e19.12,1x))', '--zline: ', zlinepartE
+    !endif
+
+    if(jtmp==0) then
+        !facy = one - (ylinepart(1)-yloc)/dy
+        facy = (ylinepart(1)-yloc)/dy
+    else
+        facy = one - (yloc-ylinepart(jtmp))/dy
+    endif
+
+    if(ktmp==0) then
+        !facz = one - (zlinepartE(1)-zloc)/dz
+        facz = (zlinepartE(1)-zloc)/dz
+    else
+        facz = one - (zloc-zlinepartE(ktmp))/dz
+    endif
+
+    onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
+
+    !if((ii==16)) then
+    !    write(100+nrank,*) '------ii=', ii, '-------'
+    !    write(100+nrank,'(a,3(e19.12,1x))') 'xl, yl, zl      : ', xloc, yloc, zloc
+    !    write(100+nrank,'(a,3(e19.12,1x))') 'dx, dy, dz      : ', dx, dy, dz
+    !    write(100+nrank,'(a,3(i4 ,1x))')    'itmp, jtmp, ktmp: ', itmp, jtmp, ktmp
+    !    if(jtmp==0) then
+    !        write(100+nrank,'(a,3(e19.12,1x))') 'xi, yj, zk      : ', xlinepart(itmp), ylinepart(jtmp+1), zlinepartE(ktmp)
+    !    else
+    !        write(100+nrank,'(a,3(e19.12,1x))') 'xi, yj, zk      : ', xlinepart(itmp), ylinepart(jtmp), zlinepartE(ktmp)
+    !    endif
+    !    write(100+nrank,'(a,3(e19.12,1x))') 'fx, fy, fz      : ', facx, facy, facz
+    !    write(100+nrank,'(a,4(e19.12,1x))') 'f-z1            : ', facx*facy*facz, onemfacx*facy*facz, facx*onemfacy*facz, onemfacx*onemfacy*facz
+    !    write(100+nrank,'(a,4(e19.12,1x))') 'f-z2            : ', facx*facy*onemfacz, onemfacx*facy*onemfacz, facx*onemfacy*onemfacz, onemfacx*onemfacy*onemfacz
+    !    write(100+nrank,*) '-Done-ii=', ii, '-------'
+    !endif
+
+    ! now consider 8 points separately
+    !point_number = 0
+    call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
+    call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
+    call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
+    call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
+    call this%set_interpfac_imptsE(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
+    call this%set_interpfac_imptsE(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
+    call this%set_interpfac_imptsE(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
+    call this%set_interpfac_imptsE(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
+
+    !itmp = floor(this%gptsE_img(ii,1)/dx);
+    !this%gptsE_ileft(ii) = max(1, min(itmp+1, this%gpE%xsz(1)-1))
+    !this%gptsE_ifacx(ii) = (this%gptsE_img(ii,1)-real(itmp, rkind)*dx)/dx
+
+    !itmp = floor(this%gptsE_img(ii,2)/dy);
+    !this%gptsE_jleft(ii) = max(1, min(itmp+1, this%gpE%ysz(2)-1))
+    !this%gptsE_jfacy(ii) = (this%gptsE_img(ii,2)-real(itmp, rkind)*dy)/dy
+
+    !itmp = floor((this%gptsE_img(ii,3)-zBot)/dz);
+    !this%gptsE_kleft(ii) = max(1, min(itmp+1, this%gpE%zsz(3)-1))
+    !this%gptsE_kfacz(ii) = (this%gptsE_img(ii,3)-real(itmp, rkind)*dz - zBot)/dz
+
+  endif
+
+end subroutine 
+
+subroutine set_interpfac_imptsC(this, ip, jp, kp, ii, point_numberdum, multfac)
   class(ibmgp),     intent(inout) :: this
   integer,     intent(in)     :: ip, jp, kp, ii
-  integer,     intent(inout)  :: point_number
+  integer,     intent(inout)  :: point_numberdum
   real(rkind), intent(in)     :: multfac
 
-  integer :: nxloc, nyloc, nzloc
+  integer :: nxloc, nyloc, nzloc, point_number
 
   nxloc = this%gpC%xsz(1);  nyloc = this%gpC%xsz(2);  nzloc = this%gpC%xsz(3)
 
   if( (ip .ge. 1) .and. (ip .le. nxloc) .and. &
       (jp .ge. 1) .and. (jp .le. nyloc) .and. &
       (kp .ge. 1) .and. (kp .le. nzloc) ) then
-          point_number = point_number + 1
-          this%imptsC_numonproc(ii) = point_number
+          !point_number = point_number + 1
+          this%imptsC_numonproc(ii) = this%imptsC_numonproc(ii) + 1
+          point_number = this%imptsC_numonproc(ii)
           this%imptsC_indices(1,point_number,ii) = ip
           this%imptsC_indices(2,point_number,ii) = jp
           this%imptsC_indices(3,point_number,ii) = kp
@@ -1103,21 +1336,23 @@ subroutine set_interpfac_imptsC(this, ip, jp, kp, ii, point_number, multfac)
 
 end subroutine
 
-subroutine set_interpfac_imptsE(this, ip, jp, kp, ii, point_number, multfac)
+subroutine set_interpfac_imptsE(this, ip, jp, kp, ii, point_numberdum, multfac)
   class(ibmgp),     intent(inout) :: this
   integer,     intent(in)    :: ip, jp, kp, ii
-  integer,     intent(inout) :: point_number
+  integer,     intent(inout) :: point_numberdum
   real(rkind), intent(in)    :: multfac
 
-  integer :: nxloc, nyloc, nzloc
+  integer :: nxloc, nyloc, nzloc, point_number
 
   nxloc = this%gpC%xsz(1);  nyloc = this%gpC%xsz(2);  nzloc = this%gpC%xsz(3)
 
   if( (ip .ge. 1) .and. (ip .le. nxloc) .and. &
       (jp .ge. 1) .and. (jp .le. nyloc) .and. &
       (kp .ge. 1) .and. (kp .le. nzloc) ) then
-          point_number = point_number + 1
-          this%imptsE_numonproc(ii) = point_number
+          !point_number = point_number + 1
+          !this%imptsE_numonproc(ii) = point_number
+          this%imptsE_numonproc(ii) = this%imptsE_numonproc(ii) + 1
+          point_number = this%imptsE_numonproc(ii)
           this%imptsE_indices(1,point_number,ii) = ip
           this%imptsE_indices(2,point_number,ii) = jp
           this%imptsE_indices(3,point_number,ii) = kp
@@ -1130,8 +1365,9 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
   class(ibmgp),     intent(inout) :: this
   real(rkind), intent(in) :: Lx, Ly, zBot, zTop
 
-  integer :: ii, jj, kk, ierr
+  integer :: ii, jj, kk, ierr, iimax(1), iimin(1)
   real(rkind) :: vec1(3), vec2(3), dotpr, xmax_img, xmin_img, ymax_img, ymin_img, zmax_img, zmin_img
+  real(rkind) :: xmax_loc, xmin_loc
   character(len=clen) :: fname, dumstr
 
   kk = this%imptsC_index_st(nrank+1)-1
@@ -1195,6 +1431,25 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
   ymax_img = p_maxval(maxval(this%gptsC_img(:,2)));   ymin_img = p_minval(minval(this%gptsC_img(:,2)))
   zmax_img = p_maxval(maxval(this%gptsC_img(:,3)));   zmin_img = p_minval(minval(this%gptsC_img(:,3)))
   if((xmax_img > Lx) .or. (xmin_img < zero)) then
+      call message(1, "Cell image points x coordinates outside domain", 111)
+      xmax_loc = maxval(this%gptsC_img(:,1))
+      iimax = maxloc(this%gptsC_img(:,1))
+      if(abs(xmax_loc-xmax_img) < 1.0d-12) then
+         print *, '-----Global maximum of gptsC_img(:,1)-----'
+         print *, iimax, nrank
+         print *, xmax_loc
+         print *, xmax_img
+         print *, this%gptsC_img(iimax(1),1)
+      endif
+      xmin_loc = minval(this%gptsC_img(:,1))
+      iimin = minloc(this%gptsC_img(:,1))
+      if(abs(xmin_loc-xmin_img) < 1.0d-12) then
+         print *, '-----Global minimum of gptsC_img(:,1)-----'
+         print *, iimin, nrank
+         print *, xmin_loc
+         print *, xmin_img
+         print *, this%gptsC_img(iimin(1),1)
+      endif
       call GracefulExit("Cell image points x coordinates outside domain", 111)
   endif
   if((ymax_img > Ly) .or. (ymin_img < zero)) then
