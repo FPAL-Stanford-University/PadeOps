@@ -1,4 +1,4 @@
-! Routines specific to 2nd order Explicit Staggered Finite Difference Scheme
+! Routines specific to 6th order Explicit Staggered Finite Difference Scheme
 
 module d06Staggstuff
 
@@ -10,7 +10,7 @@ module d06Staggstuff
 
     private
     public :: d06Stagg, aD06d1, bD06d1, cD06d1
-    ! 2nd order first derivative explicit centeral difference coefficients
+    ! 6th order first derivative explicit centeral difference coefficients
         !see table VI of Lele 1992 for alpha=beta=0
     real(rkind), parameter :: aD06d1     =  225.d0/192.0d0  
     real(rkind), parameter :: bD06d1     = -25.0d0/128.0d0
@@ -23,16 +23,16 @@ module d06Staggstuff
     ! Interior scheme
     real(rkind), parameter                   :: q_hat           = aD06d1
 
-    ! Scheme at node 1 (boundary): explicit one-sided 2nd order
+    ! Scheme at node 1 (boundary): explicit one-sided 6th order
     real(rkind), parameter                   :: p               = -3.0_rkind / 2.0_rkind
     real(rkind), parameter                   :: q               = 4.0_rkind / 2.0_rkind
     real(rkind), parameter                   :: r               = -1.0_rkind / 2.0_rkind
     real(rkind), parameter                   :: s               = 0.0_rkind / 2.0_rkind
 
-    ! Scheme at node 2: explicit central 2nd order
+    ! Scheme at node 2: explicit central 6th order
     real(rkind), parameter                   :: q_p             = 1.0_rkind / 2.0_rkind
    
-    ! Scheme at node 3: explicit central 2nd order
+    ! Scheme at node 3: explicit central 6th order
     real(rkind), parameter                   :: q_pp            = 1.0_rkind / 2.0_rkind
 
     ! Scheme at node 4: same as interior
