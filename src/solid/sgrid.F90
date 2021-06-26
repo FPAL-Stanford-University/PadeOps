@@ -101,6 +101,9 @@ module SolidGrid
         logical :: intSharp_flt                    ! Use dealliasing filter for interface sharpening derivatives
         logical :: intSharp_flp                    ! Filter pressure
 
+        logical     :: use_surfaceTension   !flag to turn on/off surface tension (in momentum and energy equations)
+        real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
+
         logical :: filt_mask = .FALSE.             ! mask filter in high gradient regions
         real(rkind), dimension(:,:,:,:), allocatable :: filt_tmp,filt_grad  ! temporary for filter mask
         real(rkind), dimension(:,:,:), allocatable :: filt_thrs  ! temporary for filter mask
@@ -219,6 +222,8 @@ contains
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
+        logical     :: use_surfaceTension = .TRUE.  
+        real(rkind) :: surfaceTension_coeff = 0.0d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0
         real(rkind) :: phys_bulk1 = 0.0d0, phys_bulk2 =0.0d0
@@ -242,7 +247,8 @@ contains
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
                            PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
-                           strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2
+                           strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
+                           use_surfaceTension, surfaceTension_coeff
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -302,6 +308,8 @@ contains
         this%cnsrv_gp = cnsrv_gp
         this%cnsrv_pe = cnsrv_pe
 
+        this%use_surfaceTension   = use_surfaceTension  
+        this%surfaceTension_coeff = surfaceTension_coeff
 
         itmp(1:3) = 0; if(this%PTeqb) itmp(1) = 1; if(this%pEqb) itmp(2) = 1; if(this%pRelax) itmp(3) = 1; 
         if(sum(itmp) .ne. 1) then
@@ -455,7 +463,7 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)
-        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%interpMid,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useOneG,this%intSharp,this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc)
+        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%interpMid,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useOneG,this%intSharp,this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension,this%surfaceTension_coeff,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -907,6 +915,16 @@ contains
                   ! !this%mix%intSharp_hFV = zero
                   ! !end debug
                   
+
+            endif
+
+            !Calculate contributions of surface tension to all equation RHS's
+            if(this%use_surfaceTension) then
+                if(this%mix%ns.ne.2) then
+                    call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
+                endif
+
+                call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)  ! Compute surface tension terms for momentum and energy equations
 
             endif
 
@@ -1489,6 +1507,13 @@ contains
                 tauxz,tauyz,tauzz,&
                 qz )
            !print '(a,4(e21.14,1x))', 'rhsz: ', rhs(179,1,1,1:4)
+        endif
+
+        if (this%use_surfaceTension) then
+            rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + this%mix%surfaceTension_f(:,:,:,1)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + this%mix%surfaceTension_f(:,:,:,2)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + this%mix%surfaceTension_f(:,:,:,3)
+            rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%mix%surfaceTension_e
         endif
 
         ! Call problem source hook

@@ -36,8 +36,13 @@ module SolidMixtureMod
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE.
         logical :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
 
+        logical     :: use_surfaceTension   !flag to turn on/off surface tension (in momentum and energy equations)
+        real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
+
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
         real(rkind), allocatable, dimension(:,:,:,:) :: intSharp_f,intSharp_h,VFboundDiff,intSharp_fDiff,intSharp_hDiff,intSharp_fFV
+        real(rkind), allocatable, dimension(:,:,:,:) :: surfaceTension_f
+        real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e
         real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV
         integer, dimension(2) :: x_bc, y_bc, z_bc
 
@@ -74,6 +79,7 @@ module SolidMixtureMod
         procedure :: get_J
         procedure :: get_q
         procedure :: get_intSharp
+        procedure :: get_surfaceTension
         procedure :: interpolateFV !TODO: check BCs on all FV terms
         procedure :: divergenceFV
         procedure :: gradientFV
@@ -97,18 +103,20 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,derD02,derStagg,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
-        class(solid_mixture)      ,     intent(inout) :: this
-        type(decomp_info), target,      intent(in)    :: decomp
-        type(filters),     target,      intent(in)    :: fil, gfil
-        type(derivatives), target,      intent(in)    :: der,derD02
-        type(derivativesStagg), target, intent(in)    :: derStagg
-        type(interpolators), target,    intent(in)    :: interpMid
-        type(ladobject),   target,      intent(in)    :: LAD
-        integer,                        intent(in)    :: ns
-        logical,                        intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
-        logical,                        intent(in)    :: SOSmodel
-        logical,                        intent(in)    :: use_gTg,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
+    subroutine init(this,decomp,der,derD02,derStagg,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,use_surfaceTension,surfaceTension_coeff,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
+        class(solid_mixture)      ,      intent(inout) :: this
+        type(decomp_info), target,       intent(in)    :: decomp
+        type(filters),     target,       intent(in)    :: fil, gfil
+        type(derivatives), target,       intent(in)    :: der,derD02
+        type(derivativesStagg), target,  intent(in)    :: derStagg
+        type(interpolators), target,     intent(in)    :: interpMid
+        type(ladobject),   target,       intent(in)    :: LAD
+        integer,                         intent(in)    :: ns
+        logical,                         intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
+        logical,                         intent(in)    :: SOSmodel
+        logical,                         intent(in)    :: use_gTg,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
+        logical,                         intent(in)    :: use_surfaceTension
+        real(rkind),                     intent(in)    :: surfaceTension_coeff
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
 
@@ -147,6 +155,9 @@ contains
         this%cnsrv_gt = cnsrv_gt
         this%cnsrv_gp = cnsrv_gp
         this%cnsrv_pe = cnsrv_pe
+
+        this%use_surfaceTension   = use_surfaceTension  
+        this%surfaceTension_coeff = surfaceTension_coeff
 
         this%x_bc = x_bc
         this%y_bc = y_bc
@@ -219,6 +230,13 @@ contains
         if(allocated(this%VFboundDiff)) deallocate(this%VFboundDiff)
         allocate(this%VFboundDiff(this%nxp, this%nyp, this%nzp, this%ns))
 
+        if(allocated(this%surfaceTension_f)) deallocate(this%surfaceTension_f)
+        allocate(this%surfaceTension_f(this%nxp, this%nyp, this%nzp, 3))
+
+        if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
+        allocate(this%surfaceTension_e(this%nxp, this%nyp, this%nzp))
+
+
     end subroutine
     !end function
 
@@ -236,6 +254,9 @@ contains
         if(allocated(this%intSharp_fFV)) deallocate(this%intSharp_fFV)
         if(allocated(this%intSharp_hFV)) deallocate(this%intSharp_hFV)
         if(allocated(this%VFboundDiff)) deallocate(this%VFboundDiff)
+
+        if(allocated(this%surfaceTension_f)) deallocate(this%surfaceTension_f)
+        if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
 
         ! Deallocate array of solids (Destructor of solid should take care of everything else)
         if (allocated(this%material)) deallocate(this%material)
@@ -2157,6 +2178,37 @@ stop
 
     end subroutine get_intSharp
 
+    subroutine get_surfaceTension(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
+        use decomp_2d, only: transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
+        use operators, only: divergence,gradient,filter3D
+        use constants,       only: zero,epssmall,eps,one,two,third,half
+        use exits,           only: GracefulExit
+        use reductions, only : P_MAXVAL
+        class(solid_mixture),                               intent(inout) :: this
+        integer, dimension(2),                              intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),                                        intent(in) :: dx,dy,dz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        logical,                                            intent(in) :: periodicx,periodicy,periodicz
+        !TODO: add additional arrays to be used locally in calculation of surface tension force
+
+        if(this%ns.ne.2) then
+            call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
+        endif
+
+        !initialize surface tension force and energy source to zero everywhere
+        this%surfaceTension_f = 0.0d0
+        this%surfaceTension_e = 0.0d0
+
+        !TODO: Compute curvature (use gradient and divergence operators)
+        !for example, to take the gradient of the volume fraction of species # 1
+        !call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+
+        !TODO: Compute surface tension force and store in this%surfaceTension_f
+        
+        !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
+
+
+    end subroutine get_surfaceTension
 
     subroutine interpolateFV(this,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
         !interpolates from Nodes to faces for finite volume treatment of terms
