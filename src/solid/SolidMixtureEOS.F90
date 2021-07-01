@@ -36,8 +36,13 @@ module SolidMixtureMod
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE.
         logical :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
 
+        logical     :: use_surfaceTension   !flag to turn on/off surface tension (in momentum and energy equations)
+        real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
+	real(rkind) :: kappa
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
         real(rkind), allocatable, dimension(:,:,:,:) :: intSharp_f,intSharp_h,VFboundDiff,intSharp_fDiff,intSharp_hDiff,intSharp_fFV
+        real(rkind), allocatable, dimension(:,:,:,:) :: surfaceTension_f
+        real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e
         real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV
         integer, dimension(2) :: x_bc, y_bc, z_bc
 
@@ -74,6 +79,7 @@ module SolidMixtureMod
         procedure :: get_J
         procedure :: get_q
         procedure :: get_intSharp
+        procedure :: get_surfaceTension
         procedure :: interpolateFV !TODO: check BCs on all FV terms
         procedure :: divergenceFV
         procedure :: gradientFV
@@ -97,18 +103,20 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,derD02,derStagg,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
-        class(solid_mixture)      ,     intent(inout) :: this
-        type(decomp_info), target,      intent(in)    :: decomp
-        type(filters),     target,      intent(in)    :: fil, gfil
-        type(derivatives), target,      intent(in)    :: der,derD02
-        type(derivativesStagg), target, intent(in)    :: derStagg
-        type(interpolators), target,    intent(in)    :: interpMid
-        type(ladobject),   target,      intent(in)    :: LAD
-        integer,                        intent(in)    :: ns
-        logical,                        intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
-        logical,                        intent(in)    :: SOSmodel
-        logical,                        intent(in)    :: use_gTg,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
+    subroutine init(this,decomp,der,derD02,derStagg,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,use_surfaceTension,surfaceTension_coeff,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
+        class(solid_mixture)      ,      intent(inout) :: this
+        type(decomp_info), target,       intent(in)    :: decomp
+        type(filters),     target,       intent(in)    :: fil, gfil
+        type(derivatives), target,       intent(in)    :: der,derD02
+        type(derivativesStagg), target,  intent(in)    :: derStagg
+        type(interpolators), target,     intent(in)    :: interpMid
+        type(ladobject),   target,       intent(in)    :: LAD
+        integer,                         intent(in)    :: ns
+        logical,                         intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
+        logical,                         intent(in)    :: SOSmodel
+        logical,                         intent(in)    :: use_gTg,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
+        logical,                         intent(in)    :: use_surfaceTension
+        real(rkind),                     intent(in)    :: surfaceTension_coeff
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
 
@@ -147,6 +155,9 @@ contains
         this%cnsrv_gt = cnsrv_gt
         this%cnsrv_gp = cnsrv_gp
         this%cnsrv_pe = cnsrv_pe
+
+        this%use_surfaceTension   = use_surfaceTension  
+        this%surfaceTension_coeff = surfaceTension_coeff
 
         this%x_bc = x_bc
         this%y_bc = y_bc
@@ -219,6 +230,13 @@ contains
         if(allocated(this%VFboundDiff)) deallocate(this%VFboundDiff)
         allocate(this%VFboundDiff(this%nxp, this%nyp, this%nzp, this%ns))
 
+        if(allocated(this%surfaceTension_f)) deallocate(this%surfaceTension_f)
+        allocate(this%surfaceTension_f(this%nxp, this%nyp, this%nzp, 3))
+
+        if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
+        allocate(this%surfaceTension_e(this%nxp, this%nyp, this%nzp))
+
+
     end subroutine
     !end function
 
@@ -236,6 +254,9 @@ contains
         if(allocated(this%intSharp_fFV)) deallocate(this%intSharp_fFV)
         if(allocated(this%intSharp_hFV)) deallocate(this%intSharp_hFV)
         if(allocated(this%VFboundDiff)) deallocate(this%VFboundDiff)
+
+        if(allocated(this%surfaceTension_f)) deallocate(this%surfaceTension_f)
+        if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
 
         ! Deallocate array of solids (Destructor of solid should take care of everything else)
         if (allocated(this%material)) deallocate(this%material)
@@ -1681,124 +1702,124 @@ stop
               print*, "can't use Tiwari here"
               stop
            endif
-           !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
-           !i.e. conserve intSharp_a intSharp__r
+        !   !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
+        !   !i.e. conserve intSharp_a intSharp__r
 
-           ! do i = 1,this%ns
-           !    this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1) !this is still used in divergence form for OOB diffusion
-           !    this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
-           !    this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
-           ! enddo
-
-
-
-           !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
-
-           !out-of-bounds diffusion terms
-           tmp4 = zero
-           do j = 1,this%ns-1
-              tmp4(:,:,:,1) = tmp4(:,:,:,1) + this%material(j)%intSharp_aDiff(:,:,:,1)
-              tmp4(:,:,:,2) = tmp4(:,:,:,2) + this%material(j)%intSharp_aDiff(:,:,:,2)
-              tmp4(:,:,:,3) = tmp4(:,:,:,3) + this%material(j)%intSharp_aDiff(:,:,:,3)
-           enddo
-           this%material(this%ns)%intSharp_aDiff(:,:,:,1) = -tmp4(:,:,:,1)
-           this%material(this%ns)%intSharp_aDiff(:,:,:,2) = -tmp4(:,:,:,2)
-           this%material(this%ns)%intSharp_aDiff(:,:,:,3) = -tmp4(:,:,:,3)
-
-           !mass flux --  rho*Ys flux --  R_i
-           do i = 1,this%ns
-              if(useRhoLocal) then !use local component density --- recommended
-                 this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1)
-                 this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
-                 this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
-              else
-                 this%material(i)%intSharp_RDiff(:,:,:,1) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,1)
-                 this%material(i)%intSharp_RDiff(:,:,:,2) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,2)
-                 this%material(i)%intSharp_RDiff(:,:,:,3) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,3)
-              endif
-           enddo
+        !   ! do i = 1,this%ns
+        !   !    this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1) !this is still used in divergence form for OOB diffusion
+        !   !    this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
+        !   !    this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
+        !   ! enddo
 
 
-           ! momentum flux -- f_i
-           this%intSharp_f = zero
-           this%intSharp_fDiff = zero
 
-           !momentum term is nonzero if coupling is turned on
-           if(this%intSharp_cpl) then
-              !spf update term
+        !   !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
 
-              !net mass flux
-              spf_f = zero
-              do i = 1,this%ns
-                 spf_f = spf_f + spf_r(:,:,:,i)
-              enddo
+        !   !out-of-bounds diffusion terms
+        !   tmp4 = zero
+        !   do j = 1,this%ns-1
+        !      tmp4(:,:,:,1) = tmp4(:,:,:,1) + this%material(j)%intSharp_aDiff(:,:,:,1)
+        !      tmp4(:,:,:,2) = tmp4(:,:,:,2) + this%material(j)%intSharp_aDiff(:,:,:,2)
+        !      tmp4(:,:,:,3) = tmp4(:,:,:,3) + this%material(j)%intSharp_aDiff(:,:,:,3)
+        !   enddo
+        !   this%material(this%ns)%intSharp_aDiff(:,:,:,1) = -tmp4(:,:,:,1)
+        !   this%material(this%ns)%intSharp_aDiff(:,:,:,2) = -tmp4(:,:,:,2)
+        !   this%material(this%ns)%intSharp_aDiff(:,:,:,3) = -tmp4(:,:,:,3)
 
-              ! u
-              if (this%intSharp_d02)  then
-                 call gradient(this%decomp,this%derD02,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              else
-                 call gradient(this%decomp,this%der,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              endif
-              this%intSharp_f(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
-
-              ! v
-              if (this%intSharp_d02)  then
-                 call gradient(this%decomp,this%derD02,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              else
-                 call gradient(this%decomp,this%der,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              endif
-              this%intSharp_f(:,:,:,2) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
-
-              ! w
-              if (this%intSharp_d02)  then
-                 call gradient(this%decomp,this%derD02,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              else
-                 call gradient(this%decomp,this%der,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              endif
-              this%intSharp_f(:,:,:,3) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+        !   !mass flux --  rho*Ys flux --  R_i
+        !   do i = 1,this%ns
+        !      if(useRhoLocal) then !use local component density --- recommended
+        !         this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1)
+        !         this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
+        !         this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
+        !      else
+        !         this%material(i)%intSharp_RDiff(:,:,:,1) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,1)
+        !         this%material(i)%intSharp_RDiff(:,:,:,2) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,2)
+        !         this%material(i)%intSharp_RDiff(:,:,:,3) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,3)
+        !      endif
+        !   enddo
 
 
-              do i = 1,this%ns
-                 !high order FD terms
-                 this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,1)
-                 this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,2)  
-                 this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) + this%material(i)%intSharp_RDiff(:,:,:,3)
-              enddo
-           endif
+        !   ! momentum flux -- f_i
+        !   this%intSharp_f = zero
+        !   this%intSharp_fDiff = zero
+
+        !   !momentum term is nonzero if coupling is turned on
+        !   if(this%intSharp_cpl) then
+        !      !spf update term
+
+        !      !net mass flux
+        !      spf_f = zero
+        !      do i = 1,this%ns
+        !         spf_f = spf_f + spf_r(:,:,:,i)
+        !      enddo
+
+        !      ! u
+        !      if (this%intSharp_d02)  then
+        !         call gradient(this%decomp,this%derD02,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      else
+        !         call gradient(this%decomp,this%der,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      endif
+        !      this%intSharp_f(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+
+        !      ! v
+        !      if (this%intSharp_d02)  then
+        !         call gradient(this%decomp,this%derD02,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      else
+        !         call gradient(this%decomp,this%der,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      endif
+        !      this%intSharp_f(:,:,:,2) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+
+        !      ! w
+        !      if (this%intSharp_d02)  then
+        !         call gradient(this%decomp,this%derD02,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      else
+        !         call gradient(this%decomp,this%der,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      endif
+        !      this%intSharp_f(:,:,:,3) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
 
 
-           !enthalpy flux -- (intSharp_h)_j = sum_i ( rho_i h_i (a_i)_j)
-           this%intSharp_h = zero
-           this%intSharp_hDiff = zero
+        !      do i = 1,this%ns
+        !         !high order FD terms
+        !         this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,1)
+        !         this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,2)  
+        !         this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) + this%material(i)%intSharp_RDiff(:,:,:,3)
+        !      enddo
+        !   endif
 
-           !enthalpy term is nonzero if coupling is turned on
-           if(this%intSharp_cpl) then
-              !spf update term 
-              spf_h = zero
-              do i = 1,this%ns
-                 call this%material(i)%get_enthalpy(hi(:,:,:,i))
-                 spf_h = spf_h + spf_r(:,:,:,i)*(hi(:,:,:,i) + half*(u**two + v**two + w**two) )
-              enddo
-              if (this%intSharp_d02)  then
-                 call gradient(this%decomp,this%derD02,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              else
-                 call gradient(this%decomp,this%der,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
-              endif
-              this%intSharp_h(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
-              this%intSharp_h(:,:,:,2) = zero
-              this%intSharp_h(:,:,:,3) = zero
 
-              do i = 1,this%ns
-                 !high order FD terms
-                 this%intSharp_hDiff(:,:,:,1) = this%intSharp_hDiff(:,:,:,1) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,1)
-                 this%intSharp_hDiff(:,:,:,2) = this%intSharp_hDiff(:,:,:,2) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,2)
-                 this%intSharp_hDiff(:,:,:,3) = this%intSharp_hDiff(:,:,:,3) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,3)
-              enddo
+        !   !enthalpy flux -- (intSharp_h)_j = sum_i ( rho_i h_i (a_i)_j)
+        !   this%intSharp_h = zero
+        !   this%intSharp_hDiff = zero
 
-           endif
+        !   !enthalpy term is nonzero if coupling is turned on
+        !   if(this%intSharp_cpl) then
+        !      !spf update term 
+        !      spf_h = zero
+        !      do i = 1,this%ns
+        !         call this%material(i)%get_enthalpy(hi(:,:,:,i))
+        !         spf_h = spf_h + spf_r(:,:,:,i)*(hi(:,:,:,i) + half*(u**two + v**two + w**two) )
+        !      enddo
+        !      if (this%intSharp_d02)  then
+        !         call gradient(this%decomp,this%derD02,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      else
+        !         call gradient(this%decomp,this%der,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !      endif
+        !      this%intSharp_h(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+        !      this%intSharp_h(:,:,:,2) = zero
+        !      this%intSharp_h(:,:,:,3) = zero
 
-           !fix momentum and energy above
-           !add kinematic below
+        !      do i = 1,this%ns
+        !         !high order FD terms
+        !         this%intSharp_hDiff(:,:,:,1) = this%intSharp_hDiff(:,:,:,1) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,1)
+        !         this%intSharp_hDiff(:,:,:,2) = this%intSharp_hDiff(:,:,:,2) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,2)
+        !         this%intSharp_hDiff(:,:,:,3) = this%intSharp_hDiff(:,:,:,3) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,3)
+        !      enddo
+
+        !   endif
+
+        !   !fix momentum and energy above
+        !   !add kinematic below
 
         else ! i.e. NOT:  if(this%intSharp_spf.and.useNewSPF.and.useNewSPFfull)  
 
@@ -1892,7 +1913,7 @@ stop
                     this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) + this%material(i)%intSharp_RDiff(:,:,:,3)
                  enddo
 
-              else
+              else !i.e. if divergence method 
                  fv_f = zero
                  do i = 1,this%ns
                     !low order FD terms
@@ -2002,43 +2023,38 @@ stop
            if(this%intSharp_cpl.AND.this%intSharp_cpg) then
                if(this%intSharp_cpg_west) then !new implementation based on Jacob's derivation
 
-                   !Retrieve species mass flux (J_i) and RHS for VF eqn (VF_RHS_i)
+                   ! Compute divergence of sharpening mass flux (low order)
+                   call divergence(this%decomp,this%derD02,this%intSharp_f(:,:,:,1),this%intSharp_f(:,:,:,2),this%intSharp_f(:,:,:,3),tmp4(:,:,:,1),-x_bc,-y_bc,-z_bc) ! mass fraction equation is anti-symmetric (because a symmetry boundary implies no mass flux across it)
+                   ! Compute divergence of sharpening mass flux (high order)
+                   call divergence(this%decomp,this%der,this%intSharp_fDiff(:,:,:,1),this%intSharp_fDiff(:,:,:,2),this%intSharp_fDiff(:,:,:,3),tmp4(:,:,:,2),-x_bc,-y_bc,-z_bc) ! mass fraction equation is anti-symmetric (because a symmetry boundary implies no mass flux across it)
                    do i=1,this%ns
-                       J_i(:,:,:,i)      = this%material(i)%intSharp_R(    :,:,:,1) + this%material(i)%intSharp_R(    :,:,:,2) + this%material(i)%intSharp_R(    :,:,:,3) + &
-                                           this%material(i)%intSharp_RDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,3)
-                       VF_RHS_i(:,:,:,i) = this%material(i)%intSharp_a(    :,:,:,1) + this%material(i)%intSharp_a(    :,:,:,2) + this%material(i)%intSharp_a(    :,:,:,3) + &
-                                           this%material(i)%intSharp_aDiff(:,:,:,1) + this%material(i)%intSharp_aDiff(:,:,:,2) + this%material(i)%intSharp_aDiff(:,:,:,3)
-                   enddo     
+                      do j=1,9
+                         if(this%intSharp_spf) then
+                            !low order FD terms
+                            this%material(i)%intSharp_rg (:,:,:,j,1) = this%material(i)%intSharp_rg (:,:,:,j,1) + third * spf_f * this%material(i)%g  (:,:,:,j)
+                            this%material(i)%intSharp_rgt(:,:,:,j,1) = this%material(i)%intSharp_rgt(:,:,:,j,1) + third * spf_f * this%material(i)%g_t(:,:,:,j)
+                         else
+                            !low order FD terms
+                            this%material(i)%intSharp_rg (:,:,:,j,1) = this%material(i)%intSharp_rg (:,:,:,j,1) + third * tmp4(:,:,:,1)   * this%material(i)%g  (:,:,:,j)
+                            this%material(i)%intSharp_rgt(:,:,:,j,1) = this%material(i)%intSharp_rgt(:,:,:,j,1) + third * tmp4(:,:,:,1)   * this%material(i)%g_t(:,:,:,j)
+                         endif
 
-                   !Calculate coefficient to multiply by gtotal or gelastic tensor     
-                   Kij_coeff_i = 0.0d0
-                   if(this%useOneG) then
-                       !accumulate J_i in last index
-                       do i=1,this%ns
-                           Kij_coeff_i(:,:,:,this%ns) = Kij_coeff_i(:,:,:,i) + J_i(:,:,:,i)
-                       enddo 
-                       !assign to all species
-                       do i=1,this%ns
-                           Kij_coeff_i(:,:,:,i) = third/rho * Kij_coeff_i(:,:,:,this%ns)
-                           !Kij_coeff_i(:,:,:,i) = one/rho * Kij_coeff_i(:,:,:,this%ns) !testing this because it is so similar to the version in the brief
-                       enddo 
-                   else
-                       do i=1,this%ns
-                           !Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i))
-                           Kij_coeff_i(:,:,:,i) = third * 1.0d0/(rhoi(:,:,:,i)*this%material(i)%VF + eps) * (J_i(:,:,:,i) - rhoi(:,:,:,i)*VF_RHS_i(:,:,:,i)) !preventing divide by zero
-                       enddo 
-                   endif
-
-                   !Loop thru components of gtotal and gelastic tensors, multiply by coeff*rho
-                   do i=1,this%ns
-                      do j=1,9 !only component 1 is used in Jacob's method
-                          this%material(i)%intSharp_rg (:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g  (:,:,:,j)
-                          this%material(i)%intSharp_rgt(:,:,:,j,1) = rho*Kij_coeff_i(:,:,:,i)*this%material(i)%g_t(:,:,:,j)
-                          !Plastic tensor does not need sharpening
+                         !high order FD terms
+                         this%material(i)%intSharp_rgDiff (:,:,:,j,1) = this%material(i)%intSharp_rgDiff (:,:,:,j,1) + third * tmp4(:,:,:,2)   * this%material(i)%g  (:,:,:,j)
+                         this%material(i)%intSharp_rgtDiff(:,:,:,j,1) = this%material(i)%intSharp_rgtDiff(:,:,:,j,1) + third * tmp4(:,:,:,2)   * this%material(i)%g_t(:,:,:,j)
                       enddo
                    enddo
 
-                   !TODO: Do something about finite volume terms
+                   !FV terms
+                   if(this%intSharp_ufv) then
+                      call divergenceFV(this,fv_f,tmp,dx,dy,dz,periodicx,periodicy,periodicz,-this%x_bc,-this%y_bc,-this%z_bc)
+                      do i=1,this%ns
+                         do j=1,9
+                            this%material(i)%intSharp_rgFV (:,:,:,j) = this%material(i)%intSharp_rgFV (:,:,:,j) + third * tmp * this%material(i)%g  (:,:,:,j)
+                            this%material(i)%intSharp_rgtFV(:,:,:,j) = this%material(i)%intSharp_rgtFV(:,:,:,j) + third * tmp * this%material(i)%g_t(:,:,:,j)
+                         enddo
+                      enddo
+                   endif
 
                else !implementation used in CTR brief
 
@@ -2162,6 +2178,66 @@ stop
 
     end subroutine get_intSharp
 
+    subroutine get_surfaceTension(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
+        use decomp_2d, only: transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
+        use operators, only: divergence,gradient,filter3D
+        use constants,       only: zero,epssmall,eps,one,two,third,half
+        use exits,           only: GracefulExit
+        use reductions, only : P_MAXVAL
+        class(solid_mixture),                               intent(inout) :: this
+        integer, dimension(2),                              intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),                                        intent(in) :: dx,dy,dz
+	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        logical,                                            intent(in) :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: kappa, GVFmag
+	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradVF
+	real(rkind), allocatable, dimension(:,:,:,:) :: surfaceTension_f
+        real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e
+	real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
+
+	!TODO: add additional arrays to be used locally in calculation of surface tension force
+
+        if(this%ns.ne.2) then
+            call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
+        endif
+
+        !initialize surface tension force and energy source to zero everywhere
+        this%surfaceTension_f = 0.0d0
+        this%surfaceTension_e = 0.0d0
+
+        !TODO: Compute curvature (use gradient and divergence operators)
+        !for example, to take the gradient of the volume fraction of species # 1
+        call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+	
+	 !calculate surface normal
+           
+              !magnitude of surface vector
+              GVFmag = sqrt( gradVF(:,:,:,1)**two + gradVF(:,:,:,2)**two + gradVF(:,:,:,3)**two )
+
+              !surface normal
+              where (GVFmag < eps)
+                 norm(:,:,:,1) = zero
+                 norm(:,:,:,2) = zero
+                 norm(:,:,:,3) = zero
+              elsewhere
+                 norm(:,:,:,1) = gradVF(:,:,:,1) / GVFmag
+                 norm(:,:,:,2) = gradVF(:,:,:,2) / GVFmag
+                 norm(:,:,:,3) = gradVF(:,:,:,3) / GVFmag
+              endwhere
+	
+	!kappa, divergence of surface normal	
+	 call divergence(this%decomp,this%der,norm(:,:,:,1),norm(:,:,:,2),norm(:,:,:,3),kappa,x_bc,y_bc,z_bc)	
+		
+        !TODO: Compute surface tension force and store in this%surfaceTension_f
+	this%surfaceTension_f(:,:,:,1) = -surfaceTension_coeff*kappa*gradVF(:,:,:,1)
+	this%surfaceTension_f(:,:,:,2) = -surfaceTension_coeff*kappa*gradVF(:,:,:,2)
+        this%surfaceTension_f(:,:,:,3) = -surfaceTension_coeff*kappa*gradVF(:,:,:,3)
+ 
+
+        !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
+	this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,2) 
+
+    end subroutine get_surfaceTension
 
     subroutine interpolateFV(this,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
         !interpolates from Nodes to faces for finite volume treatment of terms
