@@ -1,0 +1,4 @@
+&concurrent
+precInputFile = "/scratch/04076/tg833754/HIT_Interact/tall/ibm/r1/input_sm_prec.dat"
+mainInputFile = "/scratch/04076/tg833754/HIT_Interact/tall/ibm/r1/input_sm_main.dat"
+/
