@@ -2193,7 +2193,6 @@ stop
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradVF
 	real(rkind), allocatable, dimension(:,:,:,:) :: surfaceTension_f
         real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e
-	real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
 
 	!TODO: add additional arrays to be used locally in calculation of surface tension force
 
@@ -2207,7 +2206,7 @@ stop
 
         !TODO: Compute curvature (use gradient and divergence operators)
         !for example, to take the gradient of the volume fraction of species # 1
-        call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+        call gradient(this%decomp,this%der,this%material(2)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
 	
 	 !calculate surface normal
            
@@ -2229,9 +2228,9 @@ stop
 	 call divergence(this%decomp,this%der,norm(:,:,:,1),norm(:,:,:,2),norm(:,:,:,3),kappa,x_bc,y_bc,z_bc)	
 		
         !TODO: Compute surface tension force and store in this%surfaceTension_f
-	this%surfaceTension_f(:,:,:,1) = -surfaceTension_coeff*kappa*gradVF(:,:,:,1)
-	this%surfaceTension_f(:,:,:,2) = -surfaceTension_coeff*kappa*gradVF(:,:,:,2)
-        this%surfaceTension_f(:,:,:,3) = -surfaceTension_coeff*kappa*gradVF(:,:,:,3)
+	this%surfaceTension_f(:,:,:,1) = -this%surfaceTension_coeff*kappa*gradVF(:,:,:,1)
+	this%surfaceTension_f(:,:,:,2) = -this%surfaceTension_coeff*kappa*gradVF(:,:,:,2)
+        this%surfaceTension_f(:,:,:,3) = -this%surfaceTension_coeff*kappa*gradVF(:,:,:,3)
  
 
         !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
