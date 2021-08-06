@@ -73,7 +73,7 @@
        end if
 
 
-       call this%populate_RHS_extraTerms(copyFringeRHS)
+       call this%populate_RHS_extraTerms(copyFringeRHS, .false.)
 
    end subroutine
 
@@ -106,9 +106,11 @@
            !call this%AddNonLinearTerm_Rot(this%ucon, this%vcon, this%wcon)
            call this%AddNonLinearTerm_Rot(this%u_rhs, this%v_rhs, this%w_rhs)
        end if
-       this%ucon = this%u_rhs 
-       this%vcon = this%v_rhs 
-       this%wcon = this%w_rhs
+       if(associated(this%ucon)) then
+           this%ucon = this%u_rhs 
+           this%vcon = this%v_rhs 
+           this%wcon = this%w_rhs
+       endif
 
        ! Step 2: Coriolis Term
        if ((this%useCoriolis) .and. associated(this%ucor)) then 
@@ -151,19 +153,28 @@
 
        ! Step 6a: SGS  Stress Terms
        if (this%useSGS) then
+         if(associated(this%usgs)) then
            call this%sgsmodel%getRHS_SGS(this%usgs, this%vsgs, this%wsgs,      this%duidxjC, this%duidxjE,    &
                                          this%uhat,  this%vhat,  this%whatC,   this%That,    this%u,       &
                                          this%v,     this%wC,    this%T,       this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
                                          this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
+         else
+           call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
+                                         this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
+                                         this%v,     this%wC,    this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
+                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
+         end if
 
            if (this%isStratified .or. this%initspinup) then
               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
                                          this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
            end if
 
+         if(associated(this%usgs)) then
            this%u_rhs = this%u_rhs + this%usgs
            this%v_rhs = this%v_rhs + this%vsgs
            this%w_rhs = this%w_rhs + this%wsgs
+         end if
            
            ! viscous term evaluate separately  
            if ((.not. this%isInviscid) .and. associated(this%uvisc)) then
@@ -184,13 +195,13 @@
        end if
 
 
-       call this%populate_RHS_extraTerms(copyFringeRHS)
+       call this%populate_RHS_extraTerms(copyFringeRHS, .true.)
 
    end subroutine
 
-   subroutine populate_RHS_extraTerms(this, copyFringeRHS)
+   subroutine populate_RHS_extraTerms(this, copyFringeRHS, storeForBudget)
        class(igrid), intent(inout) :: this
-       logical, intent(in) :: copyFringeRHS
+       logical, intent(in) :: copyFringeRHS, storeForBudget
        integer :: idx 
        
        ! Step 7a: Extra Forcing 
@@ -200,8 +211,39 @@
        
        ! Step 7b: HIT forcing source term
        if (this%useHITForcing) then
-           call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
+           if(storeForBudget) then
+               call this%hitforce%getRHS_HITForcing(this%HITforcing_x, this%HITforcing_y, this%HITforcing_z, this%uhat, this%vhat, this%what, this%newTimeStep)
+               !print '(a,i4.4,3(1x,e19.12))', '--------', nrank, maxval(abs(this%HITforcing_x)), maxval(abs(this%HITforcing_y)), maxval(abs(this%HITforcing_z))
+               this%u_rhs = this%u_rhs + this%HITforcing_x
+               this%v_rhs = this%v_rhs + this%HITforcing_y
+               this%w_rhs = this%w_rhs + this%HITforcing_z
+           else
+               call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
+           end if
        end if
+
+       !if (this%useHITRealSpaceLinearForcing) then
+       !    this%rbuffxC(:,:,:,1) = this%u/this%HITForceTimeScale
+       !    call this%spectC%fft(this%rbuffxC(:,:,:,1),this%cbuffyC(:,:,:,1))
+       !    this%u_rhs = this%u_rhs + this%cbuffyC(:,:,:,1)
+       !    if(storeForBudget) then
+       !        this%HITforcing_x = this%HITforcing_x + this%cbuffyC(:,:,:,1)
+       !    end if
+
+       !    this%rbuffxC(:,:,:,1) = this%v/this%HITForceTimeScale
+       !    call this%spectC%fft(this%rbuffxC(:,:,:,1),this%cbuffyC(:,:,:,1))
+       !    this%v_rhs = this%v_rhs + this%cbuffyC(:,:,:,1)
+       !    if(storeForBudget) then
+       !        this%HITforcing_y = this%HITforcing_y + this%cbuffyC(:,:,:,1)
+       !    end if
+       !    
+       !    this%rbuffxE(:,:,:,1) = this%w/this%HITForceTimeScale
+       !    call this%spectE%fft(this%rbuffxE(:,:,:,1),this%cbuffyE(:,:,:,1))
+       !    this%w_rhs = this%w_rhs + this%cbuffyE(:,:,:,1)
+       !    if(storeForBudget) then
+       !        this%HITforcing_z = this%HITforcing_z + this%cbuffyE(:,:,:,1)
+       !    end if
+       !end if 
        
        ! Step 8: Fringe and sponge source terms
        if (this%useSponge) then

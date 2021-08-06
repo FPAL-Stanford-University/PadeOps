@@ -188,7 +188,9 @@
            this%runningSum_sc_turb = zero
            this%runningSum_turb    = zero
        endif
-       this%xspectra_mean = zero
+       if (this%computeSpectra) then
+           this%xspectra_mean = zero
+       endif
 
        if((nhzv .ne. nhorzavgvars) .or. (nstv .ne. nstatsvar)) then
            call message(0,"Error in init_stats3D")

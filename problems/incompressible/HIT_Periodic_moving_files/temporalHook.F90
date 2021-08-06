@@ -45,6 +45,13 @@ contains
             call message(0,"Time",gp%tsim)
             call message(1,"TIDX:",gp%step)
             call message(1,"MaxDiv:",DomMaxDiv)
+            call message(1,"Mean TKE:",gp%getMeanKE())
+            call message(1,"Mean  uu:",gp%getMeanuu())
+            call message(1,"Mean  uv:",gp%getMeanuv())
+            call message(1,"Mean  uw:",gp%getMeanuw())
+            call message(1,"Mean  vv:",gp%getMeanvv())
+            call message(1,"Mean  vw:",gp%getMeanvw())
+            call message(1,"Mean  ww:",gp%getMeanww())
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
             call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
@@ -57,7 +64,6 @@ contains
                     call message(2,"Model multiplier, (c*delta)^2:",gp%sgsModel%getMax_DynSmagConst())
                 end if 
             end if
-
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
