@@ -45,6 +45,8 @@ module SolidMixtureMod
         real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e
         real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV
         integer, dimension(2) :: x_bc, y_bc, z_bc
+        real(rkind), allocatable, dimension(:,:,:)   :: kappa
+        real(rkind), allocatable, dimension(:,:,:,:) :: norm
 
     contains
 
@@ -236,6 +238,11 @@ contains
         if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
         allocate(this%surfaceTension_e(this%nxp, this%nyp, this%nzp))
 
+        if(allocated(this%norm)) deallocate(this%norm)
+        allocate(this%norm(this%nxp, this%nyp, this%nzp, 3))
+
+        if(allocated(this%kappa)) deallocate(this%kappa)
+        allocate(this%kappa(this%nxp, this%nyp, this%nzp))
 
     end subroutine
     !end function
@@ -257,6 +264,8 @@ contains
 
         if(allocated(this%surfaceTension_f)) deallocate(this%surfaceTension_f)
         if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
+        if(allocated(this%norm)) deallocate(this%norm)
+        if(allocated(this%kappa)) deallocate(this%kappa)
 
         ! Deallocate array of solids (Destructor of solid should take care of everything else)
         if (allocated(this%material)) deallocate(this%material)
@@ -2187,9 +2196,11 @@ stop
         class(solid_mixture),                               intent(inout) :: this
         integer, dimension(2),                              intent(in) :: x_bc, y_bc, z_bc
         real(rkind),                                        intent(in) :: dx,dy,dz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
-        logical,                                            intent(in) :: periodicx,periodicy,periodicz
         !TODO: add additional arrays to be used locally in calculation of surface tension force
+	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        logical,                                            intent(in) :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: GVFmag
+	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF
 
         if(this%ns.ne.2) then
             call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
@@ -2201,12 +2212,36 @@ stop
 
         !TODO: Compute curvature (use gradient and divergence operators)
         !for example, to take the gradient of the volume fraction of species # 1
-        !call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+        call gradient(this%decomp,this%der,this%material(2)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+	
+	 !calculate surface normal
+           
+              !magnitude of surface vector
+              GVFmag = sqrt( gradVF(:,:,:,1)**two + gradVF(:,:,:,2)**two + gradVF(:,:,:,3)**two )
 
+              !surface normal
+              where (GVFmag < eps)
+                 this%norm(:,:,:,1) = zero
+                 this%norm(:,:,:,2) = zero
+                 this%norm(:,:,:,3) = zero
+              elsewhere
+                 this%norm(:,:,:,1) = gradVF(:,:,:,1) / GVFmag
+                 this%norm(:,:,:,2) = gradVF(:,:,:,2) / GVFmag
+                 this%norm(:,:,:,3) = gradVF(:,:,:,3) / GVFmag
+              endwhere
+	
+	!kappa, divergence of surface normal	
+        !TODO: double check BCs for div(norm)... do they follow symmetry, or are they opposite?
+	 call divergence(this%decomp,this%der,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)	
+		
         !TODO: Compute surface tension force and store in this%surfaceTension_f
-        
-        !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
+	this%surfaceTension_f(:,:,:,1) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,1)
+	this%surfaceTension_f(:,:,:,2) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,2)
+        this%surfaceTension_f(:,:,:,3) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,3)
+ 
 
+        !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
+	this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
 
     end subroutine get_surfaceTension
 
