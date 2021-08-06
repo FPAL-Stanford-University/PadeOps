@@ -397,7 +397,7 @@
        class(igrid), intent(inout) :: this 
        real(rkind) :: molecularDiff
        integer :: i, j, k
-       complex :: tmp1
+       complex(rkind) :: tmp1
 
        molecularDiff = one/(this%Re*this%PrandtlFluid)
        do k = 1,size(this%T_rhs,3)

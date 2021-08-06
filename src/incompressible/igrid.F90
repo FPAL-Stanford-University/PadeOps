@@ -270,7 +270,9 @@ module IncompressibleGrid
 
         ! HIT Forcing
         logical :: useHITForcing = .false., useforcedStratification = .false. 
+        logical :: useHITRealSpaceLinearForcing = .false.
         type(HIT_shell_forcing), allocatable :: hitforce
+        real(rkind) :: HITForceTimeScale 
 
         ! Scalars
         logical :: useScalars = .false. 
@@ -290,9 +292,9 @@ module IncompressibleGrid
         
         ! budgets on the fly
         logical :: StoreForBudgets = .false. 
-        complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, pxdns, pydns, pzdns, vturb, wturb 
+        complex(rkind), dimension(:,:,:), pointer :: ucon, vcon, wcon, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, pxdns, pydns, pzdns, vturb, wturb, HITforcing_x, HITforcing_y, HITforcing_z 
 
-        integer :: BuoyancyDirection 
+        integer :: buoyancyDirection 
 
         contains
             procedure          :: init
@@ -300,6 +302,12 @@ module IncompressibleGrid
             procedure          :: printDivergence 
             procedure          :: getMaxKE
             procedure          :: getMeanKE
+            procedure          :: getMeanuu
+            procedure          :: getMeanuv
+            procedure          :: getMeanuw
+            procedure          :: getMeanvv
+            procedure          :: getMeanvw
+            procedure          :: getMeanww
             procedure          :: timeAdvance
             procedure          :: start_io
             procedure          :: finalize_io
@@ -359,9 +367,10 @@ module IncompressibleGrid
             procedure, private :: initialize_hdf5_io
             procedure, private :: destroy_hdf5_io
             procedure          :: get_geostrophic_forcing
-            procedure          :: InstrumentForBudgets
-            procedure          :: InstrumentForBudgets_TimeAvg
-            procedure          :: GetMomentumTerms
+            procedure          :: instrumentForBudgets
+            procedure          :: instrumentForBudgets_timeAvg
+            procedure          :: instrumentForBudgets_volAvg
+            procedure          :: getMomentumTerms
             procedure          :: set_budget_rhs_to_zero
             procedure, private :: advance_SSP_RK45_all_stages
             procedure          :: advance_SSP_RK45_Stage_1 
@@ -402,8 +411,8 @@ contains
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false., ComputeRapidSlowPressure = .false.
-        real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0
-        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false., useControl = .false.
+        real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0, HITForceTimeScale = 10.d0
+        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false., useControl = .false., useHITRealSpaceLinearForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
@@ -413,11 +422,11 @@ contains
         logical, intent(in), optional :: initialize2decomp
         integer :: num_scalars = 0
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
-        logical :: sgsmod_stratified, Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
+        logical :: sgsmod_stratified, dump_NU_SGS = .false., dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
         integer :: zHubIndex = 16
         real(rkind) :: angleTrigger=0.1d0, Ra = 1.d14
         character(len=4) :: scheme_xy = "FOUR"
-        integer :: MeanTIDX, MeanRID, VizDump_schedule = 0    
+        integer :: MeanTIDX, MeanRID, vizDump_schedule = 0    
         character(len=clen) :: MeanFilesDir, powerDumpDir 
         logical :: WriteTurbineForce = .false., useforcedStratification = .false., useDynamicYaw = .FALSE. 
         integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0
@@ -425,12 +434,12 @@ contains
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                         useRestartFile, restartFile_TID, restartFile_RID, CviscDT
-        namelist /IO/ VizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
+        namelist /IO/ vizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
                     & t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,useforcedStratification,&
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection
+                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection, useHITRealSpaceLinearForcing, HITForceTimeScale
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
@@ -483,8 +492,8 @@ contains
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity 
         this%deleteInstructions = deleteInstructions; this%TopBC_Temp = TopBC_temp
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
-        this%donot_dealias = donot_dealias; this%ioType = ioType
-        this%moistureFactor = moistureFactor
+        this%donot_dealias = donot_dealias; this%ioType = ioType; this%HITForceTimeScale = HITForceTimeScale
+        this%moistureFactor = moistureFactor; this%useHITRealSpaceLinearForcing = useHITRealSpaceLinearForcing
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -1168,7 +1177,7 @@ contains
               this%wrhs_turbine = dcmplx(0.d0, 0.d0)
            end if
            call message(1, "Done allocating storage for pressure")
-       end if 
+       end if
        if ((.not. this%fastCalcPressure) .and. ((this%computefringePressure) .or. (this%computeDNSPressure))) then
            call gracefulExit("You need to set FASTCALCPRESSURE = .true. in & 
                     & order to use computefringepressure or computeDNSpressure", 313)
@@ -1288,11 +1297,11 @@ contains
       
 
        ! STEP 29: Set the buoyancy direction
-       this%BuoyancyDirection = BuoyancyDirection
+       this%buoyancyDirection = buoyancyDirection
        this%useforcedStratification = useforcedStratification
 
 
-       ! STEP 29: Safeguard against user invalid user inputs
+       ! STEP 30: Safeguard against user invalid user inputs
        if ((this%vizDump_Schedule == 1) .and. (.not. this%useCFL)) then
            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
        end if 
