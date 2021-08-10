@@ -1,0 +1,11 @@
+&TEST
+bc1_x = 1  
+bcn_x = -1
+bc1_y = -1
+bcn_y = 1
+bc1_z = -1
+bcn_z = 1
+periodic_x = .FALSE. 
+periodic_y = .FALSE.
+periodic_z = .FALSE.
+/
