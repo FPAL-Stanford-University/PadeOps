@@ -222,7 +222,7 @@ contains
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-        logical     :: use_surfaceTension = .TRUE.  
+        logical     :: use_surfaceTension = .FALSE.  
         real(rkind) :: surfaceTension_coeff = 0.0d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0
@@ -752,6 +752,16 @@ contains
         ! ------------------------------------------------
 
         call this%get_dt(stability)
+
+        !populate surface tension terms at initial condition
+        if(this%use_surfaceTension) then
+            if(this%mix%ns.ne.2) then
+                call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
+            endif
+
+            call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)  ! Compute surface tension terms for momentum and energy equations
+
+        endif
 
         ! Write out initial conditions
         ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
