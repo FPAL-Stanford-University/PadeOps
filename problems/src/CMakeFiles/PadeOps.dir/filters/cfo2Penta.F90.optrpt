@@ -1,0 +1,2330 @@
+Intel(R) Advisor can now assist with vectorization and show optimization
+  report messages with your source code.
+See "https://software.intel.com/en-us/intel-advisor-xe" for details.
+
+
+Begin optimization report for: CFO2PENTASTUFF::COMPUTELU
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(220,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(220,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(220,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(242,13)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed OUTPUT dependence between LU(I) (243:17) and LU(I) (245:17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(253,13)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed OUTPUT dependence between LU(I) (254:17) and LU(I) (255:17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(263,31)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(263,31)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(263,31)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(263,31)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(266,13)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed OUTPUT dependence between LU(I) (267:17) and LU(I) (268:17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(273,31)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(273,31)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(273,31)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(273,31)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(275,33)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(275,33)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(275,33)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(275,33)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(276,31)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(276,31)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(276,31)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(276,31)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(279,13)
+<Peeled loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(279,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(279,13)
+<Remainder loop for vectorization, Multiversioned v1>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(279,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(279,13)
+<Multiversioned v2>
+   remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(279,13)
+<Remainder, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(282,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(282,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(282,13)
+<Remainder loop for vectorization>
+   remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(285,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(285,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(285,13)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(285,13)
+<Remainder loop for vectorization>
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::COMPUTEPENTA
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(303,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(303,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(303,13)
+<Remainder loop for vectorization>
+   remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(304,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(304,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(304,13)
+<Remainder loop for vectorization>
+   remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(305,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(305,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(305,13)
+<Remainder loop for vectorization>
+   remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(306,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(306,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(306,13)
+<Remainder loop for vectorization>
+   remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(307,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(307,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(307,13)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(307,13)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(423,13)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed OUTPUT dependence between PENTA(I) (424:17) and PENTA(I) (427:17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(430,13)
+<Peeled loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(430,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(430,13)
+<Remainder loop for vectorization, Multiversioned v1>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(430,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(430,13)
+<Multiversioned v2>
+   remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(430,13)
+<Remainder, Multiversioned v2>
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::SOLVEXLU
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(445,9)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive   [ /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(446,13) ]
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(446,13)
+      remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(453,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between Y(I,J,K) (454:21) and Y(I-1,J,K) (454:21)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(467,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between Y(I,J,K) (468:21) and Y(I+1,J,K) (468:21)
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::SOLVEYLU
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(484,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(486,13)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(487,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(488,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(486,13)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(491,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(492,17)
+         remark #15301: FUSED LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(492,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(491,13)
+   <Remainder>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(492,17)
+         remark #15301: FUSED LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(492,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(498,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(498,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(498,13)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(499,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(499,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(499,13)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(502,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(502,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(502,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(502,13)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(503,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(503,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(503,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(503,13)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(504,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(504,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(504,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(504,13)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(505,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(506,17)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(506,17)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(506,17)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(506,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::SOLVEZLU
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(522,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(522,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(522,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(523,9)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(524,9)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(522,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(523,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(524,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(527,9)
+<Distributed chunk1>
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(528,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(528,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(528,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(528,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(527,9)
+<Distributed chunk2>
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(529,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(529,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(529,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(527,9)
+<Remainder, Distributed chunk2>
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(529,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(529,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(527,9)
+<Distributed chunk3>
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(530,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(530,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(530,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(527,9)
+<Remainder, Distributed chunk3>
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(530,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(530,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(534,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(534,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(534,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(534,9)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(534,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(535,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(535,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(535,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(535,9)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(535,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(535,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(535,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(535,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(535,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(538,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(538,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(538,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(538,9)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(538,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(538,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(538,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(538,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(538,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(539,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(539,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(539,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(539,9)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(539,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(539,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(539,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(539,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(539,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(540,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(540,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(540,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(540,9)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(540,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(540,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(540,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(540,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(540,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(541,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(542,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(542,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(542,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(542,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::SOLVEXPENTA
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(555,9)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(559,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between Y(I,J,K) (560:21) and Y(I-1,J,K) (560:21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(559,17)
+   <Remainder, Multiversioned v1>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(559,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(559,17)
+   <Remainder, Multiversioned v2>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(567,17)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between Y(I,J,K) (568:21) and Y(I+1,J,K) (568:21)
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::SOLVEYPENTA
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(583,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(585,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(585,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(585,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(585,13)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(586,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(587,17)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(587,17)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(587,17)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(587,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(591,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(591,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(591,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(591,13)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(593,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(593,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(593,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(593,13)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(594,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(595,17)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(595,17)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(595,17)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(595,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::SOLVEZPENTA_REAL
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(2,9)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(2,9)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(2,9)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(2,9)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(3,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(4,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(4,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(4,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(4,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(8,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(8,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(8,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(8,9)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(8,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(11,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(12,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(12,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(12,13)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(12,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::SOLVEZPENTA_CMPLX
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(2,9)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(2,9)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(2,9)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(3,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(4,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(4,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(4,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(8,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(8,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(8,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(8,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed OUTPUT dependence between Y(:,:,?-1) (10:9) and Y(:,:,?-1) (10:9)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+      remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+         remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(10,9)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(11,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(12,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(12,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/SolveZPenta_common.F90(12,13)
+   <Remainder loop for vectorization>
+      remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::COMPUTEXRHS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(688,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(689,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(750,21)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(750,21)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(750,21)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(636,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(658,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(658,21)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(658,21)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::COMPUTEYRHS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(881,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(884,21)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(884,21)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(884,21)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(886,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(886,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(889,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(893,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(886,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(898,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(898,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(903,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(908,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(913,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(898,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(919,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(919,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(924,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(929,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(934,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(919,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(941,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(941,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(941,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(949,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(949,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(954,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(958,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(949,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(961,21)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(961,21)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(961,21)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(963,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(963,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(968,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(973,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(978,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(963,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(984,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(984,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(989,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(994,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(999,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(984,21)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(832,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(833,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(833,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(838,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(843,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(848,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(833,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(853,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(853,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(853,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(858,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(858,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(863,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(868,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(873,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(858,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::COMPUTEZRHS_REAL
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(52,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(52,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(52,17)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(52,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(54,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(54,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(54,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(57,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(54,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(57,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(61,17)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(61,17)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(61,17)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(66,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(66,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(66,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(71,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(76,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(81,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(66,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(71,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(76,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(81,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(87,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(87,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(87,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(92,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(97,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(102,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(87,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(92,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(97,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(102,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(109,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(109,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(109,13)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(117,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(117,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(117,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(122,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(126,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(117,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(122,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(126,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(129,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(129,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(129,17)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(129,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(131,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(131,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(131,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(136,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(141,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(146,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(131,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(136,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(141,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(146,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(152,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(152,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(152,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(157,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(162,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(167,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(152,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(157,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(162,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(167,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(3,17)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(3,17)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(3,17)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(8,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(8,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(8,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(13,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(18,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(8,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(13,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(18,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(23,17)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(23,17)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(23,17)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(28,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(28,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(28,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(33,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(38,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(43,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(28,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(33,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(38,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(43,17)
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::COMPUTEZRHS_CMPLX
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(52,17)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed OUTPUT dependence between RHS(:,:,1) (52:17) and RHS(:,:,1) (52:17)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(52,17)
+      remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(52,17)
+         remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(54,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(54,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(54,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(57,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(54,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(57,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(61,17)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(61,17)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(61,17)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(66,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(66,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(66,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(71,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(76,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(81,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(66,17)
+   <Remainder loop for vectorization>
+      remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(71,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(76,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(81,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(87,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(87,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(87,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(92,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(97,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(102,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(87,17)
+   <Remainder loop for vectorization>
+      remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(92,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(97,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(102,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(109,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(109,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(109,13)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(117,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(117,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(117,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(122,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(126,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(117,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(122,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(126,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(129,17)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed OUTPUT dependence between RHS(:,:,THIS%N) (129:17) and RHS(:,:,THIS%N) (129:17)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(129,17)
+      remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(129,17)
+         remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(131,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(131,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(131,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(136,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(141,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(146,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(131,17)
+   <Remainder loop for vectorization>
+      remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(136,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(141,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(146,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(152,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(152,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(152,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(157,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(162,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(167,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(152,17)
+   <Remainder loop for vectorization>
+      remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(157,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(162,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(167,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(3,17)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(3,17)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(3,17)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(8,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(8,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(8,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(13,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(18,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(8,17)
+   <Remainder loop for vectorization>
+      remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(13,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(18,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(23,17)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(23,17)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(23,17)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(28,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(28,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(28,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(33,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(38,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(43,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(28,17)
+   <Remainder loop for vectorization>
+      remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(33,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(38,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/CFo2Penta_files/ComputeZRHS_common.F90(43,17)
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::FILTER1
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1044,13)
+   remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1044,13)
+<Remainder>
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::FILTER2
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1114,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1114,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1114,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1114,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::FILTER3_REAL
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1184,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1184,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1184,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::FILTER3_CMPLX
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1254,13)
+   remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1254,13)
+      remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(1254,13)
+   <Remainder>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: CFO2PENTASTUFF::INIT
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(141,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(141,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(141,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(141,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(141,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(171,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(171,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(171,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(171,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(171,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(172,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(172,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(172,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(172,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(172,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(173,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(173,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(173,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(173,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(173,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(174,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(174,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(174,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(174,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(174,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(175,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(175,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(175,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(175,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(175,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(176,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(176,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(176,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(176,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(176,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(177,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(177,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(177,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(177,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(177,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(178,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(178,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(178,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(178,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(178,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(179,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(179,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(179,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(179,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/cfo2Penta.F90(179,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================

@@ -1,0 +1,396 @@
+Intel(R) Advisor can now assist with vectorization and show optimization
+  report messages with your source code.
+See "https://software.intel.com/en-us/intel-advisor-xe" for details.
+
+
+Begin optimization report for: LSTSQSTUFF::FILTER1
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(111,13)
+   remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(111,13)
+<Remainder>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(169,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(187,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(187,21)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(187,21)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(187,21)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(117,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(139,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(139,21)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(139,21)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(139,21)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: LSTSQSTUFF::FILTER2
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(223,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(223,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(223,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(223,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(278,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(279,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(279,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(282,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(285,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(289,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(279,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(294,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(294,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(294,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(294,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(300,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(300,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(305,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(309,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(312,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(300,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(229,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(230,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(230,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(235,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(240,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(245,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(230,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(250,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(250,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(250,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(250,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(255,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(255,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(260,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(265,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(270,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(255,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: LSTSQSTUFF::FILTER3
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(328,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(328,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(328,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(381,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(381,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(381,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(384,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(387,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(391,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(381,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(384,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(387,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(391,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(396,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(396,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(396,13)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(396,13)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(402,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(402,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(402,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(407,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(411,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(414,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(402,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(407,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(411,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(414,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(334,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(334,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(334,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(339,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(344,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(349,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(334,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(339,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(344,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(349,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(354,17)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(354,17)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(354,17)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(354,17)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(359,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(359,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(359,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(364,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(369,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(374,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(359,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(364,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(369,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/filters/lstsq.F90(374,17)
+LOOP END
+===========================================================================

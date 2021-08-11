@@ -1,0 +1,15 @@
+# The fortran modules provided by this target.
+provides
+ abstracteosmod.mod
+ elasticeosmod.mod
+ fingereosmod.mod
+ godunovromenskiieosmod.mod
+ gridmod.mod
+ iosgridmod.mod
+ sep1solideos.mod
+ sep1solideosmod.mod
+ sgrid_hooks.mod
+ solidgrid.mod
+ solidmixturemod.mod
+ solidmod.mod
+ stiffgaseos.mod

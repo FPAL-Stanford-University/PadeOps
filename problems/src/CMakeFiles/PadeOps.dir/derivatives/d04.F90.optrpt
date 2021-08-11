@@ -1,0 +1,1219 @@
+Intel(R) Advisor can now assist with vectorization and show optimization
+  report messages with your source code.
+See "https://software.intel.com/en-us/intel-advisor-xe" for details.
+
+
+Begin optimization report for: D04STUFF::COMPUTEXD1RHS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(207,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(208,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(246,21)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(246,21)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(246,21)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(246,21)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(172,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(180,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(180,21)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(180,21)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(180,21)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::COMPUTEYD1RHS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(346,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(350,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(350,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(353,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(355,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(358,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(350,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(361,21)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(361,21)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(361,21)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(363,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(363,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(366,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(369,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(363,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(372,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(372,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(375,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(378,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(381,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(372,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(385,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(385,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(385,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(385,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(390,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(390,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(393,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(396,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(398,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(390,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(401,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(401,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(404,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(407,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(401,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(410,21)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(410,21)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(410,21)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(412,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(412,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(415,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(418,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(421,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(412,21)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(313,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(314,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(314,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(316,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(318,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(314,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(320,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(320,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(320,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(320,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(322,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(322,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(324,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(326,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(322,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::COMPUTEZD1RHS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(485,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(485,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(485,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(488,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(490,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(493,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(485,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(488,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(490,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(493,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(496,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(496,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(496,17)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(496,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(498,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(498,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(498,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(501,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(504,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(498,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(501,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(504,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(507,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(507,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(507,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(510,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(513,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(516,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(507,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(510,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(513,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(516,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(520,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(520,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(520,13)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(520,13)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(525,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(525,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(525,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(528,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(531,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(533,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(525,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(528,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(531,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(533,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(536,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(536,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(536,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(539,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(542,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(536,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(539,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(542,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(545,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(545,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(545,17)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(545,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(547,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(547,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(547,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(550,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(553,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(556,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(547,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(550,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(553,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(556,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(449,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(450,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(450,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(452,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(454,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(450,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(456,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(456,17)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(456,17)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(456,17)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(456,17)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(458,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(458,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(460,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(462,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(458,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::COMPUTEXD2RHS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(622,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(623,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(654,21)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(654,21)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(654,21)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(654,21)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(581,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(592,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(592,21)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(592,21)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(592,21)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::COMPUTEYD2RHS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(752,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(755,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(755,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(759,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(761,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(755,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(764,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(764,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(767,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(770,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(764,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(773,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(773,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(776,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(779,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(773,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(783,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(783,21)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(783,21)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(783,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(788,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(788,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(791,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(793,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(788,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(797,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(797,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(800,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(803,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(797,21)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(806,21)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(806,21)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(809,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(812,21)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(806,21)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(713,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(714,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(714,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(717,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(720,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(714,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(723,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(723,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(723,17)
+   <Remainder loop for vectorization>
+      remark #15301: REMAINDER LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(723,17)
+   <Remainder loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(726,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(726,17)
+      remark #15301: FUSED LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(729,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(732,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(726,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::COMPUTEZD2RHS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(876,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(876,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(876,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(880,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(882,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(876,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(880,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(882,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(885,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(885,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(885,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(888,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(891,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(885,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(888,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(891,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(894,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(894,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(894,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(897,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(900,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(894,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(897,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(900,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(904,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(904,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(904,13)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(904,13)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(909,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(909,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(909,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(912,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(914,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(909,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(912,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(914,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(918,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(918,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(918,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(921,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(924,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(918,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(921,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(924,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(927,17)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(927,17)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(927,17)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(930,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(933,17)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(927,17)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(930,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(933,17)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(838,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(838,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(838,13)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(838,13)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(841,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(841,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(841,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(844,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(841,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(844,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(847,13)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(847,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(847,13)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(847,13)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(850,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(850,13)
+   <Peeled loop for vectorization>
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(850,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(853,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(856,13)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(850,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(853,13)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(856,13)
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::DD1
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(950,13)
+   remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(950,13)
+<Remainder>
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::DD2
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(985,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(985,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(985,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(985,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::DD3
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1020,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1020,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1020,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::D2D1
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1055,13)
+   remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1055,13)
+<Remainder>
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::D2D2
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1090,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1090,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1090,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1090,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: D04STUFF::D2D3
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1125,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1125,13)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/derivatives/d04.F90(1125,13)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================

@@ -1,0 +1,93 @@
+Intel(R) Advisor can now assist with vectorization and show optimization
+  report messages with your source code.
+See "https://software.intel.com/en-us/intel-advisor-xe" for details.
+
+
+Begin optimization report for: ABSTRACTEOSMOD::GET_INVARIANTS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(69,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(69,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between I1(:,:,:) (69:13) and TENSOR(:,:,:) (69:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(69,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between I1(:,:,:) (69:13) and TENSOR(:,:,:) (69:13)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(69,13)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(69,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(69,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between I1(:,:,:) (69:13) and TENSOR(:,:,:) (69:13)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(69,13)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(70,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(70,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between I2(:,:,:) (70:13) and TENSOR(:,:,:) (70:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(70,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between I2(:,:,:) (70:13) and TENSOR(:,:,:) (70:13)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(70,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(70,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between I2(:,:,:) (70:13) and TENSOR(:,:,:) (70:13)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(71,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(71,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between I3(:,:,:) (71:13) and TENSOR(:,:,:) (71:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(71,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between I3(:,:,:) (71:13) and TENSOR(:,:,:) (71:13)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(71,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/AbstractEOS.F90(71,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between I3(:,:,:) (71:13) and TENSOR(:,:,:) (71:13)
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================

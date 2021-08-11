@@ -1,0 +1,117 @@
+Intel(R) Advisor can now assist with vectorization and show optimization
+  report messages with your source code.
+See "https://software.intel.com/en-us/intel-advisor-xe" for details.
+
+
+Begin optimization report for: EXITS::NANCHECK_IND
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(170,9)
+   remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(184,9) ]
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(171,13)
+      remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(182,13) ]
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(172,17)
+         remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(180,17) ]
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(174,48)
+            remark #15308: loop was not vectorized: explicitly compute the iteration count before executing the loop or try using canonical loop form from OpenMP specification
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: EXITS::NANCHECK_IND_ARR3
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(150,9)
+   remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(161,9) ]
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(151,13)
+      remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(159,13) ]
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(153,42)
+         remark #15308: loop was not vectorized: explicitly compute the iteration count before executing the loop or try using canonical loop form from OpenMP specification
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: EXITS::NANCHECK_STD_ARR3
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(130,9)
+   remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(140,17) ]
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(131,13)
+      remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(138,21) ]
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(133,42)
+         remark #15523: loop was not vectorized: loop control variable I was found, but loop iteration count cannot be computed before executing the loop
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: EXITS::NANCHECK_STD
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(107,9)
+   remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(120,17) ]
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(108,13)
+      remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(118,21) ]
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(109,17)
+         remark #15520: loop was not vectorized: loop with multiple exits cannot be vectorized unless it meets search loop idiom criteria   [ /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(116,25) ]
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(111,48)
+            remark #15523: loop was not vectorized: loop control variable I was found, but loop iteration count cannot be computed before executing the loop
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: EXITS::MESSAGE_LEVEL_CHAR_INT
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(94,9)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed ANTI dependence between FULL_MESSAGE (95:13) and FULL_MESSAGE (95:13)
+LOOP END
+===========================================================================
+
+Begin optimization report for: EXITS::MESSAGE_LEVEL_CHAR_DOUBLE
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(78,9)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed ANTI dependence between FULL_MESSAGE (79:13) and FULL_MESSAGE (79:13)
+LOOP END
+===========================================================================
+
+Begin optimization report for: EXITS::MESSAGE_LEVEL_CHAR
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/exits.F90(61,9)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed ANTI dependence between FULL_MESSAGE (62:13) and FULL_MESSAGE (62:13)
+LOOP END
+===========================================================================

@@ -1,0 +1,369 @@
+Intel(R) Advisor can now assist with vectorization and show optimization
+  report messages with your source code.
+See "https://software.intel.com/en-us/intel-advisor-xe" for details.
+
+
+Begin optimization report for: MIXTUREEOSMOD::UPDATE
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(82,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(82,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(82,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(82,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(82,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(83,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(83,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(83,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(83,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(83,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(84,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+         <Peeled loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+            remark #15542: loop was not vectorized: inner loop was already vectorized
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+               remark #15300: LOOP WAS VECTORIZED
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(86,17)
+            <Remainder loop for vectorization>
+            LOOP END
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+         <Peeled loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+         <Peeled loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(87,17)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(90,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(91,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: MIXTUREEOSMOD::GET_P
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(105,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(105,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(105,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(105,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(105,13)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(105,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: MIXTUREEOSMOD::GET_T
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(119,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(119,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(119,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(119,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(119,13)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(119,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: MIXTUREEOSMOD::GET_E_FROM_P
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(133,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(133,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(133,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(133,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(133,13)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(133,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: MIXTUREEOSMOD::GET_SOS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(147,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(147,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(147,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(147,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(147,13)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(147,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: MIXTUREEOSMOD::DESTROY
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(156,9)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed ANTI dependence between THIS%MIXTUREEOSMOD (157:17) and THIS(I) (157:50)
+LOOP END
+===========================================================================
+
+Begin optimization report for: MIXTUREEOSMOD::INIT
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/compressible/MixtureEOS.F90(53,66)
+   remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+LOOP END
+===========================================================================

@@ -2235,6 +2235,7 @@ stop
 
         !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
 	this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
+	print *, "Surface Tension"
 
     end subroutine get_surfaceTension
 

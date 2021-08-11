@@ -1,0 +1,9 @@
+# The fortran modules provided by this target.
+provides
+ cgrid_hooks.mod
+ compressiblegrid.mod
+ eosmod.mod
+ gridmod.mod
+ idealgaseos.mod
+ ladmod.mod
+ mixtureeosmod.mod

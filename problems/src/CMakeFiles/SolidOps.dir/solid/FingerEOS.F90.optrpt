@@ -1,0 +1,599 @@
+Intel(R) Advisor can now assist with vectorization and show optimization
+  report messages with your source code.
+See "https://software.intel.com/en-us/intel-advisor-xe" for details.
+
+
+Begin optimization report for: FINGEREOSMOD::GET_P_DEVSTRESS_T_SOS2
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(106,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(106,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(106,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(106,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(107,9)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(108,9)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(109,9)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(110,9)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(111,9)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(106,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(107,9)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(108,9)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(109,9)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(110,9)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(111,9)
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(107,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(108,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(109,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(110,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(111,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(114,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(114,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(114,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(114,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(114,9)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(114,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(117,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(117,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(117,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(117,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(118,9)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(119,9)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(117,9)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(117,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(118,9)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(119,9)
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(118,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(119,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(122,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(122,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(122,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: FINGEREOSMOD::GET_FINGER
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(136,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(136,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (136:17) and G(:,:,:) (136:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(136,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (136:17) and G(:,:,:) (136:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(136,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(136,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(136,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (136:17) and G(:,:,:) (136:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(136,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(137,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(137,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (137:17) and G(:,:,:) (137:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(137,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (137:17) and G(:,:,:) (137:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(137,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(137,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(137,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (137:17) and G(:,:,:) (137:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(137,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(138,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(138,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (138:17) and G(:,:,:) (138:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(138,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (138:17) and G(:,:,:) (138:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(138,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(138,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(138,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (138:17) and G(:,:,:) (138:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(138,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(139,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(139,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (139:17) and G(:,:,:) (139:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(139,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (139:17) and G(:,:,:) (139:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(139,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(139,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(139,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (139:17) and G(:,:,:) (139:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(139,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(140,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(140,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (140:17) and G(:,:,:) (140:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(140,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (140:17) and G(:,:,:) (140:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(140,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(140,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(140,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (140:17) and G(:,:,:) (140:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(140,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(141,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(141,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (141:17) and G(:,:,:) (141:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(141,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (141:17) and G(:,:,:) (141:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(141,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(141,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(141,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (141:17) and G(:,:,:) (141:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(141,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(147,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(147,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (147:17) and G(:,:,:) (147:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(147,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (147:17) and G(:,:,:) (147:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(147,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(147,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (147:17) and G(:,:,:) (147:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(148,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(148,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (148:17) and G(:,:,:) (148:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(148,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (148:17) and G(:,:,:) (148:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(148,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(148,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (148:17) and G(:,:,:) (148:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(149,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(149,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (149:17) and G(:,:,:) (149:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(149,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (149:17) and G(:,:,:) (149:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(149,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(149,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (149:17) and G(:,:,:) (149:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(150,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(150,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (150:17) and G(:,:,:) (150:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(150,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (150:17) and G(:,:,:) (150:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(150,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(150,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (150:17) and G(:,:,:) (150:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(151,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(151,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (151:17) and G(:,:,:) (151:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(151,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (151:17) and G(:,:,:) (151:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(151,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(151,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (151:17) and G(:,:,:) (151:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(152,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(152,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (152:17) and G(:,:,:) (152:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(152,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (152:17) and G(:,:,:) (152:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(152,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(152,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (152:17) and G(:,:,:) (152:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(160,17)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,1) (160:17) and FINGER(:,:,:) (160:17)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(160,17)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,1) (160:17) and FINGER(:,:,:) (160:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(160,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,1) (160:17) and FINGER(:,:,:) (160:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(161,17)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,2) (161:17) and FINGER(:,:,:) (161:17)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(161,17)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,2) (161:17) and FINGER(:,:,:) (161:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(161,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,2) (161:17) and FINGER(:,:,:) (161:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(162,17)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,3) (162:17) and FINGER(:,:,:) (162:17)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(162,17)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,3) (162:17) and FINGER(:,:,:) (162:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(162,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,3) (162:17) and FINGER(:,:,:) (162:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(163,17)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,4) (163:17) and FINGER(:,:,:) (163:17)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(163,17)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,4) (163:17) and FINGER(:,:,:) (163:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(163,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,4) (163:17) and FINGER(:,:,:) (163:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(164,17)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,5) (164:17) and FINGER(:,:,:) (164:17)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(164,17)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,5) (164:17) and FINGER(:,:,:) (164:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(164,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,5) (164:17) and FINGER(:,:,:) (164:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(165,17)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,6) (165:17) and FINGER(:,:,:) (165:17)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(165,17)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,6) (165:17) and FINGER(:,:,:) (165:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/FingerEOS.F90(165,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,6) (165:17) and FINGER(:,:,:) (165:17)
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================

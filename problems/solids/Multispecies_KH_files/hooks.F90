@@ -6,7 +6,7 @@ module Multispecies_KH_data
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one, eta_det_ge = one,eta_det_ge_2 = one, eta_det_gp = one,eta_det_gp_2 = one, eta_det_gt = one,eta_det_gt_2 = one,diff_c_ge = one,diff_c_ge_2 = one, diff_c_gp = one,diff_c_gp_2 = one, diff_c_gt = one,diff_c_gt_2 = one
-    real(rkind) :: minVF = 0.2_rkind, thick = 0.01
+    real(rkind) :: minVF = 0.2_rkind, thick = 0.01, p_ten = one
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
@@ -286,8 +286,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         w   = zero
 
         !set mixture pressure (uniform)
-        mix%material(1)%p  = p_amb
-        mix%material(2)%p  = mix%material(1)%p
+	mix%material(1)%p  = p_amb*tmp
+        mix%material(2)%p  = (p_amb+p_ten)-p_ten*tmp
 
         ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero

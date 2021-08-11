@@ -1087,17 +1087,20 @@ contains
     end subroutine
 
     subroutine get_dt(this,stability)
-        use reductions, only : P_MAXVAL
+        use reductions, only : P_MAXVAL, P_MINVAL
         use decomp_2d,  only: nrank
+	use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
-        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0
+        real(rkind) :: dtCFL, dtsigma,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0
         integer :: i
         character(len=30) :: str,str2
 
         this%st_limit = 20
 
         delta = min(this%dx, this%dy, this%dz)
+	
+	phys_mu = min(this%phys_mu1, this%phys_mu2)
 
         ! continuum
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
@@ -1106,7 +1109,10 @@ contains
 
         !dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-
+	
+	if (this%use_surfaceTension) then
+		dtsigma = max( P_MINVAL( sqrt( (this%rho*delta**3)/(4*pi*this%surfaceTension_coeff) ) ), (phys_mu*delta)/this%surfaceTension_coeff )
+	end if
         ! species specific
         call this%mix%get_dt(this%rho, delta, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast)
 
@@ -1233,6 +1239,11 @@ contains
                this%dt = dtdiff_gp
                write(str,'(ES10.3E3)') 1.0D0-dtdiff_gp/dtCFL
                stability = 'diffusive g_p: '//trim(str)//' CFL loss fraction'
+            endif
+	    if ( this%dt > dtsigma ) then
+               this%dt = dtsigma
+               write(str,'(ES10.3E3)') 1.0D0-dtsigma/dtCFL
+               stability = 'surfaceTension: '//trim(str)//' CFL loss fraction'
             endif
             if ( this%dt > dtplast ) then
                this%dt = dtplast

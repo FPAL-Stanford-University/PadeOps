@@ -7,7 +7,7 @@ module Stationary_Droplet_data
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one, eta_det_ge = one,eta_det_ge_2 = one, eta_det_gp = one,eta_det_gp_2 = one, eta_det_gt = one,eta_det_gt_2 = one,diff_c_ge = one,diff_c_ge_2 = one, diff_c_gp = one,diff_c_gp_2 = one, diff_c_gt = one,diff_c_gt_2 = one
     real(rkind) :: minVF = 0.2_rkind, thick = one
-    real(rkind) :: rhoRatio = one, pRatio = two
+    real(rkind) :: rhoRatio = one, pRatio = two, p_ten = one
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
@@ -19,7 +19,7 @@ module Stationary_Droplet_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = one, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 0.4
+    real(rkind) :: Ly = two, Lx = two, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 0.2
     real(rkind) :: tau0_2=1d0, Nvel=1d0, etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
 
 
@@ -197,7 +197,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp2, tmp, dum, eta
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac
     integer, dimension(2) :: iparams
@@ -208,7 +208,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     integer :: nx,ny,nz
     nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
 
-    namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
+    namelist /PROBINPUT/  p_infty,p_ten, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
                           plastic2, explPlast2, yield2, interface_init, kwave, a_ratio,&
                           melt_t, melt_c, melt_t2, melt_c2, &
@@ -286,23 +286,22 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = (x - 0.5)**2 + (y - 0.5)**2
+	eta = (x - 1)**2 + (y - 1)**2
 	
-	
-	!set mixture Volume fraction
-	!eta = (x - 0.5)**2 + (y - 0.75)**2
-	!where( (eta .le. (R)**2  )  
-	mix%material(1)%VF = one-minVF
-	mix%material(2)%VF = one - mix%material(1)%VF
-	!elsewhere(eta .ge. (R)**2 )	
-	!mix%material(1)%VF = 0
-	!mix%material(2)%VF = one - mix%material(1)%VF
+	tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick*dx) ) )
+
+        !set mixture Volume fraction
+        !eta = (x - 1)**2 + (y - 0.75)**2
+        !where( (eta .le. (R)**2  )
+        mix%material(1)%VF = tmp
+        mix%material(2)%VF = one - mix%material(1)%VF
 	!endwhere 
                
 	!Set density profile and mass fraction based on volume fraction
 	rho = rho_0*mix%material(1)%VF + rho_0_2*mix%material(2)%VF
 	mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
 	mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
+
 
         !set velocities
 
@@ -327,12 +326,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 	u = 0
 	v = 0
 	w = 0
+
+	 tmp2 = (half-minVF)  * ( one + tanh( (eta-((R-thick)**2))/(0.001) ) )
+
         !set mixture pressure (uniform)
-        mix%material(1)%p  = p_amb
-        mix%material(2)%p  = mix%material(1)%p
-
-
- 
+	mix%material(1)%p = p_amb+p_ten*mix%material(2)%VF
+	mix%material(2)%p = mix%material(1)%p
 
      ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero

@@ -288,7 +288,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 	!delta_rho = Nrho*0.275d0
 	eta = (x - 0.5)**2 + (y - 0.5 )**2
 
-	tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick) ) )
+	tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick*dx) ) )
 	
 	!set mixture Volume fraction
 	!eta = (x - 0.5)**2 + (y - 0.75)**2
@@ -306,6 +306,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 	mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
         !set velocities
+	u = 0
+	v = 0
+	w = 0
 
 	!delta = Nvel*dx
 	!eta0k = etasize*delta
@@ -884,12 +887,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
 
          ! set u and v
        ! IF (tsim .LT. 4) THEN
-	u = 0
-	v = 0
-	w = 0
-	p = p_amb
-	T =40
-	e = 60  
+	
         ! ! determine interface velocity
         ! ind = minloc(abs(mix%material(1)%VF(:,1,1)-0.5d0))
         ! imin = ind(1)

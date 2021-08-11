@@ -1,0 +1,973 @@
+Intel(R) Advisor can now assist with vectorization and show optimization
+  report messages with your source code.
+See "https://software.intel.com/en-us/intel-advisor-xe" for details.
+
+
+Begin optimization report for: FFT_3D_STUFF::FFT3_Y2Y
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(489,13)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::IFFT3_Y2Y
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(539,9)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(544,9)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(544,9)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(544,9)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(544,9)
+<Remainder loop for vectorization>
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::FFT3_X2Z
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(563,9)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,57)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between at (564:57) and at (564:57)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,57)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,57)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,57)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,84)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between at (564:84) and at (564:84)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,84)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,84)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,84)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,57)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between THIS(:,:,K) (564:57) and THIS(:,:,K) (564:57)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,57)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,57)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,57)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,84)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between THIS(:,:,K) (564:84) and THIS(:,:,K) (564:84)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,84)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,84)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(564,84)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::FFT2_X2Y
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(590,9)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::IFFT2_Y2X
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(606,9)
+   remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+   remark #15346: vector dependence: assumed ANTI dependence between THIS%FFT_3D (607:75) and THIS%PLAN_C2C_BWD_Y_OOP (607:18)
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(607,75)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between at (607:75) and at (607:75)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(607,75)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(607,75)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(607,75)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(607,75)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between THIS(:,:,K) (607:75) and THIS(:,:,K) (607:75)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(607,75)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(607,75)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(607,75)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(614,13)
+   remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(614,13)
+      remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(614,13)
+   <Remainder>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(621,9)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(621,9)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(621,9)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(621,9)
+<Remainder loop for vectorization>
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::IFFT3_Z2X
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(639,9)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,57)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between at (640:57) and at (640:57)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,57)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,57)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,57)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,84)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between at (640:84) and at (640:84)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,84)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,84)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,84)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,57)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between THIS(:,:,K) (640:57) and THIS(:,:,K) (640:57)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,57)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,57)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,57)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,84)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between THIS(:,:,K) (640:84) and THIS(:,:,K) (640:84)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,84)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,84)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(640,84)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(650,9)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(650,9)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(650,9)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(650,9)
+<Remainder loop for vectorization>
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::FFT3_Z2X
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(667,9)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,57)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between at (668:57) and at (668:57)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,57)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,57)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,57)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,84)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between at (668:84) and at (668:84)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,84)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,84)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,84)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,57)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between THIS(:,:,K) (668:57) and THIS(:,:,K) (668:57)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,57)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,57)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,57)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,84)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between THIS(:,:,K) (668:84) and THIS(:,:,K) (668:84)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,84)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,84)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(668,84)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::IFFT3_X2Z
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(689,9)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,57)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between at (690:57) and at (690:57)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,57)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,57)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,57)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,84)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between at (690:84) and at (690:84)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,84)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,84)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,84)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,57)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between THIS(:,:,K) (690:57) and THIS(:,:,K) (690:57)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,57)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,57)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,57)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,84)
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed OUTPUT dependence between THIS(:,:,K) (690:84) and THIS(:,:,K) (690:84)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,84)
+         remark #15398: loop was not vectorized: loop was transformed to memset or memcpy
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,84)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(690,84)
+         <Remainder>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(700,9)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(700,9)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(700,9)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(700,9)
+<Remainder loop for vectorization>
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::ALLOC_3D_REAL
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(718,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(718,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(718,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(718,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(718,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::ALLOC_3D_CMPLX
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(739,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(739,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(739,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(739,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(739,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::ALLOC_4D
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(781,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(781,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(781,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(781,13)
+         <Peeled loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(781,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(781,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::IFFTSHIFT
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13)
+<Peeled loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13)
+<Peeled loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13)
+<Multiversioned v2>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13)
+<Remainder loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13)
+<Peeled loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13)
+<Peeled loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13)
+<Multiversioned v2>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13)
+<Remainder loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13)
+<Peeled loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13)
+<Peeled loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13)
+<Multiversioned v2>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13)
+<Remainder loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13)
+<Peeled loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13)
+<Peeled loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13)
+<Multiversioned v2>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13)
+<Remainder loop for vectorization, Multiversioned v2>
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::GETWAVENUMS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(799,9)
+<Peeled loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(799,9)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(799,9)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(799,9)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Multiversioned v2>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(817,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Remainder loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Peeled loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Peeled loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Multiversioned v2>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(818,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Remainder loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Multiversioned v2>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(820,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Remainder loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Peeled loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Multiversioned v1>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Remainder loop for vectorization, Multiversioned v1>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Peeled loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Multiversioned v2>
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(821,13) inlined into /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(815,13)
+<Remainder loop for vectorization, Multiversioned v2>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(803,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(803,9)
+      remark #15300: LOOP WAS VECTORIZED
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(803,9)
+   <Remainder loop for vectorization>
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: FFT_3D_STUFF::INIT
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(335,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(336,16)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(337,20)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(337,20)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(337,20)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(342,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(343,16)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(344,20)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(344,20)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(349,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(350,16)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(351,20)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(351,20)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(356,16)
+   remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(356,16)
+      remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(356,16)
+   <Remainder>
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(357,16)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(357,16)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(357,16)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(357,16)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(358,16)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(358,16)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(358,16)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(358,16)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(369,16)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(369,16)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(369,16)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(369,16)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(369,16)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(387,16)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(387,16)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(387,16)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(387,16)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(387,16)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(407,16)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(407,16)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(407,16)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(407,16)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(407,16)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(422,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(422,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(422,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(422,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(422,13)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/utilities/fft_3d.F90(422,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================

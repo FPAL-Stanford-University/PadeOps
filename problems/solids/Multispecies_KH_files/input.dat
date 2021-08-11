@@ -71,6 +71,7 @@ mu       = 0.2886D0       ! Shear modulus
 rho_0    = 1.D0           ! No deformation density
 p_amb    = 5.D-2          ! Ambient pressure
 minVF    = 1.0D-6         ! Minimum mass fraction at initialization
+p_ten 	 = 1
 thick    = 2.0d0          ! Initial thickness in grid units for interface
 gamma_2    = 2.088D0      ! Ratio of specific heats   -- aluminium
 Rgas_2     = 1.D0         ! Gas constant

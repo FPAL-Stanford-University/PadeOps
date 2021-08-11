@@ -1,0 +1,1600 @@
+Intel(R) Advisor can now assist with vectorization and show optimization
+  report messages with your source code.
+See "https://software.intel.com/en-us/intel-advisor-xe" for details.
+
+
+Begin optimization report for: SEP1SOLIDEOS::GET_FINGER
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(136,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(136,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (136:17) and G(:,:,:) (136:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(136,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (136:17) and G(:,:,:) (136:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(136,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(136,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(136,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (136:17) and G(:,:,:) (136:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(136,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(137,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(137,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (137:17) and G(:,:,:) (137:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(137,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (137:17) and G(:,:,:) (137:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(137,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(137,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(137,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (137:17) and G(:,:,:) (137:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(137,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(138,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(138,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (138:17) and G(:,:,:) (138:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(138,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (138:17) and G(:,:,:) (138:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(138,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(138,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(138,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (138:17) and G(:,:,:) (138:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(138,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(139,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(139,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (139:17) and G(:,:,:) (139:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(139,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (139:17) and G(:,:,:) (139:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(139,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(139,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(139,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (139:17) and G(:,:,:) (139:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(139,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(140,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(140,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (140:17) and G(:,:,:) (140:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(140,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (140:17) and G(:,:,:) (140:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(140,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(140,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(140,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (140:17) and G(:,:,:) (140:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(140,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(141,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(141,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (141:17) and G(:,:,:) (141:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(141,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (141:17) and G(:,:,:) (141:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(141,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(141,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(141,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (141:17) and G(:,:,:) (141:17)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(141,17)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(143,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(143,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (143:17) and G(:,:,:) (143:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(143,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (143:17) and G(:,:,:) (143:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(143,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(143,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,1) (143:17) and G(:,:,:) (143:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(144,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(144,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (144:17) and G(:,:,:) (144:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(144,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (144:17) and G(:,:,:) (144:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(144,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(144,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,2) (144:17) and G(:,:,:) (144:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(145,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(145,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (145:17) and G(:,:,:) (145:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(145,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (145:17) and G(:,:,:) (145:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(145,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(145,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,3) (145:17) and G(:,:,:) (145:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(146,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(146,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (146:17) and G(:,:,:) (146:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(146,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (146:17) and G(:,:,:) (146:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(146,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(146,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,4) (146:17) and G(:,:,:) (146:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(147,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(147,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (147:17) and G(:,:,:) (147:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(147,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (147:17) and G(:,:,:) (147:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(147,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(147,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,5) (147:17) and G(:,:,:) (147:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(148,17)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(148,17)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (148:17) and G(:,:,:) (148:17)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(148,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (148:17) and G(:,:,:) (148:17)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(148,17)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(148,17)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGER(:,:,:,6) (148:17) and G(:,:,:) (148:17)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(157,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(157,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between DETG(:,:,:) (157:13) and GG32(:,:,:) (157:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(157,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between DETG(:,:,:) (157:13) and GG32(:,:,:) (157:13)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(157,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(157,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between DETG(:,:,:) (157:13) and GG12(:,:,:) (157:13)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(159,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(159,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,1) (159:13) and GG31(:,:,:) (159:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(159,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,1) (159:13) and GG31(:,:,:) (159:13)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(159,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(159,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,1) (159:13) and GG11(:,:,:) (159:13)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(160,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(160,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,2) (160:13) and GG32(:,:,:) (160:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(160,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,2) (160:13) and GG32(:,:,:) (160:13)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(160,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(160,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,2) (160:13) and GG11(:,:,:) (160:13)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(161,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(161,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,3) (161:13) and GG33(:,:,:) (161:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(161,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,3) (161:13) and GG33(:,:,:) (161:13)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(161,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(161,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,3) (161:13) and GG11(:,:,:) (161:13)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(162,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(162,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,4) (162:13) and GG32(:,:,:) (162:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(162,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,4) (162:13) and GG32(:,:,:) (162:13)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(162,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(162,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,4) (162:13) and GG21(:,:,:) (162:13)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(163,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(163,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,5) (163:13) and GG33(:,:,:) (163:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(163,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,5) (163:13) and GG33(:,:,:) (163:13)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(163,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(163,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,5) (163:13) and GG21(:,:,:) (163:13)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(164,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(164,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,6) (164:13) and GG33(:,:,:) (164:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(164,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,6) (164:13) and GG33(:,:,:) (164:13)
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(164,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(164,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between FINGERSQ(:,:,:,6) (164:13) and GG31(:,:,:) (164:13)
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(166,13)
+   remark #15541: outer loop was not auto-vectorized: consider using SIMD directive
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(166,13)
+   <Multiversioned v1>
+      remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+      remark #15346: vector dependence: assumed FLOW dependence between TRG(:,:,:) (166:13) and GG33(:,:,:) (166:13)
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(166,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between TRG(:,:,:) (166:13) and GG33(:,:,:) (166:13)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(166,13)
+      <Remainder>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(166,13)
+   <Multiversioned v2>
+      remark #15304: loop was not vectorized: non-vectorizable loop instance from multiversioning
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(166,13)
+         remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+         remark #15346: vector dependence: assumed FLOW dependence between TRG(:,:,:) (166:13) and GG11(:,:,:) (166:13)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(166,13)
+      <Remainder>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(167,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(167,13)
+   <Multiversioned v1>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(167,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(167,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(167,13)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(167,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(167,13)
+   <Multiversioned v2>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(167,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(167,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: SEP1SOLIDEOS::GET_DEVSTRESS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(187,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(187,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(187,75)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(187,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(187,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(189,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(189,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(189,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(189,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(189,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+   <Multiversioned v1>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(191,9)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(192,9)
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(191,9)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(192,9)
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+   <Multiversioned v2>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(190,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(191,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(192,9)
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(195,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(196,15)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(196,15)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(196,15)
+         <Peeled loop for vectorization, Multiversioned v1>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(196,15)
+         <Multiversioned v1>
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(196,15)
+         <Remainder loop for vectorization, Multiversioned v1>
+            remark #15301: REMAINDER LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(196,15)
+         <Remainder loop for vectorization, Multiversioned v1>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(196,15)
+         <Multiversioned v2>
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(196,15)
+         <Remainder, Multiversioned v2>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+      <Multiversioned v1>
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+         <Peeled loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+         <Remainder loop for vectorization>
+            remark #15301: REMAINDER LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+      <Multiversioned v2>
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+         <Peeled loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(201,15)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: SEP1SOLIDEOS::GET_EELASTIC
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(214,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(214,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(214,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(214,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(216,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(216,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(216,13)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(216,13)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(216,13)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: SEP1SOLIDEOS::GET_SOS
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+   <Multiversioned v1>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+   <Multiversioned v2>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(227,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: SEP1SOLIDEOS::GET_SOS2_MIXTURE
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+   <Multiversioned v1>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+   <Multiversioned v2>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(236,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: SEP1SOLIDEOS::GET_SOS2
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+   <Multiversioned v1>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+   <Multiversioned v2>
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+      <Remainder loop for vectorization>
+         remark #15301: REMAINDER LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(245,9)
+      <Remainder loop for vectorization>
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: SEP1SOLIDEOS::PLASTIC_DEFORMATION
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(282,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(282,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(282,13)
+      <Peeled loop for vectorization, Multiversioned v1>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(282,13)
+      <Multiversioned v1>
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(282,13)
+      <Remainder loop for vectorization, Multiversioned v1>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(282,13)
+      <Peeled loop for vectorization, Multiversioned v2>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(282,13)
+      <Multiversioned v2>
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(282,13)
+      <Remainder loop for vectorization, Multiversioned v2>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(283,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(283,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(283,13)
+      <Peeled loop for vectorization, Multiversioned v1>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(283,13)
+      <Multiversioned v1>
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(283,13)
+      <Remainder loop for vectorization, Multiversioned v1>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(283,13)
+      <Peeled loop for vectorization, Multiversioned v2>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(283,13)
+      <Multiversioned v2>
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(283,13)
+      <Remainder loop for vectorization, Multiversioned v2>
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(286,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(287,13)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(288,13)
+   remark #15300: LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(288,13)
+<Remainder loop for vectorization>
+   remark #15301: REMAINDER LOOP WAS VECTORIZED
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(288,13)
+<Remainder loop for vectorization>
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(311,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(312,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(313,17)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(323,25)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(334,21)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(336,31)
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(346,39)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(360,21)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(367,21)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(374,21)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(378,33)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(381,21)
+            remark #15542: loop was not vectorized: inner loop was already vectorized
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(401,25)
+               remark #15300: LOOP WAS VECTORIZED
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(402,25)
+               remark #15300: LOOP WAS VECTORIZED
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(404,41)
+               remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(406,25)
+               remark #15542: loop was not vectorized: inner loop was already vectorized
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(427,29)
+                  remark #15300: LOOP WAS VECTORIZED
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(429,29)
+                  remark #15300: LOOP WAS VECTORIZED
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(431,45)
+                  remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(412,29)
+                  remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(426,39)
+                  remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(427,29)
+               <Remainder loop for vectorization>
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(429,29)
+               <Remainder loop for vectorization>
+               LOOP END
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(433,25)
+               remark #15300: LOOP WAS VECTORIZED
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(433,25)
+            <Remainder loop for vectorization>
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(434,25)
+               remark #15300: LOOP WAS VECTORIZED
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(434,25)
+            <Remainder loop for vectorization>
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(435,25)
+               remark #15300: LOOP WAS VECTORIZED
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(435,25)
+            <Remainder loop for vectorization>
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(385,25)
+               remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(400,35)
+               remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(401,25)
+            <Remainder loop for vectorization>
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(402,25)
+            <Remainder loop for vectorization>
+            LOOP END
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(464,21)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(470,25)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(470,25)
+         <Remainder loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(470,32)
+            remark #15301: FUSED LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(471,25)
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(471,52)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(471,79)
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(471,52)
+         <Distributed chunk2>
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(471,52)
+         <Remainder loop for vectorization, Distributed chunk2>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+               remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+               remark #15346: vector dependence: assumed OUTPUT dependence between G(:,:) (472:29) and G(:,:) (472:29)
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+                  remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+               LOOP END
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+               LOOP END
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(472,29)
+               LOOP END
+            LOOP END
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(475,25)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(475,52)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(475,79)
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+            LOOP END
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               remark #15344: loop was not vectorized: vector dependence prevents vectorization. First dependence is shown below. Use level 5 report for details
+               remark #15346: vector dependence: assumed OUTPUT dependence between G(:,:) (476:29) and G(:,:) (476:29)
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+                  remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               LOOP END
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               LOOP END
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               LOOP END
+
+               LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(476,29)
+               LOOP END
+            LOOP END
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(323,25)
+         <Remainder loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(360,21)
+         <Remainder loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(367,21)
+         <Remainder loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(374,21)
+         <Remainder loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(464,21)
+         <Remainder loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(467,25)
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(470,32)
+         <Remainder loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(475,25)
+         <Remainder loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(475,52)
+         <Remainder loop for vectorization>
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(475,79)
+         <Remainder loop for vectorization>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: SEP1SOLIDEOS::MAKE_TENSOR_SPD
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(886,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(887,13)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(888,17)
+         remark #15542: loop was not vectorized: inner loop was already vectorized
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(897,21)
+         <Distributed chunk1>
+            remark #15300: LOOP WAS VECTORIZED
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(898,21)
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(898,48)
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(898,75)
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(899,25)
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(897,21)
+         <Distributed chunk2>
+            remark #15335: loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(899,25)
+            remark #15542: loop was not vectorized: inner loop was already vectorized
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(899,25)
+               remark #15300: LOOP WAS VECTORIZED
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(899,25)
+            <Peeled loop for vectorization>
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(899,25)
+               remark #15300: LOOP WAS VECTORIZED
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(899,25)
+               remark #15300: LOOP WAS VECTORIZED
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(899,25)
+            <Remainder loop for vectorization>
+            LOOP END
+
+            LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(899,25)
+            <Remainder loop for vectorization>
+            LOOP END
+         LOOP END
+
+         LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(897,21)
+         <Remainder loop for vectorization, Distributed chunk1>
+         LOOP END
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================
+
+Begin optimization report for: SEP1SOLIDEOS::INIT
+
+    Report from: Vector optimizations [vec]
+
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(103,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(103,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(103,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(103,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(103,9)
+      <Remainder loop for vectorization>
+         remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+      LOOP END
+   LOOP END
+LOOP END
+
+LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(104,9)
+   remark #15542: loop was not vectorized: inner loop was already vectorized
+
+   LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(104,9)
+      remark #15542: loop was not vectorized: inner loop was already vectorized
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(104,9)
+      <Peeled loop for vectorization>
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(104,9)
+         remark #15300: LOOP WAS VECTORIZED
+      LOOP END
+
+      LOOP BEGIN at /home/users/zbarbeau/Codes/PadeOps/src/solid/Sep1SolidEOS.F90(104,9)
+      <Remainder loop for vectorization>
+         remark #15335: remainder loop was not vectorized: vectorization possible but seems inefficient. Use vector always directive or -vec-threshold0 to override 
+      LOOP END
+   LOOP END
+LOOP END
+===========================================================================

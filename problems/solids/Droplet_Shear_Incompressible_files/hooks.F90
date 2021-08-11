@@ -288,7 +288,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 	!delta_rho = Nrho*0.275d0
 	eta = (x - 0.5)**2 + (y - 0.75)**2
 
-	tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick) ) )
+	tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick*dx) ) )
 	
 	!set mixture Volume fraction
 	!eta = (x - 0.5)**2 + (y - 0.75)**2
