@@ -6,7 +6,7 @@ module TayAnvil_data
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one, eta_det_ge = one,eta_det_ge_2 = one, eta_det_gp = one,eta_det_gp_2 = one, eta_det_gt = one,eta_det_gt_2 = one,diff_c_ge = one,diff_c_ge_2 = one, diff_c_gp = one,diff_c_gp_2 = one, diff_c_gt = one,diff_c_gt_2 = one
-    real(rkind) :: minVF = 0.2_rkind, thick = one, vimpact = 1.0d0, xint = 2.133d0, yint = 21.6667d0
+    real(rkind) :: minVF = 0.2_rkind, thick = one, vimpact = 1.0d0, xint = 0.00381d0, yint = 0.02347d0
     real(rkind) :: rhoRatio = -one, pRatio = two
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
@@ -20,8 +20,7 @@ module TayAnvil_data
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
     logical     :: strainHard = .FALSE., strainHard2 = .FALSE.
-    real(rkind) :: Ly = 30.0d0, Lx = 10.0d0, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
-    !real(rkind) :: Ly = 30.0d0, Lx = 30.0d0, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = 0.03, Lx = 0.01, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
 
     type(filters) :: mygfil
 
@@ -300,13 +299,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
               !good
               bkstp_x = one - half*(tanh((x(i,j,k)-xint)/dxdy) + one)
-              bkstp_y2 = 0.0!3.0!2.0!1.0!0.5 !offset from bottom wall
-              bkstp_y = (one - half*(tanh((y(i,j,k)-(yint+bkstp_y2))/dxdy) + one))
-              bkstp_y2 = one !(half*(tanh((y(i,j,k)-(bkstp_y2))/dxdy) + one)) !mca
-
+              bkstp_y = one - half*(tanh((y(i,j,k)-yint)/dxdy) + one)
     
-              marker = min(bkstp_x,bkstp_y,bkstp_y2) !mca
-
+              marker = bkstp_x*bkstp_y
 
               mix%material(1)%VF(i,j,k) = minVF + (one-two*minVF)*marker
               mix%material(2)%VF(i,j,k) = one - mix%material(1)%VF(i,j,k)
@@ -327,10 +322,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
               ! marker = min(bkstp_x,bkstp_y,bkstp_y2) !mca
 
-              marker = one
-              u(i,j,k) = zero
-              v(i,j,k) = -vimpact*marker
-
               ! if(j.le.2) then
               !   v(i,j,k) = zero
               ! endif
@@ -338,8 +329,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
           end do
          end do
         end do 
-        w = zero
-        if(nrank==0) print *, 2, maxval(v), minval(v)
 
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -357,9 +346,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         else
             tmp = rho_0*mix%material(1)%VF*mix%material(1)%g11 + rho_0_2*mix%material(2)%g11*(one-mix%material(1)%VF) ! Mixture density
         end if
-        if(nrank==0) print *, 'tmp = ', maxval(tmp), minval(tmp)
+        if(nrank==0) print *, 'density = ', maxval(tmp), minval(tmp)
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
+
+        u = zero
+        v = -vimpact*mix%material(1)%Ys  !velocity is mass-weighted
+        w = zero
+        if(nrank==0) print *, 2, maxval(v), minval(v)
 
         rhoL = tmp(1,1,1)
         rhoR = tmp(decomp%ysz(1),1,1)
@@ -583,7 +577,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
@@ -645,9 +639,6 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
            mix%material(2)%Ys=one-mix%material(1)%Ys
         end where
 
-
-
-
         mix%material(1)%g11 = mix%material(1)%g11*dumx + one*(one-dumx)
         mix%material(1)%g12 = mix%material(1)%g12*dumx
         mix%material(1)%g13 = mix%material(1)%g13*dumx
@@ -679,10 +670,6 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         mix%material(1)%gp33 = mix%material(1)%gp33*dumx + one*(one-dumx)
 
         mix%material(1)%pe = mix%material(1)%pe*dumx
-
-
-
-
 
         !if(decomp%yst(1)==1) then
         !  if(x_bc(1)==0) then
@@ -724,11 +711,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         ! dumx = one-dumx*dumy   ! step for ((x>xspng) .or. (y>yspng))
 
 
-        dx1=0.1!1.0
-        dx2=0.5!2.0
-        dumx = min(max((x-(Lx-dx2))/((Lx-dx1)-dx2),x*0.0),x*0.0+1.0)
-        dumy = min(max((x-(Ly-dx2))/((Ly-dx1)-dx2),x*0.0),x*0.0+1.0)
-        dumx = max(dumx,dumy)
+        xspng = Lx * (one - 0.1d0)
+        yspng = Ly * (one - 0.1d0)
+        thick = 0.05d0*min(Lx,Ly) 
+        dumx = 0.5d0*(tanh((X-xspng)/dx1) + 1)
+        dumy = 0.5d0*(tanh((Y-yspng)/dx1) + 1)
+        dumx = dumx+dumy - dumx*dumy !gives 1 in sponge region and 0 elsewhere
 
         !print*,decomp%yst(1),decomp%yst(2),decomp%xst(1),decomp%xst(2),decomp%ysz(2),decomp%xsz(1)!,decomp%xsz(1),decomp%xsz(2)
         !stop
@@ -933,7 +921,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         end do
 
 
-        where(y.ge.Ly-0.1)
+
+        where(y.ge. yspng)
            u = zero
            v = -vimpact
            rho = minVF*rho_0 + (one-minVF)*rho_0_2
@@ -946,7 +935,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
            mix%material(2)%Ys=one-mix%material(1)%Ys
         end where
 
-        where(x.ge.Lx-0.1)
+        where(x.ge. xspng)
            u = zero
            !v = -vimpact
            !rho = minVF*rho_0 + (one-minVF)*rho_0_2
