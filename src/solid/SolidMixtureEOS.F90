@@ -36,6 +36,10 @@ module SolidMixtureMod
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE.
         logical :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
 
+	logical :: surface_mask !flag to use masking on surface tension calculation
+	logical :: use_FV      !flag to use FV scheme when solving for kappa in surface tension	
+	logical :: use_gradphi !flag to use phi formulation of VF in calculating surface tension
+	logical :: use_gradVF  !flag to use VF in calculating surface tension
         logical     :: use_surfaceTension   !flag to turn on/off surface tension (in momentum and energy equations)
         real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
@@ -46,7 +50,8 @@ module SolidMixtureMod
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), allocatable, dimension(:,:,:)   :: kappa
         real(rkind), allocatable, dimension(:,:,:,:) :: norm
-
+	real(rkind), allocatable, dimension(:,:,:)   :: phi
+        real(rkind), allocatable, dimension(:,:,:)   :: fmask
     contains
 
         procedure :: init
@@ -104,7 +109,8 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,derD02,derStagg,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,use_surfaceTension,surfaceTension_coeff,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
+    subroutine init(this,decomp,der,derD02,derStagg,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,use_surfaceTension,use_gradphi, use_gradVF, surfaceTension_coeff, use_FV,surface_mask, strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
+
         class(solid_mixture)      ,      intent(inout) :: this
         type(decomp_info), target,       intent(in)    :: decomp
         type(filters),     target,       intent(in)    :: fil, gfil
@@ -116,7 +122,7 @@ contains
         logical,                         intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
         logical,                         intent(in)    :: SOSmodel
         logical,                         intent(in)    :: use_gTg,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
-        logical,                         intent(in)    :: use_surfaceTension
+        logical,                         intent(in)    :: use_surfaceTension, use_gradphi, use_gradVF, use_FV, surface_mask
         real(rkind),                     intent(in)    :: surfaceTension_coeff
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
@@ -157,7 +163,11 @@ contains
         this%cnsrv_gp = cnsrv_gp
         this%cnsrv_pe = cnsrv_pe
 
-        this%use_surfaceTension   = use_surfaceTension  
+	this%surface_mask 	  = surface_mask
+	this%use_FV 		  = use_FV
+        this%use_surfaceTension   = use_surfaceTension
+	this%use_gradphi 	  = use_gradphi
+	this%use_gradVF 	  = use_gradVF  
         this%surfaceTension_coeff = surfaceTension_coeff
 
         this%x_bc = x_bc
@@ -243,6 +253,14 @@ contains
         if(allocated(this%kappa)) deallocate(this%kappa)
         allocate(this%kappa(this%nxp, this%nyp, this%nzp))
 
+	if(allocated(this%phi)) deallocate(this%phi)
+        allocate(this%phi(this%nxp, this%nyp, this%nzp))
+
+	 if(allocated(this%fmask)) deallocate(this%fmask)
+        allocate(this%fmask(this%nxp, this%nyp, this%nzp))
+
+
+
 
     end subroutine
     !end function
@@ -266,6 +284,8 @@ contains
         if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
         if(allocated(this%norm)) deallocate(this%norm)
         if(allocated(this%kappa)) deallocate(this%kappa)
+	if(allocated(this%phi)) deallocate(this%phi)
+	if(allocated(this%fmask)) deallocate(this%fmask)
 
         ! Deallocate array of solids (Destructor of solid should take care of everything else)
         if (allocated(this%material)) deallocate(this%material)
@@ -1239,7 +1259,7 @@ stop
            endif
 
            !calculate surface normal
-           if(.NOT.this%intSharp_d02) then !low order FD
+           if (.NOT.this%intSharp_d02) then !low order FD
               !magnitude of surface vector
               GVFmag = sqrt( gradVFdiff(:,:,:,1)**two + gradVFdiff(:,:,:,2)**two + gradVFdiff(:,:,:,3)**two )
 
@@ -1303,7 +1323,9 @@ stop
                  call interpolateFV(this,gradVF(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
                  call interpolateFV(this,gradVF(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc) 
                  call interpolateFV(this,gradVF(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc) 
-              else
+              print *, "intsharpD02"
+
+	      else
                  !used in high order version
                  !TODO: make sure these BCS for gradVF are correct
                  call interpolateFV(this,gradVFdiff(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
@@ -1316,7 +1338,7 @@ stop
               antiDiffFVint(:,:,:,2,i) = -this%intSharp_gam * (VFint(:,:,:,2)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,2))*NMint(:,:,:,2,2)
               antiDiffFVint(:,:,:,3,i) = -this%intSharp_gam * (VFint(:,:,:,3)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,3))*NMint(:,:,:,3,3)
 
-              if(.NOT.this%intSharp_msk) then
+              if (.NOT.this%intSharp_msk) then
                  ! ! Do not do this for FV
                  ! !Mask blending function matches FD but now on faces
                  ! antiDiffFVint(:,:,:,:,i) = antiDiffFVint(:,:,:,:,i) * tanh( ( ((VFint-this%intSharp_cut)*(one-VFint-this%intSharp_cut)) / (this%intSharp_cut/this%intSharp_tnh**two) )**two )
@@ -1359,7 +1381,7 @@ stop
               endwhere
 
 
-              if(.NOT.this%intSharp_msk) then
+              if (.NOT.this%intSharp_msk) then
                  !FV diffusion terms
                  ! if(this%intSharp_d02) then !use low order FV terms
                  call gradientFV(this,this%material(i)%VF,gradVF_FV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -2198,12 +2220,14 @@ stop
         real(rkind),                                        intent(in) :: dx,dy,dz
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
         logical,                                            intent(in) :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: GVFmag
-	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF
-
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: GVFmag, GPHImag
+	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi
+	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint
+	integer :: iflag = one
+	real(rkind) :: r = 1D0, nmask = 40
 	!TODO: add additional arrays to be used locally in calculation of surface tension force
 
-        if(this%ns.ne.2) then
+        if (this%ns.ne.2) then
             call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
         endif
 
@@ -2213,33 +2237,118 @@ stop
 
         !TODO: Compute curvature (use gradient and divergence operators)
         !for example, to take the gradient of the volume fraction of species # 1
-        call gradient(this%decomp,this%der,this%material(2)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+        
+	if (this%use_gradVF) then
+
+		call gradient(this%decomp,this%der,this%material(2)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
 	
-	 !calculate surface normal
+		 !calculate surface normal
            
+        	      !magnitude of surface vector
+              		GVFmag = sqrt( gradVF(:,:,:,1)**two + gradVF(:,:,:,2)**two + gradVF(:,:,:,3)**two )
+
+            	        !surface normal
+              		where (GVFmag < eps)
+                 	   	this%norm(:,:,:,1) = zero
+                 		this%norm(:,:,:,2) = zero
+                 		this%norm(:,:,:,3) = zero
+              		elsewhere
+                 		this%norm(:,:,:,1) = gradVF(:,:,:,1) / GVFmag
+                 		this%norm(:,:,:,2) = gradVF(:,:,:,2) / GVFmag
+                 		this%norm(:,:,:,3) = gradVF(:,:,:,3) / GVFmag
+              		endwhere
+	
+		if (this%use_FV) then
+
+	     		 call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
+		         call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
+              		 call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
+	
+			 call divergenceFV(this,NMint, this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+	
+		else
+
+		!kappa, divergence of surface normal	
+        	!TODO: double check BCs for div(norm)... do they follow symmetry, or are they opposite?
+		call divergence(this%decomp,this%der,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)	
+		!call filter3D(this%decomp, this%fil, this%kappa, iflag, x_bc, y_bc, z_bc)
+		endif
+	endif
+
+	if (this%use_gradphi) then
+
+		call gradient(this%decomp,this%der,this%material(2)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+		print *, "used gradVF"
+
+	        this%phi = (this%material(2)%VF**r)/(this%material(2)%VF**r + (1-this%material(2)%VF)**r)
+
+	        print *, "calculated phi"
+
+        	call gradient(this%decomp,this%der,this%phi,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3)) !high order derivative
+
+	       print *, "grad phi"
+
+         	!calculate surface normal
+
               !magnitude of surface vector
-              GVFmag = sqrt( gradVF(:,:,:,1)**two + gradVF(:,:,:,2)**two + gradVF(:,:,:,3)**two )
+              GPHImag = sqrt( gradphi(:,:,:,1)**two + gradphi(:,:,:,2)**two + gradphi(:,:,:,3)**two )
+
+	      print *, "GPHImag"
 
               !surface normal
-              where (GVFmag < eps)
+              where (GPHImag < eps)
                  this%norm(:,:,:,1) = zero
                  this%norm(:,:,:,2) = zero
                  this%norm(:,:,:,3) = zero
               elsewhere
-                 this%norm(:,:,:,1) = gradVF(:,:,:,1) / GVFmag
-                 this%norm(:,:,:,2) = gradVF(:,:,:,2) / GVFmag
-                 this%norm(:,:,:,3) = gradVF(:,:,:,3) / GVFmag
+                 this%norm(:,:,:,1) = gradphi(:,:,:,1) / GPHImag
+                 this%norm(:,:,:,2) = gradphi(:,:,:,2) / GPHImag
+                 this%norm(:,:,:,3) = gradphi(:,:,:,3) / GPHImag
               endwhere
-	
-	!kappa, divergence of surface normal	
-        !TODO: double check BCs for div(norm)... do they follow symmetry, or are they opposite?
-	 call divergence(this%decomp,this%der,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)	
+
+		print *, "calculate phinorm"
+
+                if (this%use_FV) then
+
+                         call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-x_bc, y_bc, z_bc)
+                         call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, x_bc,-y_bc, z_bc)
+                         call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, x_bc, y_bc,-z_bc)
+
+                         call divergenceFV(this,NMint, this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+                else
+
+                !kappa, divergence of surface normal
+                !TODO: double check BCs for div(norm)... do they follow symmetry, or are they opposite?
+                call divergence(this%decomp,this%der,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
+                !call filter3D(this%decomp, this%fil, this%kappa, iflag, x_bc, y_bc, z_bc)
+		print *, "took divergence"
+
+                endif
+
 		
+	endif
+
+	if (this%surface_mask) then
+	
+	this%fmask = 1 - (1 - 4*this%material(2)%VF*(1-this%material(2)%VF))**nmask 
+	
+	!TODO: Compute surface tension force and store in this%surfaceTension_f
+        this%surfaceTension_f(:,:,:,1) = -this%fmask*this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,1)
+        this%surfaceTension_f(:,:,:,2) = -this%fmask*this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,2)
+        this%surfaceTension_f(:,:,:,3) = -this%fmask*this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,3)
+	print *, "used mask"
+
+
+	else
+
         !TODO: Compute surface tension force and store in this%surfaceTension_f
 	this%surfaceTension_f(:,:,:,1) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,1)
 	this%surfaceTension_f(:,:,:,2) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,2)
         this%surfaceTension_f(:,:,:,3) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,3)
- 
+ 	print *, "computed Surface Tension"
+
+	endif
 
         !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
 	this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
@@ -2393,7 +2502,7 @@ stop
           call this%material(imat)%filter(iflag,x_bc,y_bc,z_bc)
         end do
 
-        if(this%ns.eq.2) then
+       if(this%ns.eq.2) then
            this%material(2)%VF = one - this%material(1)%VF
         elseif(this%ns.gt.2) then
            print*,"fix needed?, SolidMixtureEOS VF filter"

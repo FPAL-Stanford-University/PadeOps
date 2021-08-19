@@ -42,6 +42,10 @@ nu = 0.02D0               ! Kinematic viscosity
 
 &SINPUT
 use_surfaceTension = .TRUE.
+surface_mask      = .FALSE.
+use_FV            = .TRUE.
+use_gradVF        = .FALSE.
+use_gradphi 	  = .TRUE.
 intSharp          = .FALSE.   ! Include interface sharpening terms
 intSharp_spf      = .FALSE.   ! Use Shukla-Pantano-Freund method - not in divergence form
 intSharp_cpg      = .FALSE.         ! Include coupling with kinematic eqn
