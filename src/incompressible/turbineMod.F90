@@ -14,6 +14,7 @@ module turbineMod
     use mpi 
     use reductions, only: p_maxval, p_sum
     use timer, only: tic, toc
+    use basic_io, only: read_2d_ascii
 
     implicit none
 
@@ -45,10 +46,12 @@ module turbineMod
  
         real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
         complex(rkind), dimension(:,:,:), pointer :: fChat, fEhat, zbuffC, zbuffE
-        real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1, meanWs, meanPbaseline, stdP
+        real(rkind), dimension(:), allocatable :: gamma, theta, meanP, gamma_nm1, meanWs
+        real(rkind), dimension(:), allocatable :: meanPbaseline, stdP
         real(rkind), dimension(:), allocatable :: power_minus_n, ws_minus_n, pb_minus_n, hubDirection
-        integer :: n_moving_average, timeStep, updateCounter 
-        real(rkind), dimension(:,:), allocatable :: powerUpdate
+        integer :: n_moving_average, timeStep, updateCounter, Tf 
+        real(rkind), dimension(:,:), allocatable :: powerUpdate, dirUpdate, wsUpdate, alpha_sim_mat
+        real(rkind), dimension(:), allocatable :: t_sim, alpha_sim, alpha_m_mat, dirstd_mat
         logical :: fixedYaw = .false., considerAdvection = .true., lookup = .false.
         integer :: dynamicStart = 1, hubIndex, dirType, advectionTime
         real(rkind) :: umAngle, vmAngle, windAngle, windAngle_old
@@ -66,6 +69,11 @@ module turbineMod
         real(rkind), dimension(:,:,:,:), pointer :: rbuffyC_ref_sim, rbuffzC_ref_sim
         type(decomp_info), pointer :: gpC_ref_sim
         logical :: ref_domain_link = .false.
+
+        ! Lookup table stuff
+        real(rkind), dimension(:,:), allocatable :: data2read, yaw_LUT
+        real(rkind), dimension(:), allocatable :: alpha_LUT, diffv, yaw_setpoints
+
     contains
 
         procedure :: init
@@ -199,6 +207,7 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
     this%powerDumpDir = powerDumpDir
     this%useDynamicYaw = useDynamicYaw
     this%yawUpdateInterval = yawUpdateInterval
+    this%Tf = this%yawUpdateInterval
     this%hubIndex = 1
 
     ! Initialize the yaw and tilf
@@ -242,6 +251,13 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              allocate(this%meanWs(this%nTurbines))
              allocate(this%hubDirection(this%nTurbines))
              allocate(this%powerUpdate(this%yawUpdateInterval, this%nTurbines))
+             allocate(this%wsUpdate(this%yawUpdateInterval, this%nTurbines))
+             allocate(this%dirUpdate(this%yawUpdateInterval, this%nTurbines))
+             allocate(this%t_sim(99999)) ! need a large column vector
+             allocate(this%alpha_sim(99999)) ! need a large column vector
+             allocate(this%alpha_sim_mat(99999,this%nTurbines)) ! need a large column vector
+             allocate(this%alpha_m_mat(this%nTurbines))
+             allocate(this%dirstd_mat(this%nTurbines))
              this%powerDumpDir = powerDumpDir
              this%timeStep = 1
              this%step = 0
@@ -251,8 +267,18 @@ subroutine init(this, inputFile, gpC, gpE, spectC, spectE, cbuffyC, cbuffYE, cbu
              this%meanPbaseline = 0.d0
              this%meanWs = 0.d0
              this%powerUpdate = 0.d0
+             this%wsUpdate = 0.d0
+             this%dirUpdate = 0.d0
              this%hubDirection = 0.d0
              this%firstStep = .TRUE.
+             ! Lookup table stuff
+             ! Size of the lookup table is num_wind_directions by num_turbines
+             ! Be sure to remember the reference turbine convention
+             allocate(this%data2read(17, this%nTurbines))
+             allocate(this%yaw_LUT(17, this%nTurbines-1))
+             allocate(this%alpha_LUT(17))
+             allocate(this%diffv(17))
+             allocate(this%yaw_setpoints(this%nTurbines-1))
          end if
          do i = 1, this%nTurbines
              call this%turbArrayADM_Tyaw(i)%init(turbInfoDir, i, mesh(:,:,:,1), mesh(:,:,:,2), mesh(:,:,:,3))
@@ -489,10 +515,14 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
     real(rkind),    dimension(:),                                                        intent(out)   :: inst_horz_avg
     complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout), optional :: uturb, vturb
     complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout), optional :: wturb
-    integer :: i
-    character(len=clen) :: tempname
-    real(rkind) :: tmp
+    integer :: i, tavg, temp
+    character(len=clen) :: tempname, tempname2, fname
+    real(rkind) :: alpha_m, tmp, dirStd = 0.d0
     real(rkind), dimension(this%nTurbines) :: angleIn
+    logical :: file_exists
+    ! Lookup table stuff
+    real(rkind) :: alpha_input
+    integer :: alpha_index
 
     if (newTimeStep) then
          this%fx = zero; this%fy = zero; this%fz = zero
@@ -518,51 +548,129 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                       this%gamma = this%windAngle*pi/180.d0
                    end if
                    ! Get RHS
-                   call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType)
+                   if (this%useDynamicYaw) then
+                       call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType, this%dyaw%ref_turbine)
+                   else
+                       call this%turbArrayADM_Tyaw(i)%get_RHS_withPower(u,v,wC,this%fx,this%fy,this%fz, this%gamma(i), this%theta(i), this%windAngle, this%dirType, .true.)
+                   end if
                    ! Proceed with dynamic yaw operations
                    if (this%useDynamicYaw) then
                        if (this%step==1) then
                            if (this%considerAdvection) then
-                               this%advectionTime = nint(2*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(1)%xLoc) / dt)
+                               if (.not. this%dyaw%ref_turbine) then
+                                   this%advectionTime = nint(1*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(1)%xLoc) / dt)
+                               else
+                                   this%advectionTime = nint(1*(this%turbArrayADM_Tyaw(this%nTurbines)%xLoc - this%turbArrayADM_Tyaw(2)%xLoc) / dt)
+                               end if
                            else
                                this%advectionTime = 1
                            end if
                        end if
-                       this%powerUpdate(this%timeStep, i) = & 
-                                         this%turbArrayADM_Tyaw(i)%get_power()
-                       if (this%timeStep >= this%advectionTime) then
+                       ! Store variables as a function of time
+                       this%powerUpdate(this%timeStep, i) = this%turbArrayADM_Tyaw(i)%get_power()
+                       this%dirUpdate(this%timeStep, i) = this%turbArrayADM_Tyaw(i)%hubDirection
+                       this%wsUpdate(this%timeStep, i) = this%meanWs(i)
+                       ! Update moving average 
+                       if (this%timeStep > this%advectionTime) then
                            call this%dyaw%simpleMovingAverage(this%meanP(i), &
                                 this%turbArrayADM_Tyaw(i)%get_power(), this%meanWs(i), & 
                                 this%turbArrayADM_Tyaw(i)%ut, &
                                 this%meanPbaseline(i), this%turbArrayADM_Tyaw(i)%powerBaseline, &
-                                this%hubDirection(i), this%turbArrayADM_Tyaw(i)%hubDirection, this%stdP(i), & 
+                                this%hubDirection(i), this%turbArrayADM_Tyaw(i)%hubDirection, & 
+                                this%stdP(i), & 
                                 this%timeStep - this%advectionTime, i)
                        end if
                    end if
-               end do    
+               end do
+               ! Simulation time and wind direction for leading turbine (by
+               ! default turbine 1 
+               if (this%step>1) then
+                    this%t_sim(this%step) = this%t_sim(this%step-1)+dt
+                    this%alpha_sim(this%step) = this%turbArrayADM_Tyaw(1)%hubDirection
+                   if (this%dirType==3) then
+                       do i = 1, this%nTurbines
+                           this%alpha_sim_mat(this%step,i) = this%turbArrayADM_Tyaw(i)%hubDirection
+                       end do 
+                   end if
+               end if
+               ! Go into the dynamic yaw code
                if (this%useDynamicYaw) then
                    ! Update the yaw misalignment for each turbine
-                   if (mod(this%timeStep, this%yawUpdateInterval) == 0 .and. this%timeStep /= 1) then
+                   if (mod(this%timeStep, this%Tf) == 0 .and. this%timeStep /= 1) then
                        ! Update the wind angle measurement
                        this%windAngle_old = this%windAngle
                        call this%update_wind_angle()
                        if (this%dirType==1 .or. this%updateCounter==1) then
                            angleIn = this%gamma - this%windAngle*pi/180.d0
-                           call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
-                                                     this%windAngle, this%meanP, this%step, this%meanPbaseline)
-                           this%gamma = angleIn
+                           call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), this%windAngle, & 
+                                                     this%windAngle, this%meanP, this%step, & 
+                                                     this%meanPbaseline, this%stdP, dirStd)
+                           ! Force to zero yaw misalignment setpoint at first
+                           ! update
+                           if (this%updateCounter==1) then
+                               this%gamma = angleIn*0.d0
+                           end if
                        else
-                           angleIn = this%gamma - this%hubDirection*pi/180.d0
-                           call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), & 
-                                                     this%hubDirection(1), this%meanP, this%step, this%meanPbaseline)
-                           if ((.not. this%lookup)) then
+                           ! Wind direction standard deviations
+                           if (this%dyaw%use_alpha_check) then
+                               call this%dyaw%alpha_check( &
+                                                      this%alpha_sim(this%step-this%dyaw%Tf_init*2+1 : this%step), & 
+                                                      this%t_sim(this%step-this%dyaw%Tf_init*2+1 : this%step), &
+                                                      alpha_m, dirStd, this%Tf)
+                               if (this%dirType==3) then
+                                   do i = 1, this%nTurbines
+                                       call this%dyaw%alpha_check( &
+                                                      this%alpha_sim_mat(this%step-this%dyaw%Tf_init*2+1 : this%step,i), & 
+                                                      this%t_sim(this%step-this%dyaw%Tf_init*2+1 : this%step), &
+                                                      this%alpha_m_mat(i), this%dirStd_mat(i), temp)
+                                   end do
+                               end if
+                           else
+                               alpha_m = mean(this%alpha_sim(this%step-this%dyaw%Tf_init+1 : this%step))
+                               dirStd = std(this%alpha_sim(this%step-this%dyaw%Tf_init+1 : this%step))
+                           end if
+                           ! Yaw misalignments
+                           if (this%dirType==2) then
+                               angleIn = this%gamma - this%hubDirection*pi/180.d0
+                           elseif (this%dirType==3) then
+                               angleIn = this%gamma - this%alpha_m_mat*pi/180.d0
+                           end if
+                           ! Run closed-loop control update step 
+                           call this%dyaw%update_and_yaw(angleIn, this%meanWs(1), &
+                                                     this%hubDirection(1), & 
+                                                     alpha_m, this%meanP, this%step, & 
+                                                     this%meanPbaseline, this%stdP, dirStd)
+                           ! Account for lookup control case (essentially void
+                           ! the prescription of yaw from the calculation above
+                           if (.not.(this%lookup)) then
                                this%gamma = angleIn
                            else
                                ! These angles were taken after one step of
                                ! online yaw, this is meant to simulate the
-                               ! lookup table approach
-                               this%gamma(1) = 0.2935d0; this%gamma(2) = 0.2973d0; this%gamma(3) = 0.2949d0;
-                               this%gamma(4) = 0.2576d0; this%gamma(5) = 0.0490d0; this%gamma(6) = 0.0000d0;
+                               ! lookup table approach (Howland et al. WES 2020)
+                               !this%gamma(1) = 0.2935d0; this%gamma(2) = 0.2973d0; this%gamma(3) = 0.2949d0;
+                               !this%gamma(4) = 0.2576d0; this%gamma(5) = 0.0490d0; this%gamma(6) = 0.0000d0;
+                               
+                               ! Load lookup table, diurnal cycle
+                               call read_2d_ascii(this%data2read, this%dyaw%input_LUT)
+                               this%alpha_LUT = this%data2read(:,1)
+                               this%yaw_LUT = this%data2read(:,2:this%nTurbines)
+                               ! Apply lookup table
+                               alpha_input = alpha_m
+                               this%diffv = abs(alpha_input - this%alpha_LUT) 
+                               alpha_index = minloc(this%diffv, 1)
+                               this%yaw_setpoints = this%yaw_LUT(alpha_index,:)
+                               ! Create yaw setpoints with reference
+                               if (this%dyaw%ref_turbine) then
+                                   this%gamma(1) = 0.d0
+                                   this%gamma(2:this%nTurbines) = this%yaw_setpoints*pi/180.d0
+                               else
+                                   this%gamma = this%yaw_setpoints*pi/180.d0
+                               endif
+                               write(*,*) "Lookup table information"
+                               write(*,*) alpha_m
+                               write(*,*) alpha_index
+                               write(*,*) this%gamma
                            end if
                        endif
                        ! Add the hub height wind direction to the yaw
@@ -571,36 +679,54 @@ subroutine getForceRHS(this, dt, u, v, wC, urhs, vrhs, wrhs, newTimeStep, inst_h
                            this%gamma = this%gamma + this%windAngle * pi / 180.d0
                        elseif (this%dirType==2) then
                            this%gamma = this%gamma + this%hubDirection * pi / 180.d0
+                       elseif (this%dirType==3) then
+                           this%gamma = this%gamma + this%alpha_m_mat * pi / 180.d0
                        endif
                        if ((this%fixedYaw) .or. (this%dynamicStart>this%step)) then
                            if (this%dirType==1) then
                                this%gamma = this%windAngle * pi / 180.d0
                            elseif (this%dirType==2) then
                                this%gamma = this%hubDirection * pi / 180.d0
+                           elseif (this%dirType==3) then
+                               this%gamma = this%alpha_m_mat * pi / 180.d0
                            endif
                        end if
+                       ! Write closed-loop control data
                        do i=1,this%nTurbines
                            write(tempname,"(A12,I3.3,A8,I3.3,A4)") "powerUpdate_",i,"_update_",this%updateCounter,".txt"
-                           call this%turbArrayADM_Tyaw(i)%dumpPowerUpdate(this%powerDumpDir,& 
-                                tempname, this%powerUpdate(:,i), this%dyaw%Phat, & 
-                                this%gamma, this%gamma_nm1, this%meanP, &
-                                this%dyaw%kw, this%dyaw%sigma_0, &
-                                this%dyaw%Phat_yaw, this%updateCounter, this%meanPbaseline, this%hubDirection, this%dyaw%Popti, this%stdP)
+                           ! check if file exists before writing
+                           write(tempname2,"(A5,I3.3,A6,I3.3,A4)")"Pvec_",this%updateCounter,"_turb_",i,".txt"
+                           fname = this%powerDumpDir(:len_trim(this%powerDumpDir))//"/tdata/"//trim(tempname2)
+                           inquire(FILE=fname, EXIST=file_exists)
+                           ! Write turbine data
+                           if (.not.(file_exists)) then
+                               call this%turbArrayADM_Tyaw(i)%dumpPowerUpdate(this%powerDumpDir, & 
+                                    tempname, this%powerUpdate(:,i), this%dirUpdate(:,i), & 
+                                    this%dyaw%Phat, this%dyaw%Phat_fit, & 
+                                    this%gamma, this%gamma_nm1, this%meanP, &
+                                    this%dyaw%kw, this%dyaw%sigma_0, &
+                                    this%dyaw%Phat_yaw, this%updateCounter, &
+                                    this%meanPbaseline, this%hubDirection, & 
+                                    this%dyaw%Popti, this%stdP, alpha_m, dirStd, i)
+                           end if
                        end do
+                       ! Clean up step
                        this%timeStep = 0
                        this%updateCounter=this%updateCounter+1
                        this%powerUpdate = 0.d0
+                       this%dirUpdate = 0.d0
+                       this%wsUpdate = 0.d0
                    end if
                    ! Update time step
-                   if ((.not. this%firstStep)) then
+                   if (.not.(this%firstStep)) then
                        this%timeStep = this%timeStep+1 
                    else
                        ! Don't count the initialization step
                        this%firstStep = .FALSE.
                    end if
                    this%gamma_nm1 = this%gamma
-                   this%step=this%step+1
                end if
+               this%step=this%step+1
            end select 
     end if 
 
@@ -642,5 +768,20 @@ subroutine write_turbine_power(this, TID, outputdir, runID)
     end do
     
 end subroutine
+
+! Utilities
+
+function mean(x) result(xm)
+    real(rkind), dimension(:), intent(in) :: x
+    real(rkind) :: xm
+    xm = sum(x) / real(size(x),rkind)
+end function mean
+
+function std(x) result(xstd)
+    real(rkind), dimension(:), intent(in) :: x
+    real(rkind) :: xm, xstd
+    xm = sum(x) / real(size(x),rkind)
+    xstd = sqrt( (1.d0/real(size(x),rkind)) * sum((x-xm)**2.d0) )
+end function std
 
 end module

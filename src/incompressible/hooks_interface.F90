@@ -94,7 +94,7 @@ module igrid_hooks
         subroutine setInhomogeneousNeumannBC_Temp(inpDirectory, wTh_surf)
             import :: rkind
             character(len=*), intent(in) :: inpDirectory
-            real(rkind), intent(out) :: wTh_surf
+            real(rkind), intent(inout) :: wTh_surf
 
         end subroutine 
     end interface

@@ -12,6 +12,59 @@ module AD_Coriolis_parameters
     
     real(rkind), parameter :: xdim = 1000._rkind, udim = 0.45_rkind
     real(rkind), parameter :: timeDim = xdim/udim
+    real(rkind), dimension(:,:,:), allocatable :: utarget, vtarget, wtarget
+
+    contains
+subroutine init_fringe_targets(inputfile, mesh)
+    use kind_parameters,    only: rkind
+    use constants,          only: zero, one, two, pi, half
+    use gridtools,          only: alloc_buffs
+    use random,             only: gaussian_random
+    use decomp_2d          
+    use reductions,         only: p_maxval, p_minval
+    use exits,              only: message_min_max
+    implicit none
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
+    real(rkind), dimension(:,:,:), pointer :: z
+    real(rkind) :: Lx, Ly, Lz, uInflow, vInflow  
+    real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
+    integer :: i,j,k, ioUnit
+    integer :: InflowProfileType
+
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=AD_CoriolisINPUT)
+    close(ioUnit)    
+
+    ! Initialize the velocity targets
+    ! Put the same velocity profile in init fields and target
+    ! Do something similar for v
+    ! Compute the targets
+    wtarget = zero 
+    zMid = Lz / two
+    z => mesh(:,:,:,3)
+    !call get_u(uInflow, vInflow, InflowProfileAmplit, InflowProfileThick, mesh(:,:,:,3), zMid, InflowProfileType, utarget, vtarget)    
+    select case(InflowProfileType)
+      case(0)
+          utarget = uInflow 
+          vtarget = zero
+      case(1)
+          utarget = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
+          vtarget = zero
+      case(2)
+          utarget = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
+          vtarget = vInflow * tanh((z-zMid)/InflowProfileThick);
+    end select
+
+
+    ! The velocity profile in z needs to go to slip wall at the top
+    ! Both u and v need slip conditions
+
+end subroutine
 
 end module     
 
@@ -29,7 +82,11 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one, G_alpha
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, G_alpha
+    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
+    integer :: InflowProfileType
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -90,7 +147,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
     real(rkind)  :: Lx = one, Ly = one, Lz = one, G_alpha
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, G_alpha
+    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
+    integer :: InflowProfileType
+    
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -106,15 +168,29 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
- 
+
    
-    u = one * cos(G_alpha * pi / 180.d0)!z*(2 - z) + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
+    !u = one * cos(G_alpha * pi / 180.d0)!z*(2 - z) + epsnd*(z/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
       !+ epsnd*((2-z)/Lz)*cos(periods*2*pi*x/Lx)*sin(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
     
-    v = one * sin(G_alpha * pi / 180.d0)!- epsnd*(z/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
+    !v = one * sin(G_alpha * pi / 180.d0)!- epsnd*(z/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*(z/zpeak/Lz)**2) &
         !- epsnd*((2-z)/Lz)*sin(periods*2*pi*x/Lx)*cos(periods*2*pi*y/Lx)*exp(-0.5*((2-z)/zpeak/Lz)**2)
     
-    wC= zero  
+    wC = zero
+    zMid = Lz / 2.d0
+    select case(InflowProfileType)
+      case(0)
+          u = uInflow 
+          v = zero
+      case(1)
+          u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
+          v = zero
+      case(2)
+          u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
+          v = vInflow * tanh((z-zMid)/InflowProfileThick);
+    end select
+
+    !call get_u(uInflow, vInflow, InflowProfileAmplit, InflowProfileThick, z, zMid, InflowProfileType, u, v)    
     
     !allocate(randArr(size(u,1),size(u,2),size(u,3)))
     !call gaussian_random(randArr,-one,one,seedu + 10*nrank)
@@ -196,7 +272,11 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     integer :: ioUnit 
     real(rkind) :: ThetaRef, Lx, Ly, Lz
     logical :: initPurturbations = .false. 
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz
+    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
+    integer :: InflowProfileType
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -215,7 +295,11 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     real(rkind) :: ThetaRef, Lx, Ly, Lz, G_alpha
     integer :: iounit
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, G_alpha
+    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
+    integer :: InflowProfileType
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -236,8 +320,12 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     real(rkind), intent(out) :: Tref
     real(rkind) :: Lx, Ly, Lz, G_alpha
     integer :: iounit
+    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
+    integer :: InflowProfileType
     
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, G_alpha
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -297,3 +385,28 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
 
     scalarSource = 0.d0
 end subroutine 
+
+subroutine get_u(uInflow, vInflow, InflowProfileAmplit, InflowProfileThick, z, zMid, InflowProfileType, u, v)
+    use kind_parameters, only: rkind
+    use constants,          only: zero, one, two, pi, half
+    implicit none
+    real(rkind), dimension(:,:,:), intent(inout) :: u, v
+    real(rkind), dimension(:,:,:), intent(in) :: z
+    real(rkind), intent(in) :: InflowProfileAmplit, InflowProfileThick, zMid, uInflow, vInflow
+    integer, intent(in) :: InflowProfileType
+
+    select case(InflowProfileType)
+      case(0)
+          u = uInflow 
+          v = zero
+      case(1)
+          u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
+          v = zero
+      case(2)
+          u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
+          v = vInflow * tanh((z-zMid)/InflowProfileThick);
+    end select
+
+end subroutine
+
+

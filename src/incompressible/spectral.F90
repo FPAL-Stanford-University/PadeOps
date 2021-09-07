@@ -102,6 +102,7 @@ module spectralMod
             procedure           :: bandpassFilter_and_PhaseShift
             procedure           :: GetModifiedWavenumber_xy_oop
             procedure           :: GetModifiedWavenumber_xy_ip 
+            procedure           :: ResetSurfaceFilter 
 
             procedure           :: InitTestFilter
             procedure           :: take_fft1d_z2z_ip
@@ -1146,6 +1147,34 @@ contains
 
       this%kabs_sq = this%k1*this%k1 + this%k2*this%k2
     end subroutine 
+    
+    subroutine ResetSurfaceFilter(this, surfaceFilterFact) 
+        class(spectral), intent(inout) :: this
+        real(rkind), intent(in) :: surfaceFilterfact 
+        real(rkind), dimension(:,:,:), allocatable :: tmp1, tmp2
+        real(rkind) :: kdealiasx, kdealiasy
+        integer :: i, j 
+
+        allocate(tmp1(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
+        allocate(tmp2(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
+        call transpose_y_to_z(this%k1,tmp1,this%spectdecomp)
+        call transpose_y_to_z(this%k2,tmp2,this%spectdecomp)
+        if (allocated(this%GsurfaceFilter)) deallocate(this%GsurfaceFilter)
+        allocate(this%Gsurfacefilter(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2)))
+        kdealiasx = (one/three)*pi/this%dx*surfaceFilterFact
+        kdealiasy = (one/three)*pi/this%dy*surfaceFilterFact
+        do j = 1,size(tmp1,2)
+            do i = 1,size(tmp1,1)
+                if ((abs(tmp1(i,j,1)) <= kdealiasx) .and. (abs(tmp2(i,j,1)) <= kdealiasy)) then
+                    this%GSurfaceFilter(i,j) = one
+                else
+                    this%GSurfaceFilter(i,j) = zero
+                end if
+            end do 
+        end do 
+        deallocate(tmp1,tmp2)
+
+    end subroutine 
 
     subroutine initializeEverything(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,filt,nonPeriodic)
         class(spectral),  intent(inout), target :: this
@@ -1512,7 +1541,8 @@ contains
                 end if
             end do 
         end do 
-     
+        deallocate(tmp1,tmp2)
+
         ! STEP 14: Prep filter for KS  
         allocate(this%GksPrep1(this%spectdecomp%ysz(1), this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)))
         kdealiasx = (4.d0/5.d0)*pi/dx

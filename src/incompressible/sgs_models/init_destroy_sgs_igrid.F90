@@ -67,9 +67,9 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind) :: z0t = 0.001d0
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
-  logical :: usePrSGS = .false. 
-  integer :: ierr, WM_matchingIndex = 1
-  real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 
+  logical :: usePrSGS = .false., useFullyLocalWM = .false.  
+  integer :: ierr, WM_matchingIndex = 1, WallFunctionType = 1 
+  real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 , SurfaceFilterFact = 1.d0 
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
@@ -77,8 +77,13 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  DomainAveraged_DynProc, SGSDynamicRestartFile, &
                  explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
-                 useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex 
+                 useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, & 
+                 WallFunctionType, useFullyLocalWM, SurfaceFilterFact  
 
+  open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+  read(unit=123, NML=SGS_MODEL)
+  close(123)
+  
   this%gpC => gpC
   this%gpE => gpE
   this%spectC => spectC
@@ -101,6 +106,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%usePrSGS = usePrSGS
   !if (present(botBC_Temp)) 
   this%botBC_Temp = botBC_Temp
+  this%useFullyLocalWM = useFullyLocalWM
+  this%WallFunctionType = WallFunctionType 
 
   this%dx = dx
   this%dy = dy
@@ -143,9 +150,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%rbuffyC => rbuffyC
   this%rbuffzC => rbuffzC
 
-  open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
-  read(unit=123, NML=SGS_MODEL)
-  close(123)
 
   this%useScalarBounding = useScalarBounding 
   this%Cy = Cy  
@@ -168,7 +172,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
       if (this%PadeDer%isPeriodic) then
          call GracefulExit("You cannot use a wall model if the problem is periodic in Z",12)
       else
-         call this%initWallModel()
+         call this%initWallModel(SurfaceFilterFact)
       end if 
   else
       this%useWallModel = .false. 

@@ -1,0 +1,23 @@
+&DYNAMIC_YAW
+var_p        =   9.0d-4
+var_sig        =   9.0d-4
+var_k        =   9.0d-4
+epochsYaw         =   5000
+stateEstimationEpochs         =   0
+Ne         =   100
+Ct         =   0.75d0
+eta         =   0.6d0
+beta1         =   0.9d0
+beta2         =   0.999d0
+conditionTurb = 1
+n_moving_average = 10000
+fixedYaw      = .false.
+dynamicStart = 10000
+dirType      = 2
+considerAdvection = .true.
+lookup = .false.
+useInitialParams = .false.
+powerExp = 2.0d0
+superposition = 2
+secondary = .true.
+/

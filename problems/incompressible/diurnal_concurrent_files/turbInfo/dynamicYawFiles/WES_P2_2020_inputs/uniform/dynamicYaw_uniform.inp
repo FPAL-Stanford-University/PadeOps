@@ -1,0 +1,32 @@
+&DYNAMIC_YAW
+var_p        =   9.0d-4               ! EnKF power variance
+var_sig        =   9.0d-4             ! EnKF sigma_0 variance
+var_k        =   9.0d-4               ! EnKF kw variance
+epochsYaw         =   1000            ! Epochs for yaw misalignment optimization
+stateEstimationEpochs  =   10          ! Number of EnKF state estimation epochs
+Ne         =   100                    ! Number of ensemble members
+Ct         =   0.75d0                 ! Wake model thrust coefficient
+eta         =   0.6d0                 ! Eta for Cp in yaw
+beta1         =   0.9d0               ! Adam beta1
+beta2         =   0.999d0             ! Adam beta2
+conditionTurb = 1                     ! Wind condition turbine (should be 1)
+n_moving_average = 1000                ! Number of LES steps to average over (T)
+fixedYaw      = .false.               ! Yaw aligned operation: .true.
+dynamicStart = 1000                    ! Time index to start dynamic yaw
+dirType      = 2                      ! Wind direction type: 1) planar average 2) turbine specific dir
+considerAdvection = .true.            ! Wait to average for advection time scale?
+lookup = .false.                      ! Lookup table preset yaw
+useInitialParams = .false.            ! Use initial parameters to initialize EnKF
+powerExp = 2.0d0                       ! Pp power-yaw exponent
+superposition = 3                     ! Wake model superposition: 1) linear 2) mom conserving 3) mod linear
+secondary = .true.                    ! Include secondary steering model?
+uncertain = .true.                    ! Wake model optimization under uncertainty?
+p_bins = 1                            ! Number of power production bins to consider
+dir_bins = 1                          ! Number of wind direction bins to consider
+gamma_bins = 1                        ! Number of yaw misalignment bins to consider
+ws_bins = 1                           ! Number of wind speed bins to consider
+ref_turbine = .true.                  ! Use an adjacent reference turbine for power normalization: .true.
+gamma_std = 0.d0                      ! STD for yaw misalignment uncertainty
+dir_std = 0.d0                        ! STD for wind direction uncertainty
+ws_std = 0.d0                         ! STD for wind speed uncertainty
+/
