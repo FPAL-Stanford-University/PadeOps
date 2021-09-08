@@ -77,7 +77,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
     use decomp_2d          
-    use reductions,         only: p_maxval
+    use reductions,         only: p_maxval, p_minval
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -110,14 +110,15 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    epsnd = 5.0d0
+    epsnd = 1.0d-5
 
-    u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    !u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    u = 18.0d0*(one-(z-one)*(z-one)) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
    
     !Add random numbers
-    randomScaleFact = 0.1d0
+    randomScaleFact = 0.00d0
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     do k = 1,size(u,3)
@@ -133,6 +134,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
         v(:,:,k) = v(:,:,k) + sig*randArr(:,:,k)
     end do  
     deallocate(randArr)
+
+    write(*,*) 'umax, umin: ', p_maxval(maxval(u)), p_minval(minval(u))
+    write(*,*) 'vmax, vmin: ', p_maxval(maxval(v)), p_minval(minval(v))
 
 
     ! Interpolate wC to w

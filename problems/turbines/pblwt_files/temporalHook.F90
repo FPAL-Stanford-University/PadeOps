@@ -40,6 +40,7 @@ contains
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
+            call message(1,gp%dtlimit)
             call toc()
             call tic()
         end if 
