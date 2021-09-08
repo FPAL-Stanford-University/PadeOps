@@ -41,7 +41,7 @@ module ibmgpmod
         real(rkind), allocatable, dimension(:)     ::  imptsC_u, imptsC_v, imptsC_w, imptsE_u, imptsE_v, imptsE_w
         real(rkind), allocatable, dimension(:)     ::  imptsC_u_tmp, imptsC_v_tmp, imptsC_w_tmp
         real(rkind), allocatable, dimension(:)     ::  imptsE_u_tmp, imptsE_v_tmp, imptsE_w_tmp
-        real(rkind), allocatable, dimension(:)     ::  gptsC_dst, gptsE_dst
+        real(rkind), allocatable, dimension(:)     ::  gptsC_dst, gptsE_dst, utauC_ib
 
         real(rkind), dimension(:,:,:), pointer     :: rbuffxC1, rbuffxC2, rbuffyC1, rbuffyC2, rbuffzC1, rbuffzC2 
         real(rkind), dimension(:,:,:), pointer     :: rbuffxE1, rbuffxE2, rbuffyE1, rbuffyE2, rbuffzE1, rbuffzE2 
@@ -57,6 +57,8 @@ module ibmgpmod
             procedure          :: init
             procedure          :: destroy
             procedure          :: update_ibmgp
+            procedure          :: get_utauC_ib
+            procedure          :: get_num_gptsC
             procedure, private :: compute_levelset
             procedure, private :: mark_ghost_points
             procedure, private :: save_ghost_points
@@ -395,6 +397,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   allocate(this%gptsC_img(this%num_gptsC,3), this%gptsE_img(this%num_gptsE,3))
   allocate(this%gptsC_bnp(this%num_gptsC,3), this%gptsE_bnp(this%num_gptsE,3))
   allocate(this%gptsC_dst(this%num_gptsC),   this%gptsE_dst(this%num_gptsE))
+  allocate(this%utauC_ib(this%num_gptsC))
 
   this%gptsC_xyz   = zero;      this%gptsE_xyz   = zero;
   this%gptsC_ind   = 0;         this%gptsE_ind   = 0;   
@@ -403,6 +406,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   this%gptsC_img   = zero;      this%gptsE_img   = zero;
   this%gptsC_bnp   = zero;      this%gptsE_bnp   = zero;
   this%gptsC_dst   = zero;      this%gptsE_dst   = zero;
+  this%utauC_ib    = zero;
 
   !allocate(this%imptsC_numonproc(this%num_gptsC), this%imptsE_numonproc(this%num_gptsE))
   !allocate(this%imptsC_indices(3,8,this%num_gptsC), this%imptsE_indices(3,8,this%num_gptsE))
@@ -757,6 +761,21 @@ subroutine update_ghostptsCE(this, u, v, w)
           i = this%gptsE_ind(ii,1);   j = this%gptsE_ind(ii,2);  k = this%gptsE_ind(ii,3)
           jj = this%imptsE_index_st(nrank+1) + ii - 1
           w(i,j,k) = -this%imptsE_w(jj)
+      enddo
+
+      ! calculate tau_IB
+      do ii = 1, this%num_gptsC
+          kk = this%imptsC_index_st(nrank+1) + ii - 1
+          vec1(1) = this%imptsC_u(kk);  vec1(2) = this%imptsC_v(kk);  vec1(3) = this%imptsC_w(kk)
+
+          jj = this%gptsC_bpind(ii)
+          vec2(:) = this%surfnormal(jj,:)
+          dotpr = sum(vec1*vec2)
+          unrm = vec2*dotpr
+          utan = vec1-unrm
+
+          dist = this%gptsC_dst(ii) ! distance from ghost pt to image point
+          this%utauC_ib(ii) = sqrt(sum(utan*utan))/(dist + 1.0d-18)
       enddo
   elseif(this%ibwm==2) then
       ! simple log-law immersed boundary
@@ -1430,47 +1449,47 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
   xmax_img = p_maxval(maxval(this%gptsC_img(:,1)));   xmin_img = p_minval(minval(this%gptsC_img(:,1)))
   ymax_img = p_maxval(maxval(this%gptsC_img(:,2)));   ymin_img = p_minval(minval(this%gptsC_img(:,2)))
   zmax_img = p_maxval(maxval(this%gptsC_img(:,3)));   zmin_img = p_minval(minval(this%gptsC_img(:,3)))
-  if((xmax_img > Lx) .or. (xmin_img < zero)) then
-      call message(1, "Cell image points x coordinates outside domain", 111)
-      xmax_loc = maxval(this%gptsC_img(:,1))
-      iimax = maxloc(this%gptsC_img(:,1))
-      if(abs(xmax_loc-xmax_img) < 1.0d-12) then
-         print *, '-----Global maximum of gptsC_img(:,1)-----'
-         print *, iimax, nrank
-         print *, xmax_loc
-         print *, xmax_img
-         print *, this%gptsC_img(iimax(1),1)
-      endif
-      xmin_loc = minval(this%gptsC_img(:,1))
-      iimin = minloc(this%gptsC_img(:,1))
-      if(abs(xmin_loc-xmin_img) < 1.0d-12) then
-         print *, '-----Global minimum of gptsC_img(:,1)-----'
-         print *, iimin, nrank
-         print *, xmin_loc
-         print *, xmin_img
-         print *, this%gptsC_img(iimin(1),1)
-      endif
-      call GracefulExit("Cell image points x coordinates outside domain", 111)
-  endif
-  if((ymax_img > Ly) .or. (ymin_img < zero)) then
-      call GracefulExit("Cell image points y coordinates outside domain", 111)
-  endif
-  if((zmax_img > zTop) .or. (zmin_img < zBot)) then
-      call GracefulExit("Cell image points z coordinates outside domain", 111)
-  endif
+  !if((xmax_img > Lx) .or. (xmin_img < zero)) then
+  !    call message(1, "Cell image points x coordinates outside domain", 111)
+  !    xmax_loc = maxval(this%gptsC_img(:,1))
+  !    iimax = maxloc(this%gptsC_img(:,1))
+  !    if(abs(xmax_loc-xmax_img) < 1.0d-12) then
+  !       print *, '-----Global maximum of gptsC_img(:,1)-----'
+  !       print *, nrank, iimax
+  !       print *, nrank, xmax_loc
+  !       print *, nrank, xmax_img
+  !       print *, nrank, this%gptsC_img(iimax(1),1)
+  !    endif
+  !    xmin_loc = minval(this%gptsC_img(:,1))
+  !    iimin = minloc(this%gptsC_img(:,1))
+  !    if(abs(xmin_loc-xmin_img) < 1.0d-12) then
+  !       print *, '-----Global minimum of gptsC_img(:,1)-----'
+  !       print *, nrank, iimin
+  !       print *, nrank, xmin_loc
+  !       print *, nrank, xmin_img
+  !       print *, nrank, this%gptsC_img(iimin(1),1)
+  !    endif
+  !    call GracefulExit("Cell image points x coordinates outside domain", 111)
+  !endif
+  !if((ymax_img > Ly) .or. (ymin_img < zero)) then
+  !    call GracefulExit("Cell image points y coordinates outside domain", 111)
+  !endif
+  !if((zmax_img > zTop) .or. (zmin_img < zBot)) then
+  !    call GracefulExit("Cell image points z coordinates outside domain", 111)
+  !endif
 
   xmax_img = p_maxval(maxval(this%gptsE_img(:,1)));   xmin_img = p_minval(minval(this%gptsE_img(:,1)))
   ymax_img = p_maxval(maxval(this%gptsE_img(:,2)));   ymin_img = p_minval(minval(this%gptsE_img(:,2)))
   zmax_img = p_maxval(maxval(this%gptsE_img(:,3)));   zmin_img = p_minval(minval(this%gptsE_img(:,3)))
-  if((xmax_img > Lx) .or. (xmin_img < zero)) then
-      call GracefulExit("Edge image points x coordinates outside domain", 111)
-  endif
-  if((ymax_img > Ly) .or. (ymin_img < zero)) then
-      call GracefulExit("Edge image points y coordinates outside domain", 111)
-  endif
-  if((zmax_img > zTop) .or. (zmin_img < zBot)) then
-      call GracefulExit("Edge image points z coordinates outside domain", 111)
-  endif
+  !if((xmax_img > Lx) .or. (xmin_img < zero)) then
+  !    call GracefulExit("Edge image points x coordinates outside domain", 111)
+  !endif
+  !if((ymax_img > Ly) .or. (ymin_img < zero)) then
+  !    call GracefulExit("Edge image points y coordinates outside domain", 111)
+  !endif
+  !if((zmax_img > zTop) .or. (zmin_img < zBot)) then
+  !    call GracefulExit("Edge image points z coordinates outside domain", 111)
+  !endif
 
 
 end subroutine
@@ -1800,6 +1819,24 @@ subroutine compute_levelset(this, xlinepart, ylinepart, zlinepart, zlinepartE, m
 
 end subroutine
 
+function get_num_gptsC(this)  result (val)
+    class(ibmgp), intent(in) :: this
+    integer :: val
+
+    val = this%num_gptsC
+
+end function
+
+subroutine get_utauC_ib(this, fout)
+    use mpi
+    use kind_parameters, only: mpirkind
+    class(ibmgp), intent(in) :: this
+    real(rkind), dimension(this%num_gptsC) :: fout
+
+    fout(:) = this%utauC_ib
+
+end subroutine 
+
 
 subroutine destroy(this)
   class(ibmgp), intent(inout) :: this
@@ -1835,6 +1872,7 @@ subroutine destroy(this)
   deallocate(this%imptsC_indices, this%imptsE_indices)
   deallocate(this%imptsC_multfac, this%imptsE_multfac)
   deallocate(this%gptsC_dst, this%gptsE_dst)
+  deallocate(this%utauC_ib)
   deallocate(this%gptsC_bnp, this%gptsE_bnp)
   deallocate(this%gptsC_img, this%gptsE_img)
   deallocate(this%gptsC_xyz, this%gptsE_xyz)

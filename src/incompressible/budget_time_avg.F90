@@ -115,6 +115,9 @@ module budgets_time_avg_mod
         integer :: counter
         character(len=clen) :: budgets_dir
 
+        integer :: num_gptsC
+        real(rkind), dimension(:), allocatable :: utauC_ib
+
         logical :: useWindTurbines, isStratified, is_z0_varying
         real(rkind), allocatable, dimension(:) :: runningSum_sc, runningSum_sc_turb, runningSum_turb
         logical :: HaveScalars
@@ -233,6 +236,12 @@ contains
             !end if
             allocate(this%budget_3(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),08))
 
+            if(this%igrid_sim%useibm) then
+                this%num_gptsC = this%igrid_sim%ibm%get_num_gptsC()
+                allocate(this%utauC_ib(this%num_gptsC))
+                this%utauC_ib = zero
+            end if
+
             if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
                 this%budgets_dir = igrid_sim%outputDir
             end if 
@@ -266,7 +275,7 @@ contains
             
             call igrid_sim%spectC%alloc_r2c_out(this%uvisc)
             call igrid_sim%spectC%alloc_r2c_out(this%vvisc)
-            call igrid_sim%spectC%alloc_r2c_out(this%wvisc)
+            call igrid_sim%spectE%alloc_r2c_out(this%wvisc)
             
             call igrid_sim%spectC%alloc_r2c_out(this%ucor)
             call igrid_sim%spectC%alloc_r2c_out(this%vcor)
@@ -388,7 +397,8 @@ contains
     ! ---------------------- Budget 0 ------------------------
     subroutine DumpBudget0(this)
         class(budgets_time_avg), intent(inout) :: this
-        integer :: idx 
+        integer :: idx, ii 
+        character(len=clen) :: fname, tempname 
         
         ! Step 1: Get the average from sum
         this%budget_0 = this%budget_0/(real(this%counter,rkind) + 1.d-18)
@@ -497,11 +507,27 @@ contains
         ! Step 11: Go back to summing instead of averaging
         this%budget_0 = this%budget_0*(real(this%counter,rkind) + 1.d-18)
 
+        !STEP 12: IBM
+        if(this%igrid_sim%useibm) then
+            this%utauC_ib = this%utauC_ib/(real(this%counter,rkind) + 1.0d-18)
+            
+            write(tempname,"(A3,I2.2,A15,I4.4,A1,I6.6,A,I6.6,A4)") "Run",this%run_id,"_ibm_utauC_ib_",nrank,"_t",this%igrid_sim%step,"_n",this%counter,".dat"
+            fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
+            open(11,file=fname,status='unknown',action='write')
+            do ii = 1, this%num_gptsC
+                write(11, '(1(e19.12,1x))') this%utauC_ib(ii)
+            enddo
+            close(11)
+
+            this%utauC_ib = this%utauC_ib*(real(this%counter,rkind) + 1.0d-18)
+        endif
+
     end subroutine 
 
     subroutine AssembleBudget0(this)
         class(budgets_time_avg), intent(inout) :: this
         integer :: idx
+        real(rkind) :: tempbuf(this%num_gptsC)
 
         ! STEP 1: Compute mean U, V and W
         this%budget_0(:,:,:,1) = this%budget_0(:,:,:,1) + this%igrid_sim%u
@@ -574,7 +600,13 @@ contains
                     & this%budget_0(:,:,:,30+this%igrid_sim%n_scalars+idx) + & 
                     & this%igrid_sim%scalars(idx)%F*this%igrid_sim%scalars(idx)%F
             end do 
-        end if 
+        end if
+
+        !STEP 11: IBM
+        if(this%igrid_sim%useibm) then
+            call this%igrid_sim%ibm%get_utauC_ib(tempbuf)
+            this%utauC_ib = this%utauC_ib + tempbuf
+        endif
 
     end subroutine 
 
@@ -1245,6 +1277,9 @@ contains
         endif
         if(this%is_z0_varying) then
             deallocate(this%z0varstats)
+        endif
+        if(this%igrid_sim%useibm) then
+            deallocate(this%utauC_ib)
         endif
 
     end subroutine 
