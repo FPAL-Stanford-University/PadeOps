@@ -47,11 +47,11 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
    end if
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, xMesh, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, xMesh, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, useShiftedPeriodicBC, Lxeff, initSpinUp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
-  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re, Lx, Ly
+  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re, Lx, Ly, Lxeff
   real(rkind), intent(in), target :: Tsurf, wTh_surf
   character(len=*), intent(in) :: inputfile
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC, xMesh
@@ -60,7 +60,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE, rbuffyC, rbuffzC
   complex(rkind), dimension(:,:,:,:), intent(in), target :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
   type(Pade6stagg), target, intent(in) :: PadeDer
-  logical, intent(in) :: isInviscid, isStratified
+  logical, intent(in) :: isInviscid, isStratified, useShiftedPeriodicBC
   integer, intent(in) :: botBC_temp
   logical, intent(in), optional :: initSpinUp
 
@@ -109,11 +109,26 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   this%fxC => fBody_x
   this%fyC => fBody_y
   this%fzE => fBody_z
-  this%meanfact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
   this%isStratified = isStratified
   this%usePrSGS = usePrSGS
   !if (present(botBC_Temp)) 
   this%botBC_Temp = botBC_Temp
+
+  ! compute nxeff for horz averaging if useShiftedPeriodicBC is true
+  this%useShiftedPeriodicBC = useShiftedPeriodicBC
+  if(this%useShiftedPeriodicBC) then
+    this%nxeff = minloc(abs(xMesh-Lxeff*Lx), 1)
+    this%nxeff = this%nxeff-4   ! 4 is arbitrary here
+    print *, 'Lxeff = ', Lxeff*Lx
+    print *, 'nxeff = ', this%nxeff
+  endif
+
+  if(this%useShiftedPeriodicBC) then
+      this%meanFact = one/(real(this%nxeff,rkind) * real(gpC%ysz(2),rkind))
+  else 
+      this%meanFact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
+  endif
+  print *, "meanFact = ", this%meanFact
 
   this%dx = dx
   this%dy = dy

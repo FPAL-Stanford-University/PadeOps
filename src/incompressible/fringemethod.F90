@@ -204,8 +204,7 @@ contains
       integer,                                                                 intent(in), optional         :: xen_targ
  
       if(this%useShiftedPeriodicBC) then
-          call GracefulExit("Fringe targets already associated at setup if &
-            ShiftedPeriodicBC is true. Check input and problem files",999)
+          call GracefulExit("Fringe targets already associated at setup if ShiftedPeriodicBC is true. Check input and problem files",999)
       endif
  
       this%u_target => utarget
@@ -247,7 +246,7 @@ contains
    end function
 
 
-   subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, fringeID)
+   subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, useShiftedPeriodicBC, Lxeff, fringeID)
       use reductions, only: p_minval, p_maxval
       use exits, only: message_min_max
        use decomp_2d_io
@@ -257,10 +256,11 @@ contains
       type(decomp_info), intent(in), target :: gpC, gpE
       real(rkind), dimension(gpC%xsz(1)), intent(in) :: x
       real(rkind), dimension(gpC%xsz(2)), intent(in) :: y
-      real(rkind), intent(in) :: dx, dy
+      real(rkind), intent(in) :: dx, dy, Lxeff
       type(spectral), intent(in), target :: spectC, spectE
       real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
+      logical, intent(in) :: useShiftedPeriodicBC
       integer, intent(in), optional :: fringeID
 
       real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0, LambdaFactPotTemp = 2.45d0
@@ -276,13 +276,12 @@ contains
       integer :: ioUnit = 10, i, j, k, nx, ierr
       real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
       logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
-      logical :: useShiftedPeriodicBC = .false.
-      real(rkind) :: shift_distance = 0.5d0, Lxeff = 0.5d0, threshold_val
+      real(rkind) :: shift_distance = 0.5d0, threshold_val
 
       namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
                         Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFactPotTemp, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
                         Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen, &
-                        useShiftedPeriodicBC, shift_distance, Lxeff
+                        shift_distance
  
       if (present(fringeID)) then
          this%myFringeID = fringeID
@@ -465,11 +464,11 @@ contains
 
           ! set indices so target can be in the interior in the x-direction
           ! (target ends at Lxeff)
-          Lxeff = Lxeff*Lx
+          this%Lxeff = Lxeff*Lx
           this%ixen_1 = minloc(abs(x-Fringe_xen),1);   this%ixen_1 = min(this%ixen_1+1, nx)
           this%ixst_1 = minloc(abs(x-Fringe_xst),1);   this%ixst_1 = max(this%ixst_1-1, 1)
 
-          this%ixen_2 = minloc(abs(x-Lxeff),1);   this%ixen_2 = min(this%ixen_2+1, nx)
+          this%ixen_2 = minloc(abs(x-this%Lxeff),1);   this%ixen_2 = min(this%ixen_2+1, nx)
           this%ixst_2 = this%ixen_2 - (this%ixen_1 - this%ixst_1); this%ixst_2 = max(this%ixst_2, 1)
 
           call message(1, "ixst_1 = ", this%ixst_1)
@@ -479,7 +478,7 @@ contains
           
 
           if( (this%ixen_2-this%ixst_2) .ne. (this%ixen_1-this%ixst_1)) then
-              call GracefulExit("Lxeff, Fringe_xst and Fringe_xen incompatible; Check details for Shifted periodic BC to work.", 11)
+              call GracefulExit("this%Lxeff, Fringe_xst and Fringe_xen incompatible; Check details for Shifted periodic BC to work.", 11)
           endif 
 
           call message(0, "Shifted periodic BC successfully set up in fringe init.")

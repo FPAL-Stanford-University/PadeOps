@@ -527,16 +527,23 @@ subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
     rbuff = sqrt(u*u + v*v)
     call this%spectC%fft(rbuff,cbuff)
 
-    if (nrank == 0) then
-        this%Umn = real(uhat(1,1,this%WM_matchingIndex),rkind)*this%meanFact
-        this%Vmn = real(vhat(1,1,this%WM_matchingIndex),rkind)*this%meanFact
-        this%Uspmn = real(cbuff(1,1,this%WM_matchingIndex),rkind)*this%meanFact
-        if (this%isStratified .or. this%initSpinUp) this%Tmn = real(That(1,1,1),rkind)*this%meanFact
-    end if
-    call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
-    call mpi_bcast(this%Vmn,1,mpirkind,0,mpi_comm_world,ierr)
-    call mpi_bcast(this%Uspmn,1,mpirkind,0,mpi_comm_world,ierr)
-    if (this%isStratified .or. this%initSpinup) call mpi_bcast(this%Tmn,1,mpirkind,0,mpi_comm_world,ierr)
+    if(this%useShiftedPeriodicBC) then
+        this%Umn = p_sum(sum(u(1:this%nxeff,:,this%WM_matchingIndex))) * this%meanFact
+        this%Vmn = p_sum(sum(v(1:this%nxeff,:,this%WM_matchingIndex))) * this%meanFact
+        this%Uspmn = p_sum(sum(rbuff(1:this%nxeff,:,this%WM_matchingIndex))) * this%meanFact
+        !if (this%isStratified .or. this%initSpinUp) this%Tmn = p_sum(sum())
+    else
+        if (nrank == 0) then
+            this%Umn = real(uhat(1,1,this%WM_matchingIndex),rkind)*this%meanFact
+            this%Vmn = real(vhat(1,1,this%WM_matchingIndex),rkind)*this%meanFact
+            this%Uspmn = real(cbuff(1,1,this%WM_matchingIndex),rkind)*this%meanFact
+            if (this%isStratified .or. this%initSpinUp) this%Tmn = real(That(1,1,1),rkind)*this%meanFact
+        end if
+        call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
+        call mpi_bcast(this%Vmn,1,mpirkind,0,mpi_comm_world,ierr)
+        call mpi_bcast(this%Uspmn,1,mpirkind,0,mpi_comm_world,ierr)
+        if (this%isStratified .or. this%initSpinup) call mpi_bcast(this%Tmn,1,mpirkind,0,mpi_comm_world,ierr)
+    endif
 
     call this%getSurfaceQuantities() 
 end subroutine
