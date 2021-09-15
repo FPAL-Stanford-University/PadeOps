@@ -521,6 +521,7 @@ subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
     real(rkind), dimension(:,:,:), pointer :: rbuff
     complex(rkind), dimension(:,:,:), pointer :: cbuff
     integer :: ierr
+    real(rkind) :: ts1, gs1, ts2, gs2, ts3, gs3, ts4, gs4
 
     rbuff => this%rbuffxC(:,:,:,1)
     cbuff => this%cbuffyC(:,:,:,1)
@@ -528,10 +529,21 @@ subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
     call this%spectC%fft(rbuff,cbuff)
 
     if(this%useShiftedPeriodicBC) then
-        this%Umn = p_sum(sum(u(1:this%nxeff,:,this%WM_matchingIndex))) * this%meanFact
-        this%Vmn = p_sum(sum(v(1:this%nxeff,:,this%WM_matchingIndex))) * this%meanFact
-        this%Uspmn = p_sum(sum(rbuff(1:this%nxeff,:,this%WM_matchingIndex))) * this%meanFact
-        !if (this%isStratified .or. this%initSpinUp) this%Tmn = p_sum(sum())
+        ts1  = 0.0d0; ts2 = 0.0d0; ts3 = 0.0d0; ts4 = 0.0d0;
+        gs1  = 0.0d0; gs2 = 0.0d0; gs3 = 0.0d0; gs4 = 0.0d0;
+        if(this%gpC%xst(3)==1) then
+            ts1 = sum(u(1:this%nxeff,:,this%WM_matchingIndex))
+            ts2 = sum(v(1:this%nxeff,:,this%WM_matchingIndex))
+            ts3 = sum(rbuff(1:this%nxeff,:,this%WM_matchingIndex))
+            !if (this%isStratified .or. this%initSpinUp) ts4 = p_sum(sum())
+        endif
+        !globsum = p_sum(tmpsum)
+        gs1 = p_sum(ts1); gs2 = p_sum(ts2); gs3 = p_sum(ts3); gs4 = p_sum(ts4)
+        this%Umn = gs1 * this%meanFact
+        this%Vmn = gs2 * this%meanFact
+        this%Uspmn = gs3 * this%meanFact
+        !print *, 'tt1: ', tt1, tg1, tmpsum(3), globsum(3)
+        !if (this%isStratified .or. this%initSpinUp) this%Tmn = gs4 * this%meanFact
     else
         if (nrank == 0) then
             this%Umn = real(uhat(1,1,this%WM_matchingIndex),rkind)*this%meanFact
