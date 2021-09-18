@@ -29,6 +29,8 @@ module IncompressibleGrid
 
     implicit none
 
+    external :: MPI_BCAST, MPI_RECV, MPI_SEND, MPI_REDUCE
+
     private
     public :: igrid, wBC_bottom, wBC_top  
 

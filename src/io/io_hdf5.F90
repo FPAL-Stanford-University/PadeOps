@@ -6,6 +6,9 @@ module io_hdf5_stuff
     use exits,           only: GracefulExit
     implicit none
 
+    external :: MPI_ALLREDUCE, SYSTEM, MPI_BCAST
+
+
     type :: io_hdf5
 
         logical :: reduce_precision = .false. ! Reduce precision to single for I/O?

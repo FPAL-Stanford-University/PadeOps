@@ -198,7 +198,7 @@ program test_sgsmod_igrid
  
    ! STEP 6: Compute the SGS rhs terms 
    call sgsmodel%link_pointers(nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappaSGS)
-   call sgsmodel%getRHS_SGS(urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, u, v, wC, .true., dTdxC, dTdyC, dTdzC, dTdxE, dTdyE, dTdzE)
+   call sgsmodel%getRHS_SGS(urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, u, v, wC, T, .true., dTdxC, dTdyC, dTdzC, dTdxE, dTdyE, dTdzE)
    call sgsmodel%getRHS_SGS_Scalar(Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, wC, T, ThatC, duidxjC)
 ! subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, TurbPrandtlNum, Cy, lowbound, highbound)
 
