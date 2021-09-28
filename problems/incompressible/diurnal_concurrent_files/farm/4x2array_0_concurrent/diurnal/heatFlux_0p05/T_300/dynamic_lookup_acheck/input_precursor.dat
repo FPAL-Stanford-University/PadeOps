@@ -1,6 +1,6 @@
 &INPUT
 inputdir                      = "/work2/05294/mhowland/stampede2/PadeOpsData/diurnal_concurrent/farm/init_0p05_turb"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0_modRef/diurnal/heatFlux_0p05/T_1200_turb_init/lookup_acheck_on_32x24"   ! Directory for all output files
+outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0_modRef/diurnal/heatFlux_0p05/T_300_turb_init/lookup_acheck_on_32x24"   ! Directory for all output files
 nx                            = 480          ! Number of points in X
 ny                            = 320          ! Number of points in Y
 nz                            = 320          ! Number of points in Z

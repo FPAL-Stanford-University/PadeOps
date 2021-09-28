@@ -1,5 +1,0 @@
-&concurrent
-primary_InputFile                 = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/farm/4x2array_0_concurrent/diurnal/T_300/dynamic_deter/input_primary.dat"
-precursor_InputFile                  = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/farm/4x2array_0_concurrent/diurnal/T_300/dynamic_deter/input_precursor.dat"
-synchronize_RK_fringe = .true.
-/
