@@ -1,6 +1,6 @@
 &INPUT
 inputdir                      = "/work2/05294/mhowland/stampede2/PadeOpsData/diurnal_concurrent/farm/init_0p05_turb"   ! Directory for any input files
-outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0_modRef/diurnal/heatFlux_0p05/T_1200_turb_init/lookup_acheck_on_32x24"   ! Directory for all output files
+outputdir                     = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0_modRef/diurnal/heatFlux_0p05/T_300_turb_init/lookup_acheck_on_32x24"   ! Directory for all output files
 nx                            = 480          ! Number of points in X
 ny                            = 320          ! Number of points in Y
 nz                            = 320          ! Number of points in Z
@@ -141,9 +141,9 @@ num_turbines                  = 9          ! How many turbines?
 ADM                           = .TRUE.      ! Are these actuator disks?
 turbInfoDir           = "/home1/05294/mhowland/PadeOps_diurnal/PadeOps/problems/incompressible/diurnal_concurrent_files/turbInfo/4x2array_0_modRef"
 ADM_Type              = 4         ! 1 or 2. 2 is optimized and well tested. Use 1 at your own risk.
-powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0_modRef/diurnal/heatFlux_0p05/T_1200_turb_init/lookup_acheck_on_32x24/turbOut"
+powerDumpDir          = "/scratch/05294/mhowland/diurnal_concurrent/farm/4x2array_0_modRef/diurnal/heatFlux_0p05/T_300_turb_init/lookup_acheck_on_32x24/turbOut"
 useDynamicYaw         = .TRUE.
-yawUpdateInterval     = 1200
+yawUpdateInterval     = 300
 inputDirDyaw          = "/home1/05294/mhowland/dynamicYawFiles/WES_P2_2020_inputs/diurnal/dynamicYaw_diurnal_dynamic_lookup_on_acheck_on.inp"
 /
 /
