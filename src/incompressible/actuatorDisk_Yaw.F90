@@ -145,15 +145,13 @@ subroutine get_RHS_withPower(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_
     !gamma_local = 0.d0 * wind_dir * pi / 180.d0
     !write(*,*) 'aligned'
     call this%get_RHS(ug, vg, wg, rhsxvalsg, rhsyvalsg, rhszvalsg, gamma_local, theta*0.d0) 
+    ! Simple model (use this)
     this%powerBaseline = this%get_power()
+    ! LESGO comparison (don't use this)
+    ! this%powerBaseline = 1.d0
     ! Now run the model with the appropriate yaw misalignment to return the
     ! correct values
-    !write(*,*) this%get_power()
-    !write(*,*) gamma_local
-    !write(*,*) 'zero'
     call this%get_RHS(u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, theta) 
-    !write(*,*) this%get_power()
-    !write(*,*) gamma_negative
 
 end subroutine
 
@@ -224,13 +222,15 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, gamma_negative, 
         end do
         numPoints = p_sum(this%blanks)
         this%rbuff = this%blanks*this%speed
+        
+        ! Simple power method (use this!)
         this%ut = p_sum(this%rbuff)/numPoints    
-        this%hubDirection = atan2(p_sum(this%blanks*v), p_sum(this%blanks*u)) * 180.d0 / pi
-        !write(*,*) 'uvw'
-        !write(*,*) p_sum(this%blanks*u)/numPoints
-        !write(*,*) p_sum(this%blanks*v)/numPoints
-        !write(*,*) p_sum(this%blanks*w)/numPoints
+        ! LESGO power method
+        ! this%ut = p_sum(this%speed*this%scalarSource)*this%dx*this%dy*this%dz
+        
+
         ! Mean speed at the turbine
+        this%hubDirection = atan2(p_sum(this%blanks*v), p_sum(this%blanks*u)) * 180.d0 / pi
         usp_sq = (this%ut)**2
         force = -0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
         Ft = reshape([force, 0.d0, 0.d0], shape(Ft))
