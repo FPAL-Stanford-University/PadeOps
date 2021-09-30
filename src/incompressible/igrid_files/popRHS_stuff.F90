@@ -159,13 +159,8 @@
                                          this%v,     this%wC,    this%T,       this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
                                          this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
          else
-<<<<<<< HEAD
            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,   this%duidxjC, this%duidxjE, &
                                          this%uhat,  this%vhat,  this%whatC,   this%That,    this%u,       &
-=======
-           call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
-                                         this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
->>>>>>> ced04bd62be385774bcfb40f04bfee1ef14e9188
                                          this%v,     this%wC,    this%T,       this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
                                          this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
          end if
