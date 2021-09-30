@@ -11,6 +11,8 @@ module io_VTK_stuff
     use io_stuff, only: io
     implicit none
 
+    external :: SYSTEM, MPI_RECV, MPI_SEND
+    
     type, extends(io) :: io_VTK
 
     contains

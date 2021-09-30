@@ -9,6 +9,8 @@ module reductions
     private
     public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN, P_AVGZ
 
+    external :: MPI_ALLREDUCE
+
     interface P_MAXVAL
         module procedure P_MAXVAL_arr4, P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca, P_MAXVAL_int, P_MAXVAL_int_locComm
     end interface

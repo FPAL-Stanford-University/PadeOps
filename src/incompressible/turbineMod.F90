@@ -21,6 +21,8 @@ module turbineMod
     private
     public :: TurbineArray
 
+    external :: MPI_CART_GET, MPI_IRECV, MPI_ISSEND, MPI_WAITALL
+
     ! default initializations
     integer :: num_turbines = 1
     character(len=clen) :: turbInfoDir

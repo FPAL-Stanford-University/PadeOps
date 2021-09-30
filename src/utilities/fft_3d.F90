@@ -8,7 +8,11 @@ module fft_3d_stuff
     public :: fft_3d
 
     include "fftw3.f"
-    
+
+    external :: MPI_CART_GET, DFFTW_PLAN_MANY_DFT_R2C, DFFTW_PLAN_MANY_DFT_C2R, & 
+      DFFTW_PLAN_MANY_DFT, DFFTW_DESTROY_PLAN, DFFTW_EXECUTE, DFFTW_EXECUTE_DFT, & 
+      DFFTW_EXECUTE_DFT_C2R,  DFFTW_EXECUTE_DFT_R2C
+
     type fft_3d
         private
         type(decomp_info),public    :: physical
