@@ -113,25 +113,35 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
    case (2) ! Bou-zeid Wall model
       call this%getfilteredSpeedSqAtWall(uhat, vhat)
-      if(this%is_z0_varying) then
-          this%WallMFactorvar = -(kappa/(log(this%dz/(two*this%z0var)) - this%PsiM))**2 
-          call this%BouZeidLocalModel()
-      else 
-          this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) - this%PsiM))**2 
-          
-          call this%spectC%fft(this%filteredSpeedSq, cbuffy)
-          call transpose_y_to_z(cbuffy, cbuffz, this%sp_gpC)
-          
-          ! tau_13
-          this%tauijWMhat_inZ(:,:,1,1) = (this%WallMFactor*this%umn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
-          call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,1), this%tauijWMhat_inY(:,:,:,1), this%sp_gpE)
-          call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,1), this%tauijWM(:,:,:,1))
-          
-          ! tau_23
-          this%tauijWMhat_inZ(:,:,1,2) = (this%WallMFactor*this%vmn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
-          call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
-          call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
-      endif
+      !if(this%LSM) then
+      !    ! tau_13
+      !    this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uxvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
+      !    call this%set_tauijWM(this%rbuffxC(:,:,:,1), 1)
+
+      !    ! tau_23
+      !    this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uyvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
+      !    call this%set_tauijWM(this%rbuffxC(:,:,:,1), 2)
+      !elseif(.not. this%LSM) then
+        if(this%is_z0_varying) then
+            this%WallMFactorvar = -(kappa/(log(this%dz/(two*this%z0var)) - this%PsiM))**2 
+            call this%BouZeidLocalModel()
+        else 
+            this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) - this%PsiM))**2 
+            
+            call this%spectC%fft(this%filteredSpeedSq, cbuffy)
+            call transpose_y_to_z(cbuffy, cbuffz, this%sp_gpC)
+            
+            ! tau_13
+            this%tauijWMhat_inZ(:,:,1,1) = (this%WallMFactor*this%umn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
+            call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,1), this%tauijWMhat_inY(:,:,:,1), this%sp_gpE)
+            call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,1), this%tauijWM(:,:,:,1))
+            
+            ! tau_23
+            this%tauijWMhat_inZ(:,:,1,2) = (this%WallMFactor*this%vmn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
+            call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
+            call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
+        endif
+      !endif
 
    case (3) ! Abkar-PA (2012) heterogeneous model
       !! type 1 :: SG-local method (span averages)
@@ -149,7 +159,8 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
           endif
       endif
       call this%getSpanAvgVelAtWall()
-      this%rbuffxC(:,:,1,2) = sqrt(this%filteredSpeedSq(:,:,1))
+      this%rbuffxC(:,:,1,2) = sqrt(this%filteredSpeedSq(:,:,1))     ! not span-avg
+      this%rbuffxC(:,:,2,2) = sqrt(this%filteredSpeedSq(:,:,2))     ! span-avg
 
       ! using this%filteredSpeedSq in the upstream region, estimate ustar1
       call this%compute_ustar_upstreampart(ustar1)
@@ -158,14 +169,14 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
 
       !modelregion = 0; 
       where(this%lamfact > (one-epssmall))
-          this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)
+          this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)     ! not span-avg
           !modelregion = 1
       elsewhere (this%lamfact > epssmall)
-          this%ustarsqvar = (this%rbuffxC(:,:,1,2) - this%lamfact*ust1fac) / (one - this%lamfact)
+          this%ustarsqvar = (this%rbuffxC(:,:,2,2) - this%lamfact*ust1fac) / (one - this%lamfact)
           this%ustarsqvar = this%kaplnzfac_r*this%ustarsqvar*this%ustarsqvar
           !modelregion = 2
       elsewhere
-          this%ustarsqvar = this%kaplnzfac_r*this%filteredSpeedSq(:,:,1)
+          this%ustarsqvar = this%kaplnzfac_r*this%filteredSpeedSq(:,:,2)
           !modelregion = 3
       endwhere
 
@@ -178,11 +189,13 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       !endif
 
       ! tau_13
-      this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uxvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
+      this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uxvar / (this%rbuffxC(:,:,1,2) + 1.0d-18) ! not span-avg
+      !this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uxspan/ (this%rbuffxC(:,:,2,2) + 1.0d-18) ! span-avg
       call this%set_tauijWM(this%rbuffxC(:,:,:,1), 1)
 
       ! tau_23
-      this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uyvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
+      this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uyvar / (this%rbuffxC(:,:,1,2) + 1.0d-18) ! not span-avg
+      !this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uyspan/ (this%rbuffxC(:,:,2,2) + 1.0d-18) ! span-avg
       call this%set_tauijWM(this%rbuffxC(:,:,:,1), 2)
 
    case (4) ! Our heterogeneous model
@@ -557,7 +570,13 @@ subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
         if (this%isStratified .or. this%initSpinup) call mpi_bcast(this%Tmn,1,mpirkind,0,mpi_comm_world,ierr)
     endif
 
-    call this%getSurfaceQuantities() 
+    !if(this%LSM) then
+    !  ! implement LSM
+    !  call this%LSM()
+    !else
+      call this%getSurfaceQuantities() 
+    !endif
+
 end subroutine
 
 subroutine BouZeidLocalModel(this)
@@ -618,11 +637,14 @@ subroutine getSpanAvgVelAtWall(this)
     enddo
 
     call transpose_y_to_x(this%rbuffyC(:,:,:,1), this%filteredSpeedSq, this%gpC)
-    this%Uxvar(:,:) = this%filteredSpeedSq(:,:,2)
-    this%Uyvar(:,:) = this%filteredSpeedSq(:,:,3)
+    !this%Uxvar(:,:) = this%filteredSpeedSq(:,:,2)
+    !this%Uyvar(:,:) = this%filteredSpeedSq(:,:,3)
+    this%Uxspan(:,:) = this%filteredSpeedSq(:,:,2)
+    this%Uyspan(:,:) = this%filteredSpeedSq(:,:,3)
 
-    this%filteredSpeedSq(:,:,1) = this%filteredSpeedSq(:,:,2)*this%filteredSpeedSq(:,:,2)
-    this%filteredSpeedSq(:,:,1) = this%filteredSpeedSq(:,:,1) + this%filteredSpeedSq(:,:,3)*this%filteredSpeedSq(:,:,3)
+    !this%filteredSpeedSq(:,:,1) = this%filteredSpeedSq(:,:,2)*this%filteredSpeedSq(:,:,2)
+    !this%filteredSpeedSq(:,:,1) = this%filteredSpeedSq(:,:,1) + this%filteredSpeedSq(:,:,3)*this%filteredSpeedSq(:,:,3)
+    this%filteredSpeedSq(:,:,2) = this%Uxspan*this%Uxspan + this%Uyspan*this%Uyspan
     
 end subroutine
 
@@ -748,3 +770,42 @@ subroutine getSurfaceQuantities(this)
       this%PsiM = zero
     end if 
 end subroutine
+
+!subroutine LSM(this)
+!  class(sgs_igrid), intent(inout) :: this
+!  integer :: i, j
+!
+!  ! write non-linear solver for each point (i,j)
+!  ! fill in this%PsiMvar, this%PsiHvar, this%q3w, this%Tsurfvar,
+!  ! this%ustarvar
+!  do j = 1, this%gpC%xsz(2)
+!    do i = 1, this%gpC%xsz(1)
+!        Linv = zero; !dTheta = this%Tsurf - this%Tmn;
+!        ustarDiff = one; wTh = this%wTh_surf_var(i,j)
+!        a=log(hwm/this%z0var(i,j)); b=beta_h*hwm; c=beta_m*hwm
+!        PsiM = zero; PsiH = zero; idx = 0; ustar = one; u = this%Uspmn(i,j)
+!        at=log(hwm/this%z0t(i,j))
+!
+!        ! Inside the do loop all the used variables are on the stored on the stack
+!        ! After the while loop these variables are copied to their counterparts
+!        ! on the heap (variables part of the derived type)
+!        do while ( (ustarDiff > 1d-12) .and. (idx < itermax))
+!            ustarNew = u*kappa/(a - PsiM)
+!            Linv = -kappa*wTh/((this%Fr**2) * this%ThetaRef*ustarNew**3)
+!            if (Linv .ge. zero) then 
+!              ! similarity functions if stable stratification is present
+!              PsiM = -c*Linv;         PsiH = -b*Linv; 
+!            else
+!              ! similarity functions if unstable stratification is present
+!              xisq = sqrt(one-15.d0*hwm*Linv); xi = sqrt(xisq)
+!              PsiM = two*log(half*(one+xi)) + log(half*(one+xisq)) - two*atan(xi) + piby2; 
+!              PsiH = two*log(half*(one+xisq));
+!            endif
+!            ustarDiff = abs((ustarNew - ustar)/ustarNew)
+!            ustar = ustarNew; idx = idx + 1
+!        end do 
+!        this%ustarvar(i,j) = ustar; this%invObLengthvar(i,j) = Linv; 
+!        this%Tsurfvar(i,j) = this%Tmnvar(i,j) + wTh*(at-PsiH)/(ustar*kappa)
+!        this%PsiMvar(i,j) = PsiM;      this%PsiHvar(i,j) = PsiH
+!    enddo
+!subroutine LSM

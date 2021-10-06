@@ -71,10 +71,10 @@ module sgsmod_igrid
         integer :: WM_matchingIndex
 
         ! for varying z0
-        real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, alpfac, nlptype
+        real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, alpfac, nlptype, Uxspan, Uyspan 
         real(rkind), dimension(:,:), allocatable :: lamfact, mask_upstream, deli, ustarsq_ratio_kaplnzfacs
         real(rkind) :: kaplnzfac_s, kaplnzfac_r, z0s, z0r, mask_normfac, ustar_upstream, betfac
-        logical :: is_z0_varying = .false., filter_for_heterog = .true.
+        logical :: is_z0_varying = .false., filter_for_heterog = .true., LSM = .false.
 
         ! for dynamic procedures - all are at edges
         type(gaussian) :: gaussianTestFilterZ
@@ -146,6 +146,7 @@ module sgsmod_igrid
             procedure, private :: interpolate_kappaSGS 
             procedure, private :: compute_kappa_bounding   
             procedure, private :: compute_Tscale
+            !procedure, private :: LSM
 
             !! ALL DESTROY PROCEDURES
             procedure          :: destroy

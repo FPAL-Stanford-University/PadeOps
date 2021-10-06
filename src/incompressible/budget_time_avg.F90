@@ -100,7 +100,7 @@ module budgets_time_avg_mod
    ! BUDGET_4_ij term indices: 
    ! <incomplete/not-needed for now>
 
-   ! Enable time-averaging of ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1) 
+   ! Enable time-averaging of ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1); Uxspan; Uyspan; nlptype
 
    type :: budgets_time_avg
         private
@@ -945,7 +945,7 @@ contains
 
         if(this%is_z0_varying) then
             ! time-averaged quntities related to varying z0
-            iind_max = 5     ! ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1) 
+            iind_max = 7     ! ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1); Uxspan; Uyspan; nlptype 
             call this%igrid_sim%sgsmodel%get_z0varstats(this%igrid_sim%rbuffxC(:,:,:,1))
             this%z0varstats(:,:,1:iind_max) = this%z0varstats(:,:,1:iind_max) + this%igrid_sim%rbuffxC(:,:,1:iind_max,1)
         else
