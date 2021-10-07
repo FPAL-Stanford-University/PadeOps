@@ -44,6 +44,7 @@ module kspreprocessing
             procedure :: LES_to_KS
             procedure :: applyFilterForKS
             procedure :: link_pointers
+            procedure :: dumpKSfilteredFields
             generic :: init => initFull, initLES2KSfilter 
     end type
 

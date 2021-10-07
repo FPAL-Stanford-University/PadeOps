@@ -1074,8 +1074,11 @@ contains
        if (this%PreprocessForKS) then
            allocate(this%LES2KS)
            if (this%KSinitType == 0) then
-               call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
+               !call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
+               call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%KSOutputDir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
                call this%LES2KS%link_pointers(this%uFil4KS, this%vFil4KS, this%wFil4KS)
+               call this%LES2KS%applyFilterForKS(this%u, this%v, this%w)
+               call this%LES2KS%dumpKSfilteredFields()
                if (this%useProbes) then
                    if (this%doIhaveAnyProbes) then
                        allocate(this%KS_Probe_Data(1:4,1:this%nprobes,0:this%probeTimeLimit-1))
@@ -1088,7 +1091,7 @@ contains
                   &         this%dz, this%planes2dumpC_KS, this%planes2dumpF_KS)
            end if
            this%KSupdated = .false. 
-           call message(0, "KS Preprocessor initializaed successfully.")
+           call message(0, "KS Preprocessor initialized successfully.")
        end if 
 
 

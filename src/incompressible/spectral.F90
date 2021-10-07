@@ -91,6 +91,7 @@ module spectralMod
             procedure           :: mTimes_ik1_ip
             procedure           :: mTimes_ik2_oop
             procedure           :: mTimes_ik2_ip
+            procedure           :: mTimes_ik3_ip
             procedure           :: TestFilter_ip
             procedure           :: TestFilter_oop
             procedure           :: SurfaceFilter_ip
@@ -329,6 +330,24 @@ contains
             end do 
         end do 
 
+    end subroutine
+
+    subroutine mTimes_ik3_ip(this, fin)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fin
+        integer :: i, j, k
+        real(rkind) :: rpart, ipart
+        
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                !$omp simd 
+                do i = 1,this%fft_size(1)
+                    rpart = -this%k3(i,j,k)*dimag(fin(i,j,k))
+                    ipart = this%k3(i,j,k)*dreal(fin(i,j,k))
+                    fin(i,j,k) = dcmplx(rpart,ipart)
+                end do 
+            end do 
+        end do 
     end subroutine
 
     subroutine dealias(this, fhat)
