@@ -2,7 +2,7 @@ module ibmgpmod
     use kind_parameters, only: rkind, clen, mpiinteg, mpirkind
     use constants      , only: zero, one, third, half, two, kappa
     use exits          , only: GracefulExit, message
-    use reductions     , only: p_maxval, p_minval
+    use reductions     , only: p_maxval, p_minval, p_sum
     use kdtree_wrapper , only: initialize_kdtree_ib, create_kdtree_ib, probe_nearest_points_kdtree_ib, finalize_kdtree_ib
     use spectralMod    , only: spectral  
     use decomp_2d
@@ -21,7 +21,7 @@ module ibmgpmod
 
         integer     :: num_surfelem, num_gptsC, num_gptsE, ibwm, runID
         integer     :: num_imptsC_glob, num_imptsE_glob
-        real(rkind) :: ibwm_ustar, ibwm_z0
+        real(rkind) :: ibwm_ustar, ibwm_z0, ibwm_utau_avg, ibwm_utau_max, ibwm_utau_min
         real(rkind), allocatable, dimension(:,:,:) :: surfelem
         real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal
         real(rkind), allocatable, dimension(:,:)   :: gptsC_xyz, gptsE_xyz, gptsC_bpt, gptsE_bpt
@@ -40,8 +40,8 @@ module ibmgpmod
         real(rkind), allocatable, dimension(:,:)   ::  imptsC_xyz_loc, imptsE_xyz_loc
         real(rkind), allocatable, dimension(:)     ::  imptsC_u, imptsC_v, imptsC_w, imptsE_u, imptsE_v, imptsE_w
         real(rkind), allocatable, dimension(:)     ::  imptsC_u_tmp, imptsC_v_tmp, imptsC_w_tmp
-        real(rkind), allocatable, dimension(:)     ::  imptsE_u_tmp, imptsE_v_tmp, imptsE_w_tmp
-        real(rkind), allocatable, dimension(:)     ::  gptsC_dst, gptsE_dst, utauC_ib
+        real(rkind), allocatable, dimension(:)     ::  imptsE_u_tmp, imptsE_v_tmp, imptsE_w_tmp, utauC_ib
+        real(rkind), allocatable, dimension(:,:)   ::  gptsC_dst, gptsE_dst
 
         real(rkind), dimension(:,:,:), pointer     :: rbuffxC1, rbuffxC2, rbuffyC1, rbuffyC2, rbuffzC1, rbuffzC2 
         real(rkind), dimension(:,:,:), pointer     :: rbuffxE1, rbuffxE2, rbuffyE1, rbuffyE2, rbuffzE1, rbuffzE2 
@@ -58,6 +58,9 @@ module ibmgpmod
             procedure          :: destroy
             procedure          :: update_ibmgp
             procedure          :: get_utauC_ib
+            procedure          :: get_ibwm_utau_avg
+            procedure          :: get_ibwm_utau_max
+            procedure          :: get_ibwm_utau_min
             procedure          :: get_num_gptsC
             procedure, private :: compute_levelset
             procedure, private :: mark_ghost_points
@@ -285,6 +288,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   xlinepart = mesh(:,1,1,1)
   ylinepart = mesh(1,:,1,2)
   zlinepart = mesh(1,1,:,3)
+  dx = xlinepart(2)-xlinepart(1); dy = ylinepart(2)-ylinepart(1)
   do k = 1,this%gpC%xsz(3)
     zlinepartE(k) = zlinepart(k) - half*dz
   enddo
@@ -396,7 +400,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   allocate(this%gptsC_bpind(this%num_gptsC), this%gptsE_bpind(this%num_gptsE))
   allocate(this%gptsC_img(this%num_gptsC,3), this%gptsE_img(this%num_gptsE,3))
   allocate(this%gptsC_bnp(this%num_gptsC,3), this%gptsE_bnp(this%num_gptsE,3))
-  allocate(this%gptsC_dst(this%num_gptsC),   this%gptsE_dst(this%num_gptsE))
+  allocate(this%gptsC_dst(this%num_gptsC,2), this%gptsE_dst(this%num_gptsE,2))
   allocate(this%utauC_ib(this%num_gptsC))
 
   this%gptsC_xyz   = zero;      this%gptsE_xyz   = zero;
@@ -430,9 +434,8 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
 
   call this%mark_boundary_points()
 
-  call this%compute_image_points(Lx, Ly, zBot, zTop)
+  call this%compute_image_points(Lx, Ly, zBot, zTop, dx, dy, dz)
 
-  dx = xlinepart(2)-xlinepart(1); dy = ylinepart(2)-ylinepart(1)
   call this%setup_interpolation(dx,dy,dz, zBot, Lx, Ly, xlinepart, ylinepart, zlinepart, zlinepartE)
 
   deallocate(flagE, flagC, mapC, mapE, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE)
@@ -714,7 +717,7 @@ subroutine smooth_along_z(this, uarr, rhs, mask_solid_z, num_smooth, diffcoeff)
 
   integer :: it, i, j, k, nxloc, nyloc, nz
   real(rkind) :: diffcoeff_z, dcmax, dcmin, rhsmax, rhsmin
-  integer :: maxmsk, minmsk
+  real(rkind) :: maxmsk, minmsk
 
   nxloc = size(uarr, 1); nyloc = size(uarr, 2); nz = size(uarr, 3)
 
@@ -748,19 +751,22 @@ subroutine update_ghostptsCE(this, u, v, w)
   real(rkind) :: vec1(3), vec2(3), unrm(3), utan(3), dotpr, dist
   real(rkind) :: ibwallvel, utan_gp(3), unrm_gp(3), vmax, vmin
 
+  !ubnp = (uimp*dist1 + ughpt*dist2)/(dist1+dist2)
+  !ughpt = ((dist1+dist2)*ubnp - uimp*dist1)/dist2
+
 
   if(this%ibwm==1) then
       ! no slip immersed boundary
       do ii = 1, this%num_gptsC
           i = this%gptsC_ind(ii,1);  j = this%gptsC_ind(ii,2);  k = this%gptsC_ind(ii,3)
           jj = this%imptsC_index_st(nrank+1) + ii - 1
-          u(i,j,k) = -this%imptsc_u(jj)
-          v(i,j,k) = -this%imptsc_v(jj)
+          u(i,j,k) = -this%imptsc_u(jj)*this%gptsC_dst(ii,1)/this%gptsC_dst(ii,2)
+          v(i,j,k) = -this%imptsc_v(jj)*this%gptsC_dst(ii,1)/this%gptsC_dst(ii,2)
       enddo
       do ii = 1, this%num_gptsE
           i = this%gptsE_ind(ii,1);   j = this%gptsE_ind(ii,2);  k = this%gptsE_ind(ii,3)
           jj = this%imptsE_index_st(nrank+1) + ii - 1
-          w(i,j,k) = -this%imptsE_w(jj)
+          w(i,j,k) = -this%imptsE_w(jj)*this%gptsE_dst(ii,1)/this%gptsE_dst(ii,2)
       enddo
 
       ! calculate tau_IB
@@ -774,9 +780,22 @@ subroutine update_ghostptsCE(this, u, v, w)
           unrm = vec2*dotpr
           utan = vec1-unrm
 
-          dist = this%gptsC_dst(ii) ! distance from ghost pt to image point
+          dist = this%gptsC_dst(ii,2) ! distance from boundary pt to image point
           this%utauC_ib(ii) = sqrt(sum(utan*utan))/(dist + 1.0d-18)
+
+          !!if((abs(this%gptsC_bpt(ii,1)-1.3542d0) < 1.0d-3) .and. (nrank==0) .and. (ii==849)) then
+          !if((nrank==0) .and. ((ii==849) .or. (ii==850)) ) then
+          !    print *, 'gggggg----', ii, this%gptsC_bpt(ii,1), this%utauC_ib(ii)
+          !    print *, 'vec1------', vec1
+          !    print *, 'vec2------', vec2
+          !    print *, 'unrm------', unrm
+          !    print *, 'utan------', utan
+          !    print *, 'dist------', dist
+          !endif
+
       enddo
+      this%ibwm_utau_avg = p_sum(sum(this%utauC_ib))/(real(this%num_imptsC_glob, rkind) + 1.0d-18)
+      this%ibwm_utau_max = p_maxval(maxval(this%utauC_ib));  this%ibwm_utau_min = p_minval(minval(this%utauC_ib))
   elseif(this%ibwm==2) then
       ! simple log-law immersed boundary
       do ii = 1, this%num_gptsC
@@ -789,7 +808,7 @@ subroutine update_ghostptsCE(this, u, v, w)
           unrm = vec2*dotpr
           utan = vec1-unrm
 
-          dist = this%gptsC_dst(ii) ! distance from ghost pt to image point
+          dist = this%gptsC_dst(ii,2) ! distance from ghost pt to image point
           !ibwallvel = this%ibwm_ustar/kappa*log(dist/this%ibwm_z0)
           !utan_gp = -utan+two*ibwallvel   ! (WM01)
            utan_gp = utan*(one - two*kappa/log(dist/this%ibwm_z0)) ! (WM04) 
@@ -828,7 +847,7 @@ subroutine update_ghostptsCE(this, u, v, w)
           unrm = vec2*dotpr
           utan = vec1-unrm
 
-          dist = this%gptsE_dst(ii) ! distance from ghost pt to image point
+          dist = this%gptsE_dst(ii,2) ! distance from ghost pt to image point
           !ibwallvel = this%ibwm_ustar/kappa*log(dist/this%ibwm_z0)
           !utan_gp = -utan+two*ibwallvel ! (WM01)
            utan_gp = utan*(one - two*kappa/log(dist/this%ibwm_z0)) ! (WM04) 
@@ -1380,16 +1399,18 @@ subroutine set_interpfac_imptsE(this, ip, jp, kp, ii, point_numberdum, multfac)
 
 end subroutine
 
-subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
+subroutine compute_image_points(this, Lx, Ly, zBot, zTop, dx, dy, dz)
   class(ibmgp),     intent(inout) :: this
-  real(rkind), intent(in) :: Lx, Ly, zBot, zTop
+  real(rkind), intent(in) :: Lx, Ly, zBot, zTop, dx, dy, dz
 
   integer :: ii, jj, kk, ierr, iimax(1), iimin(1)
   real(rkind) :: vec1(3), vec2(3), dotpr, xmax_img, xmin_img, ymax_img, ymin_img, zmax_img, zmin_img
-  real(rkind) :: xmax_loc, xmin_loc
+  real(rkind) :: xmax_loc, xmin_loc, min_accept_dist, fac
   character(len=clen) :: fname, dumstr
 
   kk = this%imptsC_index_st(nrank+1)-1
+
+  min_accept_dist = 0.1d0*min(min(dx, dy), dz)
 
   do ii = 1, this%num_gptsC
       ! compute image of gptsC_xyz(ii,:) wrt gptsc_bpt(ii,:) and
@@ -1398,9 +1419,14 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
       vec2(:) = this%surfnormal(jj,:)
       dotpr = sum(vec1*vec2)
 
-      this%gptsC_img(ii,:) = this%gptsC_xyz(ii,:) + two*dotpr*vec2
+      fac = min_accept_dist/dotpr - one;       fac = max(fac, one);
+      this%gptsC_img(ii,:) = this%gptsC_xyz(ii,:) + (one+fac)*dotpr*vec2
       this%gptsC_bnp(ii,:) = this%gptsC_xyz(ii,:) + dotpr*vec2
-      this%gptsC_dst(ii)   = dotpr
+      this%gptsC_dst(ii,1) = dotpr;   this%gptsC_dst(ii,2)   = fac*dotpr
+
+      !this%gptsC_img(ii,:) = this%gptsC_xyz(ii,:) + two*dotpr*vec2
+      !this%gptsC_bnp(ii,:) = this%gptsC_xyz(ii,:) + dotpr*vec2
+      !this%gptsC_dst(ii)   = dotpr
 
       ! prepare to store in the global array
       kk = kk+1
@@ -1416,9 +1442,14 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
       vec2(:) = this%surfnormal(jj,:)
       dotpr = sum(vec1*vec2)
 
-      this%gptsE_img(ii,:) = this%gptsE_xyz(ii,:) + two*dotpr*vec2
+      fac = min_accept_dist/dotpr - one;       fac = max(fac, one)
+      this%gptsE_img(ii,:) = this%gptsE_xyz(ii,:) + (one+fac)*dotpr*vec2
       this%gptsE_bnp(ii,:) = this%gptsE_xyz(ii,:) + dotpr*vec2
-      this%gptsE_dst(ii)   = dotpr
+      this%gptsE_dst(ii,1) = dotpr;   this%gptsE_dst(ii,2) = fac*dotpr
+
+      !this%gptsE_img(ii,:) = this%gptsE_xyz(ii,:) + two*dotpr*vec2
+      !this%gptsE_bnp(ii,:) = this%gptsE_xyz(ii,:) + dotpr*vec2
+      !this%gptsE_dst(ii)   = dotpr
 
       ! prepare to store in the global array
       kk = kk+1
@@ -1434,7 +1465,7 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
   open(11,file=fname,status='unknown',action='write')
   do ii = 1, this%num_gptsC
-      write(11, '(7(e19.12,1x))') this%gptsC_img(ii,:), this%gptsC_bnp(ii,:), this%gptsC_dst(ii)
+      write(11, '(8(e19.12,1x))') this%gptsC_img(ii,:), this%gptsC_bnp(ii,:), this%gptsC_dst(ii,:)
   enddo
   close(11)
 
@@ -1442,7 +1473,7 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop)
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
   open(11,file=fname,status='unknown',action='write')
   do ii = 1, this%num_gptsE
-      write(11, '(7(e19.12,1x))') this%gptsE_img(ii,:), this%gptsE_bnp(ii,:), this%gptsE_dst(ii)
+      write(11, '(8(e19.12,1x))') this%gptsE_img(ii,:), this%gptsE_bnp(ii,:), this%gptsE_dst(ii,:)
   enddo
   close(11)
 
@@ -1827,6 +1858,27 @@ function get_num_gptsC(this)  result (val)
 
 end function
 
+pure function get_ibwm_utau_max(this) result(val)
+   class(ibmgp), intent(in) :: this
+   real(rkind)             :: val
+   
+   val = this%ibwm_utau_max
+end function
+
+pure function get_ibwm_utau_min(this) result(val)
+   class(ibmgp), intent(in) :: this
+   real(rkind)             :: val
+   
+   val = this%ibwm_utau_min
+end function
+
+pure function get_ibwm_utau_avg(this) result(val)
+   class(ibmgp), intent(in) :: this
+   real(rkind)             :: val
+   
+   val = this%ibwm_utau_avg
+end function
+
 subroutine get_utauC_ib(this, fout)
     use mpi
     use kind_parameters, only: mpirkind
@@ -1836,7 +1888,6 @@ subroutine get_utauC_ib(this, fout)
     fout(:) = this%utauC_ib
 
 end subroutine 
-
 
 subroutine destroy(this)
   class(ibmgp), intent(inout) :: this

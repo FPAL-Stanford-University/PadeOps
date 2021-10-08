@@ -40,7 +40,9 @@ contains
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
-            call message(1,gp%dtlimit)
+            !call message(1,gp%dtlimit)
+            call message(1, "Average of utauIB:", gp%ibm%get_ibwm_utau_avg())
+            call message_min_max(1, "Bounds for utauIB:", gp%ibm%get_ibwm_utau_min(), gp%ibm%get_ibwm_utau_max())
             call toc()
             call tic()
         end if 

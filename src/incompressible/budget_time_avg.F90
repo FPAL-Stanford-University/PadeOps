@@ -511,7 +511,7 @@ contains
         if(this%igrid_sim%useibm) then
             this%utauC_ib = this%utauC_ib/(real(this%counter,rkind) + 1.0d-18)
             
-            write(tempname,"(A3,I2.2,A15,I4.4,A1,I6.6,A,I6.6,A4)") "Run",this%run_id,"_ibm_utauC_ib_",nrank,"_t",this%igrid_sim%step,"_n",this%counter,".dat"
+            write(tempname,"(A3,I2.2,A14,I4.4,A1,I6.6,A,I6.6,A4)") "Run",this%run_id,"_ibm_utauC_ib_",nrank,"_t",this%igrid_sim%step,"_n",this%counter,".dat"
             fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
             open(11,file=fname,status='unknown',action='write')
             do ii = 1, this%num_gptsC
