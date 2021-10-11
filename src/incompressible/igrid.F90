@@ -29,6 +29,8 @@ module IncompressibleGrid
 
     implicit none
 
+    external :: MPI_BCAST, MPI_RECV, MPI_SEND, MPI_REDUCE
+
     private
     public :: igrid, wBC_bottom, wBC_top  
 
@@ -161,7 +163,6 @@ module IncompressibleGrid
         real(rkind) :: latitude, max_nuSGS, invObLength, Tsurf0, Tsurf, dTsurf_dt, ThetaRef, TsurfTop, dTsurfTop_dt
 
         real(rkind) :: dtOld, dtRat, Tmn, wTh_surf
-        real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
         integer :: wallMType, botBC_Temp, topBC_Temp 
 
         ! Statistics to compute 
@@ -682,7 +683,6 @@ contains
        allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
        allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
        allocate(this%rbuffzE(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),4))
-       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
        if (.not.this%isinviscid) then
            allocate(this%d2udz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
            allocate(this%d2vdz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
@@ -727,6 +727,7 @@ contains
            else if (botBC_Temp == 1) then
                ! Do nothing 
            else if (botBC_Temp == 2) then
+               this%wTh_surf = this%tsim
                call setInhomogeneousNeumannBC_Temp(inputfile, this%wTh_surf)
            else if (botBC_Temp == 3) then
                if (topBC_Temp .ne. 3) then

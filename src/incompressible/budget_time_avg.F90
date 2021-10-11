@@ -63,6 +63,7 @@ module budgets_time_avg_mod
    ! 5:  Y eqn - Advection/convection term
    ! 6:  Y eqn - Pressure gradient term
    ! 7:  Y eqn - SGS term
+   ! 15: Y eqn - Actuator disk/turbine term 
 
    ! 8:  Z eqn - Advection term
    ! 9:  Z eqn - Pressure gradient term 
@@ -215,7 +216,7 @@ contains
                     allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),30))
                 end if 
                 allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),09))
-                allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),14))
+                allocate(this%budget_1(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),15))
             !else
             !    allocate(this%budget_0(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),25))
             !    allocate(this%budget_2(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3),07))
@@ -591,6 +592,9 @@ contains
         call this%igrid_sim%spectC%ifft(this%vsgs,this%igrid_sim%rbuffxC(:,:,:,1))
         this%budget_1(:,:,:,7) = this%budget_1(:,:,:,7) + this%igrid_sim%rbuffxC(:,:,:,1)
         
+        call this%igrid_sim%spectC%ifft(this%vturb,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_1(:,:,:,15) = this%budget_1(:,:,:,15) + this%igrid_sim%rbuffxC(:,:,:,1)
+        
         ! STEP 2: Get 3 terms from w-equation 
         call this%igrid_sim%spectE%ifft(this%wc,this%igrid_sim%rbuffxE(:,:,:,1))
         call this%interp_Edge2Cell(this%igrid_sim%rbuffxE(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1))
@@ -838,6 +842,9 @@ contains
         ! 7. Actuator disk/Turbine sink  (J)
         call this%igrid_sim%spectC%ifft(this%uturb,this%igrid_sim%rbuffxC(:,:,:,1))
         this%budget_3(:,:,:,7) = this%budget_3(:,:,:,7) + this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,1)
+        ! 7. Actuator disk/Turbine sink  (J)
+        call this%igrid_sim%spectC%ifft(this%vturb,this%igrid_sim%rbuffxC(:,:,:,1))
+        this%budget_3(:,:,:,7) = this%budget_3(:,:,:,7) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,1)
  
     end subroutine 
     

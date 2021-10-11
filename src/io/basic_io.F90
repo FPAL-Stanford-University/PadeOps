@@ -53,7 +53,7 @@ contains
         open(unit=10,file=filename,access='sequential',form='formatted')
         read(10, '(a)') columncount
         rewind(10)
-
+        
         nc = 0
         do i = 1,len(columncount)
             if (columncount(i:i) == 'e') nc = nc +1
@@ -66,7 +66,7 @@ contains
             nr = nr + 1
         end do 
         rewind(10)
-       
+         
         allocate(data2read(nr,nc))
 
         do i=1, nr

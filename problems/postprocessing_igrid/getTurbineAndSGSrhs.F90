@@ -12,7 +12,7 @@ program testSGSmodelWT
    implicit none
 
    complex(rkind), dimension(:,:,:), allocatable :: uhatC, vhatC, whatE, uhatE, vhatE, whatC, ThatC,u_rhs,v_rhs,w_rhs
-   real(rkind), dimension(:,:,:), allocatable :: uC, vC, wC, uE, vE, wE, fbody_x, fbody_y, fbody_z, fbody_zC
+   real(rkind), dimension(:,:,:), allocatable :: T, uC, vC, wC, uE, vE, wE, fbody_x, fbody_y, fbody_z, fbody_zC
    real(rkind), dimension(:,:,:,:), allocatable, target :: duidxjE, duidxjC, rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE, duidxjE2
    complex(rkind), dimension(:,:,:,:), allocatable, target :: duidxjEhat,duidxjChat,cbuffyC,cbuffzC,cbuffyE,cbuffzE
    type(sgs_igrid) :: newsgs
@@ -125,7 +125,7 @@ program testSGSmodelWT
 
         ! SGS MODEL STUFF
         u_rhs = zeroC; v_rhs = zeroC; w_rhs = zeroC
-        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, .true., dTdxC, dTdyC, dTdzC, dTdxE, dTdyE, dTdzE)
+        call newsgs%getRHS_SGS(u_rhs, v_rhs, w_rhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, T, .true., dTdxC, dTdyC, dTdzC, dTdxE, dTdyE, dTdzE)
         call spectC%ifft(u_rhs,fbody_x)
         call spectC%ifft(v_rhs,fbody_y)
         call spectE%ifft(w_rhs,fbody_z)
