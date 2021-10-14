@@ -5,10 +5,11 @@ program KS_preprocess_dev
    use mpi
    use timer, only: tic, toc
    use exits, only: message, gracefulExit
+   use decomp2d
    implicit none
 
    ! Input file variables
-   integer :: nx, ny, nz, nxLES, nyLES, nzLES, nxQH, nyQH, nzQH
+   integer :: nx, ny, nz, nxLES, nyLES, nzLES, nxQH, nyQH, nzQH, interval
    integer :: tid_st, tid_en, tid_stride = 1
    real(rkind) :: Lx, Ly, Lz
    real(rkind) :: Lfact = 1.d0, disp_fact = 1.d0
@@ -18,8 +19,8 @@ program KS_preprocess_dev
    integer :: RunID
 
    ! Other variables
-   real(rkind) :: kco1, kco2
    real(rkind), dimension(:,:,:), allocatable :: u, v, w
+   real(rkind), dimension(:,:,:), allocatable :: uLES, vLES, wLES
    real(rkind), dimension(:,:,:), allocatable :: dudx, dudy, dudz
    real(rkind), dimension(:,:,:), allocatable :: dvdx, dvdy, dvdz
    real(rkind), dimension(:,:,:), allocatable :: dwdx, dwdy, dwdz
@@ -29,6 +30,9 @@ program KS_preprocess_dev
    real(rkind) :: dxQH, dyQH, dzQH
    integer :: ierr, tid
    character(len=clen) :: inputfile
+
+   ! decomp2d objects
+   type(deomp_info), pointer :: gpC, gpE
 
    namelist /INPUT/ nx, ny, nz, nxLES, nyLES, nzLES, nxQH, nyQH, nzQH, Lx, Ly, &
      Lz, Lfact, disp_fact, inputdir, outputdir, tid_st, tid_en, tid_stride, &
@@ -53,7 +57,11 @@ program KS_preprocess_dev
    ! Initialize the operator classes
    call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, &
      isZPeriodic, NUmericalSchemeVert, FFT3D = .true.)
-   
+  
+   ! Get decomp info for filtered fields (eventually this will be KS object)
+   gpC => ops%gp
+   gpE => ops%gpE
+
    ! Allocate all the needed memory
    call ops%allocate3DField(u)
    call ops%allocate3DField(v)
@@ -71,6 +79,11 @@ program KS_preprocess_dev
    call ops%allocate3DField(dwdy)
    call ops%allocate3DField(dwdz)
 
+   allocate(uLES(nxLES,nyLES,nzLES))
+   allocate(vLES(nxLES,nyLES,nzLES))
+   allocate(wLES(nxLES,nyLES,nzLES))
+   interval = nx/nxLES
+   
    ! Loop over tids
    do tid = tid_st, tid_en, tid_stride
      ! Read velocity data
@@ -113,10 +126,12 @@ program KS_preprocess_dev
      call ops%WriteField3D(dwdy,'dwdy',tid)
      call ops%WriteField3D(dwdz,'dwdz',tid)
      
-     call gracefulExit('Finished gradients',ierr)
+!     call gracefulExit('Finished gradients',ierr)
      
      ! Downsample velocity data
-     
+     call ops%downsample3D(u,uLES, interval)
+     call ops%downsample3D(v,vLES, interval)
+     call ops%downsample3D(w,wLES, interval)
 
      ! further downsample (for QH only)
      ! Save data

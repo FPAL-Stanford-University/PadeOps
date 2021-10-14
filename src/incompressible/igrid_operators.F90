@@ -90,7 +90,10 @@ module igrid_Operators
          procedure :: Project_DivergenceFree_BC
          procedure :: create_turbine_array
          procedure :: destroy_turbine_array
-         procedure :: get_turbine_RHS 
+         procedure :: get_turbine_RHS
+
+         ! Operators specific to KS prep
+         procedure :: downsample3D 
      end type 
 
 contains
@@ -900,5 +903,38 @@ end subroutine
 !!   call transpose_y_to_x(this%rbuffyE(:,:,:,1), rxE, this%gpE)
 !!
 !end subroutine
+
+subroutine downsample3D(this, fin, fout, interval)
+  class(igrid_ops) :: this
+  real(rkind), dimension(:,:,:), intent(in) :: fin
+  real(rkind), dimension(:,:,:), intent(inout) :: fout
+  integer, intent(in) :: interval
+  integer :: kL, jL, iL, k, j, i
+  integer :: nx, ny, nz, nxL, nyL, nzL
+
+  nx = size(fin,1)
+  ny = size(fin,2)
+  nz = size(fin,3)
+
+  nxL = size(fout,1)
+  nyL = size(fout,2)
+  nzL = size(fout,3)
+
+  call assert(nx/nxL == interval)
+  kL = -1
+  jL = -1
+  iL = -1
+
+  do k = 1,nzL
+    kL = kL + interval
+    do j = 1,nyL
+      jL = jL + interval
+      do i = 1,nxL
+        iL = iL + interval
+        fout(i,j,k) = fin(iL,jL,kL)
+      end do
+    end do
+  end do
+end subroutine
 
 end module 

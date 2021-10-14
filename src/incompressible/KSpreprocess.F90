@@ -181,7 +181,7 @@ contains
         allocate(this%ufil(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
         allocate(this%vfil(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
         allocate(this%wfil(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-
+        
         allocate(this%fCtmp1(spectC%spectdecomp%zsz(1),spectC%spectdecomp%zsz(2),spectC%spectdecomp%zsz(3)))
         allocate(this%fCtmp2(spectC%spectdecomp%zsz(1),spectC%spectdecomp%zsz(2),spectC%spectdecomp%zsz(3)))
        

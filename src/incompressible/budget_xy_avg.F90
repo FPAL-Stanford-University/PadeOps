@@ -184,7 +184,7 @@ contains
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
         read(unit=ioUnit, NML=BUDGET_XY_AVG)
         close(ioUnit)
-
+         
         this%igrid_sim => igrid_sim 
         this%run_id = igrid_sim%runid
         this%nz = igrid_sim%nz
@@ -200,6 +200,11 @@ contains
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
         this%avgFact = 1.d0/(real(igrid_sim%nx,rkind)*real(igrid_sim%ny,rkind))
+
+        if (.not. this%igrid_sim%fastCalcPressure) then
+            call GracefulExit("Cannot perform budget calculaitons if IGRID"//&
+              " is initialized with FASTCALCPRESSURE=.false.", ierr)
+        end if
 
         if((this%tidx_budget_start > 0) .and. (this%time_budget_start > 0.0d0)) then
             call GracefulExit("Both tidx_budget_start and time_budget_start in budget_xy_avg are positive. Turn one negative", 100)
@@ -267,7 +272,6 @@ contains
             allocate(this%buoy_hydrostatic(this%nz)) 
             allocate(this%meanZ_bcast(this%nz)) 
 
-
             ! STEP 2: Allocate memory (massive amount of memory needed)
             call igrid_sim%spectC%alloc_r2c_out(this%uc)
             call igrid_sim%spectC%alloc_r2c_out(this%usgs)
@@ -289,12 +293,12 @@ contains
             call igrid_sim%spectE%alloc_r2c_out(this%pz)
             call igrid_sim%spectE%alloc_r2c_out(this%wb)
 
-
             ! STEP 3: Now instrument igrid 
             call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
                        & this%vcor, this%wcor, this%uturb) 
-
+            
+            call message("Budget_xy_avg initialized successfully!")
         end if 
 
     end subroutine 
