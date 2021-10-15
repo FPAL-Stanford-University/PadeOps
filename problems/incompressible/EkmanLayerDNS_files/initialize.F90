@@ -33,8 +33,9 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx=26.d0, Ly=26.d0, Lz=24.d0, alphaRot = 0.d0, noiseAmp 
     character(len=clen) :: InitFileTag, InitFileDirectory!,inputfname
+    logical :: do_laminar = .false.
     
-    namelist /EkmanLayerDNS/Lx,Ly,Lz,alphaRot,noiseAmp,InitFileTag, InitFileDirectory
+    namelist /EkmanLayerDNS/Lx,Ly,Lz,alphaRot,noiseAmp,InitFileTag, InitFileDirectory, do_laminar
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -102,7 +103,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: upurt, vpurt, wpurt
     type(cd06stagg), allocatable :: derW
     real(rkind)  :: Lx = 26.d0, Ly = 26.d0, Lz = 24.d0 
-    namelist /EkmanLayerDNS/Lx,Ly,Lz,alphaRot,noiseAmp,InitFileTag, InitFileDirectory
+    logical :: do_laminar = .false.
+    namelist /EkmanLayerDNS/Lx,Ly,Lz,alphaRot,noiseAmp,InitFileTag, InitFileDirectory, do_laminar
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -128,7 +130,13 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     allocate(upurt(size(u ,1),size(u ,2),size(u ,3)))
     allocate(vpurt(size(v ,1),size(v ,2),size(v ,3)))
     allocate(wpurt(size(wC,1),size(wC,2),size(wC,3)))
-    call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, upurt, vpurt, wpurt)
+    if (do_laminar) then
+      upurt = 0.d0
+      vpurt = 0.d0
+      wpurt = 0.d0
+    else
+      call get_perturbations(decompC, x, y, InitFileTag, InitFileDirectory, upurt, vpurt, wpurt)
+    end if
     u  = u + upurt
     v  = v + vpurt
     wC = wC+ wpurt

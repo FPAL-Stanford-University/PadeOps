@@ -5,7 +5,6 @@ program KS_preprocess_dev
    use mpi
    use timer, only: tic, toc
    use exits, only: message, gracefulExit
-   use decomp2d
    implicit none
 
    ! Input file variables
@@ -31,9 +30,6 @@ program KS_preprocess_dev
    integer :: ierr, tid
    character(len=clen) :: inputfile
 
-   ! decomp2d objects
-   type(deomp_info), pointer :: gpC, gpE
-
    namelist /INPUT/ nx, ny, nz, nxLES, nyLES, nzLES, nxQH, nyQH, nzQH, Lx, Ly, &
      Lz, Lfact, disp_fact, inputdir, outputdir, tid_st, tid_en, tid_stride, &
      RunID, isZperiodic, NumericalSchemeVert
@@ -44,24 +40,21 @@ program KS_preprocess_dev
    read(unit=99, NML=INPUT)
    close(unit=99)
 
-   dx = Lx/nx
-   dy = Ly/ny
-   dz = Lz/nz
-   dxLES = Lx/nxLES
-   dyLES = Ly/nyLES
-   dzLES = Lz/nzLES
-   dxQH = Lx/nxQH
-   dyQH = Ly/nyQH
-   dzQH = Lz/nzQH
+   dx = Lx/real(nx,rkind)
+   dy = Ly/real(ny,rkind)
+   dz = Lz/real(nz,rkind)
+   dxLES = Lx/real(nxLES,rkind)
+   dyLES = Ly/real(nyLES,rkind)
+   dzLES = Lz/real(nzLES,rkind)
+   dxQH = Lx/real(nxQH,rkind)
+   dyQH = Ly/real(nyQH,rkind)
+   dzQH = Lz/real(nzQH,rkind)
 
    ! Initialize the operator classes
    call ops%init(nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, &
-     isZPeriodic, NUmericalSchemeVert, FFT3D = .true.)
+     isZPeriodic, NUmericalSchemeVert, FFT3D = .true., nxD = nxLES, &
+     nyD = nyLES, nzD = nzLES, dxD = dxLES, dyD = dyLES, dzD = dzLES)
   
-   ! Get decomp info for filtered fields (eventually this will be KS object)
-   gpC => ops%gp
-   gpE => ops%gpE
-
    ! Allocate all the needed memory
    call ops%allocate3DField(u)
    call ops%allocate3DField(v)
@@ -129,9 +122,7 @@ program KS_preprocess_dev
 !     call gracefulExit('Finished gradients',ierr)
      
      ! Downsample velocity data
-     call ops%downsample3D(u,uLES, interval)
-     call ops%downsample3D(v,vLES, interval)
-     call ops%downsample3D(w,wLES, interval)
+     call ops%down_sample(u,v,w,uLES,vLES,wLES)
 
      ! further downsample (for QH only)
      ! Save data

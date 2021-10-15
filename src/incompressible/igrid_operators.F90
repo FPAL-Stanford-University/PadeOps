@@ -11,6 +11,7 @@ module igrid_Operators
    use PadePoissonMod, only: padepoisson
    use turbineMod, only: turbineArray
    use fortran_assert, only: assert
+   use interpolatorMod, only: interpolator
    implicit none
    
    private
@@ -20,14 +21,14 @@ module igrid_Operators
       private
       complex(rkind), dimension(:,:,:), allocatable, public :: cbuffy1, cbuffy2, cbuffy3
       real(rkind),    dimension(:,:,:), allocatable :: rbuffx, rbuffy, rbuffz1, rbuffz2
-      type(decomp_info), public :: gp, gpE
+      type(decomp_info), public :: gp, gpE, gp_D
       type(spectral), public  :: spect, spectE
       type(Pade6stagg), public :: derZ
       type(cd06stagg) :: derZ1d
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2
 
       type(PoissonPeriodic) :: poiss_periodic
-      real(rkind) :: dx, dy, dz, Lx, Ly, Lz
+      real(rkind) :: dx, dy, dz, dxD, dyD, dzD, Lx, Ly, Lz
       character(len=clen), public ::  inputdir, outputdir, RestartDir
       real(rkind) :: mfact_xy
     
@@ -37,9 +38,11 @@ module igrid_Operators
     
       real(rkind), dimension(:), allocatable :: gxfilt, gyfilt, gzfilt
       type(gaussian) :: gfilt 
+      type(interpolator) :: interp
       
       complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffyE, cbuffzC, cbuffzE  ! Actuator disk buffers
-      real(rkind), dimension(:,:,:,:), allocatable :: mesh, rbuffyC, rbuffzC, rbuffyE, rbuffzE 
+      real(rkind), dimension(:,:,:,:), allocatable :: mesh, meshD, rbuffyC, rbuffzC, rbuffyE, rbuffzE 
+      real(rkind), dimension(:,:,:), pointer :: x, y, z, xD, yD, zD ! "D" denotes down-sampled grid
       complex(rkind), dimension(:,:,:), allocatable :: urhshat, vrhshat, wrhshat
       type(turbineArray), allocatable :: turbArray
 
@@ -77,6 +80,9 @@ module igrid_Operators
          procedure :: alloc_cbuffz
          procedure :: Read_VizSummary
          procedure :: alloc_zvec
+         procedure :: down_sample
+         procedure, private :: generate_mesh
+         procedure, private :: generate_course_mesh
 
          ! Initialize filters
          procedure, private :: initFilter_gaus
@@ -92,43 +98,81 @@ module igrid_Operators
          procedure :: destroy_turbine_array
          procedure :: get_turbine_RHS
 
-         ! Operators specific to KS prep
-         procedure :: downsample3D 
      end type 
 
 contains
 
-subroutine create_turbine_array(this, inputfile)
+subroutine generate_mesh(this)
     use constants, only : two
     class(igrid_ops), intent(inout), target :: this
-    character(len=*), intent(in) :: inputfile
     integer :: i, j, k, ix1, iy1, iz1, ixn, iyn, izn, hubIndex
-    real(rkind), dimension(:,:,:), pointer :: x, y, z
-
+    
     ix1 = this%gp%xst(1); iy1 = this%gp%xst(2); iz1 = this%gp%xst(3)
     ixn = this%gp%xen(1); iyn = this%gp%xen(2); izn = this%gp%xen(3)
+
+    call assert(.not. allocated(this%mesh),'.not. allocated(this%mesh)'//&
+      ' -- igrid_operators.F90')
     allocate(this%mesh(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),3))
     !associate( x => this%mesh(:,:,:,1), y => this%mesh(:,:,:,2), z => this%mesh(:,:,:,3) )
-    x => this%mesh(:,:,:,1)
-    y => this%mesh(:,:,:,2)
-    z => this%mesh(:,:,:,3)
+    this%x => this%mesh(:,:,:,1)
+    this%y => this%mesh(:,:,:,2)
+    this%z => this%mesh(:,:,:,3)
         do k=1,size(this%mesh,3)
             do j=1,size(this%mesh,2)
                 do i=1,size(this%mesh,1)
-                    x(i,j,k) = real( ix1 + i - 1, rkind ) * this%dx
-                    y(i,j,k) = real( iy1 + j - 1, rkind ) * this%dy
-                    z(i,j,k) = real( iz1 + k - 1, rkind ) * this%dz + this%dz/two
+                    this%x(i,j,k) = real( ix1 + i - 1, rkind ) * this%dx
+                    this%y(i,j,k) = real( iy1 + j - 1, rkind ) * this%dy
+                    this%z(i,j,k) = real( iz1 + k - 1, rkind ) * this%dz + this%dz/two
                 end do
             end do
         end do
 
         ! Shift everything to the origin 
-        x = x - this%dx
-        y = y - this%dy
-        z = z - this%dz 
+        this%x = this%x - this%dx
+        this%y = this%y - this%dy
+        this%z = this%z - this%dz 
 
     !end associate
+end subroutine
+
+subroutine generate_course_mesh(this)
+    use constants, only : two
+    class(igrid_ops), intent(inout), target :: this
+    integer :: i, j, k, ix1, iy1, iz1, ixn, iyn, izn, hubIndex
     
+    ix1 = this%gp%xst(1); iy1 = this%gp%xst(2); iz1 = this%gp%xst(3)
+    ixn = this%gp%xen(1); iyn = this%gp%xen(2); izn = this%gp%xen(3)
+    
+    call assert(.not. allocated(this%meshD),'.not. allocated(this%meshD)'//&
+      ' -- igrid_operators.F90')
+    allocate(this%meshD(this%gp_D%xsz(1), this%gp_D%xsz(2), this%gp_D%xsz(3),3))
+    this%xD => this%meshD(:,:,:,1)
+    this%yD => this%meshD(:,:,:,2)
+    this%zD => this%meshD(:,:,:,3)
+        do k=1,size(this%meshD,3)
+            do j=1,size(this%meshD,2)
+                do i=1,size(this%meshD,1)
+                    this%xD(i,j,k) = real( ix1 + i - 1, rkind ) * this%dxD
+                    this%yD(i,j,k) = real( iy1 + j - 1, rkind ) * this%dyD
+                    this%zD(i,j,k) = real( iz1 + k - 1, rkind ) * this%dzD + this%dzD/two
+                end do
+            end do
+        end do
+
+        ! Shift everything to the origin 
+        this%xD = this%xD - this%dxD
+        this%yD = this%yD - this%dyD
+        this%zD = this%zD - this%dzD
+
+    !end associate
+end subroutine
+
+subroutine create_turbine_array(this, inputfile)
+    class(igrid_ops), intent(inout), target :: this
+    character(len=*), intent(in) :: inputfile
+
+    call this%generate_mesh()
+
     allocate(this%turbArray)
     allocate(this%cbuffyC(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3),1))
     allocate(this%cbuffyE(this%spectE%spectdecomp%ysz(1),this%spectE%spectdecomp%ysz(2),this%spectE%spectdecomp%ysz(3),1))
@@ -491,11 +535,14 @@ function getCenterlineQuantity(this, vec) result(val)
 
 end function
 
-subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeriodicinZ, NumericalSchemeZ, RestartDir,&
-    FFT3D)
+subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, &
+    OutputDir, RunID, isPeriodicinZ, NumericalSchemeZ, RestartDir,&
+    FFT3D, nxD, nyD, nzD, dxD, dyD, dzD) 
    class(igrid_ops), intent(out), target :: this
    integer, intent(in) :: nx, ny, nz
+   integer, intent(in), optional :: nxD, nyD, nzD ! Size of down-sampled grid
    real(rkind), intent(in) :: dx, dy, dz
+   real(rkind), intent(in), optional :: dxD, dyD, dzD
    character(len=clen), intent(in) ::  inputdir, outputdir
    character(len=clen), intent(in), optional :: RestartDir
    logical, intent(in) :: isPeriodicinZ
@@ -505,10 +552,14 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
 
    periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = isPeriodicinZ 
    call decomp_2d_init(nx, ny, nz, 0, 0, periodicbcs)
-   
    call get_decomp_info(this%gp)
-   
    call decomp_info_init(nx,ny,nz+1,this%gpE)
+
+   if (present(nxD)) then
+     call assert(present(nyD),'present(nyD) -- igrid_operators.F90')
+     call assert(present(nzD),'present(nzD) -- igrid_operators.F90')
+     call decomp_info_init(nxD,nyD,nzD,this%gp_D)
+   end if
 
    if (present(FFT3D)) this%do3DFFT = FFT3D
    if (this%do3DFFT) then
@@ -542,7 +593,14 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
    this%dx = dx
    this%dy = dy
    this%dz = dz
-    
+
+   if (present(dxD)) then  
+     call assert(present(dyD), 'present(dyD) -- igrid_operators.F90') 
+     call assert(present(dzD), 'present(dzD) -- igrid_operators.F90') 
+     this%dxD = dxD
+     this%dyD = dyD
+     this%dzD = dzD
+   end if
    this%PeriodicInZ = isPeriodicInZ
 
    this%mfact_xy = 1.d0/(real(nx,rkind)*real(ny,rkind))
@@ -553,6 +611,7 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
 
    allocate(this%zarr1d_1(1,1,nz))
    allocate(this%zarr1d_2(1,1,nz))
+   
 end subroutine 
 
 subroutine destroy(this)
@@ -890,6 +949,34 @@ subroutine dump_plane(this, field, dir_id, plane_id, tid, label)
 
 end subroutine 
 
+subroutine down_sample(this, u, v, w, uD, vD, wD)
+  class(igrid_ops) :: this
+  real(rkind), dimension(this%gp%xsz(1)) :: x
+  real(rkind), dimension(this%gp%xsz(2)) :: y
+  real(rkind), dimension(this%gp%xsz(3)) :: z
+  real(rkind), dimension(this%gp_D%xsz(1)) :: xD
+  real(rkind), dimension(this%gp_D%xsz(2)) :: yD
+  real(rkind), dimension(this%gp_D%xsz(3)) :: zD
+  real(rkind), dimension(:,:,:), intent(in) :: u, v, w
+  real(rkind), dimension(:,:,:), intent(inout) :: uD, vD, wD
+
+
+  call this%generate_mesh()
+  call this%generate_course_mesh()
+
+  x = this%x(:,1,1)
+  y = this%y(1,:,1)
+  z = this%z(1,1,:)
+
+  xD = this%xD(:,1,1)
+  yD = this%yD(1,:,1)
+  zD = this%zD(1,1,:)
+
+  call this%interp%init(this%gp, this%gp_D, x, y, z, xD, yD, zD)
+  call this%interp%LinInterp3D(u, uD)
+  call this%interp%LinInterp3D(v, vD)
+  call this%interp%LinInterp3D(w, wD)
+end subroutine
 !subroutine interpolate_cellField_to_edgeField(this, rxC, rxE, bc1, bc2)
 !   class(igrid_ops), intent(inout) :: this
 !   real(rkind), intent(in),  dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)) :: rxC
@@ -903,38 +990,5 @@ end subroutine
 !!   call transpose_y_to_x(this%rbuffyE(:,:,:,1), rxE, this%gpE)
 !!
 !end subroutine
-
-subroutine downsample3D(this, fin, fout, interval)
-  class(igrid_ops) :: this
-  real(rkind), dimension(:,:,:), intent(in) :: fin
-  real(rkind), dimension(:,:,:), intent(inout) :: fout
-  integer, intent(in) :: interval
-  integer :: kL, jL, iL, k, j, i
-  integer :: nx, ny, nz, nxL, nyL, nzL
-
-  nx = size(fin,1)
-  ny = size(fin,2)
-  nz = size(fin,3)
-
-  nxL = size(fout,1)
-  nyL = size(fout,2)
-  nzL = size(fout,3)
-
-  call assert(nx/nxL == interval)
-  kL = -1
-  jL = -1
-  iL = -1
-
-  do k = 1,nzL
-    kL = kL + interval
-    do j = 1,nyL
-      jL = jL + interval
-      do i = 1,nxL
-        iL = iL + interval
-        fout(i,j,k) = fin(iL,jL,kL)
-      end do
-    end do
-  end do
-end subroutine
 
 end module 
