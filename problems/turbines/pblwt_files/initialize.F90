@@ -110,15 +110,26 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    epsnd = 1.0d-5
+    epsnd = 2.0d-0
+
+    !!!! Laminar Channel flow solution
+    !!!! 0 = (2/Re) + (1/Re)*d2u/dz2
+    !!!! -2 = d2u/dz2
+    !!!! -2z + c = dudz
+    !!!! -z^2 + cz + k = u
+    !!!! u(0) = 0 ==> k = 0
+    !!!! u(1) = 0 ==> c = 1
+    !!!! u(z) = z-z^2 = z*(1-z)
 
     !u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    u = 22.0d0*(one-(z-one)*(z-one)) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    !u = 22.0d0*(one-(z-one)*(z-one)) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    !--parabolic --!u = 2.0d1*z*(Lz-z) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    u = 2.0d1*(one-(z-1.125d0)**6) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
    
     !Add random numbers
-    randomScaleFact = 0.00d0
+    randomScaleFact = 2.00d-1
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     do k = 1,size(u,3)

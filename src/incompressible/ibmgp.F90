@@ -566,9 +566,9 @@ subroutine smooth_solidptsCE(this, u, v, w)
   !    print *, '------------------------------'
   !endif
   call transpose_y_to_z   (this%rbuffyC1, this%rbuffzC1, this%gpC)
-  !if(nrank==8) then
+  !if(nrank==3) then
   !  print *, 'nrank 8 x = ', this%gpC%zst(1), this%gpC%zen(1)
-  !  ii = 1; jj = 33;
+  !  ii = 4; jj = 4;
   !  open(10,file='smooth_along_z_before.dat',status='replace')
   !  do kk = 1, size(this%rbuffzC1,3)
   !      write(10,*) this%rbuffzC1(ii,jj,kk), this%mask_solid_zC(ii,jj,kk)
@@ -576,8 +576,8 @@ subroutine smooth_solidptsCE(this, u, v, w)
   !  close(10)
   !endif
   call this%smooth_along_z(this%rbuffzC1, this%rbuffzC2, this%mask_solid_zC, num_smooth, diffcoeff)
-  !if(nrank==8) then
-  !  ii = 1; jj = 33;
+  !if(nrank==3) then
+  !  ii = 4; jj = 4;
   !  open(10,file='smooth_along_z_after.dat',status='replace')
   !  do kk = 1, size(this%rbuffzC1,3)
   !      write(10,*) this%rbuffzC1(ii,jj,kk), this%mask_solid_zC(ii,jj,kk)

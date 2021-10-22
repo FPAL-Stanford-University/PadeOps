@@ -64,20 +64,18 @@
            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
                                          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
                                          this%v,     this%wC,    this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
-                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
+                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE, this%embed_visc_in_sgs)
 
            if (this%isStratified .or. this%initspinup) then
               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
                                          this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
            end if
-       else
-           ! IMPORTANT: If SGS model is used, the viscous term is evaluated
-           ! as part of the SGS stress tensor. 
-           if (.not. this%isInviscid) then
-               call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
-           end if
        end if
 
+       ! Add viscous term if not embedded in sgs term and not viscous simulation
+       if((.NOT. this%embed_visc_in_sgs) .and. (.NOT. this%isInviscid)) then
+               call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
+       end if
 
        call this%populate_RHS_extraTerms(copyFringeRHS, .false.)
 
@@ -169,18 +167,18 @@
            call this%sgsmodel%getRHS_SGS(this%usgs, this%vsgs, this%wsgs,      this%duidxjC, this%duidxjE,    &
                                          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
                                          this%v,     this%wC,    this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
-                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
+                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE, this%embed_visc_in_sgs)
          else
            call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
                                          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
                                          this%v,     this%wC,    this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
-                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
+                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE, this%embed_visc_in_sgs)
          end if
 
-           if (this%isStratified .or. this%initspinup) then
-              call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
-                                         this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
-           end if
+         if (this%isStratified .or. this%initspinup) then
+            call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
+                                       this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
+         end if
 
          if(associated(this%usgs)) then
            this%u_rhs = this%u_rhs + this%usgs
@@ -188,22 +186,27 @@
            this%w_rhs = this%w_rhs + this%wsgs
          end if
            
-           ! viscous term evaluate separately  
-           if ((.not. this%isInviscid) .and. associated(this%uvisc)) then
-               call this%addViscousTerm(this%uvisc, this%vvisc, this%wvisc)
-               
-               ! Now correct the SGS term 
-               this%usgs = this%usgs - this%uvisc 
-               this%vsgs = this%vsgs - this%vvisc 
-               this%wsgs = this%wsgs - this%wvisc 
-           end if  
+         ! viscous term evaluate separately
+         if ((.not. this%isInviscid) .and. associated(this%uvisc) .and. this%embed_visc_in_sgs) then
+             call this%addViscousTerm(this%uvisc, this%vvisc, this%wvisc)
+
+             ! Now correct the SGS term
+             this%usgs = this%usgs - this%uvisc
+             this%vsgs = this%vsgs - this%vvisc
+             this%wsgs = this%wsgs - this%wvisc
+         end if  
+       end if
           
-       else
-           ! IMPORTANT: If SGS model is used, the viscous term is evaluated
-           ! as part of the SGS stress tensor. 
-           if ((.not. this%isInviscid)) then
-               call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
-           end if
+       ! Add viscous term if not embedded in sgs term and not viscous simulation
+       if((.NOT. this%embed_visc_in_sgs) .and. (.NOT. this%isInviscid)) then
+         if(associated(this%uvisc)) then
+           call this%addViscousTerm(this%uvisc, this%vvisc, this%wvisc)
+           this%u_rhs = this%u_rhs + this%uvisc
+           this%v_rhs = this%v_rhs + this%vvisc
+           this%w_rhs = this%w_rhs + this%wvisc
+         else
+           call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs)
+         end if
        end if
 
 

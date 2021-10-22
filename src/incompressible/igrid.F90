@@ -152,7 +152,7 @@ module IncompressibleGrid
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false., useMoisture = .false.
         logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
-        logical :: useSGS = .false., computeTurbinePressure = .false.  
+        logical :: useSGS = .false., computeTurbinePressure = .false., embed_visc_in_sgs = .true.
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
         logical :: useCFL = .false., donot_dealias = .false.   
@@ -409,7 +409,7 @@ contains
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,CviscDT=1.d0,deltaT_dump=1.d0
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0, moistureFactor = 0.61_rkind
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
-        logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
+        logical ::useRestartFile=.false.,isInviscid=.false., embed_visc_in_sgs=.true.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false., useibm = .false. 
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
@@ -445,7 +445,7 @@ contains
                     & t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,useforcedStratification,&
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection, useHITRealSpaceLinearForcing, HITForceTimeScale
+                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection, useHITRealSpaceLinearForcing, HITForceTimeScale, embed_visc_in_sgs
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl, useibm
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
@@ -495,7 +495,7 @@ contains
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact;this%useFringe = useFringe; this%useControl = useControl
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT 
-        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity 
+        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity; this%embed_visc_in_sgs = embed_visc_in_sgs 
         this%deleteInstructions = deleteInstructions; this%TopBC_Temp = TopBC_temp
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
         this%donot_dealias = donot_dealias; this%ioType = ioType; this%HITForceTimeScale = HITForceTimeScale
@@ -1354,9 +1354,11 @@ contains
            call GracefulExit("SCALARS are only supported with TVD RK3 or SSP RK45 time stepping.",123)
        end if 
 
-       if ((this%fastCalcPressure) .and. (useDealiasFilterVert)) then
-           call GracefulExit("fastCalcPressure feature is not supported if useDealiasFilterVert is TRUE",123) 
-       end if 
+       !!! --- Question from Niranjan :: why is this needed ??? ----
+       !!!if ((this%fastCalcPressure) .and. (useDealiasFilterVert)) then
+       !!!    call GracefulExit("fastCalcPressure feature is not supported if useDealiasFilterVert is TRUE",123) 
+       !!!end if 
+       !!! --- Question from Niranjan :: why is this needed ??? ----
 
        if ((.not. this%fastCalcPressure) .and. ((this%computefringePressure) .or. (this%computeDNSPressure))) then
            call gracefulExit("You need to set FASTCALCPRESSURE = .true. in & 

@@ -218,6 +218,10 @@ contains
             call GracefulExit("Both tidx_budget_start and time_budget_start in budget_time_avg are positive. Turn one negative", 100)
         endif
 
+        if((.NOT. this%igrid_sim%isInviscid) .and. (.NOT. this%igrid_sim%embed_visc_in_sgs)) then
+            call message(1, "!!!!! Simulation is viscous but viscous terms are not embedded in SGS terms. Viscous terms are missing from budget calculations !!!!!!!")
+        endif
+
         if(this%do_budgets) then 
             !if (this%isStratified) then
             ! Always assume that you are stratified
@@ -549,8 +553,10 @@ contains
         this%budget_0(:,:,:,10) = this%budget_0(:,:,:,10) + this%igrid_sim%pressure
 
         ! STEP 4: SGS stresses (also viscous stress if finite reynolds number is being used)
-        call this%igrid_sim%sgsmodel%populate_tauij_E_to_C()
-        this%budget_0(:,:,:,11:16) = this%budget_0(:,:,:,11:16) + this%igrid_sim%tauSGS_ij 
+        if(this%igrid_sim%usesgs) then
+            call this%igrid_sim%sgsmodel%populate_tauij_E_to_C()
+            this%budget_0(:,:,:,11:16) = this%budget_0(:,:,:,11:16) + this%igrid_sim%tauSGS_ij 
+        endif
 
         ! STEP 5: Pressure flux for TKE transport
         this%budget_0(:,:,:,17) = this%budget_0(:,:,:,17) + this%igrid_sim%pressure*this%igrid_sim%u
@@ -566,17 +572,19 @@ contains
         this%budget_0(:,:,:,22) = this%budget_0(:,:,:,22) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%wC
 
         ! STEP 7: SGS flux for TKE transport
-        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%igrid_sim%tauSGS_ij(:,:,:,1)*this%igrid_sim%u
-        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%igrid_sim%tauSGS_ij(:,:,:,2)*this%igrid_sim%v
-        this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%igrid_sim%tauSGS_ij(:,:,:,3)*this%igrid_sim%wC
+        if(this%igrid_sim%usesgs) then
+            this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%igrid_sim%tauSGS_ij(:,:,:,1)*this%igrid_sim%u
+            this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%igrid_sim%tauSGS_ij(:,:,:,2)*this%igrid_sim%v
+            this%budget_0(:,:,:,23) = this%budget_0(:,:,:,23) + this%igrid_sim%tauSGS_ij(:,:,:,3)*this%igrid_sim%wC
 
-        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%igrid_sim%tauSGS_ij(:,:,:,2)*this%igrid_sim%u
-        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%igrid_sim%tauSGS_ij(:,:,:,4)*this%igrid_sim%v
-        this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%igrid_sim%tauSGS_ij(:,:,:,5)*this%igrid_sim%wC
+            this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%igrid_sim%tauSGS_ij(:,:,:,2)*this%igrid_sim%u
+            this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%igrid_sim%tauSGS_ij(:,:,:,4)*this%igrid_sim%v
+            this%budget_0(:,:,:,24) = this%budget_0(:,:,:,24) + this%igrid_sim%tauSGS_ij(:,:,:,5)*this%igrid_sim%wC
 
-        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,3)*this%igrid_sim%u
-        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,5)*this%igrid_sim%v
-        this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,6)*this%igrid_sim%wC
+            this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,3)*this%igrid_sim%u
+            this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,5)*this%igrid_sim%v
+            this%budget_0(:,:,:,25) = this%budget_0(:,:,:,25) + this%igrid_sim%tauSGS_ij(:,:,:,6)*this%igrid_sim%wC
+        endif
 
         ! STEP 8: Potential temperature terms for stratified flow
         if (this%isStratified) then
@@ -815,7 +823,9 @@ contains
     subroutine AssembleBudget3(this)
         class(budgets_time_avg), intent(inout) :: this
 
-        call this%igrid_sim%sgsmodel%populate_tauij_E_to_C()
+        if(this%igrid_sim%usesgs) then
+            call this%igrid_sim%sgsmodel%populate_tauij_E_to_C()
+        endif
 
         ! 3. turbulent transport         (C)
         call this%igrid_sim%spectC%ifft(this%uc,this%igrid_sim%rbuffxC(:,:,:,1))
@@ -854,32 +864,34 @@ contains
         
 
         ! 6. SGS + viscous dissipation   (H+I)
-        call this%ddx_R2R(this%igrid_sim%u, this%igrid_sim%rbuffxC(:,:,:,1)); 
-        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,1)
+        if(this%igrid_sim%usesgs) then
+            call this%ddx_R2R(this%igrid_sim%u, this%igrid_sim%rbuffxC(:,:,:,1)); 
+            this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,1)
 
-        call this%ddx_R2R(this%igrid_sim%v, this%igrid_sim%rbuffxC(:,:,:,1)); 
-        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,2)
+            call this%ddx_R2R(this%igrid_sim%v, this%igrid_sim%rbuffxC(:,:,:,1)); 
+            this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,2)
 
-        call this%ddx_R2R(this%igrid_sim%wC, this%igrid_sim%rbuffxC(:,:,:,1)); 
-        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,3)
+            call this%ddx_R2R(this%igrid_sim%wC, this%igrid_sim%rbuffxC(:,:,:,1)); 
+            this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,3)
 
-        call this%ddy_R2R(this%igrid_sim%u, this%igrid_sim%rbuffxC(:,:,:,1)); 
-        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,2)
+            call this%ddy_R2R(this%igrid_sim%u, this%igrid_sim%rbuffxC(:,:,:,1)); 
+            this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,2)
 
-        call this%ddy_R2R(this%igrid_sim%v, this%igrid_sim%rbuffxC(:,:,:,1)); 
-        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,4)
+            call this%ddy_R2R(this%igrid_sim%v, this%igrid_sim%rbuffxC(:,:,:,1)); 
+            this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,4)
 
-        call this%ddy_R2R(this%igrid_sim%wC, this%igrid_sim%rbuffxC(:,:,:,1)); 
-        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,5)
+            call this%ddy_R2R(this%igrid_sim%wC, this%igrid_sim%rbuffxC(:,:,:,1)); 
+            this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,5)
 
-        call this%ddz_R2R(this%igrid_sim%u, this%igrid_sim%rbuffxC(:,:,:,1)); 
-        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,3)
+            call this%ddz_R2R(this%igrid_sim%u, this%igrid_sim%rbuffxC(:,:,:,1)); 
+            this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,3)
 
-        call this%ddz_R2R(this%igrid_sim%v, this%igrid_sim%rbuffxC(:,:,:,1)); 
-        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,5)
+            call this%ddz_R2R(this%igrid_sim%v, this%igrid_sim%rbuffxC(:,:,:,1)); 
+            this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,5)
 
-        call this%ddz_R2R(this%igrid_sim%wC, this%igrid_sim%rbuffxC(:,:,:,1)); 
-        this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,6)
+            call this%ddz_R2R(this%igrid_sim%wC, this%igrid_sim%rbuffxC(:,:,:,1)); 
+            this%budget_3(:,:,:,6) = this%budget_3(:,:,:,6) + this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%tauSGS_ij(:,:,:,6)
+        endif
 
 
         ! 7. Actuator disk/Turbine sink  (J)
@@ -975,24 +987,32 @@ contains
         class(budgets_time_avg), intent(inout) :: this
         integer :: iind_max
 
-        if(this%is_z0_varying) then
-            ! time-averaged quntities related to varying z0
-            iind_max = 4     ! ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1) 
-            call this%igrid_sim%sgsmodel%get_z0varstats(this%igrid_sim%rbuffxC(:,:,:,1))
-            this%z0varstats(:,:,1:iind_max) = this%z0varstats(:,:,1:iind_max) + this%igrid_sim%rbuffxC(:,:,1:iind_max,1)
+        if(this%igrid_sim%usesgs) then
+            if(this%is_z0_varying) then
+                ! time-averaged quntities related to varying z0
+                iind_max = 4     ! ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1) 
+                call this%igrid_sim%sgsmodel%get_z0varstats(this%igrid_sim%rbuffxC(:,:,:,1))
+                this%z0varstats(:,:,1:iind_max) = this%z0varstats(:,:,1:iind_max) + this%igrid_sim%rbuffxC(:,:,1:iind_max,1)
+            else
+                ! horizontally-averaged surface quantities and turbine statistics
+                this%igrid_sim%inst_horz_avg(1) = this%igrid_sim%sgsmodel%get_ustar()
+                this%igrid_sim%inst_horz_avg(2) = this%igrid_sim%sgsmodel%get_uw_surf()
+                this%igrid_sim%inst_horz_avg(3) = this%igrid_sim%sgsmodel%get_vw_surf()
+                if(this%isStratified) then
+                    this%igrid_sim%inst_horz_avg(4) = this%igrid_sim%sgsmodel%get_InvObLength()
+                    this%igrid_sim%inst_horz_avg(5) = this%igrid_sim%wTh_surf
+                endif
+            endif
         else
-            ! horizontally-averaged surface quantities and turbine statistics
-            this%igrid_sim%inst_horz_avg(1) = this%igrid_sim%sgsmodel%get_ustar()
-            this%igrid_sim%inst_horz_avg(2) = this%igrid_sim%sgsmodel%get_uw_surf()
-            this%igrid_sim%inst_horz_avg(3) = this%igrid_sim%sgsmodel%get_vw_surf()
+            this%igrid_sim%inst_horz_avg(1:3) = zero
             if(this%isStratified) then
-                this%igrid_sim%inst_horz_avg(4) = this%igrid_sim%sgsmodel%get_InvObLength()
-                this%igrid_sim%inst_horz_avg(5) = this%igrid_sim%wTh_surf
+                this%igrid_sim%inst_horz_avg(4:5) = zero
             endif
-            this%runningSum_sc = this%runningSum_sc + this%igrid_sim%inst_horz_avg
-            if(this%useWindTurbines) then
-                this%runningSum_sc_turb = this%runningSum_sc_turb + this%igrid_sim%inst_horz_avg_turb
-            endif
+        endif
+
+        this%runningSum_sc = this%runningSum_sc + this%igrid_sim%inst_horz_avg
+        if(this%useWindTurbines) then
+            this%runningSum_sc_turb = this%runningSum_sc_turb + this%igrid_sim%inst_horz_avg_turb
         endif
 
     end subroutine 
@@ -1265,6 +1285,9 @@ contains
     subroutine destroy(this)
         class(budgets_time_avg), intent(inout) :: this
 
+        if(this%igrid_sim%useibm) then
+            deallocate(this%utauC_ib)
+        endif
         nullify(this%igrid_sim)
         if(this%do_budgets) then
             deallocate(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, this%px, this%py, this%pz, this%uturb)  
@@ -1277,9 +1300,6 @@ contains
         endif
         if(this%is_z0_varying) then
             deallocate(this%z0varstats)
-        endif
-        if(this%igrid_sim%useibm) then
-            deallocate(this%utauC_ib)
         endif
 
     end subroutine 
