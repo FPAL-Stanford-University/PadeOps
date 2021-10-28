@@ -162,41 +162,42 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       this%rbuffxC(:,:,1,2) = sqrt(this%filteredSpeedSq(:,:,1))     ! not span-avg
       this%rbuffxC(:,:,2,2) = sqrt(this%filteredSpeedSq(:,:,2))     ! span-avg
       
-      !spanwise averaging for rbuffxC
-      runavg = 0
-      do i = 1,xsz(2)
-          runavg = runavg + rbuffxc(:,i,1,2)
-      enddo
-      runavg = runavg/xsz(2)
-      write(*,'(a,f11.8)') "rbuffxC(:,:,1,2): ", runavg
+      !!spanwise averaging for rbuffxC
+      !runavg = 0
+      !do i = 1,xsz(2)
+      !    runavg = runavg + rbuffxc(:,i,1,2)
+      !enddo
+      !runavg = runavg/xsz(2)
+      !write(*,'(a,f11.8)') "rbuffxC(:,:,1,2): ", runavg
 
-      write(*,'(a,f11.8)') "rbuffxC(:,:,2,2): ", rbuffxC(:,:,2,2)        
+      !write(*,'(a,f11.8)') "rbuffxC(:,:,2,2): ", rbuffxC(:,:,2,2)        
       
       ! using this%filteredSpeedSq in the upstream region, estimate ustar1
       call this%compute_ustar_upstreampart(ustar1)
       ust1fac = ustar1/sqrt(this%kaplnzfac_s)
       this%ustar_upstream = ustar1
 
-      !modelregion = 0; 
+      modelregion = 0; 
       where(this%lamfact > (one-epssmall))
           this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)     ! not span-avg
           this%ustarsqspan = this%kaplnzfac_s*this%filteredSpeedSq(:,:,2)    !!!!! span-avg 
-          !modelregion = 1
+          modelregion = 1
       elsewhere (this%lamfact > epssmall)
           this%ustarsqvar = (this%rbuffxC(:,:,2,2) - this%lamfact*ust1fac) / (one - this%lamfact)
           this%ustarsqvar = this%kaplnzfac_r*this%ustarsqvar*this%ustarsqvar
-          !modelregion = 2
+          modelregion = 2
       elsewhere
           this%ustarsqvar = this%kaplnzfac_r*this%filteredSpeedSq(:,:,2)
-          !modelregion = 3
+          modelregion = 3
       endwhere
 
       !if(nrank==0) then
-      !  !do i=1,this%gpC%xsz(1)
-      !  !  write(*,*) this%lamfact(i,1), modelregion(i,1)
-      !  !enddo
-      !  i = 34
-      !  write(*,'(a,e19.12,x,i4.4,1x,4(e19.12,1x))') '---i=34: ', this%lamfact(i,1), modelregion(i,1), this%rbuffxC(i,1,1,2), ust1fac, this%ustarsqvar(i,1), this%kaplnzfac_r
+      !  do i=48,52 !1,this%gpC%xsz(1)
+      !    !  write(*,*) this%lamfact(i,1), modelregion(i,1)
+      !    !enddo
+      !    !i = 50
+      !    write(*,'(a,i4.4,1x,e19.12,1x,i4.4,1x,5(e19.12,1x))') '---i= ', i,this%lamfact(i,1), modelregion(i,1), this%rbuffxC(i,1,1:2,2), ust1fac, this%ustarsqvar(i,1), this%kaplnzfac_r
+      !  enddo
       !endif
 
       ! tau_13
@@ -487,7 +488,8 @@ subroutine compute_ustar_upstreampart(this, ustar1)
    !ufiltavg = p_sum(sum(sqrt(this%filteredSpeedSq(:,:,1)*this%mask_upstream)))/this%mask_normfac
    !ustar1 = ufiltavg*sqrt(this%kaplnzfac_s)
 
-   ufiltavg = p_sum(sum(this%filteredSpeedSq(:,:,1)*this%mask_upstream))/this%mask_normfac
+   !ufiltavg = p_sum(sum(this%filteredSpeedSq(:,:,1)*this%mask_upstream))/this%mask_normfac !--- using not-span-avg
+   ufiltavg = p_sum(sum(this%filteredSpeedSq(:,:,2)*this%mask_upstream))/this%mask_normfac  !--- using span-avg
    ustar1 = sqrt(ufiltavg*this%kaplnzfac_s)
    !if(nrank==0) 
    !print '(a,3(e19.12,1x))', "ustar1:= ", ustar1, this%kaplnzfac_s, ufiltavg
