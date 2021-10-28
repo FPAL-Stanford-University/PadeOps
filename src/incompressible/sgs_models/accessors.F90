@@ -208,8 +208,9 @@ subroutine get_z0varstats(this, fout)
     fout(:,:,4) = this%filteredSpeedSq(:,:,1)
     fout(:,:,5) = this%Uxspan
     fout(:,:,6) = this%Uyspan
+    fout(:,:,7) = this%ustarsqspan !!!!
     if(this%WallModel == 4) then
-        fout(:,:,7) = this%nlptype
+        fout(:,:,8) = this%nlptype
     endif
 
 end subroutine 

@@ -13,7 +13,7 @@ subroutine destroy(this)
   nullify(this%tau_11, this%tau_12, this%tau_22, this%tau_33)
   deallocate(this%tau_13, this%tau_23)
   if(this%is_z0_varying) then
-      deallocate(this%ustarsqvar, this%z0var, this%Uxvar, this%Uyvar, this%WallMFactorvar, this%lamfact, this%deli, this%mask_upstream, this%alpfac, this%Uxspan, this%Uyspan)
+      deallocate(this%ustarsqvar, this%z0var, this%Uxvar, this%Uyvar, this%WallMFactorvar, this%lamfact, this%deli, this%mask_upstream, this%alpfac, this%Uxspan, this%Uyspan, this%ustarsqspan) !!!!
   endif
 
 end subroutine
@@ -216,12 +216,13 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     allocate(this%deli(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%Uxspan(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%Uyspan(this%gpC%xsz(1), this%gpC%xsz(2)))
+    allocate(this%ustarsqspan(this%gpC%xsz(1), this%gpC%xsz(2))) !!!!!
 
     ! set all arrays to zero :: this is important
     this%z0var         = 0.0_rkind;   this%ustarsqvar     = 0.0_rkind;   this%Uxvar   = 0.0_rkind
     this%Uyvar         = 0.0_rkind;   this%WallMFactorvar = 0.0_rkind;   this%lamfact = 0.0_rkind
     this%mask_upstream = 0.0_rkind;   this%deli           = 0.0_rkind;   sp_map       = 0.0_rkind
-    this%Uxspan        = 0.0_rkind;   this%Uyspan         = 0.0_rkind;
+    this%Uxspan        = 0.0_rkind;   this%Uyspan         = 0.0_rkind;   this%ustarsqspan = 0.0_rkind
 
     this%z0s = z0s; this%z0r = z0r
     this%filter_for_heterog = filter_for_heterog

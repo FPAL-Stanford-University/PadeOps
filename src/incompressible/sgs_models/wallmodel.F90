@@ -161,7 +161,17 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       call this%getSpanAvgVelAtWall()
       this%rbuffxC(:,:,1,2) = sqrt(this%filteredSpeedSq(:,:,1))     ! not span-avg
       this%rbuffxC(:,:,2,2) = sqrt(this%filteredSpeedSq(:,:,2))     ! span-avg
+      
+      !spanwise averaging for rbuffxC
+      runavg = 0
+      do i = 1,xsz(2)
+          runavg = runavg + rbuffxc(:,i,1,2)
+      enddo
+      runavg = runavg/xsz(2)
+      write(*,'(a,f11.8)') "rbuffxC(:,:,1,2): ", runavg
 
+      write(*,'(a,f11.8)') "rbuffxC(:,:,2,2): ", rbuffxC(:,:,2,2)        
+      
       ! using this%filteredSpeedSq in the upstream region, estimate ustar1
       call this%compute_ustar_upstreampart(ustar1)
       ust1fac = ustar1/sqrt(this%kaplnzfac_s)
@@ -170,6 +180,7 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       !modelregion = 0; 
       where(this%lamfact > (one-epssmall))
           this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)     ! not span-avg
+          this%ustarsqspan = this%kaplnzfac_s*this%filteredSpeedSq(:,:,2)    !!!!! span-avg 
           !modelregion = 1
       elsewhere (this%lamfact > epssmall)
           this%ustarsqvar = (this%rbuffxC(:,:,2,2) - this%lamfact*ust1fac) / (one - this%lamfact)

@@ -207,10 +207,12 @@ program concurrentSimulation
     call prec%destroy()                                                  !<-- Destroy the IGRID derived type 
     call igp%destroy()                                                   !<-- Destroy the IGRID derived type 
    
-    deallocate(utarget, vtarget, wtarget)
+    if(allocated(utarget)) deallocate(utarget) !!
+    if(allocated(vtarget)) deallocate(vtarget) !!
+    if(allocated(wtarget)) deallocate(wtarget) !!
     if(allocated(Ttarget)) deallocate(Ttarget)
-    call interpE%destroy()
-    call interpC%destroy()
+    if(useInterpolator) call interpE%destroy()
+    if(useInterpolator) call interpC%destroy()
 
     deallocate(prec)                                                     !<-- Deallocate all the memory associated with scalar defaults
     deallocate(igp)                                                      !<-- Deallocate all the memory associated with scalar defaults
