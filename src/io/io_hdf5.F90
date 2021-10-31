@@ -6,7 +6,7 @@ module io_hdf5_stuff
     use exits,           only: GracefulExit
     implicit none
 
-    external :: MPI_ALLREDUCE, SYSTEM, MPI_BCAST
+    external :: MPI_ALLREDUCE, MPI_BCAST
 
 
     type :: io_hdf5
@@ -127,7 +127,7 @@ contains
         end if
 
         ! Create vizdir if it does not exist
-        !if (this%master) call system('mkdir -p ' // adjustl(trim(this%vizdir)))
+        if (this%master) call system('mkdir -p ' // adjustl(trim(this%vizdir)))
         call mpi_barrier(mpi_comm_world, error)
 
         ! Initialize the HDF5 library and Fortran interfaces

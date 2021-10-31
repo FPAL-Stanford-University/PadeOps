@@ -15,7 +15,7 @@ foreach ( testfile ${tests_source_files} )
   
     add_executable( ${testexec} ${testfile} )
     
-    target_link_libraries( ${testexec} IncompressibleOps CompressibleOps 2decomp_fft fftw3 ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a )
+    target_link_libraries( ${testexec} GaborOps IncompressibleOps CompressibleOps 2decomp_fft fftw3 ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a )
 
     if (MPI_Fortran_COMPILER_FLAGS)
         set_target_properties(${testexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")

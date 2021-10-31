@@ -7,6 +7,7 @@ file(GLOB compressible_source_files compressible/*.F90)
 file(GLOB solid_source_files solid/*.F90)
 file(GLOB poisson_source_files incompressible/poisson/*.F90)
 file(GLOB incompressible_source_files incompressible/*.F90)
+file(GLOB gabor_source_files gabor/*.F90)
 
 # Where to look for FFTW
 set(FFTW_LIBRARY_PATH "${FFTW_PATH}/lib")
@@ -61,3 +62,12 @@ target_link_libraries(IncompressibleOps PadeOps ${MPI_LIBRARIES})
 if (MPI_Fortran_COMPILER_FLAGS)
     set_target_properties(IncompressibleOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
 endif()
+
+# Create a library called GaborOps
+add_library(GaborOps STATIC ${grid_source_files} ${poisson_source_files} ${incompressible_source_files} ${gabor_source_files})
+target_link_libraries(GaborOps IncompressibleOps PadeOps ${MPI_LIBRARIES})
+
+if (MPI_Fortran_COMPILER_FLAGS)
+    set_target_properties(GaborOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
+endif()
+
