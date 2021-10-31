@@ -18,7 +18,10 @@ module EulerG_mod
             procedure :: destroy
             procedure :: setField 
             procedure :: getPointersToFields 
-            procedure :: allocateFieldForLevel  
+            procedure :: allocateFieldForLevel 
+            procedure :: getDeltaForLevel 
+            procedure :: getDomainRangeForLevel
+            procedure :: ResetVelocityToZero 
     end type 
 
 contains 
@@ -43,6 +46,8 @@ subroutine init(this, gpLES, xLim, yLim, zLim, nlevels)
         call this%fields(ilevel)%init(myGP, xLim, yLim, zLim)
     end do 
 
+    call this%ResetVelocityToZero()
+
 end subroutine
 
 subroutine setField(this, u, v, w, level)
@@ -63,6 +68,25 @@ subroutine agglomerate(this)
         call this%fields(ilevel)%aggDown(this%fields(ilevel+1)%u, this%fields(ilevel+1)%v, this%fields(ilevel+1)%w, this%fields(ilevel+1)%buffer)
     end do 
     
+end subroutine 
+
+subroutine getDeltaForLevel(this, delta, level)
+    class(EulerG), intent(in) :: this 
+    integer, intent(in) :: level 
+    real(rkind), dimension(3), intent(out) :: delta 
+
+    delta = this%fields(level)%delta 
+
+end subroutine 
+
+subroutine getDomainRangeForLevel(this, xRange, yRange, zRange, level)
+    class(EulerG), intent(in) :: this 
+    integer, intent(in) :: level 
+    real(rkind), dimension(2), intent(out) :: xRange, yRange, zRange 
+
+    xRange = this%fields(level)%xRange 
+    yRange = this%fields(level)%yRange 
+    zRange = this%fields(level)%zRange 
 end subroutine 
 
 subroutine destroy(this)
@@ -97,7 +121,7 @@ subroutine getPointersToFields(this, u, v, w, level)
 
 end subroutine 
 
-subroutine writeFields(this, level, fname)
+subroutine writeFields(this, fname, level)
     use decomp_2d_io
     class(EulerG), intent(inout) :: this 
     integer :: level 
@@ -116,6 +140,18 @@ subroutine writeFields(this, level, fname)
     write(tmp,"(A6,I2.2,A5,A4)") "_Level",level, "_wVEL", ".out"
     writefname = fname // tmp 
     call decomp_2d_write_one(1, this%fields(level)%w, trim(writefname), this%fields(level)%gp)
+
+end subroutine 
+
+subroutine ResetVelocityToZero(this)
+    class(EulerG), intent(inout) :: this 
+    integer :: ilevel 
+
+    do ilevel = 1,this%nlevels
+        this%fields(ilevel)%u = 0.d0 
+        this%fields(ilevel)%v = 0.d0 
+        this%fields(ilevel)%w = 0.d0 
+    end do 
 
 end subroutine 
 

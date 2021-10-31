@@ -59,7 +59,7 @@ contains
         class(gaborMode), intent(in) :: this
         real(rkind), dimension(2), intent(in) :: xRange, yRange, zRange
         real(rkind), dimension(3), intent(in) :: delta  
-        real(rkind), dimension(:,:,:), intent(inout) :: u, v, w
+        real(kind=4), dimension(:,:,:), intent(inout) :: u, v, w
         integer :: xst, xen, yst, yen, zst, zen, i, j, k 
         real(rkind) :: xmin, xmax, ymin, ymax, zmin, zmax 
         real(kind=4) :: Lw, uhatR, vhatR, whatR, uhatI, vhatI, whatI

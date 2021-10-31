@@ -11,7 +11,8 @@ module Efield_mod
         type(interpolator), allocatable  :: interpToFinerLevel 
         type(decomp_info), pointer :: gp
         type(decomp_info), allocatable  :: gpFinerLevel  
-
+        real(rkind), dimension(3) :: delta
+        real(rkind), dimension(2) :: xRange, yRange, zRange  
         contains 
         procedure :: init
         procedure :: AggDown    
@@ -48,16 +49,29 @@ subroutine init(this, gp, xDom, yDom, zDom)
     allocate(this%gpFinerLevel)
     call decomp_info_init(2*nx+1,2*ny+1,2*nz+1,this%gpFinerLevel)
 
-    allocate(this%interpToFinerLevel)
-    call this%interpToFinerLevel%init(this%gp, this%gpFinerLevel, x, y, z, xFine, yFine, zFine) 
-   
     allocate(this%u(this%gp%xsz(1), this%gp%xsz(2), this%gp%xsz(3)))
     allocate(this%v(this%gp%xsz(1), this%gp%xsz(2), this%gp%xsz(3)))
     allocate(this%w(this%gp%xsz(1), this%gp%xsz(2), this%gp%xsz(3)))
     allocate(this%buffer(this%gp%xsz(1), this%gp%xsz(2), this%gp%xsz(3)))
-    this%u = 0.d0 
-    this%v = 0.d0 
-    this%w = 0.d0 
+    
+    this%delta(1) = x(2) - x(1) 
+    this%delta(2) = y(2) - y(1)
+    this%delta(3) = z(2) - z(1)
+
+    ! Rank specific domain bounds 
+    this%xRange(1) = x(this%gp%xst(1)) 
+    this%xRange(2) = x(this%gp%xen(1))
+    
+    this%yRange(1) = y(this%gp%xst(2)) 
+    this%yRange(2) = y(this%gp%xen(2))
+    
+    this%zRange(1) = z(this%gp%xst(3)) 
+    this%zRange(2) = z(this%gp%xen(3))
+    
+    allocate(this%interpToFinerLevel)
+    call this%interpToFinerLevel%init(this%gp, this%gpFinerLevel, x, y, z, xFine, yFine, zFine) 
+
+    deallocate(x, y, z, xFine, yFine, zFine)
 end subroutine 
 
 subroutine AggDown(this, uFiner, vFiner, wFiner, buffer)
