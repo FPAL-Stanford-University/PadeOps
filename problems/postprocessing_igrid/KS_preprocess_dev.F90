@@ -124,6 +124,12 @@ program KS_preprocess_dev
      ! Downsample velocity data
      call ops%down_sample(u,v,w,uLES,vLES,wLES)
 
+     ! Write LES fields to disk
+     print*, shape(uLES)
+     call ops%WriteDownsampledField3D(uLES, 'uLES', tid)
+     call ops%WriteDownsampledField3D(vLES, 'vLES', tid)
+     call ops%WriteDownsampledField3D(wLES, 'wLES', tid)
+
      ! further downsample (for QH only)
      ! Save data
    end do

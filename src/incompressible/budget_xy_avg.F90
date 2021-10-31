@@ -7,6 +7,7 @@ module budgets_xy_avg_mod
    use constants, only: half,two,one,zero
    use basic_io, only: read_2d_ascii, write_2d_ascii
    use mpi 
+   use fortran_assert, only: assert
 
    implicit none 
 
@@ -177,6 +178,7 @@ contains
         integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = -100
         logical :: do_budgets = .false., do_spectra = .false., do_autocorrel = .false.
         real(rkind) :: time_budget_start = -1.0d0
+        character(len=clen) :: mssg
         namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start, time_budget_start, do_spectra, do_autocorrel
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
@@ -253,6 +255,15 @@ contains
                     call GracefulExit("restart budgets not supported with do_autocorrel. Set one of them to false", 100)
                 endif
                 call this%RestartBudget(restart_rid, restart_tid, restart_counter)
+                
+                ! Error handling
+                call assert(size(this%Budget_0,1) == this%nz, &
+                  'size(this%Budget_0,1) == this%nz -- budget_xy_avg.F90')
+                write(mssg,'(A,I2,A,I2,A)')&
+                  'size(this%Budget_0,2) == 21 -- budget_xy_avg.F90'&
+                  //' | shape(this%Budget_0) = (', size(this%Budget_0,1), &
+                  ',', size(this%Budget_0,2), ')'
+                call assert(size(this%Budget_0,2) == 21, trim(mssg))
             else
                 call this%resetBudget()
             end if

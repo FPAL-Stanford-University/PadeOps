@@ -60,6 +60,7 @@ module igrid_Operators
          procedure :: getFluct_from_MeanZ
          procedure :: ReadField3D
          procedure :: WriteField3D
+         procedure :: WriteDownsampledField3D
          procedure :: WriteSummingRestart 
          procedure :: ReadSummingRestart 
          procedure :: WriteSummingRestartInfo
@@ -81,8 +82,6 @@ module igrid_Operators
          procedure :: Read_VizSummary
          procedure :: alloc_zvec
          procedure :: down_sample
-         procedure, private :: generate_mesh
-         procedure, private :: generate_course_mesh
 
          ! Initialize filters
          procedure, private :: initFilter_gaus
@@ -102,16 +101,17 @@ module igrid_Operators
 
 contains
 
-subroutine generate_mesh(this)
+subroutine create_turbine_array(this, inputfile)
     use constants, only : two
     class(igrid_ops), intent(inout), target :: this
+    character(len=*), intent(in) :: inputfile
     integer :: i, j, k, ix1, iy1, iz1, ixn, iyn, izn, hubIndex
     
     ix1 = this%gp%xst(1); iy1 = this%gp%xst(2); iz1 = this%gp%xst(3)
     ixn = this%gp%xen(1); iyn = this%gp%xen(2); izn = this%gp%xen(3)
 
-    call assert(.not. allocated(this%mesh),'.not. allocated(this%mesh)'//&
-      ' -- igrid_operators.F90')
+!    call assert(.not. allocated(this%mesh),'.not. allocated(this%mesh)'//&
+!      ' -- igrid_operators.F90')
     allocate(this%mesh(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),3))
     !associate( x => this%mesh(:,:,:,1), y => this%mesh(:,:,:,2), z => this%mesh(:,:,:,3) )
     this%x => this%mesh(:,:,:,1)
@@ -133,45 +133,6 @@ subroutine generate_mesh(this)
         this%z = this%z - this%dz 
 
     !end associate
-end subroutine
-
-subroutine generate_course_mesh(this)
-    use constants, only : two
-    class(igrid_ops), intent(inout), target :: this
-    integer :: i, j, k, ix1, iy1, iz1, ixn, iyn, izn, hubIndex
-    
-    ix1 = this%gp%xst(1); iy1 = this%gp%xst(2); iz1 = this%gp%xst(3)
-    ixn = this%gp%xen(1); iyn = this%gp%xen(2); izn = this%gp%xen(3)
-    
-    call assert(.not. allocated(this%meshD),'.not. allocated(this%meshD)'//&
-      ' -- igrid_operators.F90')
-    allocate(this%meshD(this%gp_D%xsz(1), this%gp_D%xsz(2), this%gp_D%xsz(3),3))
-    this%xD => this%meshD(:,:,:,1)
-    this%yD => this%meshD(:,:,:,2)
-    this%zD => this%meshD(:,:,:,3)
-        do k=1,size(this%meshD,3)
-            do j=1,size(this%meshD,2)
-                do i=1,size(this%meshD,1)
-                    this%xD(i,j,k) = real( ix1 + i - 1, rkind ) * this%dxD
-                    this%yD(i,j,k) = real( iy1 + j - 1, rkind ) * this%dyD
-                    this%zD(i,j,k) = real( iz1 + k - 1, rkind ) * this%dzD + this%dzD/two
-                end do
-            end do
-        end do
-
-        ! Shift everything to the origin 
-        this%xD = this%xD - this%dxD
-        this%yD = this%yD - this%dyD
-        this%zD = this%zD - this%dzD
-
-    !end associate
-end subroutine
-
-subroutine create_turbine_array(this, inputfile)
-    class(igrid_ops), intent(inout), target :: this
-    character(len=*), intent(in) :: inputfile
-
-    call this%generate_mesh()
 
     allocate(this%turbArray)
     allocate(this%cbuffyC(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3),1))
@@ -814,7 +775,21 @@ subroutine WriteField3D(this, field, label, tidx)
    
    call decomp_2d_write_one(1,field,fname,this%gp)
 end subroutine  
+         
+subroutine WriteDownsampledField3D(this, field, label, tidx)
+   use decomp_2d_io
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp_D%xsz(1),this%gp_D%xsz(2),this%gp_D%xsz(3)), intent(in)  :: field
+   character(len=clen) :: tempname, fname
+   character(len=*), intent(in) :: label
+   integer, intent(in) :: tidx
+         
+   write(tempname,"(A,I2.2,A,A,A,I6.6,A)") "Run",this%runID, "_",trim(label),"_t",tidx,".out"
+   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   
+   call decomp_2d_write_one(1,field,fname,this%gp_D)
 
+end subroutine
 
 subroutine WriteSummingRestart(this, field, label, tidx)
    use decomp_2d_io
@@ -949,28 +924,23 @@ subroutine dump_plane(this, field, dir_id, plane_id, tid, label)
 
 end subroutine 
 
-subroutine down_sample(this, u, v, w, uD, vD, wD)
-  class(igrid_ops) :: this
-  real(rkind), dimension(this%gp%xsz(1)) :: x
-  real(rkind), dimension(this%gp%xsz(2)) :: y
-  real(rkind), dimension(this%gp%xsz(3)) :: z
-  real(rkind), dimension(this%gp_D%xsz(1)) :: xD
-  real(rkind), dimension(this%gp_D%xsz(2)) :: yD
-  real(rkind), dimension(this%gp_D%xsz(3)) :: zD
+subroutine down_sample(this, u, v, w, uD, vD, wD, x, y, z, xrng, yrng, zrng)
+  use gridtools, only: linspace
+  class(igrid_ops), intent(inout) :: this
+  real(rkind), dimension(:), intent(in) :: x, y, z
+  real(rkind), dimension(2), intent(in) :: xrng, yrng, zrng
   real(rkind), dimension(:,:,:), intent(in) :: u, v, w
   real(rkind), dimension(:,:,:), intent(inout) :: uD, vD, wD
+  real(rkind), dimension(this%gp_D%xsz(1)) :: xD
+  real(rkind), dimension(this%gp_D%ysz(2)) :: yD
+  real(rkind), dimension(this%gp_D%zsz(3)) :: zD
 
 
-  call this%generate_mesh()
-  call this%generate_course_mesh()
-
-  x = this%x(:,1,1)
-  y = this%y(1,:,1)
-  z = this%z(1,1,:)
-
-  xD = this%xD(:,1,1)
-  yD = this%yD(1,:,1)
-  zD = this%zD(1,1,:)
+  !call this%generate_mesh()
+  !call this%generate_course_mesh()
+  xD = linspace(xrng(1),xrng(2),size(xD))
+  yD = linspace(yrng(1),yrng(2),size(yD))
+  zD = linspace(zrng(1),zrng(2),size(zD))
 
   call this%interp%init(this%gp, this%gp_D, x, y, z, xD, yD, zD)
   call this%interp%LinInterp3D(u, uD)
