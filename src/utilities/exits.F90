@@ -31,12 +31,12 @@ contains
         integer, intent(in) :: errcode
         integer :: ierr
 
-        !call decomp_2d_abort(errcode, message)
-        if (nrank == 0) then
-           write(*,*) 'ERROR MESSAGE: ' // trim(message)
-        end if
-        call MPI_Barrier(MPI_COMM_WORLD, ierr)
-        call MPI_ABORT(MPI_COMM_WORLD,errcode,ierr)
+        call decomp_2d_abort(errcode, message)
+        !if (nrank == 0) then
+        !   write(*,*) 'ERROR MESSAGE: ' // trim(message)
+        !end if
+        !call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        !call MPI_ABORT(MPI_COMM_WORLD,errcode,ierr)
     end subroutine
 
     subroutine newline()
