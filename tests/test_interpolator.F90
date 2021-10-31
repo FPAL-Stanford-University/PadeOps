@@ -88,7 +88,6 @@ program test_interpolator
         call message(1,"TEST PASSED.")        
     end if 
 
-
     ! Finalize 
     call interp%destroy()
     call MPI_Finalize(ierr)
