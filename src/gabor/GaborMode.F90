@@ -78,9 +78,13 @@ contains
         yst = floor(((ymin - yRange(1)))/delta(2)) + 1 
         zst = floor(((zmin - zRange(1)))/delta(3)) + 1 
         
-        xen = floor(((xmax - xRange(2)))/delta(1)) + 1 
-        yen = floor(((ymax - yRange(2)))/delta(2)) + 1 
-        zen = floor(((zmax - zRange(2)))/delta(3)) + 1 
+        xen = floor(((xRange(2) - xmax))/delta(1)) + 1 
+        yen = floor(((yRange(2) - ymax))/delta(2)) + 1 
+        zen = floor(((zRange(2) - zmax))/delta(3)) + 1 
+
+        !xen = floor(((xmax - xRange(2)))/delta(1)) + 1 
+        !yen = floor(((ymax - yRange(2)))/delta(2)) + 1 
+        !zen = floor(((zmax - zRange(2)))/delta(3)) + 1 
 
         Lw = real(pi/this%wSupport ,kind=4)
 

@@ -1,6 +1,6 @@
 program test_gaborMode
     use gaborModeMod, only : gaborMode 
-    use kind_parameters, only: rkind 
+    use kind_parameters, only: rkind, clen 
     use EulerG_mod, only: EulerG 
     use constants 
     use decomp_2d 
@@ -16,6 +16,7 @@ program test_gaborMode
     real(rkind) :: xRange(2), yRange(2), zRange(2), delta(3)
     complex(kind=8), parameter :: uhat = (0.25d0,2.d0), vhat = (-2.42d0,1.5d0), what = (0.35d0,-2.65d0)
     real(kind=4), dimension(:,:,:), allocatable :: u_sp, v_sp, w_sp 
+    character(len=clen) :: datadir = '/work2/06632/ryanhass/stampede2/Enrichment/Gabor_class_tests'
     
     ! Test with these inputs  
     real(rkind), parameter :: wSupport = 0.5d0  
@@ -56,10 +57,10 @@ program test_gaborMode
     call Egrid%agglomerate()
     call toc
 
-    call Egrid%writeFields("./Run01", modeAtLevel)
+    call Egrid%writeFields(trim(datadir)//"/Run01", modeAtLevel)
 
     if (modeAtLevel .ne. levels) then 
-        call Egrid%writeFields("./Run01", levels)
+        call Egrid%writeFields(trim(datadir)//"/Run01", levels)
     end if 
 
 end program 
