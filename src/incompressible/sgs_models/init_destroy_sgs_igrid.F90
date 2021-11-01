@@ -75,7 +75,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   integer :: ierr, WM_matchingIndex = 1, i, j
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0, xpos = 0.0_rkind, epssmall = 1.0d-6
   real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2, deli
-  logical :: is_z0_varying = .false., filter_for_heterog = .true., use_const_alpfac = .true.
+  logical :: is_z0_varying = .false., filter_for_heterog = .true., use_const_alpfac = .true., is_z0_stochastic = .false.
   real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
   real(rkind) :: Mfactor, dele, excludedist = 3.0_rkind, const_alpfac = 0.027_rkind, blht_for_alpfac = 3.0_rkind, betfac = 0.15_rkind
   integer :: spnumx, spnumy
@@ -87,7 +87,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
                  explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, &
-                 is_z0_varying
+                 is_z0_varying, is_z0_stochastic, stochastic_n, stochastic_sig, &
+                 stochastic_lc, stochastic_omegan_fname
 
   namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, rpstart, spx_delta, spy_delta, &
                        filter_for_heterog, excludedist, use_const_alpfac, const_alpfac, blht_for_alpfac, betfac
@@ -191,19 +192,12 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   this%isInviscid = isInviscid
 
   this%is_z0_varying  = is_z0_varying
+  this%is_z0_stochastic  = is_z0_stochastic
   if(this%is_z0_varying) then
     ! read more stuff from the input file
     open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=123, NML=Z0VARYING)
     close(123)
-
-    if((abs(spy-Ly)>1.0d-9) .or. (abs(rpy-Ly)>1.0d-9)) then
-        call GracefulExit("Only stripe heterogeneity allowed. Change spy.", 11)
-    endif
-
-    if((abs(spnumx*(spx+rpx)-Lx)>1.0d-9)) then
-        call GracefulExit("Inconsistent spx, rpx, spnumx and Lx. Check details.", 11)
-    endif
 
     allocate(this%z0var(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%ustarsqvar(this%gpC%xsz(1), this%gpC%xsz(2)))
@@ -224,119 +218,139 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     this%mask_upstream = 0.0_rkind;   this%deli           = 0.0_rkind;   sp_map       = 0.0_rkind
     this%Uxspan        = 0.0_rkind;   this%Uyspan         = 0.0_rkind;   this%ustarsqspan = 0.0_rkind
 
-    this%z0s = z0s; this%z0r = z0r
-    this%filter_for_heterog = filter_for_heterog
-    this%betfac = betfac
-    totpx = spx + rpx
-    if(rpstart < zero) then
-        ! overwrite rough patch start with length of smooth patch
-        rpstart = spx
-    elseif(rpstart > totpx) then
-        !call message(1, "!!!!!WARNING!!!!! rpstart is larger than totpx. Ensure this is a developing case.")
-        call GracefulExit("rpstart is larger than totpx. Check details.", 11)
-    endif
+    if(this%is_z0_stochastic) then
+      ! reading in n, sigma_theta, Lc -- done one line 199
+      ! read in omega_n from stochastic_omega_fname
+      ! calculate lam_n
+      ! set this%z0var(:,:)  -- only as a function of y.
 
-    if(spx_delta < epssmall) then
-        do i = 1, this%gpC%xsz(1)
-          xl = xMesh(i)
-          xlmod = mod(xl, totpx)
-          if((xlmod >= (rpstart+rpx)) .or. (xlmod < rpstart)) then
-              sp_map(i) = 0.0_rkind !this%z0var(i,j) = z0s
-          else
-              sp_map(i) = 1.0_rkind !this%z0var(i,j) = z0r
-          endif
-        enddo
-    else
-        ! handle xpos = (rpstart-spx) separately
-        xpos = rpstart-spx; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
-        call S_fringe(x1, S1)
-        sp_map = 1.0_rkind-S1
+      if(WallModelType .ne. 2) then
+          call GracefulExit("Only Bou-Zeid wall model allowed with stochastic z0. Change spy.", 11)
+      endif
+    else if(this%is_z0_step) then
 
-        !xpos = rpstart - spx; sp_map = 0.0_rkind
+      if((abs(spy-Ly)>1.0d-9) .or. (abs(rpy-Ly)>1.0d-9)) then
+          call GracefulExit("Only stripe heterogeneity allowed. Change spy.", 11)
+      endif
 
-        ! then calculate map for all stripes
-        do i = 1, spnumx
-          xpos = xpos + spx; x1 = (xMesh - (xpos - 0.5_rkind*spx_delta))/spx_delta
-          xpos = xpos + rpx; x2 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
-          call S_fringe(x1, S1)
-          call S_fringe(x2, S2)
-          sp_map = sp_map + S1 - S2
-        enddo
-    endif
+      if((abs(spnumx*(spx+rpx)-Lx)>1.0d-9)) then
+          call GracefulExit("Inconsistent spx, rpx, spnumx and Lx. Check details.", 11)
+      endif
 
-    do j = 1, this%gpC%xsz(2)
-      this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
-    enddo
+      this%z0s = z0s; this%z0r = z0r
+      this%filter_for_heterog = filter_for_heterog
+      this%betfac = betfac
+      totpx = spx + rpx
+      if(rpstart < zero) then
+          ! overwrite rough patch start with length of smooth patch
+          rpstart = spx
+      elseif(rpstart > totpx) then
+          !call message(1, "!!!!!WARNING!!!!! rpstart is larger than totpx. Ensure this is a developing case.")
+          call GracefulExit("rpstart is larger than totpx. Check details.", 11)
+      endif
 
-    ! NOTE :: rpstart must be figured out before this block for setting alpfac
-    this%alpfac = const_alpfac
-    if(.not. use_const_alpfac) then
-        do j = 1, this%gpC%xsz(2)
+      if(spx_delta < epssmall) then
           do i = 1, this%gpC%xsz(1)
-              xl = xMesh(i) - rpstart
-              if(xl > epssmall) then
-                  this%alpfac(i,j) = 0.004551_rkind * (xl/blht_for_alpfac)**(-0.3593)
-              endif
-          enddo
-        enddo
-    endif
-
-    !!! only for Abkar-PA model. Think where to put this later
-    !!! determine lamfact
-    !!! smooth patch before rpstart and after fringe. Rough between these.
-    Mfactor = 0.75_rkind-0.03_rkind*log(this%z0r/this%z0s)
-    deli = 0.0_rkind
-    do j = 1, this%gpC%xsz(2)
-      do i = 1, this%gpC%xsz(1)
-        if((xMesh(i) < rpstart) .or. (xMesh(i) > rpstart+spx)) then
-            ! upstream smooth patch
-            this%lamfact(i,j) = 1.1d0 ! set some number above 1.0
-        else
-            ! downstream rough or smooth region
-            xl = xMesh(i) - rpstart
-            deli(i) = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind
-            this%lamfact(i,j) = -log(half*this%dz/(deli(i)*this%alpfac(i,j)+1.0d-18)) / log(this%alpfac(i,j))
-            this%lamfact(i,j) = min(this%lamfact(i,j), one)     ! note :: must be here, not outside the loop
-            this%lamfact(i,j) = max(this%lamfact(i,j), zero)    ! note :: must be here, not outside the loop
-            write(100+nrank,'(2(i5,1x),9(e19.12,1x))') i, j, xl, deli(i), this%alpfac(i,j), half*this%dz, half*this%dz/(deli(i)*this%alpfac(i,j)+1.0d-18), -log(this%alpfac(i,j)), this%lamfact(i,j)
-        endif
-      enddo
-    enddo
-
-    if(this%gpC%xst(3)==1) then
-        do j = 1, this%gpC%xsz(2)
-          do i = 1, this%gpC%xsz(1)
-            if((xMesh(i) < (rpstart-excludedist)) .or. (xMesh(i) > (rpstart+spx+excludedist))) then
-                this%mask_upstream(i,j) = one
+            xl = xMesh(i)
+            xlmod = mod(xl, totpx)
+            if((xlmod >= (rpstart+rpx)) .or. (xlmod < rpstart)) then
+                sp_map(i) = 0.0_rkind !this%z0var(i,j) = z0s
+            else
+                sp_map(i) = 1.0_rkind !this%z0var(i,j) = z0r
             endif
           enddo
-        enddo
-    endif
-    this%mask_normfac = p_sum(sum(this%mask_upstream))
+      else
+          ! handle xpos = (rpstart-spx) separately
+          xpos = rpstart-spx; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+          call S_fringe(x1, S1)
+          sp_map = 1.0_rkind-S1
 
-    do j=1, this%gpC%xsz(2)
-      this%deli(:,j) = deli(:)
-    enddo
+          !xpos = rpstart - spx; sp_map = 0.0_rkind
 
-    call message(1, "Printing debug info about heterog ")
-    if(nrank==0) then
-      !print *, 'nx = ', this%gpC%xsz(1)
-      open(10, file='debug_heterog.dat',action='write',status='unknown')
-      do i=1,this%gpC%xsz(1)
-        write(10,'(5(e19.12,1x))') xMesh(i), sp_map(i), this%z0var(i,1), this%lamfact(i,1), deli(i)
+          ! then calculate map for all stripes
+          do i = 1, spnumx
+            xpos = xpos + spx; x1 = (xMesh - (xpos - 0.5_rkind*spx_delta))/spx_delta
+            xpos = xpos + rpx; x2 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+            call S_fringe(x1, S1)
+            call S_fringe(x2, S2)
+            sp_map = sp_map + S1 - S2
+          enddo
+      endif
+
+      do j = 1, this%gpC%xsz(2)
+        this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
       enddo
-      close(10)
-    endif
 
-    ! write all data as 2D arrays
-    this%rbuffxC(:,:,1,1) = this%z0var(:,:)
-    this%rbuffxC(:,:,2,1) = this%mask_upstream(:,:)
-    this%rbuffxC(:,:,3,1) = this%lamfact(:,:)
-    this%rbuffxC(:,:,4,1) = this%deli(:,:)
-    write(tempname,"(A)") "z0var_setup.dat"
-    fname = "./"//trim(tempname)
-    call decomp_2d_write_one(1, this%rbuffxC(:,:,:,1), fname, gpC)
-    call message(1, "Done printing debug info about heterog ")
+      ! NOTE :: rpstart must be figured out before this block for setting alpfac
+      this%alpfac = const_alpfac
+      if(.not. use_const_alpfac) then
+          do j = 1, this%gpC%xsz(2)
+            do i = 1, this%gpC%xsz(1)
+                xl = xMesh(i) - rpstart
+                if(xl > epssmall) then
+                    this%alpfac(i,j) = 0.004551_rkind * (xl/blht_for_alpfac)**(-0.3593)
+                endif
+            enddo
+          enddo
+      endif
+
+      !!! only for Abkar-PA model. Think where to put this later
+      !!! determine lamfact
+      !!! smooth patch before rpstart and after fringe. Rough between these.
+      Mfactor = 0.75_rkind-0.03_rkind*log(this%z0r/this%z0s)
+      deli = 0.0_rkind
+      do j = 1, this%gpC%xsz(2)
+        do i = 1, this%gpC%xsz(1)
+          if((xMesh(i) < rpstart) .or. (xMesh(i) > rpstart+spx)) then
+              ! upstream smooth patch
+              this%lamfact(i,j) = 1.1d0 ! set some number above 1.0
+          else
+              ! downstream rough or smooth region
+              xl = xMesh(i) - rpstart
+              deli(i) = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind
+              this%lamfact(i,j) = -log(half*this%dz/(deli(i)*this%alpfac(i,j)+1.0d-18)) / log(this%alpfac(i,j))
+              this%lamfact(i,j) = min(this%lamfact(i,j), one)     ! note :: must be here, not outside the loop
+              this%lamfact(i,j) = max(this%lamfact(i,j), zero)    ! note :: must be here, not outside the loop
+              write(100+nrank,'(2(i5,1x),9(e19.12,1x))') i, j, xl, deli(i), this%alpfac(i,j), half*this%dz, half*this%dz/(deli(i)*this%alpfac(i,j)+1.0d-18), -log(this%alpfac(i,j)), this%lamfact(i,j)
+          endif
+        enddo
+      enddo
+
+      if(this%gpC%xst(3)==1) then
+          do j = 1, this%gpC%xsz(2)
+            do i = 1, this%gpC%xsz(1)
+              if((xMesh(i) < (rpstart-excludedist)) .or. (xMesh(i) > (rpstart+spx+excludedist))) then
+                  this%mask_upstream(i,j) = one
+              endif
+            enddo
+          enddo
+      endif
+      this%mask_normfac = p_sum(sum(this%mask_upstream))
+
+      do j=1, this%gpC%xsz(2)
+        this%deli(:,j) = deli(:)
+      enddo
+
+      call message(1, "Printing debug info about heterog ")
+      if(nrank==0) then
+        !print *, 'nx = ', this%gpC%xsz(1)
+        open(10, file='debug_heterog.dat',action='write',status='unknown')
+        do i=1,this%gpC%xsz(1)
+          write(10,'(5(e19.12,1x))') xMesh(i), sp_map(i), this%z0var(i,1), this%lamfact(i,1), deli(i)
+        enddo
+        close(10)
+      endif
+
+      ! write all data as 2D arrays
+      this%rbuffxC(:,:,1,1) = this%z0var(:,:)
+      this%rbuffxC(:,:,2,1) = this%mask_upstream(:,:)
+      this%rbuffxC(:,:,3,1) = this%lamfact(:,:)
+      this%rbuffxC(:,:,4,1) = this%deli(:,:)
+      write(tempname,"(A)") "z0var_setup.dat"
+      fname = "./"//trim(tempname)
+      call decomp_2d_write_one(1, this%rbuffxC(:,:,:,1), fname, gpC)
+      call message(1, "Done printing debug info about heterog ")
+    endif
 
   endif
 

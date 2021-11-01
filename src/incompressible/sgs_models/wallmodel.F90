@@ -622,9 +622,13 @@ subroutine BouZeidLocalModel(this)
 
     this%ustarsqvar = -this%WallMFactorvar * this%filteredSpeedSq(:,:,1)
 
-    call this%compute_ustar_upstreampart(ustar1)
-    this%ustar_upstream = ustar1
-    !print *, 'ustar_upstream:= ',  this%ustar_upstream
+    if(this%is_z0_stochastic) then
+      this%ustar_upstream = -one
+    else
+      call this%compute_ustar_upstreampart(ustar1)
+      this%ustar_upstream = ustar1
+      !print *, 'ustar_upstream:= ',  this%ustar_upstream
+    endif
 
     ! NOTE:: tauijWMhat_inY and tauijWMhat_inZ are not populated. Are they
     ! required ????
