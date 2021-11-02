@@ -19,7 +19,7 @@ module Stationary_Droplet_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = two, Lx = two, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 0.2
+    real(rkind) :: Ly = 4D0, Lx = 4D0, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 1D0
     real(rkind) :: tau0_2=1d0, Nvel=1d0, etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
 
 
@@ -216,7 +216,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
                           diff_c_ge,diff_c_ge_2,diff_c_gp,diff_c_gp_2,diff_c_gt,diff_c_gt_2, v0, v0_2, tau0, &
-			tau0_2, eta0k, Nvel, etasize, ksize, delta_rho, Nrho, delta, Tp, thick
+			tau0_2, eta0k, Nvel, etasize, ksize, delta_rho, Nrho, delta, Tp, thick, R
 
     
     ioUnit = 11
@@ -234,23 +234,24 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
-     !   if(rhoRatio > 0) then
+       if (rhoRatio > 0) then
          ! if rhoRatio is positive, only rho_0 is different. Rgas is set such
           ! that Temperature equilibrium condition is satisfied
         !  gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
         !  rho_0_2 = rho_0*rhoRatio; mu_2 = mu
-       ! else
+        else
           ! if rhoRatio is negative, all quantities except Rgas need to be
           ! specified in input file. Rgas is then set such
           ! that Temperature equilibrium condition is satisfied
-          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+          if (adjustRgas) then
+            Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
 
           ! determine p_amb that guarantees T equilibrium
         !  if(adjustPamb) then
         !    fac = Rgas_2*rho_0_2/Rgas/rho_0
         !    p_amb = (fac*p_infty - p_infty_2)/(one - fac)
-        !  endif
-       ! endif
+          endif
+        endif
   if (nrank == 0) then
             print *, '---Material 1---'
             write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
@@ -278,23 +279,25 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
 
         ! speed of sound
-        a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-        a2 = sqrt((gamma*(p2+p_infty) + 4.0d0/3.0d0*mu)/rho2)
+        a1 = sqrt((gamma*(p_amb+p_infty) + 4.0d0/3.0d0*mu)/rho1)
+        a2 = sqrt((gamma*(p_amb+p_ten+p_infty_2) + 4.0d0/3.0d0*mu)/rho2)
 
         
  	        ! Set up smearing function for VF based on interface location and thickness
        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = (x - 1)**2 + (y - 1)**2
+	eta = (x - 2)**2 + (y - 2)**2
 	
-	tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick*dx) ) )
+	tmp = (half)  * ( one - tanh( (sqrt(eta)-(R))/(thick) ) )
+
+        !tmp = 1/( one + exp( (sqrt(eta)-(R))/(thick) ) )
 
         !set mixture Volume fraction
         !eta = (x - 1)**2 + (y - 0.75)**2
         !where( (eta .le. (R)**2  )
-        mix%material(1)%VF = tmp
-        mix%material(2)%VF = one - mix%material(1)%VF
+        mix%material(2)%VF = tmp + minVF
+        mix%material(1)%VF = one - mix%material(2)%VF
 	!endwhere 
                
 	!Set density profile and mass fraction based on volume fraction
@@ -665,11 +668,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
-    integer :: nx, i, j
-    real(rkind) :: dx, xspng, tspng
+    integer :: nx,ny, i, j
+    real(rkind) :: dx,dy, xspng, tspng
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     
     nx = decomp%ysz(1)
+    nx = decomp%ysz(2)
+
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -714,6 +719,72 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             !  mix%material(2)%VF ( 1,:,:) = one - VFL
          ! end if
         !endif
+
+        
+         if(decomp%yst(1)==1) then
+          if(x_bc(1)==0) then
+               !rho( 1,:,:) = one
+               u  ( 1,:,:) = zero
+               v  ( 1,:,:) = zero
+               w  ( 1,:,:) = zero
+               !mix%material(1)%p(1,:,:) = p_amb
+               !mix%material(2)%p(1,:,:) = p_amb
+        
+              mix%material(2)%VF ( 1,:,:) = minVF
+              mix%material(1)%VF ( 1,:,:) = one - minVF
+              mix%material(2)%Ys ( 1,:,:) = minVF
+              mix%material(1)%Ys ( 1,:,:) = one - minVF
+          end if
+        endif
+        
+        if(decomp%yen(1)==decomp%xsz(1)) then
+          if(x_bc(2)==0) then
+              !rho( nx,:,:) = 1
+               u  ( nx,:,:) = zero
+               v  ( nx,:,:) = zero
+               w  ( nx,:,:) = zero
+              !mix%material(1)%p(nx,:,:) = p_amb
+              !mix%material(2)%p(nx,:,:) = p_amb
+        
+              mix%material(2)%VF ( nx,:,:) = minVF
+              mix%material(1)%VF ( nx,:,:) = one - minVF
+              mix%material(2)%Ys ( nx,:,:) = minVF
+              mix%material(1)%Ys ( nx,:,:) = one - minVF
+          end if
+        endif
+
+       if(decomp%yst(2)==1) then
+          if(y_bc(1)==0) then
+               !rho( :,1,:) = 1
+               u  ( :,1,:) = zero
+               v  ( :,1,:) = zero
+               w  ( :,1,:) = zero
+               !!mix%material(1)%p(:, 1, :) = p_amb
+               !mix%material(2)%p(:, 1, :) = p_amb
+        !
+              mix%material(2)%VF ( :,1,:) = minVF
+              mix%material(1)%VF ( :,1,:) = one - minVF
+              mix%material(2)%Ys ( :,1,:) = minVF
+              mix%material(1)%Ys ( :,1,:) = one - minVF
+          end if
+        endif
+      
+      if (decomp%yen(2)==decomp%ysz(2)) then
+          if(y_bc(2)==0) then
+              !rho( :, ny, :) = 1
+              u  ( :, ny, :) = zero
+              v  ( :, ny:,:) = zero
+              w  ( :, ny, :) = zero
+              !mix%material(1)%p(:,ny,:) = p_amb
+              !mix%material(2)%p(:,ny,:) = p_amb
+        !
+              mix%material(2)%VF ( :,ny,:) = minVF
+              mix%material(1)%VF ( :,ny,:) = one - minVF
+              mix%material(2)%Ys ( :,ny,:) = minVF
+              mix%material(1)%Ys ( :,ny,:) = one - minVF
+          end if
+        endif
+
 
         !xspng = -two + half
         !tspng = 0.2_rkind

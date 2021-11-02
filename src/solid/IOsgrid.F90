@@ -360,9 +360,22 @@ contains
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='kappa',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
 
+            call update_halo(mix%maskKappa,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='maskKappa',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%phi,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='phi',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%fmask,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='fmask',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
             call update_halo(mix%norm(:,:,:,1),tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='norm_x',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
+
 
             call update_halo(mix%norm(:,:,:,2),tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='norm_y',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
@@ -371,7 +384,30 @@ contains
             call update_halo(mix%norm(:,:,:,3),tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='norm_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
-         endif
+       
+            call update_halo(mix%surfaceTension_f(:, :, :, 1),tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fx',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+
+            call update_halo(mix%surfaceTension_f(:, :, :, 2),tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fy',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            
+            call update_halo(mix%surfaceTension_f(:, :, :, 3),tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            
+            call update_halo(mix%surfaceTension_e,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_e',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+
+
+  
+       endif
 
         E_IO = VTK_DAT_XML(var_location='node',var_block_action='close')
         E_IO = VTK_GEO_XML_WRITE()

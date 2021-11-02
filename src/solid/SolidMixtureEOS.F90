@@ -48,7 +48,7 @@ module SolidMixtureMod
         real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e
         real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV
         integer, dimension(2) :: x_bc, y_bc, z_bc
-        real(rkind), allocatable, dimension(:,:,:)   :: kappa
+        real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa
         real(rkind), allocatable, dimension(:,:,:,:) :: norm
 	real(rkind), allocatable, dimension(:,:,:)   :: phi
         real(rkind), allocatable, dimension(:,:,:)   :: fmask
@@ -253,6 +253,10 @@ contains
         if(allocated(this%kappa)) deallocate(this%kappa)
         allocate(this%kappa(this%nxp, this%nyp, this%nzp))
 
+
+        if(allocated(this%maskKappa)) deallocate(this%maskKappa)
+        allocate(this%maskKappa(this%nxp, this%nyp, this%nzp))
+
 	if(allocated(this%phi)) deallocate(this%phi)
         allocate(this%phi(this%nxp, this%nyp, this%nzp))
 
@@ -284,7 +288,9 @@ contains
         if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
         if(allocated(this%norm)) deallocate(this%norm)
         if(allocated(this%kappa)) deallocate(this%kappa)
-	if(allocated(this%phi)) deallocate(this%phi)
+	if(allocated(this%kappa)) deallocate(this%kappa)
+
+        if(allocated(this%maskKappa)) deallocate(this%maskKappa)
 	if(allocated(this%fmask)) deallocate(this%fmask)
 
         ! Deallocate array of solids (Destructor of solid should take care of everything else)
@@ -586,9 +592,9 @@ stop
         do imat = 1, this%ns
             ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
         enddo
-!print *, 'pinpiut: ', mixE(89,1,1), ehmix(89,1,1), mixRho(89,1,1)
-!print *, 'VF     : ', this%material(1)%VF(89,1,1), this%material(2)%VF(89,1,1)
-!print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
+print *, 'pinpiut: ', mixE(89,1,1), ehmix(89,1,1), mixRho(89,1,1)
+print *, 'VF     : ', this%material(1)%VF(89,1,1), this%material(2)%VF(89,1,1)
+print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
         do k=1,this%nzp
          do j=1,this%nyp
@@ -687,12 +693,12 @@ stop
         ! correct.
         ehmix = mixE
         do imat = 1, this%ns
-           ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel !original
-           !ehmix = ehmix - min(max(this%material(imat)%Ys,zero),one) * this%material(imat)%eel  !new
+           !ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel !original
+            ehmix = ehmix - min(max(this%material(imat)%Ys,zero),one) * this%material(imat)%eel  !new
         enddo
-!print *, 'pinpiut: ', mixE(89,1,1), ehmix(89,1,1), mixRho(89,1,1)
-!print *, 'VF     : ', this%material(1)%VF(89,1,1), this%material(2)%VF(89,1,1)
-!print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
+print *, 'pinpiut: ', mixE(89,1,1), ehmix(89,1,1), mixRho(89,1,1)
+print *, 'VF     : ', this%material(1)%VF(89,1,1), this%material(2)%VF(89,1,1)
+print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
         do k=1,this%nzp
          do j=1,this%nyp
@@ -710,13 +716,13 @@ stop
               !maxp = maxval(maxp, this%material(imat)%hydro%PInf)
 
               ! set initial guess
-               peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k) !original
-               !peqb = peqb + min(max(this%material(imat)%VF(i,j,k),zero),one)*this%material(imat)%p(i,j,k)  !new
-
+               !peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k) !original
+               peqb = peqb + min(max(this%material(imat)%VF(i,j,k),zero),one)*this%material(imat)%p(i,j,k)  !new
+               !peqb = peqb + this%material(imat)%p(i,j,k)
                ! !debug
-               ! if(this%material(imat)%p(i,j,k).le.eps) then
+               ! if (this%material(imat)%p(i,j,k).le.eps) then
                !    print*,'negative p 1 ',this%material(imat)%p(i,j,k),imat,i,j,k
-               ! endif
+               !  endif
                ! !end 
             end do
             !pest = peqb
@@ -732,9 +738,9 @@ stop
             call this%rootfind_nr_1d_new(peqb,fparams,iparams,pmin,pmax,icount,icount2,isub,nsubs) !now coupled with bisection method for improved stability --- fixes problem in fnumden -> fnumden_new when negative mass fraction
             
             !debug
-            if(peqb.le.eps) then
-               print*,'negative p 3 ',peqb,imat,i,j,k
-            endif
+            !if(peqb.le.eps) then
+            !   print*,'negative p 3 ',peqb,imat,i,j,k
+            !endif
             !end
 
             !pdiffmax = max(dabs(pest-peqb),pdiffmax)
@@ -2220,11 +2226,11 @@ stop
         real(rkind),                                        intent(in) :: dx,dy,dz
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
         logical,                                            intent(in) :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: GVFmag, GPHImag
-	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: GVFmag, GPHImag, mask2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint
 	integer :: iflag = one
-	real(rkind) :: r = 1D0, nmask = 40
+	real(rkind) :: r = 0.5D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0
 	!TODO: add additional arrays to be used locally in calculation of surface tension force
 
         if (this%ns.ne.2) then
@@ -2278,35 +2284,33 @@ stop
 	if (this%use_gradphi) then
 
 		call gradient(this%decomp,this%der,this%material(2)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
-		print *, "used gradVF"
 
-	        this%phi = (this%material(2)%VF**r)/(this%material(2)%VF**r + (1-this%material(2)%VF)**r)
-
-	        print *, "calculated phi"
+                where( (this%material(2)%VF .GT. minVF) .AND. (this%material(2)%VF .LT. 1) )
+                         this%phi = (this%material(2)%VF**r)/(this%material(2)%VF**r + (1-this%material(2)%VF)**r)
+                elsewhere( (this%material(2)%VF .GE. 1) )
+                        this%phi = 1
+                endwhere
 
         	call gradient(this%decomp,this%der,this%phi,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3)) !high order derivative
 
-	       print *, "grad phi"
 
          	!calculate surface normal
 
               !magnitude of surface vector
               GPHImag = sqrt( gradphi(:,:,:,1)**two + gradphi(:,:,:,2)**two + gradphi(:,:,:,3)**two )
 
-	      print *, "GPHImag"
 
               !surface normal
               where (GPHImag < eps)
-                 this%norm(:,:,:,1) = zero
-                 this%norm(:,:,:,2) = zero
-                 this%norm(:,:,:,3) = zero
+                 this%norm(:,:,:,1) = eps
+                 this%norm(:,:,:,2) = eps
+                 this%norm(:,:,:,3) = eps
               elsewhere
                  this%norm(:,:,:,1) = gradphi(:,:,:,1) / GPHImag
                  this%norm(:,:,:,2) = gradphi(:,:,:,2) / GPHImag
                  this%norm(:,:,:,3) = gradphi(:,:,:,3) / GPHImag
               endwhere
 
-		print *, "calculate phinorm"
 
                 if (this%use_FV) then
 
@@ -2322,7 +2326,6 @@ stop
                 !TODO: double check BCs for div(norm)... do they follow symmetry, or are they opposite?
                 call divergence(this%decomp,this%der,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
                 !call filter3D(this%decomp, this%fil, this%kappa, iflag, x_bc, y_bc, z_bc)
-		print *, "took divergence"
 
                 endif
 
@@ -2331,13 +2334,22 @@ stop
 
 	if (this%surface_mask) then
 	
-	this%fmask = 1 - (1 - 4*this%material(2)%VF*(1-this%material(2)%VF))**nmask 
-	
+	 this%fmask = 1 - (1 - 4*this%material(2)%VF*(1-this%material(2)%VF))**nmask 
+	 !this%fmask = tanh( ( ((this%material(2)%VF-minVF)*(one-this%material(2)%VF-minVF)) / tmask)**two )
+
+        where (this%material(2)%VF .LE. (one-minVF))
+                mask2 = one
+        elsewhere (this%material(2)%VF .GT. (one-minVF))
+                mask2 = eps
+        elsewhere (this%material(2)%VF .LE. minVF)
+                mask2 = eps
+        endwhere
+
+        this%maskKappa = this%fmask*this%kappa*mask2
 	!TODO: Compute surface tension force and store in this%surfaceTension_f
-        this%surfaceTension_f(:,:,:,1) = -this%fmask*this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,1)
-        this%surfaceTension_f(:,:,:,2) = -this%fmask*this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,2)
-        this%surfaceTension_f(:,:,:,3) = -this%fmask*this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,3)
-	print *, "used mask"
+        this%surfaceTension_f(:,:,:,1) = -this%surfaceTension_coeff*this%maskKappa*gradVF(:,:,:,1)
+        this%surfaceTension_f(:,:,:,2) = -this%surfaceTension_coeff*this%maskKappa*gradVF(:,:,:,2)
+        this%surfaceTension_f(:,:,:,3) = -this%surfaceTension_coeff*this%maskKappa*gradVF(:,:,:,3)
 
 
 	else
@@ -2346,13 +2358,11 @@ stop
 	this%surfaceTension_f(:,:,:,1) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,1)
 	this%surfaceTension_f(:,:,:,2) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,2)
         this%surfaceTension_f(:,:,:,3) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,3)
- 	print *, "computed Surface Tension"
 
 	endif
 
         !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
 	this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
-	print *, "Surface Tension"
 
     end subroutine get_surfaceTension
 

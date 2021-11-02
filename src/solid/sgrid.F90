@@ -107,7 +107,7 @@ module SolidGrid
 	logical     :: use_gradVF           !flag to use VF formulation in surface tension calculation		
         logical     :: use_surfaceTension   !flag to turn on/off surface tension (in momentum and energy equations)
         real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
-
+        real(rkind) :: R
         logical :: filt_mask = .FALSE.             ! mask filter in high gradient regions
         real(rkind), dimension(:,:,:,:), allocatable :: filt_tmp,filt_grad  ! temporary for filter mask
         real(rkind), dimension(:,:,:), allocatable :: filt_thrs  ! temporary for filter mask
@@ -227,7 +227,7 @@ contains
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         logical     :: use_surfaceTension = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_FV = .FALSE., surface_mask = .FALSE. 
-        real(rkind) :: surfaceTension_coeff = 0.0d0 
+        real(rkind) :: surfaceTension_coeff = 0.0d0, R = 1d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0
         real(rkind) :: phys_bulk1 = 0.0d0, phys_bulk2 =0.0d0
@@ -252,7 +252,7 @@ contains
                            PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
-                           use_surfaceTension, use_gradphi, use_gradVF, use_FV, surface_mask, surfaceTension_coeff
+                           use_surfaceTension, use_gradphi, use_gradVF, use_FV, surface_mask, surfaceTension_coeff, R
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -318,7 +318,7 @@ contains
 	this%use_gradVF 	  = use_gradVF
         this%use_surfaceTension   = use_surfaceTension  
         this%surfaceTension_coeff = surfaceTension_coeff
-
+        this%R                    = R
         itmp(1:3) = 0; if(this%PTeqb) itmp(1) = 1; if(this%pEqb) itmp(2) = 1; if(this%pRelax) itmp(3) = 1; 
         if(sum(itmp) .ne. 1) then
             call GracefulExit("Exactly one among PTeqb, pEqb and pRelax should be true",4634)
@@ -1162,6 +1162,12 @@ contains
                  if(this%intSharp_gam.lt.-2.5) then
                     this%mix%intSharp_gam = zero
                     this%mix%intSharp_gam = max( this%mix%intSharp_gam, P_MAXVAL(sqrt( this%u**2 + this%v**2 + this%w**2 ) ) )
+                 endif
+                 if (this%intSharp_gam.lt.-3.5) then
+                 this%mix%intSharp_gam = zero
+                 do i=1,this%mix%ns
+                    this%mix%intSharp_gam = max( this%mix%intSharp_gam, P_MAXVAL( this%surfaceTension_coeff/this%R * this%mix%material(i)%VF*(one-this%mix%material(i)%VF ) ) )
+                 enddo
                  endif
               endif
               !print*,this%intSharp_gam,this%mix%intSharp_gam
