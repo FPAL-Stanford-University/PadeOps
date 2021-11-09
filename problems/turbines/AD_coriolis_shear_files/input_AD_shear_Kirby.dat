@@ -1,9 +1,9 @@
 &INPUT
 inputdir                      = "/scratch/05294/mhowland/uniform_shear/kirby"   ! Directory for any input files
 outputdir                     = "/scratch/05294/mhowland/uniform_shear/kirby"   ! Directory for all output files
-nx                            = 128          ! Number of points in X
-ny                            = 128          ! Number of points in Y
-nz                            = 64          ! Number of points in Z
+nx                            = 256          ! Number of points in X
+ny                            = 256          ! Number of points in Y
+nz                            = 128          ! Number of points in Z
 tstop                         = 500000.D0       ! Physical time to stop the simulation
 CFL                           = 1.4D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
@@ -33,6 +33,8 @@ dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select pl
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
 t_start_planeDump             = 1           ! When do you want to start dumping planes?
 t_stop_planeDump              = 5000        ! When do you want to stop dumping planes?
+dump_NU_SGS                   = .TRUE.
+dump_KAPPA_SGS                = .TRUE.
 /
 /
 &STATS
