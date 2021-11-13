@@ -1,6 +1,6 @@
 module GaborModeMod
     use constants
-    use kind_parameters, only: rkind
+    use kind_parameters, only: rkind, clen
     
     implicit none 
 
@@ -78,13 +78,9 @@ contains
         yst = floor(((ymin - yRange(1)))/delta(2)) + 1 
         zst = floor(((zmin - zRange(1)))/delta(3)) + 1 
         
-        xen = floor(((xRange(2) - xmax))/delta(1)) + 1 
-        yen = floor(((yRange(2) - ymax))/delta(2)) + 1 
-        zen = floor(((zRange(2) - zmax))/delta(3)) + 1 
-
-        !xen = floor(((xmax - xRange(2)))/delta(1)) + 1 
-        !yen = floor(((ymax - yRange(2)))/delta(2)) + 1 
-        !zen = floor(((zmax - zRange(2)))/delta(3)) + 1 
+        xen = floor(((xmax - xRange(1)))/delta(1)) + 1 
+        yen = floor(((ymax - yRange(1)))/delta(2)) + 1 
+        zen = floor(((zmax - zRange(1)))/delta(3)) + 1 
 
         Lw = real(pi/this%wSupport ,kind=4)
 
@@ -102,15 +98,14 @@ contains
 
         ! Induce velocity 
         do k = zst,zen
-            zshift = real( ((k-1)*delta(3)+zmin) - this%z, kind=4 )
+            zshift = real( ((k-1)*delta(3) + zRange(1)) - this%z, kind=4 )
             
             do j = yst,yen
-                
-                yshift = real( ((j-1)*delta(2)+ymin) - this%y, kind=4 )
+                yshift = real( ((j-1)*delta(2) + yRange(1)) - this%y, kind=4 )
                 weight_yz = cos(yshift*Lw)*cos(zshift*Lw) 
                 
                 do i = xst,xen
-                    xshift = real( ((i-1)*delta(1)+ymin) - this%x, kind=4 )
+                    xshift = real( ((i-1)*delta(1) + xRange(1)) - this%x, kind=4 )
                     weight = cos(xshift*Lw)*weight_yz 
 
                     kdotx = kx_sp*xshift + ky_sp*yshift + kz_sp*zshift 

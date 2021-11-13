@@ -6,6 +6,8 @@ module EulerG_mod
     implicit none 
 
     type :: EulerG
+    ! The EulerG type is and "Euler Grid" where and "Euler Field" is the
+    ! corresponding values associated with the given grid.
         private
         integer :: nlevels 
         type(Efield), dimension(:), allocatable :: fields
@@ -27,6 +29,13 @@ module EulerG_mod
 contains 
 
 subroutine init(this, gpLES, xLim, yLim, zLim, nlevels)
+    ! Input parameters:
+    !     gpLES             --> decomp_info object corresponding to the LES
+    !     xLim, yLim, zLim  --> bounds of domain, dimension(2)
+    !     nlevels           --> number of levels associated with grid refinment
+    !                           (e.g. for a 32^3 LES enriched to 256^3, there 
+    !                           would be 4 levels: 32, 64, 128, and 256)
+
     class(EulerG), intent(inout), target :: this
     type(decomp_info), intent(in), target :: gpLES 
     real(rkind), dimension(2) :: xLim, yLim, zLim 
@@ -51,6 +60,10 @@ subroutine init(this, gpLES, xLim, yLim, zLim, nlevels)
 end subroutine
 
 subroutine setField(this, u, v, w, level)
+    ! Input parameters:
+    !     u, v, w --> value of velocity components at grid locations
+    !     level   --> Level of the current grid
+
     class(EulerG), intent(inout) :: this 
     real(rkind), dimension(:,:,:), intent(in) :: u, v, w
     integer, intent(in) :: level 
@@ -61,6 +74,8 @@ subroutine setField(this, u, v, w, level)
 end subroutine 
 
 subroutine agglomerate(this)
+    ! Add up all the contributions to a field from every level (i.e. resolution)
+
     class(EulerG), intent(inout) :: this 
     integer :: iLevel 
 
@@ -71,6 +86,12 @@ subroutine agglomerate(this)
 end subroutine 
 
 subroutine getDeltaForLevel(this, delta, level)
+    ! Determine the grid spacing for the current grid level
+    ! Input parameters:
+    !     level --> Level of the current grid
+    ! Output:
+    !     delta --> grid spacing
+
     class(EulerG), intent(in) :: this 
     integer, intent(in) :: level 
     real(rkind), dimension(3), intent(out) :: delta 
