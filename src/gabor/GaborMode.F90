@@ -17,6 +17,7 @@ module GaborModeMod
             procedure          :: evolve
             procedure, private :: RK4
             procedure, private :: periodicBClocation
+            procedure, private :: projectDivergenceFree
             procedure          :: render 
     end type 
 
@@ -59,8 +60,6 @@ contains
         class(gaborMode), intent(inout) :: this 
         real(rkind), intent(in) :: ules, vles, wles, dudx, dudy, dudz, dvdx
         real(rkind), intent(in) :: dvdy, dvdz, dwdx, dwdy, dwdz, dt, epsKE, kmin
-        real(rkind) :: uhatR, uhatI, vhatR, vhatI, whatR, whatI
-        real(rkind) :: ksq, onebyksq
         
         ! Inputs:
         !   ules, vles, wles --> large-scale velocity components at mode location
@@ -77,29 +76,10 @@ contains
         call this%periodicBClocation()
       
         if(useStrain) then
-            ! Step 2: Straining + relaxation
             call this%RK4(AnuRNG, nu, epsKE, dudx, dudy, dudz, dvdx, dvdy, &
               & dvdz, dwdx, dwdy, dwdz, kmin, dt)
-            
-            ksq = (this%kx*this%kx + this%ky*this%ky + this%kz*this%kz)
-            onebyksq = 1.0d0/ksq
-
-            ! Step 4: Projection
-            this%uhatR = this%uhatR - onebyksq*(this%kx*this%kx*this%uhatR + &
-                          this%ky*this%kx*this%vhatR + this%kz*this%kx*this%whatR)
-            this%uhatI = this%uhatI - onebyksq*(this%kx*this%kx*this%uhatI + &
-                          this%ky*this%kx*this%vhatI + this%kz*this%kx*this%whatI)
-
-            this%vhatR = this%vhatR - onebyksq*(this%kx*this%ky*this%uhatR + &
-                          this%ky*this%ky*this%vhatR + this%kz*this%ky*this%whatR)
-            this%vhatI = this%vhatI - onebyksq*(this%kx*this%ky*this%uhatI + &
-                          this%ky*this%ky*this%vhatI + this%kz*this%ky*this%whatI)
-            
-            this%whatR = this%whatR - onebyksq*(this%kx*this%kz*this%uhatR + &
-                          this%ky*this%kz*this%vhatR + this%kz*this%kz*this%whatR)
-            this%whatI = this%whatI - onebyksq*(this%kx*this%kz*this%uhatI + &
-                            this%ky*this%kz*this%vhatI + this%kz*this%kz*this%whatI)
-        end if ! if (useStrain)
+            call this%projectDivergenceFree()            
+        end if
     end subroutine 
 
     subroutine render(this, u, v, w, xRange, yRange, zRange, delta)

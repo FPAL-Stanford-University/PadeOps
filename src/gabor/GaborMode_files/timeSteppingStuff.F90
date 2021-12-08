@@ -127,3 +127,28 @@
       this%z = zDom(1) + (this%z - zDom(2))
     end if
   end subroutine 
+
+  subroutine projectDivergenceFree(this)
+    class(GaborMode), intent(inout) :: this
+    real(rkind) :: ksq, onebyksq
+
+    ksq = (this%kx*this%kx + this%ky*this%ky + this%kz*this%kz)
+    onebyksq = 1.0d0/ksq
+
+    ! Step 4: Projection
+    this%uhatR = this%uhatR - onebyksq*(this%kx*this%kx*this%uhatR + &
+                  this%ky*this%kx*this%vhatR + this%kz*this%kx*this%whatR)
+    this%uhatI = this%uhatI - onebyksq*(this%kx*this%kx*this%uhatI + &
+                  this%ky*this%kx*this%vhatI + this%kz*this%kx*this%whatI)
+
+    this%vhatR = this%vhatR - onebyksq*(this%kx*this%ky*this%uhatR + &
+                  this%ky*this%ky*this%vhatR + this%kz*this%ky*this%whatR)
+    this%vhatI = this%vhatI - onebyksq*(this%kx*this%ky*this%uhatI + &
+                  this%ky*this%ky*this%vhatI + this%kz*this%ky*this%whatI)
+    
+    this%whatR = this%whatR - onebyksq*(this%kx*this%kz*this%uhatR + &
+                  this%ky*this%kz*this%vhatR + this%kz*this%kz*this%whatR)
+    this%whatI = this%whatI - onebyksq*(this%kx*this%kz*this%uhatI + &
+                    this%ky*this%kz*this%vhatI + this%kz*this%kz*this%whatI)
+
+  end subroutine
