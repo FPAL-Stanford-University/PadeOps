@@ -1,20 +1,29 @@
 module GaborModeMod
     use constants
     use kind_parameters, only: rkind, clen
+    use fortran_assert, only: assert
     
     implicit none 
-
+    logical :: useStrain = .true.
+    real(rkind) :: AnuRNG = 4.0d-4 ! spectral eddy viscosity coefficient
+    real(rkind) :: nu = 0.d0       ! kinematic viscosity of working fluid
     type :: gaborMode 
-        private    
+        !private   
         real(rkind) :: uhatR, uhatI, vhatR, vhatI, whatR, whatI, kx, ky, kz, x, y, z
-        real(rkind) :: wSupport 
+        real(rkind) :: wSupport
+         
         contains 
-            procedure :: init 
-            procedure :: evolve
-            procedure :: render 
+            procedure          :: init 
+            procedure          :: evolve
+            procedure, private :: RK4
+            procedure, private :: periodicBClocation
+            procedure          :: render 
     end type 
 
 contains 
+
+#include "GaborMode_files/timeSteppingStuff.F90"
+
     subroutine init(this, uhat, vhat, what, x, y, z, kx, ky, kz, wSupport)
         class(gaborMode), intent(inout) :: this
         complex(kind=8), intent(in) :: uhat, vhat, what
@@ -45,14 +54,52 @@ contains
         end if 
     end subroutine
     
-    subroutine evolve(this, ules, vles, wles, dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, dt)
+    subroutine evolve(this, ules, vles, wles, dudx, dudy, dudz, dvdx, dvdy, &
+                      & dvdz, dwdx, dwdy, dwdz, epsKE, dt, kmin)
         class(gaborMode), intent(inout) :: this 
-        real(rkind), intent(in) ::  ules, vles, wles, dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, dt
+        real(rkind), intent(in) :: ules, vles, wles, dudx, dudy, dudz, dvdx
+        real(rkind), intent(in) :: dvdy, dvdz, dwdx, dwdy, dwdz, dt, epsKE, kmin
+        real(rkind) :: uhatR, uhatI, vhatR, vhatI, whatR, whatI
+        real(rkind) :: ksq, onebyksq
+        
+        ! Inputs:
+        !   ules, vles, wles --> large-scale velocity components at mode location
+        !   dudx, ..., dwdz  --> large-scale velocity-gradient components at mode location
+        !   epsKE            --> Kinetic energy (KE) dissipation rate
+        !   dt               --> time-step size
+        !   kmin             --> The minimum wavenumber for enrichment (i.e.
+        !                        Nyquist wavenumber of LES to be enriched)
 
-        ! RYAN : Finish this 
+        ! TODO : Finish this 
         this%x = this%x + dt*ules 
         this%y = this%y + dt*vles 
-        this%z = this%z + dt*wles 
+        this%z = this%z + dt*wles
+        call this%periodicBClocation()
+      
+        if(useStrain) then
+            ! Step 2: Straining + relaxation
+            call this%RK4(AnuRNG, nu, epsKE, dudx, dudy, dudz, dvdx, dvdy, &
+              & dvdz, dwdx, dwdy, dwdz, kmin, dt)
+            
+            ksq = (this%kx*this%kx + this%ky*this%ky + this%kz*this%kz)
+            onebyksq = 1.0d0/ksq
+
+            ! Step 4: Projection
+            this%uhatR = this%uhatR - onebyksq*(this%kx*this%kx*this%uhatR + &
+                          this%ky*this%kx*this%vhatR + this%kz*this%kx*this%whatR)
+            this%uhatI = this%uhatI - onebyksq*(this%kx*this%kx*this%uhatI + &
+                          this%ky*this%kx*this%vhatI + this%kz*this%kx*this%whatI)
+
+            this%vhatR = this%vhatR - onebyksq*(this%kx*this%ky*this%uhatR + &
+                          this%ky*this%ky*this%vhatR + this%kz*this%ky*this%whatR)
+            this%vhatI = this%vhatI - onebyksq*(this%kx*this%ky*this%uhatI + &
+                          this%ky*this%ky*this%vhatI + this%kz*this%ky*this%whatI)
+            
+            this%whatR = this%whatR - onebyksq*(this%kx*this%kz*this%uhatR + &
+                          this%ky*this%kz*this%vhatR + this%kz*this%kz*this%whatR)
+            this%whatI = this%whatI - onebyksq*(this%kx*this%kz*this%uhatI + &
+                            this%ky*this%kz*this%vhatI + this%kz*this%kz*this%whatI)
+        end if ! if (useStrain)
     end subroutine 
 
     subroutine render(this, u, v, w, xRange, yRange, zRange, delta)

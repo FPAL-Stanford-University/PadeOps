@@ -11,7 +11,7 @@ module EulerG_mod
         private
         integer :: nlevels 
         type(Efield), dimension(:), allocatable :: fields
-        type(decomp_info), pointer :: gp 
+        type(decomp_info), pointer :: gp
         
         contains 
             procedure :: init 
@@ -28,17 +28,15 @@ module EulerG_mod
 
 contains 
 
-subroutine init(this, gpLES, xLim, yLim, zLim, nlevels)
+subroutine init(this, gpLES, nlevels)
     ! Input parameters:
     !     gpLES             --> decomp_info object corresponding to the LES
-    !     xLim, yLim, zLim  --> bounds of domain, dimension(2)
     !     nlevels           --> number of levels associated with grid refinment
     !                           (e.g. for a 32^3 LES enriched to 256^3, there 
     !                           would be 4 levels: 32, 64, 128, and 256)
 
     class(EulerG), intent(inout), target :: this
     type(decomp_info), intent(in), target :: gpLES 
-    real(rkind), dimension(2) :: xLim, yLim, zLim 
     integer, intent(in) :: nLevels 
     integer :: iLevel
     type(decomp_info), pointer :: myGP
@@ -48,11 +46,11 @@ subroutine init(this, gpLES, xLim, yLim, zLim, nlevels)
     allocate(this%fields(nlevels))
     this%gp => gpLES 
 
-    call this%fields(1)%init(this%gp, xLim, yLim, zLim)
+    call this%fields(1)%init(this%gp)
 
     do iLevel = 2,nLevels
         myGP => this%fields(ilevel-1)%gpFinerLevel 
-        call this%fields(ilevel)%init(myGP, xLim, yLim, zLim)
+        call this%fields(ilevel)%init(myGP)
     end do 
 
     call this%ResetVelocityToZero()
