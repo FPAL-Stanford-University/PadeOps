@@ -135,7 +135,6 @@
     ksq = (this%kx*this%kx + this%ky*this%ky + this%kz*this%kz)
     onebyksq = 1.0d0/ksq
 
-    ! Step 4: Projection
     this%uhatR = this%uhatR - onebyksq*(this%kx*this%kx*this%uhatR + &
                   this%ky*this%kx*this%vhatR + this%kz*this%kx*this%whatR)
     this%uhatI = this%uhatI - onebyksq*(this%kx*this%kx*this%uhatI + &
