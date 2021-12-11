@@ -18,7 +18,8 @@ program test_gaborMode
     real(rkind) :: xRange(2), yRange(2), zRange(2), delta(3)
     complex(kind=8), parameter :: uhat = (0.25d0,2.d0), vhat = (-2.42d0,1.5d0), what = (0.35d0,-2.65d0)
     real(kind=4), dimension(:,:,:), allocatable :: u_sp, v_sp, w_sp 
-    character(len=clen) :: datadir = '/work2/06632/ryanhass/stampede2/Enrichment/Gabor_class_tests'
+    character(len=clen) :: datadir = '/work2/06632/ryanhass/stampede2/Enrichment/Gabor_class_tests/Vadvect'
+    character(len=18) :: fname
     integer :: n, ierr
     
     ! Test with these inputs  
@@ -26,7 +27,7 @@ program test_gaborMode
     real(rkind), parameter :: kx = 26.d0, ky = 26.d0, kz = 40.d0 
     real(rkind), parameter :: xMode = 1.d0, yMode = 1.d0, zMode = 1.d0   
     integer, parameter :: modeAtLevel = 4
-    real(rkind) :: ules = two*pi, vles = 0.d0, wles = 0.d0
+    real(rkind) :: ules = 0.d0, vles = two*pi, wles = 0.d0
     real(rkind) :: dudx = 0.d0, dudy = 2.d0, dudz = 0.d0 ! Shear
     real(rkind) :: dvdx = 0.d0, dvdy = 0.d0, dvdz = 0.d0
     real(rkind) :: dwdx = 0.d0, dwdy = 0.d0, dwdz = 0.d0
@@ -89,7 +90,8 @@ program test_gaborMode
           vF = real(v_sp, rkind)
           wF = real(w_sp, rkind)
           call Egrid%agglomerate()
-          call Egrid%writeFields(trim(datadir)//"/Run01_adv_half", modeAtLevel)
+          write(fname,'(A,I3.3)')'Run01_adv_step',n
+          call Egrid%writeFields(trim(datadir)//'/'//trim(fname), modeAtLevel)
           call Egrid%ResetVelocityToZero()
     
           ! Zero velocity field
@@ -143,7 +145,8 @@ program test_gaborMode
           vF = real(v_sp, rkind)
           wF = real(w_sp, rkind)
           call Egrid%agglomerate()
-          call Egrid%writeFields(trim(datadir)//"/Run01_strn_half", modeAtLevel)
+          write(fname,'(A,I3.3)')'Run01_strn_step',n
+          call Egrid%writeFields(trim(datadir)//'/'//trim(fname), modeAtLevel)
           call Egrid%ResetVelocityToZero()
     
           ! Zero velocity field
@@ -176,6 +179,13 @@ program test_gaborMode
 
     if (modeAtLevel .ne. levels) then 
         call Egrid%writeFields(trim(datadir)//"/Run01_strn", levels)
-    end if 
+    end if
+
+!BEGIN_DEBUG****************************************************************
+write(mssg,'(A,I3,A,I3,A)')'(yst,yen) = (',Egrid%fields(4)%gp%xst(2),',',Egrid%fields(4)%gp%xen(2),')'
+print*, trim(mssg)
+write(mssg,'(A,F20.16,A,F20.16,A)')'Y domain = [',yRange(1),',',yRange(2),']'
+print*, trim(mssg)
+!END_DEBUG******************************************************************
     call Egrid%destroy()
 end program 

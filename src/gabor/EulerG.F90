@@ -6,9 +6,11 @@ module EulerG_mod
     implicit none 
 
     type :: EulerG
-    ! The EulerG type is and "Euler Grid" where and "Euler Field" is the
-    ! corresponding values associated with the given grid.
-        private
+    ! The EulerG type is an "Euler Grid" where and "Euler Field" is the
+    ! corresponding values associated with the given grid. Each Euler Grid
+    ! contains one or more Euler Fields resolved on a variety of resolutions.
+    ! Each successive field is a factor 2 refinment in all three directions.
+        !private
         integer :: nlevels 
         type(Efield), dimension(:), allocatable :: fields
         type(decomp_info), pointer :: gp

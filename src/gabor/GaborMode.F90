@@ -7,6 +7,8 @@ module GaborModeMod
     logical :: useStrain = .true.
     real(rkind) :: AnuRNG = 4.0d-4 ! spectral eddy viscosity coefficient
     real(rkind) :: nu = 0.d0       ! kinematic viscosity of working fluid
+    logical :: MMS = .false.       ! Do method of manufactured solution test
+    real(rkind) :: nutMMS = 0.1d0  ! Used if MMS = .true.
     type :: gaborMode 
         !private   
         real(rkind) :: uhatR, uhatI, vhatR, vhatI, whatR, whatI, kx, ky, kz, x, y, z
@@ -90,7 +92,7 @@ contains
         integer :: xst, xen, yst, yen, zst, zen, i, j, k 
         real(rkind) :: xmin, xmax, ymin, ymax, zmin, zmax 
         real(kind=4) :: Lw, uhatR, vhatR, whatR, uhatI, vhatI, whatI
-        real(kind=4) :: kx_sp, ky_sp, kz_sp, kdotx, cs, weight, weight_yz
+        real(kind=4) :: kx_sp, ky_sp, kz_sp, kdotx, cs, weight, weight_z, weight_yz
         real(kind=4) :: xshift, yshift, zshift, ss 
       
         xmin = max(this%x - half*this%wSupport, xRange(1))
@@ -101,13 +103,19 @@ contains
         ymax = min(this%y + half*this%wSupport, yRange(2))
         zmax = min(this%z + half*this%wSupport, zRange(2))
        
-        xst = floor(((xmin - xRange(1)))/delta(1)) + 1 
-        yst = floor(((ymin - yRange(1)))/delta(2)) + 1 
-        zst = floor(((zmin - zRange(1)))/delta(3)) + 1 
+        !xst = floor(((xmin - xRange(1)))/delta(1)) + 1 
+        !yst = floor(((ymin - yRange(1)))/delta(2)) + 1 
+        !zst = floor(((zmin - zRange(1)))/delta(3)) + 1 
+        xst = nint(((xmin - xRange(1)))/delta(1)) + 1 
+        yst = nint(((ymin - yRange(1)))/delta(2)) + 1 
+        zst = nint(((zmin - zRange(1)))/delta(3)) + 1 
         
-        xen = floor(((xmax - xRange(1)))/delta(1)) + 1 
-        yen = floor(((ymax - yRange(1)))/delta(2)) + 1 
-        zen = floor(((zmax - zRange(1)))/delta(3)) + 1 
+        !xen = floor(((xmax - xRange(1)))/delta(1)) + 1 
+        !yen = floor(((ymax - yRange(1)))/delta(2)) + 1 
+        !zen = floor(((zmax - zRange(1)))/delta(3)) + 1 
+        xen = nint(((xmax - xRange(1)))/delta(1)) + 1 
+        yen = nint(((ymax - yRange(1)))/delta(2)) + 1 
+        zen = nint(((zmax - zRange(1)))/delta(3)) + 1 
 
         Lw = real(pi/this%wSupport ,kind=4)
 
@@ -126,10 +134,11 @@ contains
         ! Induce velocity 
         do k = zst,zen
             zshift = real( ((k-1)*delta(3) + zRange(1)) - this%z, kind=4 )
-            
+            weight_z = cos(zshift*Lw)
+
             do j = yst,yen
                 yshift = real( ((j-1)*delta(2) + yRange(1)) - this%y, kind=4 )
-                weight_yz = cos(yshift*Lw)*cos(zshift*Lw) 
+                weight_yz = cos(yshift*Lw)*weight_z
                 
                 do i = xst,xen
                     xshift = real( ((i-1)*delta(1) + xRange(1)) - this%x, kind=4 )
