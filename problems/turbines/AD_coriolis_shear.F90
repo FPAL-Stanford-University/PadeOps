@@ -1,9 +1,9 @@
 ! Template for PadeOps
 
-#include "AD_Coriolis_files/initialize.F90"       
-#include "AD_Coriolis_files/temporalHook.F90"  
+#include "AD_coriolis_shear_files/initialize.F90"       
+#include "AD_coriolis_shear_files/temporalHook.F90"  
 
-program AD_Coriolis
+program AD_Coriolis_shear
     use mpi
     use kind_parameters,  only: clen, rkind
     use IncompressibleGrid, only: igrid

@@ -113,7 +113,7 @@ module budgets_time_avg_mod
         integer :: counter
         character(len=clen) :: budgets_dir
 
-        logical :: useWindTurbines, isStratified
+        logical :: useWindTurbines, isStratified, useCoriolis
         real(rkind), allocatable, dimension(:) :: runningSum_sc, runningSum_sc_turb, runningSum_turb
         logical :: HaveScalars
         integer :: tidx_dump 
@@ -193,6 +193,7 @@ contains
         this%time_budget_start = time_budget_start  
         this%useWindTurbines = igrid_sim%useWindTurbines
         this%isStratified    = igrid_sim%isStratified
+        this%useCoriolis    = igrid_sim%useCoriolis
         this%forceDump = .false.
 
         this%budgets_dir = budgets_dir
@@ -608,7 +609,7 @@ contains
         call this%interp_Edge2Cell(this%igrid_sim%rbuffxE(:,:,:,1), this%igrid_sim%rbuffxC(:,:,:,1))
         this%budget_1(:,:,:,10) = this%budget_1(:,:,:,10) + this%igrid_sim%rbuffxC(:,:,:,1)
        
-        if (this%isStratified) then
+        if (this%useCoriolis) then
             ! Get the geostrophic forcing 
             call this%igrid_sim%get_geostrophic_forcing(tmp1, tmp2)         ! Forcing in x and y directions respectively 
             ! Coriolis term, X       
@@ -730,7 +731,7 @@ contains
             this%budget_2(:,:,:,7) = Umn*this%budget_1(:,:,:,4)
 
             ! 8: Coriolis terms
-            if (this%isStratified) then
+            if (this%useCoriolis) then
                 ! Geostrophic forcing term
                 this%budget_2(:,:,:,8) = Umn*this%budget_1(:,:,:,12) &
                                + Vmn*this%budget_1(:,:,:,14)

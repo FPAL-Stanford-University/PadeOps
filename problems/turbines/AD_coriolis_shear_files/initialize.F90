@@ -58,6 +58,9 @@ subroutine init_fringe_targets(inputfile, mesh)
       case(2)
           utarget = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
           vtarget = vInflow * tanh((z-zMid)/InflowProfileThick);
+      case(3)
+          utarget = uInflow 
+          vtarget = zero
     end select
 
 
@@ -188,6 +191,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       case(2)
           u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
           v = vInflow * tanh((z-zMid)/InflowProfileThick);
+      case(3)
+          u = uInflow
+          v = zero
     end select
 
     !call get_u(uInflow, vInflow, InflowProfileAmplit, InflowProfileThick, z, zMid, InflowProfileType, u, v)    
@@ -405,6 +411,9 @@ subroutine get_u(uInflow, vInflow, InflowProfileAmplit, InflowProfileThick, z, z
       case(2)
           u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
           v = vInflow * tanh((z-zMid)/InflowProfileThick);
+      case(3)
+          u = uInflow 
+          v = zero
     end select
 
 end subroutine
