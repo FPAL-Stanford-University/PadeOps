@@ -80,7 +80,7 @@ contains
         if(useStrain) then
             call this%RK4(AnuRNG, nu, epsKE, dudx, dudy, dudz, dvdx, dvdy, &
               & dvdz, dwdx, dwdy, dwdz, kmin, dt)
-            call this%projectDivergenceFree()            
+            if (.not. MMS) call this%projectDivergenceFree()            
         end if
     end subroutine 
 

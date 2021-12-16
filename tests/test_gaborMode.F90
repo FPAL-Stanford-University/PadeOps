@@ -188,4 +188,6 @@ write(mssg,'(A,F20.16,A,F20.16,A)')'Y domain = [',yRange(1),',',yRange(2),']'
 print*, trim(mssg)
 !END_DEBUG******************************************************************
     call Egrid%destroy()
+    call decomp_2d_finalize
+    call MPI_Finalize(ierr)
 end program 

@@ -55,6 +55,7 @@
   end subroutine
 
   pure subroutine gaborEvoRHS(epsKE, AnuRNG, nuMolec, k, uhatR, uhatI, dudx, uRrhs, uIrhs, krhs, kmin)
+      use MMS_mod, only: get_MMS_source
       real(rkind), dimension(3), intent(in) :: k
       real(rkind), dimension(3), intent(in) :: uhatR, uhatI
       real(rkind), dimension(3), intent(out) :: uRrhs, uIrhs
@@ -78,74 +79,38 @@
       Kmag = sqrt(Ksq)
       nuFact = 1.d0
       if (Kmag < kmin) nuFact = 10.d0
-      f = 0
-      g = 0
-      if (MMS) f = [cos(2.d0*pi*t)*(0.4d0*cos(2.d0*pi*t)**2.d0 + 0.121d0*sin(2.d0*pi*t)**2.d0 + &
-                    0.025d0*sin(4.d0*pi*t)**2.d0) - ((8.d0*cos(2.d0*pi*t)**2.d0)/(4.d0*cos(2.d0*pi*t)**2.d0 + &
-                    1.21d0*sin(2.d0*pi*t)**2.d0 + 0.25d0*sin(4.d0*pi*t)**2.d0) - 1.d0)*(1.1d0*cos(2.d0*pi*t) + &
-                    1.3d0*cos(4.d0*pi*t) + 1.2d0*sin(2.d0*pi*t)) - 2.d0*pi*sin(2.d0*pi*t) - &
-                    (4.4d0*cos(2.d0*pi*t)*sin(2.d0*pi*t)*(3.1d0*cos(2.d0*pi*t) + 3.3d0*cos(4.d0*pi*t) + &
-                    3.2d0*sin(2.d0*pi*t)))/(4.d0*cos(2.d0*pi*t)**2.d0 + 1.21d0*sin(2.d0*pi*t)**2.d0 + &
-                    0.25d0*sin(4.d0*pi*t)**2.d0) - (2.d0*cos(2.d0*pi*t)*sin(4.d0*pi*t)*(2.1d0*cos(2.d0*pi*t) + &
-                    2.3d0*cos(4.d0*pi*t) + 2.2d0*sin(2.d0*pi*t)))/(4.d0*cos(2.d0*pi*t)**2.d0 + &
-                    1.21d0*sin(2.d0*pi*t)**2.d0 + 0.25d0*sin(4.d0*pi*t)**2.d0), &
-                    sin(2.d0*pi*t)*(0.4d0*cos(2.d0*pi*t)**2.d0 + 0.121d0*sin(2.d0*pi*t)**2.d0 + &
-                    0.025d0*sin(4.d0*pi*t)**2.d0) - &
-                    ((0.5d0*sin(4.d0*pi*t)**2.d0)/(4.d0*cos(2.d0*pi*t)**2.d0 + &
-                    1.21d0*sin(2.d0*pi*t)**2.d0 + 0.25d0*sin(4.d0*pi*t)**2.d0) - &
-                    1.d0)*(2.1d0*cos(2.d0*pi*t) + 2.3d0*cos(4.d0*pi*t) + &
-                    2.2d0*sin(2.d0*pi*t)) + 2.d0*pi*cos(2.d0*pi*t) + (delt21 - &
-                    (2.d0*cos(2.d0*pi*t)*sin(4.d0*pi*t))/(4.d0*cos(2.d0*pi*t)**2.d0 + &
-                    1.21d0*sin(2.d0*pi*t)**2.d0 + &
-                    0.25d0*sin(4.d0*pi*t)**2.d0))*(1.1d0*cos(2.d0*pi*t) + &
-                    1.3d0*cos(4.d0*pi*t) + 1.2d0*sin(2.d0*pi*t)) - &
-                    (1.1d0*sin(2.d0*pi*t)*sin(4.d0*pi*t)*(3.1d0*cos(2.d0*pi*t) + &
-                    3.3d0*cos(4.d0*pi*t) + 3.2d0*sin(2.d0*pi*t)))/(4.d0*cos(2.d0*pi*t)**2.d0 + &
-                    1.21d0*sin(2.d0*pi*t)**2.d0 + 0.25d0*sin(4.d0*pi*t)**2.d0), &
-                      cos(4.d0*pi*t)*(0.4d0*cos(2.d0*pi*t)**2.d0 + 0.121d0*sin(2.d0*pi*t)**2.d0 + &
-                    0.025d0*sin(4.d0*pi*t)**2.d0) - 4.d0*pi*sin(4.d0*pi*t) - &
-                    ((2.42d0*sin(2.d0*pi*t)**2.d0)/(4.d0*cos(2.d0*pi*t)**2.d0 + &
-                    1.21d0*sin(2.d0*pi*t)**2.d0 + 0.25d0*sin(4.d0*pi*t)**2.d0) - &
-                    1)*(3.1d0*cos(2.d0*pi*t) + 3.3d0*cos(4.d0*pi*t) + &
-                    3.2d0*sin(2.d0*pi*t)) - &
-                    (1.1d0*sin(2.d0*pi*t)*sin(4.d0*pi*t)*(2.1d0*cos(2.d0*pi*t) + &
-                    2.3d0*cos(4.d0*pi*t) + 2.2d0*sin(2.d0*pi*t)))/(4.d0*cos(2.d0*pi*t)**2.d0 + &
-                    1.21d0*sin(2.d0*pi*t)**2.d0 + 0.25d0*sin(4.d0*pi*t)**2.d0) - &
-                    (4.4d0*cos(2.d0*pi*t)*sin(2.d0*pi*t)*(1.1d0*cos(2.d0*pi*t) + &
-                    1.3d0*cos(4.d0*pi*t) + 1.2d0*sin(2.d0*pi*t)))/(4.d0*cos(2.d0*pi*t)**2.d0 + &
-                    1.21d0*sin(2.d0*pi*t)**2.d0 + 0.25d0*sin(4.d0*pi*t)**2.d0)]; &
-               g = [2.2d0*cos(2.d0*pi*t) + 3.41d0*sin(2.d0*pi*t) + 1.05d0*sin(4.d0*pi*t)
-                    - 4.d0*pi*sin(2.d0*pi*t), &
-                    2.4d0*cos(2.d0*pi*t) + 3.52d0*sin(2.d0*pi*t) + 1.1d0*sin(4.d0*pi*t) &
-                    + 2.d0*pi*cos(4.d0*pi*t), &
-                    2.6d0*cos(2.d0*pi*t) + 3.63d0*sin(2.d0*pi*t) + 1.15d0*sin(4.d0*pi*t) &
-                    + 2.2d0*pi*cos(2.d0*pi*t)]
+      nuK = AnuRNG*epsKE**(1.0/3.0)*(Ksq**(-2.0/3.0))*nuFact
+      
+      f = 0.d0
+      g = 0.d0
+      if (MMS) then
+          call get_MMS_source(f,g)
+          nuK = nutMMS
+      end if
 
       do jj = 1,3
           do kk = 1,3
               do ll = 1,3
                   uRrhs(jj) = uRrhs(jj) + (2.d0*k(jj)*k(ll)*OneByksq - &
-                              kronD(jj,ll)) * uhatR(kk)*dudx(ll,kk) + f(jj)
+                              kronD(jj,ll)) * uhatR(kk)*dudx(ll,kk)
                   uIrhs(jj) = uIrhs(jj) + (2.d0*k(jj)*k(ll)*OneByksq - &
-                              kronD(jj,ll)) * uhatI(kk)*dudx(ll,kk) + f(jj)
+                              kronD(jj,ll)) * uhatI(kk)*dudx(ll,kk)
               end do 
           end do 
       end do 
       
-      nuK = AnuRNG*epsKE**(1.0/3.0)*(Ksq**(-2.0/3.0))*nuFact
-      if (MMS) nuK = nutMMS
-
-      uRrhs(1) = uRrhs(1) - (nuK + nuMolec)*Ksq*uhatR(1) 
-      uIrhs(1) = uIrhs(1) - (nuK + nuMolec)*Ksq*uhatI(1)
-      uRrhs(2) = uRrhs(2) - (nuK + nuMolec)*Ksq*uhatR(2)
-      uIrhs(2) = uIrhs(2) - (nuK + nuMolec)*Ksq*uhatI(2)
-      uRrhs(3) = uRrhs(3) - (nuK + nuMolec)*Ksq*uhatR(3)
-      uIrhs(3) = uIrhs(3) - (nuK + nuMolec)*Ksq*uhatI(3)
+      uRrhs(1) = uRrhs(1) - (nuK + nuMolec)*Ksq*uhatR(1) + f(1) 
+      uIrhs(1) = uIrhs(1) - (nuK + nuMolec)*Ksq*uhatI(1) + f(1)
+      uRrhs(2) = uRrhs(2) - (nuK + nuMolec)*Ksq*uhatR(2) + f(2)
+      uIrhs(2) = uIrhs(2) - (nuK + nuMolec)*Ksq*uhatI(2) + f(2)
+      uRrhs(3) = uRrhs(3) - (nuK + nuMolec)*Ksq*uhatR(3) + f(3)
+      uIrhs(3) = uIrhs(3) - (nuK + nuMolec)*Ksq*uhatI(3) + f(3)
 
       do ll = 1,3
           do jj = 1,3
-              krhs(ll) = krhs(ll) + (-k(jj)*dudx(jj,ll)) + g(ll)
+              krhs(ll) = krhs(ll) + (-k(jj)*dudx(jj,ll))
           end do 
+          krhs(ll) = krhs(ll) + g(ll)
       end do 
   end subroutine
 
