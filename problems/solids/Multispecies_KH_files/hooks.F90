@@ -266,6 +266,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
         ! Set up smearing function for VF based on interface location and thickness
+
         tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 
         !set mixture Volume fraction
@@ -281,7 +282,17 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         !set velocities based on mass fraction
         tmp = tmp*rho_0/rho
+        
         u   = zero
+        where(eta .ge. 0d0)
+               v = v0_2
+        elsewhere((eta .le. 1d0) .and. (eta .ge. 0d0))
+	       v = (vc + -(3/2)*(vc - v0_2)*eta + -(1/2)*(v0_2-vc)*eta*eta*eta)
+        elsewhere( (eta .le. 0d0) .and. (eta .ge. -1d0) )
+		 v = (vc + -(3/2)*(v0 - vc)*eta + -(1/2)*(vc-v0)*eta*eta*eta)
+	elsewhere(eta .le. -1.0d0)
+                v = v0
+	endwhere
         v   = ( v0 - v0_2 ) * tmp + v0_2
         w   = zero
 

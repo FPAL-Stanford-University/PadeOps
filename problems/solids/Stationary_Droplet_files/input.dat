@@ -48,6 +48,7 @@ nu = 0.02D0               ! Kinematic viscosity
 /
 
 &SINPUT
+weightedcurvature  = .FALSE.
 surface_mask       = .FALSE.
 use_FV		   = .FALSE.
 use_gradphi 	   = .FALSE.

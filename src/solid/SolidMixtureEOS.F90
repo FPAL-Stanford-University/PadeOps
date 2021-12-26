@@ -13,11 +13,13 @@ module SolidMixtureMod
     use StiffGasEOS,             only: stiffgas
     use Sep1SolidEOS,            only: sep1solid
     use SolidMod,                only: solid
+    use mpi
 
     implicit none
 
     type :: solid_mixture
-
+        
+        integer :: mpi_rank, mpi_size, ierror, mpi_rank_prev, mpi_rank_next
         integer :: ns
         integer :: nxp, nyp, nzp
         type(solid), dimension(:), allocatable :: material
@@ -34,12 +36,13 @@ module SolidMixtureMod
 
         logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE.
-        logical :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
+        logical :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
 
 	logical :: surface_mask !flag to use masking on surface tension calculation
 	logical :: use_FV      !flag to use FV scheme when solving for kappa in surface tension	
 	logical :: use_gradphi !flag to use phi formulation of VF in calculating surface tension
 	logical :: use_gradVF  !flag to use VF in calculating surface tension
+        logical :: weightedcurvature !flag for curvature correction
         logical     :: use_surfaceTension   !flag to turn on/off surface tension (in momentum and energy equations)
         real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
@@ -47,11 +50,23 @@ module SolidMixtureMod
         real(rkind), allocatable, dimension(:,:,:,:) :: surfaceTension_f
         real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e
         real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV
+        
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa
         real(rkind), allocatable, dimension(:,:,:,:) :: norm
 	real(rkind), allocatable, dimension(:,:,:)   :: phi
         real(rkind), allocatable, dimension(:,:,:)   :: fmask
+        real(rkind), allocatable, dimension(:,:,:)   :: buffer_send_1, buffer_send_k_1
+        real(rkind), allocatable, dimension(:,:,:)   :: buffer_send_2, buffer_send_k_2
+        real(rkind), allocatable, dimension(:,:,:)   :: buffer_recieve_1, buffer_recieve_k_1
+        real(rkind), allocatable, dimension(:,:,:)   :: buffer_recieve_2, buffer_recieve_k_2
+!        real(rkind), dimension(:,:,:), pointer       :: buffs1, buffs2, buffr1, buffr2
+!        real(rkind), dimension(:,:,:), pointer       :: buffsk1, buffsk2, buffrk1, buffrk2
+
+        integer, dimension(8) :: MPI_req, MPI_Stats
+      
+
+
     contains
 
         procedure :: init
@@ -109,9 +124,9 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,derD02,derStagg,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,use_surfaceTension,use_gradphi, use_gradVF, surfaceTension_coeff, use_FV,surface_mask, strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
+    subroutine init(this,decomp,der,derD02,derStagg,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,use_surfaceTension,use_gradphi, use_gradVF, surfaceTension_coeff, use_FV,surface_mask, weightedcurvature, strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
 
-        class(solid_mixture)      ,      intent(inout) :: this
+        class(solid_mixture), target,    intent(inout) :: this
         type(decomp_info), target,       intent(in)    :: decomp
         type(filters),     target,       intent(in)    :: fil, gfil
         type(derivatives), target,       intent(in)    :: der,derD02
@@ -122,7 +137,7 @@ contains
         logical,                         intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
         logical,                         intent(in)    :: SOSmodel
         logical,                         intent(in)    :: use_gTg,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
-        logical,                         intent(in)    :: use_surfaceTension, use_gradphi, use_gradVF, use_FV, surface_mask
+        logical,                         intent(in)    :: use_surfaceTension, use_gradphi, use_gradVF, use_FV, surface_mask, weightedcurvature
         real(rkind),                     intent(in)    :: surfaceTension_coeff
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
@@ -163,6 +178,7 @@ contains
         this%cnsrv_gp = cnsrv_gp
         this%cnsrv_pe = cnsrv_pe
 
+        this%weightedcurvature    = weightedcurvature
 	this%surface_mask 	  = surface_mask
 	this%use_FV 		  = use_FV
         this%use_surfaceTension   = use_surfaceTension
@@ -253,6 +269,36 @@ contains
         if(allocated(this%kappa)) deallocate(this%kappa)
         allocate(this%kappa(this%nxp, this%nyp, this%nzp))
 
+        if(allocated(this%buffer_send_1)) deallocate(this%buffer_send_1)
+        allocate(this%buffer_send_1(this%nxp, 1, this%nzp))
+
+        
+        if(allocated(this%buffer_send_2)) deallocate(this%buffer_send_2)
+        allocate(this%buffer_send_2(this%nxp,1,this%nzp))
+
+        
+        if(allocated(this%buffer_recieve_1)) deallocate(this%buffer_recieve_1)
+        allocate(this%buffer_recieve_1(this%nxp,1,this%nzp))
+
+        
+        if(allocated(this%buffer_recieve_2)) deallocate(this%buffer_recieve_2)
+        allocate(this%buffer_recieve_2(this%nxp, 1,this%nzp))
+
+
+        if(allocated(this%buffer_send_k_1)) deallocate(this%buffer_send_k_1)
+        allocate(this%buffer_send_k_1(this%nxp, 1, this%nzp))
+
+
+        if(allocated(this%buffer_send_k_2)) deallocate(this%buffer_send_k_2)
+        allocate(this%buffer_send_k_2(this%nxp, 1,this%nzp))
+
+
+        if(allocated(this%buffer_recieve_k_1)) deallocate(this%buffer_recieve_k_1)
+        allocate(this%buffer_recieve_k_1(this%nxp,1,this%nzp))
+
+
+        if(allocated(this%buffer_recieve_k_2)) deallocate(this%buffer_recieve_k_2)
+        allocate(this%buffer_recieve_k_2(this%nxp,1,this%nzp))
 
         if(allocated(this%maskKappa)) deallocate(this%maskKappa)
         allocate(this%maskKappa(this%nxp, this%nyp, this%nzp))
@@ -260,9 +306,14 @@ contains
 	if(allocated(this%phi)) deallocate(this%phi)
         allocate(this%phi(this%nxp, this%nyp, this%nzp))
 
-	 if(allocated(this%fmask)) deallocate(this%fmask)
+	if(allocated(this%fmask)) deallocate(this%fmask)
         allocate(this%fmask(this%nxp, this%nyp, this%nzp))
+        
+        call MPI_COMM_SIZE(MPI_COMM_WORLD, this%mpi_size, this%ierror)
+        call MPI_COMM_RANK(MPI_COMM_WORLD, this%mpi_rank, this%ierror)
 
+        this%mpi_rank_prev = mod((this%mpi_rank - 1 + this%mpi_size), this%mpi_size)
+        this%mpi_rank_next = mod((this%mpi_rank + 1), this%mpi_size)
 
 
 
@@ -288,7 +339,15 @@ contains
         if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
         if(allocated(this%norm)) deallocate(this%norm)
         if(allocated(this%kappa)) deallocate(this%kappa)
-	if(allocated(this%kappa)) deallocate(this%kappa)
+	if(allocated(this%buffer_send_1)) deallocate(this%buffer_send_1)
+        if(allocated(this%buffer_send_2)) deallocate(this%buffer_send_2)
+        if(allocated(this%buffer_recieve_1)) deallocate(this%buffer_recieve_1)
+        if(allocated(this%buffer_recieve_2)) deallocate(this%buffer_recieve_2)
+        if(allocated(this%buffer_send_k_1)) deallocate(this%buffer_send_k_1)
+        if(allocated(this%buffer_send_k_2)) deallocate(this%buffer_send_k_2)
+        if(allocated(this%buffer_recieve_k_1)) deallocate(this%buffer_recieve_k_1)
+        if(allocated(this%buffer_recieve_k_2)) deallocate(this%buffer_recieve_k_2)
+
 
         if(allocated(this%maskKappa)) deallocate(this%maskKappa)
 	if(allocated(this%fmask)) deallocate(this%fmask)
@@ -306,7 +365,7 @@ contains
         nullify(this%interpMid)
 
     end subroutine
-
+  
     subroutine set_material(this, imat, hydro, elastic)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: imat
@@ -662,7 +721,6 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
         
     end subroutine
 
-
     subroutine equilibratePressureTemperature_new(this,mixRho,mixE,mixP,mixT,isub,nsubs)
         use reductions, only : P_MINVAL,P_MAXVAL
         class(solid_mixture), intent(inout) :: this
@@ -693,12 +751,12 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
         ! correct.
         ehmix = mixE
         do imat = 1, this%ns
-           !ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel !original
-            ehmix = ehmix - min(max(this%material(imat)%Ys,zero),one) * this%material(imat)%eel  !new
+           ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel !original
+           !ehmix = ehmix - min(max(this%material(imat)%Ys,zero),one) * this%material(imat)%eel  !new
         enddo
-print *, 'pinpiut: ', mixE(89,1,1), ehmix(89,1,1), mixRho(89,1,1)
-print *, 'VF     : ', this%material(1)%VF(89,1,1), this%material(2)%VF(89,1,1)
-print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
+!print *, 'pinpiut: ', mixE(89,1,1), ehmix(89,1,1), mixRho(89,1,1)
+!print *, 'VF     : ', this%material(1)%VF(89,1,1), this%material(2)%VF(89,1,1)
+!print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
         do k=1,this%nzp
          do j=1,this%nyp
@@ -716,13 +774,13 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
               !maxp = maxval(maxp, this%material(imat)%hydro%PInf)
 
               ! set initial guess
-               !peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k) !original
-               peqb = peqb + min(max(this%material(imat)%VF(i,j,k),zero),one)*this%material(imat)%p(i,j,k)  !new
-               !peqb = peqb + this%material(imat)%p(i,j,k)
+               peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k) !original
+               !peqb = peqb + min(max(this%material(imat)%VF(i,j,k),zero),one)*this%material(imat)%p(i,j,k)  !new
+
                ! !debug
-               ! if (this%material(imat)%p(i,j,k).le.eps) then
+               ! if(this%material(imat)%p(i,j,k).le.eps) then
                !    print*,'negative p 1 ',this%material(imat)%p(i,j,k),imat,i,j,k
-               !  endif
+               ! endif
                ! !end 
             end do
             !pest = peqb
@@ -738,9 +796,9 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
             call this%rootfind_nr_1d_new(peqb,fparams,iparams,pmin,pmax,icount,icount2,isub,nsubs) !now coupled with bisection method for improved stability --- fixes problem in fnumden -> fnumden_new when negative mass fraction
             
             !debug
-            !if(peqb.le.eps) then
-            !   print*,'negative p 3 ',peqb,imat,i,j,k
-            !endif
+            if(peqb.le.eps) then
+               print*,'negative p 3 ',peqb,imat,i,j,k
+            endif
             !end
 
             !pdiffmax = max(dabs(pest-peqb),pdiffmax)
@@ -1329,7 +1387,6 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
                  call interpolateFV(this,gradVF(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
                  call interpolateFV(this,gradVF(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc) 
                  call interpolateFV(this,gradVF(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc) 
-              print *, "intsharpD02"
 
 	      else
                  !used in high order version
@@ -2226,12 +2283,15 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
         real(rkind),                                        intent(in) :: dx,dy,dz
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
         logical,                                            intent(in) :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: GVFmag, GPHImag, mask2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: GVFmag, GPHImag, mask2, updatedKappa, weight, kappaSum
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint
 	integer :: iflag = one
-	real(rkind) :: r = 0.5D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0
+	real(rkind) :: r = 0.5D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0 
 	!TODO: add additional arrays to be used locally in calculation of surface tension force
+        integer :: i,j,k,n
+        integer, dimension(2) :: coords
+
 
         if (this%ns.ne.2) then
             call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
@@ -2240,6 +2300,10 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
         !initialize surface tension force and energy source to zero everywhere
         this%surfaceTension_f = 0.0d0
         this%surfaceTension_e = 0.0d0
+        this%kappa            = 0.0d0
+        updatedKappa           = 0.0d0
+        weight                 = 0.0d0
+        kappaSum               = 0.0d0
 
         !TODO: Compute curvature (use gradient and divergence operators)
         !for example, to take the gradient of the volume fraction of species # 1
@@ -2331,6 +2395,155 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
 		
 	endif
+
+
+      if (this%weightedcurvature) then
+
+!        do n = 1
+!   print*, this%mpi_rank
+!           this%MPI_req = MPI_REQUEST_NULL
+
+            call MPI_Irecv(this%buffer_recieve_1, this%nxp, MPI_real, this%mpi_rank_prev, 1, MPI_Comm_world, this%MPI_req(1), this%ierror)
+
+
+            call MPI_Irecv(this%buffer_recieve_2, this%nxp, MPI_real, this%mpi_rank_next, 2, MPI_Comm_world, this%MPI_req(2), this%ierror)
+
+
+            call MPI_Irecv(this%buffer_recieve_k_1, this%nxp, MPI_real, this%mpi_rank_prev, 3, MPI_Comm_world, this%MPI_req(3), this%ierror)
+
+
+            call MPI_Irecv(this%buffer_recieve_k_2, this%nxp, MPI_real, this%mpi_rank_next, 4, MPI_Comm_world, this%MPI_req(4), this%ierror)
+        
+             print*, this%nxp
+
+
+            this%buffer_send_1 = this%material(2)%VF(:,1:1,:);
+            call  MPI_Issend(this%buffer_send_1,this%nxp, MPI_real, this%mpi_rank_prev, 2, MPI_Comm_world, this%MPI_req(5), this%ierror)
+             print*, this%material(2)%VF(10:10,1:1,1)
+
+            this%buffer_send_2 = this%material(2)%VF(:,this%nyp:this%nyp,:);
+            call  MPI_Issend(this%buffer_send_2,this%nxp, MPI_real, this%mpi_rank_next, 1, MPI_Comm_world, this%MPI_req(6), this%ierror)
+            print*, this%material(2)%VF(10:10,this%nxp:this%nxp,1)
+
+            this%buffer_send_k_1 = this%kappa(:,1:1,:);
+            call  MPI_Issend(this%buffer_send_k_1,this%nxp, MPI_real, this%mpi_rank_prev, 4, MPI_Comm_world, this%MPI_req(7), this%ierror)
+
+            this%buffer_send_k_2 = this%kappa(:,this%nyp:this%nyp,:);
+            call  MPI_Issend(this%buffer_send_k_2,this%nxp, MPI_real, this%mpi_rank_next, 3, MPI_Comm_world, this%MPI_req(8), this%ierror)
+
+            call MPI_Waitall(8, this%MPI_req, this%MPI_Stats, this%ierror)
+
+
+                do k = 1, this%nzp
+                  do i = 2, (this%nxp-1)
+                     j = 1
+
+
+                      weight(i,j,k) = (this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
+                        (this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
+                        (this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
+                        (this%buffer_recieve_1(i,1,k)*(1-this%buffer_recieve_1(i,1,k)))**2 + &
+                        (this%buffer_recieve_1(i+1,1,k)*(1-this%buffer_recieve_1(i+1,1,k)))**2 +  &
+                        (this%buffer_recieve_1(i-1,1,k)*(1-this%buffer_recieve_1(i-1,1,k)))**2 + &
+                        (this%material(2)%VF(i,j+1,k)*(1-this%material(2)%VF(i,j+1,k)))**2 + &
+                        (this%material(2)%VF(i-1,j+1,k)*(1-this%material(2)%VF(i-1,j+1,k)))**2 + &
+                        (this%material(2)%VF(i+1,j+1,k)*(1-this%material(2)%VF(i+1,j+1,k)))**2
+
+
+                       kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
+                          this%kappa(i+1,j,k)*(this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
+                          this%kappa(i-1,j,k)*(this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
+                          this%buffer_recieve_k_1(i,1,k)*(this%buffer_recieve_1(i,1,k)*(1-this%buffer_recieve_1(i,1,k)))**2 + &
+                          this%buffer_recieve_k_1(i+1,1,k)*(this%buffer_recieve_1(i+1,1,k)*(1-this%buffer_recieve_1(i+1,1,k)))**2 +  &
+                          this%buffer_recieve_k_1(i-1,1,k)*(this%buffer_recieve_1(i-1,1,k)*(1-this%buffer_recieve_1(i-1,1,k)))**2 + &
+                          this%kappa(i,j+1,k)*(this%material(2)%VF(i,j+1,k)*(1-this%material(2)%VF(i,j+1,k)))**2 + &
+                          this%kappa(i-1,j+1,k)*(this%material(2)%VF(i-1,j+1,k)*(1-this%material(2)%VF(i-1,j+1,k)))**2 + &
+                          this%kappa(i+1,j+1,k)*(this%material(2)%VF(i+1,j+1,k)*(1-this%material(2)%VF(i+1,j+1,k)))**2
+
+                 enddo
+              enddo
+
+               do k = 1, this%nzp
+                  do i = 2, (this%nxp-1)
+                     j = this%nyp
+
+
+                      weight(i,j,k) = (this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
+                        (this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
+                        (this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
+                        (this%buffer_recieve_2(i,1,k)*(1-this%buffer_recieve_2(i,1,k)))**2 + &
+                        (this%buffer_recieve_2(i+1,1,k)*(1-this%buffer_recieve_2(i+1,1,k)))**2 +  &
+                        (this%buffer_recieve_2(i-1,1,k)*(1-this%buffer_recieve_2(i-1,1,k)))**2 + &
+                        (this%material(2)%VF(i,j-1,k)*(1-this%material(2)%VF(i,j-1,k)))**2 + &
+                        (this%material(2)%VF(i-1,j-1,k)*(1-this%material(2)%VF(i-1,j-1,k)))**2 + &
+                        (this%material(2)%VF(i+1,j-1,k)*(1-this%material(2)%VF(i+1,j-1,k)))**2
+
+
+                       kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
+                          this%kappa(i+1,j,k)*(this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
+                          this%kappa(i-1,j,k)*(this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
+                          this%buffer_recieve_k_2(i,1,k)*(this%buffer_recieve_2(i,1,k)*(1-this%buffer_recieve_2(i,1,k)))**2 + &
+                          this%buffer_recieve_k_2(i+1,1,k)*(this%buffer_recieve_2(i+1,1,k)*(1-this%buffer_recieve_2(i+1,1,k)))**2 +  &
+                          this%buffer_recieve_k_2(i-1,1,k)*(this%buffer_recieve_2(i-1,1,k)*(1-this%buffer_recieve_2(i-1,1,k)))**2 + &
+                          this%kappa(i,j-1,k)*(this%material(2)%VF(i,j-1,k)*(1-this%material(2)%VF(i,j-1,k)))**2 + &
+                          this%kappa(i-1,j-1,k)*(this%material(2)%VF(i-1,j-1,k)*(1-this%material(2)%VF(i-1,j-1,k)))**2 + &
+                          this%kappa(i+1,j-1,k)*(this%material(2)%VF(i+1,j-1,k)*(1-this%material(2)%VF(i+1,j-1,k)))**2
+
+                 enddo
+              enddo
+
+
+        
+        do k = 1, this%nzp
+          do j = 2, (this%nyp-1)
+            do i = 2, (this%nxp-1)
+                            
+                              
+               weight(i,j,k) = (this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
+                        (this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
+                        (this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
+                        (this%material(2)%VF(i,j-1,k)*(1-this%material(2)%VF(i,j-1,k)))**2 + &
+                        (this%material(2)%VF(i+1,j-1,k)*(1-this%material(2)%VF(i+1,j-1,k)))**2 +  &
+                        (this%material(2)%VF(i-1,j-1,k)*(1-this%material(2)%VF(i-1,j-1,k)))**2 + &
+                        (this%material(2)%VF(i,j+1,k)*(1-this%material(2)%VF(i,j+1,k)))**2 + &
+                        (this%material(2)%VF(i-1,j+1,k)*(1-this%material(2)%VF(i-1,j+1,k)))**2 + &
+                        (this%material(2)%VF(i+1,j+1,k)*(1-this%material(2)%VF(i+1,j+1,k)))**2 
+               
+                
+               kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
+                          this%kappa(i+1,j,k)*(this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
+                          this%kappa(i-1,j,k)*(this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
+                          this%kappa(i,j-1,k)*(this%material(2)%VF(i,j-1,k)*(1-this%material(2)%VF(i,j-1,k)))**2 + &
+                          this%kappa(i+1,j-1,k)*(this%material(2)%VF(i+1,j-1,k)*(1-this%material(2)%VF(i+1,j-1,k)))**2 +  &
+                          this%kappa(i-1,j-1,k)*(this%material(2)%VF(i-1,j-1,k)*(1-this%material(2)%VF(i-1,j-1,k)))**2 + &
+                          this%kappa(i,j+1,k)*(this%material(2)%VF(i,j+1,k)*(1-this%material(2)%VF(i,j+1,k)))**2 + &
+                          this%kappa(i-1,j+1,k)*(this%material(2)%VF(i-1,j+1,k)*(1-this%material(2)%VF(i-1,j+1,k)))**2 + &
+                          this%kappa(i+1,j+1,k)*(this%material(2)%VF(i+1,j+1,k)*(1-this%material(2)%VF(i+1,j+1,k)))**2
+
+
+             enddo
+           enddo
+         enddo
+         
+         
+               where (weight .LE. eps) 
+
+                   updatedKappa = eps
+
+                elsewhere
+
+                    updatedKappa = kappaSum/weight
+
+               endwhere
+
+          this%kappa = updatedKappa         
+!        enddo
+        
+
+       endif
+
+
+
 
 	if (this%surface_mask) then
 	
