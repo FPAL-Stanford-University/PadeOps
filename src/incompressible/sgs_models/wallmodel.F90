@@ -567,14 +567,14 @@ subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
         gs1 = p_sum(ts1); gs2 = p_sum(ts2); gs3 = p_sum(ts3); gs4 = p_sum(ts4)
         this%Umn = gs1 * this%meanFact
         this%Vmn = gs2 * this%meanFact
-        this%Uspmn = gs3 * this%meanFact
+        this%Uspmn = sqrt(this%Umn**2 + this%Vmn**2)          !gs3 * this%meanFact
         !print *, 'tt1: ', tt1, tg1, tmpsum(3), globsum(3)
         !if (this%isStratified .or. this%initSpinUp) this%Tmn = gs4 * this%meanFact
     else
         if (nrank == 0) then
             this%Umn = real(uhat(1,1,this%WM_matchingIndex),rkind)*this%meanFact
             this%Vmn = real(vhat(1,1,this%WM_matchingIndex),rkind)*this%meanFact
-            this%Uspmn = real(cbuff(1,1,this%WM_matchingIndex),rkind)*this%meanFact
+            this%Uspmn = sqrt(this%Umn**2 + this%Vmn**2)      !real(cbuff(1,1,this%WM_matchingIndex),rkind)*this%meanFact
             if (this%isStratified .or. this%initSpinUp) this%Tmn = real(That(1,1,1),rkind)*this%meanFact
         end if
         call mpi_bcast(this%Umn,1,mpirkind,0,mpi_comm_world,ierr)
