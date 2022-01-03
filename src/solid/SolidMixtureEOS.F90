@@ -309,11 +309,11 @@ contains
 	if(allocated(this%fmask)) deallocate(this%fmask)
         allocate(this%fmask(this%nxp, this%nyp, this%nzp))
         
-        call MPI_COMM_SIZE(MPI_COMM_WORLD, this%mpi_size, this%ierror)
-        call MPI_COMM_RANK(MPI_COMM_WORLD, this%mpi_rank, this%ierror)
+!        call MPI_COMM_SIZE(MPI_COMM_WORLD, this%mpi_size, this%ierror)
+!        call MPI_COMM_RANK(MPI_COMM_WORLD, this%mpi_rank, this%ierror)
 
-        this%mpi_rank_prev = mod((this%mpi_rank - 1 + this%mpi_size), this%mpi_size)
-        this%mpi_rank_next = mod((this%mpi_rank + 1), this%mpi_size)
+      !  this%mpi_rank_prev = mod((this%mpi_rank - 1 + this%mpi_size), this%mpi_size)
+      !  this%mpi_rank_next = mod((this%mpi_rank + 1), this%mpi_size)
 
 
 

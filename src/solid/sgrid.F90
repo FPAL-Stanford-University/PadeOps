@@ -1204,34 +1204,34 @@ contains
         endif
          a = -1
         ! Use fixed time step if CFL <= 0
-        if ( a .LE. zero ) then
+        if ( this%CFL .LE. zero ) then
             this%dt = this%dtfixed
             stability = 'fixed'
         else
             stability = 'convective'
             this%dt = dtCFL
-            ! if ( this%dt > dtmu ) then
-            !     this%dt = dtmu
-            !     stability = 'shear'
-            ! else if ( this%dt > dtbulk ) then
-            !     this%dt = dtbulk
-            !     stability = 'bulk'
-            ! else if ( this%dt > dtkap ) then
-            !     this%dt = dtkap
-            !     stability = 'conductive'
-            ! else if ( this%dt > dtdiff ) then
-            !     this%dt = dtdiff
-            !     stability = 'diffusive'
-            ! else if ( this%dt > dtdiff_g ) then
-            !     this%dt = dtdiff_g
-            !     stability = 'diffusive g'
-            ! else if ( this%dt > dtdiff_gt ) then
-            !     this%dt = dtdiff
-            !     stability = 'diffusive g_t'
-            ! else if ( this%dt > dtplast ) then
-            !     this%dt = dtplast
-            !     stability = 'plastic'
-            ! end if
+             if ( this%dt > dtmu ) then
+                 this%dt = dtmu
+                 stability = 'shear'
+              else if ( this%dt > dtbulk ) then
+                 this%dt = dtbulk
+                 stability = 'bulk'
+             else if ( this%dt > dtkap ) then
+                 this%dt = dtkap
+                 stability = 'conductive'
+             else if ( this%dt > dtdiff ) then
+                 this%dt = dtdiff
+                 stability = 'diffusive'
+             else if ( this%dt > dtdiff_g ) then
+                 this%dt = dtdiff_g
+                 stability = 'diffusive g'
+             else if ( this%dt > dtdiff_gt ) then
+                 this%dt = dtdiff
+                 stability = 'diffusive g_t'
+             else if ( this%dt > dtplast ) then
+                 this%dt = dtplast
+                 stability = 'plastic'
+             endif
             
             if ( this%dt > dtmu ) then
                this%dt = dtmu
@@ -1304,8 +1304,8 @@ contains
             if (this%step .LE. this%st_limit) then
                this%dt = min(this%dt / st_fac, this%dtfixed)
                stability = 'startup'
-            end if
-         end if
+            endif
+         endif
 
     end subroutine
 
