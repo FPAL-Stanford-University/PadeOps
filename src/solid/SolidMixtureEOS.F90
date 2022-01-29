@@ -76,6 +76,7 @@ module SolidMixtureMod
         procedure :: equilibratePressure
         procedure :: equilibratePressureTemperature
         procedure :: equilibratePressureTemperature_new
+        procedure :: equilibrateTemperature
         procedure :: getLAD
         procedure :: calculate_source
         procedure :: update_g
@@ -101,8 +102,7 @@ module SolidMixtureMod
         procedure :: get_q
         procedure :: get_intSharp
         procedure :: get_surfaceTension
-        procedure :: interpolateFV !TODO: check BCs on all FV terms
-        procedure :: divergenceFV
+        procedure :: interpolateFV !TODO: check BCs on all FV terms        procedure :: divergenceFV
         procedure :: gradientFV
         procedure :: get_qmix
         procedure :: get_dt
@@ -270,35 +270,35 @@ contains
         allocate(this%kappa(this%nxp, this%nyp, this%nzp))
 
         if(allocated(this%buffer_send_1)) deallocate(this%buffer_send_1)
-        allocate(this%buffer_send_1(this%nxp, 1, this%nzp))
+        allocate(this%buffer_send_1(1,this%nyp, this%nzp))
 
         
         if(allocated(this%buffer_send_2)) deallocate(this%buffer_send_2)
-        allocate(this%buffer_send_2(this%nxp,1,this%nzp))
+        allocate(this%buffer_send_2(1,this%nyp,this%nzp))
 
         
         if(allocated(this%buffer_recieve_1)) deallocate(this%buffer_recieve_1)
-        allocate(this%buffer_recieve_1(this%nxp,1,this%nzp))
+        allocate(this%buffer_recieve_1(1,this%nyp,this%nzp))
 
         
         if(allocated(this%buffer_recieve_2)) deallocate(this%buffer_recieve_2)
-        allocate(this%buffer_recieve_2(this%nxp, 1,this%nzp))
+        allocate(this%buffer_recieve_2(1,this%nyp,this%nzp))
 
 
         if(allocated(this%buffer_send_k_1)) deallocate(this%buffer_send_k_1)
-        allocate(this%buffer_send_k_1(this%nxp, 1, this%nzp))
+        allocate(this%buffer_send_k_1(1,this%nyp, this%nzp))
 
 
         if(allocated(this%buffer_send_k_2)) deallocate(this%buffer_send_k_2)
-        allocate(this%buffer_send_k_2(this%nxp, 1,this%nzp))
+        allocate(this%buffer_send_k_2(1,this%nyp,this%nzp))
 
 
         if(allocated(this%buffer_recieve_k_1)) deallocate(this%buffer_recieve_k_1)
-        allocate(this%buffer_recieve_k_1(this%nxp,1,this%nzp))
+        allocate(this%buffer_recieve_k_1(1,this%nyp,this%nzp))
 
 
         if(allocated(this%buffer_recieve_k_2)) deallocate(this%buffer_recieve_k_2)
-        allocate(this%buffer_recieve_k_2(this%nxp,1,this%nzp))
+        allocate(this%buffer_recieve_k_2(1,this%nyp,this%nzp))
 
         if(allocated(this%maskKappa)) deallocate(this%maskKappa)
         allocate(this%maskKappa(this%nxp, this%nyp, this%nzp))
@@ -309,11 +309,11 @@ contains
 	if(allocated(this%fmask)) deallocate(this%fmask)
         allocate(this%fmask(this%nxp, this%nyp, this%nzp))
         
-!        call MPI_COMM_SIZE(MPI_COMM_WORLD, this%mpi_size, this%ierror)
-!        call MPI_COMM_RANK(MPI_COMM_WORLD, this%mpi_rank, this%ierror)
+        call MPI_COMM_SIZE(MPI_COMM_WORLD, this%mpi_size, this%ierror)
+        call MPI_COMM_RANK(MPI_COMM_WORLD, this%mpi_rank, this%ierror)
 
-      !  this%mpi_rank_prev = mod((this%mpi_rank - 1 + this%mpi_size), this%mpi_size)
-      !  this%mpi_rank_next = mod((this%mpi_rank + 1), this%mpi_size)
+        this%mpi_rank_prev = mod((this%mpi_rank - 1 + this%mpi_size), this%mpi_size)
+        this%mpi_rank_next = mod((this%mpi_rank + 1), this%mpi_size)
 
 
 
@@ -870,6 +870,369 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
         
 
+    end subroutine
+
+
+subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
+        use reductions, only : P_MINVAL,P_MAXVAL
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP, mixT
+
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix, tmp
+        real(rkind), dimension(4*this%ns), target :: fparams
+        real(rkind), dimension(this%ns) :: e_species, T_species, p_species 
+        real(rkind) :: Teqb, Peqb2, T, numer, denom, eps_1 = 1D0, eps_2 = 1D0, vf_cutoff= 0
+        integer, dimension(4)             :: iparams
+        integer, intent(in)               :: isub, nsubs
+
+        integer :: i,j,k,imat,icount = zero, icount2 = zero
+        real(rkind) :: maxp, peqb,rhomin,pmin,pmax, delta_max, delta_min, delta_e1, delta_e2, s=2, VF, e_species_n1
+
+        ! subtract elastic energy to determine hydrostatic energy. Temperature
+        ! is assumed a function of only hydrostatic energy. Not sure if this is
+        ! correct.
+
+        
+        rhomin = 1.0/eps
+        pmin = 1.0/eps
+        pmax = zero
+        do imat = 1, this%ns
+           rhomin = min(P_MINVAL(this%material(imat)%consrv(:,:,:,1)),rhomin)
+           pmin = min(P_MINVAL(this%material(imat)%p),pmin)
+           pmax = max(P_MAXVAL(this%material(imat)%p),pmax)
+        enddo
+
+
+
+        ehmix = mixE
+        do imat = 1, this%ns
+            ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+        enddo
+
+
+        do k=1,this%nzp
+         do j=1,this%nyp
+          do i=1,this%nxp
+           this%material(2)%rho(i,j,k) = this%material(2)%elastic%rho0
+
+           VF = mixRho(i,j,k)*this%material(2)%Ys(i,j,k)/this%material(2)%rho(i,j,k)
+
+           if ( ( VF .LE. vf_cutoff) .OR. (VF .GE. (1-vf_cutoff)) ) then
+           fparams(1) = mixRho(i,j,k)*ehmix(i,j,k)
+
+            ! set iparams
+            iparams(1) = 2
+            iparams(2) = i; iparams(3) = j; iparams(4) = k;
+
+            maxp = zero; peqb = zero
+            do imat=1,this%ns
+              !! determine max over all PInfs
+              !maxp = maxval(maxp, this%material(imat)%hydro%PInf)
+
+              ! set initial guess
+               peqb = peqb + this%material(imat)%VF(i,j,k)*this%material(imat)%p(i,j,k) !original
+               !peqb = peqb + min(max(this%material(imat)%VF(i,j,k),zero),one)*this%material(imat)%p(i,j,k)  !new
+
+               ! !debug
+               ! if(this%material(imat)%p(i,j,k).le.eps) then
+               !    print*,'negative p 1 ',this%material(imat)%p(i,j,k),imat,i,j,k
+               ! endif
+               ! !end 
+            end do
+            !pest = peqb
+
+            ! !debug
+            ! if(peqb.le.eps) then
+            !    print*,'negative p 2 ',peqb,imat,i,j,k
+            ! endif
+            ! !end
+
+            ! solve non-linear equation
+            !call this%rootfind_nr_1d(peqb,fparams,iparams) !original
+            call this%rootfind_nr_1d_new(peqb,fparams,iparams,pmin,pmax,icount,icount2,isub,nsubs) !now coupled with bisection method for improved stability --- fixes problem in fnumden -> fnumden_new when negative mass fraction
+            
+            !debug
+            if(peqb.le.eps) then
+               print*,'negative p 3 ',peqb,imat,i,j,k
+
+            endif
+            !end
+
+           if (ehmix(i,j,k) .LE. 0) then
+           print *, ehmix(i,j,k)
+           print *, 'ehmix in PTEQB'
+           end if
+
+
+
+            !! rescale all pressures by maxp
+            !fparams(2*this%ns+1:4*this%ns) = fparams(2*this%ns+1:4*this%ns)*maxp
+            mixP(i,j,k) = peqb !*maxp
+                 mixT(i,j,k) = zero
+                 do imat = 1, this%ns
+                    mixT(i,j,k) = mixT(i,j,k) + this%material(imat)%Ys(i,j,k)*this%material(imat)%hydro%Cv * (mixP(i,j,k) + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf)/(mixP(i,j,k) + this%material(imat)%hydro%PInf) !original
+                    !mixT(i,j,k) = mixT(i,j,k) + min(max(this%material(imat)%Ys(i,j,k),zero),one)*this%material(imat)%hydro%Cv * (mixP(i,j,k) + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf)/(mixP(i,j,k) + this%material(imat)%hydro%PInf) !new
+                    !mixT(i,j,k) = mixT(i,j,k) + min(max(this%material(imat)%Ys(i,j,k),zero+1.D-6),one-1.D-6)*this%material(imat)%hydro%Cv * (mixP(i,j,k) + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf)/(mixP(i,j,k) + this%material(imat)%hydro%PInf) !new
+                 enddo
+                 mixT(i,j,k) = ehmix(i,j,k)/mixT(i,j,k)
+
+                 do imat = 1, this%ns
+                    this%material(imat)%T(i,j,k) = mixT(i,j,k)
+                    this%material(imat)%p(i,j,k) = mixP(i,j,k)
+
+                    this%material(imat)%VF(i,j,k) = mixRho(i,j,k)*this%material(imat)%Ys(i,j,k)*(this%material(imat)%hydro%gam-one) * this%material(imat)%hydro%Cv*mixT(i,j,k)/(mixP(i,j,k) + this%material(imat)%hydro%PInf) !original
+                    !this%material(imat)%VF(i,j,k) = mixRho(i,j,k)*min(max(this%material(imat)%Ys(i,j,k),zero),one)*(this%material(imat)%hydro%gam-one) * this%material(imat)%hydro%Cv*mixT(i,j,k)/(mixP(i,j,k) + this%material(imat)%hydro%PInf) !new
+                    !this%material(imat)%VF(i,j,k) = mixRho(i,j,k)*min(max(this%material(imat)%Ys(i,j,k),zero+1.D-6),one-1.D-6)*(this%material(imat)%hydro%gam-one) * this%material(imat)%hydro%Cv*mixT(i,j,k)/(mixP(i,j,k) + this%material(imat)%hydro%PInf) !new
+
+                    this%material(imat)%eh(i,j,k) = this%material(imat)%hydro%Cv*mixT(i,j,k)*(mixP(i,j,k) + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf) / (mixP(i,j,k) + this%material(imat)%hydro%PInf)
+                 end do
+
+                tmp = zero
+                do imat = 1, this%ns-one
+                  tmp = tmp + this%material(imat)%VF
+                enddo
+                this%material(this%ns)%VF = one - tmp
+
+                tmp = zero
+                do imat = 1, this%ns-one
+                   tmp = tmp + this%material(imat)%eh
+                enddo
+                this%material(this%ns)%eh = ehmix - tmp
+
+           else
+           !! NEW incompressible phase EOS code
+           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       
+           !! set reference density
+           this%material(2)%rho(i,j,k) = this%material(2)%elastic%rho0
+
+!           print *,'Teqb routine'
+
+           !! Find VF from mass conservation
+           this%material(2)%VF(i,j,k) = mixRho(i,j,k)*this%material(2)%Ys(i,j,k)/this%material(2)%rho(i,j,k)
+           this%material(1)%VF(i,j,k) = 1 - this%material(2)%VF(i,j,k)
+            
+           !! Find density of material 1
+           this%material(1)%rho(i,j,k) = mixRho(i,j,k)*this%material(1)%Ys(i,j,k)/this%material(1)%VF(i,j,k)
+
+                      do imat = 1, this%ns
+
+
+              e_species(imat) = this%material(imat)%eh(i,j,k)
+
+
+
+              T_species(imat) = this%material(imat)%T(i,j,k)
+
+               if (((e_species(1) .LT. 0) .OR. (e_species(2) .LT. 0))) then
+
+                print *, e_species(imat)
+                print *, 'especie sinitial'
+
+                print *, T_species(imat)
+                print *, 'T_species initial'
+                end if
+
+           enddo
+
+
+
+
+          if ((e_species(1) .LT. 0) .OR. (e_species(2) .LT. 0)) then
+           print *, mixRho(i,j,k)
+           print *, 'mixRho'
+
+
+           print *, this%material(1)%p(i,j,k)
+           print *, 'pressure1'
+
+           print *, this%material(2)%p(i,j,k)
+           print *, 'pressure2'
+
+
+
+          print *, this%material(1)%rho(i,j,k)
+           print *, 'rho gas'
+
+           print *, ehmix(i,j,k)
+           print *, 'ehmix'
+
+           print *, this%material(1)%Ys(i,j,k)
+           print *, 'Ys gas'
+
+
+           print *, this%material(2)%Ys(i,j,k)
+           print *, 'Ys liquid'
+
+           print *, this%material(2)%VF(i,j,k)
+           print *, 'VF liquid'
+
+          end if
+           !!! Iteratively solve for temperature equilibrium
+
+           !  get initial guess for species energy
+
+            eps_1 = 1
+            eps_2 = 1
+
+          !!!!! Iterate until convergence is reached !!!!!!
+          do while ( (eps_1 .gt. 10d-5) .OR. (eps_2 .gt. 10d-5) )
+
+
+               
+               !find summations
+               numer = 0
+               denom = 0
+
+               do imat=1,this%ns
+
+                    !!Temperature floor!!
+                    if (T_species(imat) .LE. 0) then
+                        T_species(imat) = 10D-12
+                    endif
+
+                    if (e_species(imat) .LE. 0) then
+                        e_species(imat) = 10D-12
+                    end if
+
+                    numer = numer + this%material(imat)%Ys(i,j,k)*(e_species(imat) -  T_species(imat)*(this%material(imat)%hydro%Cv) )
+
+                    denom = denom + this%material(imat)%Ys(i,j,k)*(this%material(imat)%hydro%Cv)
+
+               end do
+ 
+
+               !Calculate Tn+1
+               Teqb  = (ehmix(i,j,k) - numer)/denom
+                !print *, Teqb
+                !print *, 'teqb'
+
+
+               ! Update convergence criterion
+               eps_1 = abs((this%material(1)%Ys(i,j,k)*(Teqb - T_species(1) ) ) / Teqb)
+               eps_2 = abs((this%material(2)%Ys(i,j,k)*(Teqb - T_species(2) ) ) / Teqb)
+
+ !               print *, eps_1
+ !               print *, 'eps1'
+
+ !               print *, eps_2
+ !               print *, 'eps2'
+
+
+               !print *, '---Material 1---'
+               !write(*,'(3(a,e12.5))') 'rho_1 = ', this%material(1)%rho(i,j,k), ', Tspecies  = ', T_species(1), ', e_species = ', e_species(1)
+               !write(*,'(3(a,e12.5))') 'VF  = ', this%material(1)%VF(i,j,k)
+               !print *, '---Material 2---'
+               !write(*,'(3(a,e12.5))') 'rho_2 = ', this%material(2)%rho(i,j,k), ', Tspecies  = ', T_species(2), ', e_species = ', e_species(2)
+               !write(*,'(3(a,e12.5))') 'VF  = ', this%material(1)%VF(i,j,k)
+               !write(*,'(3(a,e12.5))') 'Teqb  = ', Teqb,'ehmix  = ', ehmix(i,j,k)
+               !write(*,'(3(a,e12.5))') 'numerator  = ', numer, ', denominator  = ', denom
+         
+!               if ( (eps_1 .GT. 10D-5) .OR. (eps_2 .GT. 10D-5) ) then
+               ! Update species energy
+               do imat = 1, this%ns
+
+                     e_species_n1 = ( Teqb - T_species(imat) )*(this%material(imat)%hydro%Cv)
+     
+                     !!! delta max and min needed for limitors
+                     delta_max = (s - 1)*e_species(imat)
+                     delta_min = (1/s - 1)*e_species(imat)
+
+                     !!! Use limitors on species energy
+                     delta_e1 =  min( e_species_n1, delta_max )
+                     delta_e2 = max( delta_e1, delta_min )
+
+                     !! species energy update
+
+                     e_species(imat) = e_species(imat) + delta_e2
+
+                     T_species(imat) = (e_species(imat) - (this%material(imat)%hydro%PInf/this%material(imat)%rho(i,j,k))) /this%material(imat)%hydro%Cv
+
+                    ! print *, T_species(imat)
+                    ! print *, 'tspecies'
+                    ! print *, e_species(imat)
+                    ! print *, 'especies'
+
+                             
+
+                 enddo
+ !               endif
+
+              end do
+
+
+               !! Set temperature, energy, and pressure
+               Peqb2 = 0
+               do imat = 1, this%ns
+
+                    this%material(imat)%T(i,j,k) = Teqb
+                    this%material(imat)%eh(i,j,k) = e_species(imat) !this%material(imat)%hydro%Cv * Teqb + this%material(imat)%hydro%PInf/this%material(imat)%rho(i,j,k)
+
+                    p_species(imat) =  (this%material(imat)%hydro%gam-one)*this%material(imat)%rho(i,j,k)*this%material(imat)%eh(i,j,k) &
+                                       - this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf
+
+                    Peqb2 = Peqb2 + this%material(imat)%VF(i,j,k)*p_species(imat)
+               
+               if ((e_species(1) .LT. 0) .OR. (e_species(2) .LT. 0)) then        
+               print *, e_species(imat)
+               print *, 'final especies'
+
+               print *, p_species(imat)
+               print *, 'pspecies'
+
+               print *, T_species(imat)
+               print *, 'Tspecies'
+               endif
+
+              enddo
+              
+              mixP(i,j,k) = Peqb2
+              mixT(i,j,k) = Teqb
+                    
+ 
+
+              if ((e_species(1) .LT. 0) .OR. (e_species(2) .LT. 0)) then
+              print *, Teqb
+              print *, 'teqb'
+
+              print *, Peqb2
+
+              print *, 'peqb'
+              endif
+
+             do imat = 1, this%ns
+                 this%material(imat)%p(i,j,k) = p_species(imat)
+             enddo
+             endif
+
+
+          enddo
+         enddo
+        enddo
+ 
+
+           ! 1) calculate the species densities and volume fractions
+           ! (conservation of mass)
+           ! reference density is stored in this%material(imat)%elastic%rho0
+           ! this%material(2)%rho = this%material(2)%elastic%rho0
+
+           ! 2) iteratively solve for equilibrium temperature
+           ! 2a) set initial guess for temperaures and energies based on
+           ! previous timestep
+           ! 2b) calculate partial derivatives (analytical based Stiff EOS)
+           ! 2c) calculate update of T_eqb until it converges
+                 ! (also update species energies)
+                 ! (may be necessary to use a limiter)
+
+           ! 3) calculate species pressures analytical based on
+           ! densities and temperature
+           !
+           ! 4) calculate mixture pressure based on the volume fractions
+           ! and species pressures
+
+!           print *, 'end routine'
+!           stop
     end subroutine
 
 
@@ -1431,7 +1794,7 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
                  antiDiffFVint(:,:,:,1,i) = zero
               elsewhere(VFint(:,:,:,1).gt.one-this%intSharp_cut)
                  antiDiffFVint(:,:,:,1,i) = zero
-              endwhere
+             endwhere
               where(VFint(:,:,:,2).lt.this%intSharp_cut)
                  antiDiffFVint(:,:,:,2,i) = zero
               elsewhere(VFint(:,:,:,2).gt.one-this%intSharp_cut)
@@ -2329,7 +2692,21 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
               		endwhere
 	
 		if (this%use_FV) then
+                        call gradientFV(this,this%material(2)%VF,gradVF,dx,dy,dz,periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc) 
+                        !magnitude of surface vector
+                        GVFmag = sqrt( gradVF(:,:,:,1)**two + gradVF(:,:,:,2)**two + gradVF(:,:,:,3)**two )
 
+                        !surface normal
+                        where (GVFmag < eps)
+                                this%norm(:,:,:,1) = zero
+                                this%norm(:,:,:,2) = zero
+                                this%norm(:,:,:,3) = zero
+                        elsewhere
+                                this%norm(:,:,:,1) = gradVF(:,:,:,1) / GVFmag
+                                this%norm(:,:,:,2) = gradVF(:,:,:,2) / GVFmag
+                                this%norm(:,:,:,3) = gradVF(:,:,:,3) / GVFmag
+                        endwhere
+                          
 	     		 call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
 		         call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
               		 call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
@@ -2347,7 +2724,6 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
 	if (this%use_gradphi) then
 
-		call gradient(this%decomp,this%der,this%material(2)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
 
                 where( (this%material(2)%VF .GT. minVF) .AND. (this%material(2)%VF .LT. 1) )
                          this%phi = (this%material(2)%VF**r)/(this%material(2)%VF**r + (1-this%material(2)%VF)**r)
@@ -2375,8 +2751,27 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
                  this%norm(:,:,:,3) = gradphi(:,:,:,3) / GPHImag
               endwhere
 
-
                 if (this%use_FV) then
+                         
+
+                     call gradientFV(this,this%phi,gradphi,dx,dy,dz,periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+
+                     !calculate surface normal
+
+                     !magnitude of surface vector
+                     GPHImag = sqrt( gradphi(:,:,:,1)**two + gradphi(:,:,:,2)**two + gradphi(:,:,:,3)**two )
+
+
+                     !surface normal
+                        where (GPHImag < eps)
+                            this%norm(:,:,:,1) = eps
+                            this%norm(:,:,:,2) = eps
+                            this%norm(:,:,:,3) = eps
+                       elsewhere
+                           this%norm(:,:,:,1) = gradphi(:,:,:,1) / GPHImag
+                           this%norm(:,:,:,2) = gradphi(:,:,:,2) / GPHImag
+                           this%norm(:,:,:,3) = gradphi(:,:,:,3) / GPHImag
+                       endwhere
 
                          call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-x_bc, y_bc, z_bc)
                          call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, x_bc,-y_bc, z_bc)
@@ -2399,95 +2794,92 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
 
       if (this%weightedcurvature) then
 
-!        do n = 1
+        do n = 1,5
 !   print*, this%mpi_rank
 !           this%MPI_req = MPI_REQUEST_NULL
 
-            call MPI_Irecv(this%buffer_recieve_1, this%nxp, MPI_real, this%mpi_rank_prev, 1, MPI_Comm_world, this%MPI_req(1), this%ierror)
+            call MPI_Irecv(this%buffer_recieve_1, this%nyp, MPI_real, this%mpi_rank_prev, 1, MPI_Comm_world, this%MPI_req(1), this%ierror)
 
 
-            call MPI_Irecv(this%buffer_recieve_2, this%nxp, MPI_real, this%mpi_rank_next, 2, MPI_Comm_world, this%MPI_req(2), this%ierror)
+            call MPI_Irecv(this%buffer_recieve_2, this%nyp, MPI_real, this%mpi_rank_next, 2, MPI_Comm_world, this%MPI_req(2), this%ierror)
 
 
-            call MPI_Irecv(this%buffer_recieve_k_1, this%nxp, MPI_real, this%mpi_rank_prev, 3, MPI_Comm_world, this%MPI_req(3), this%ierror)
+            call MPI_Irecv(this%buffer_recieve_k_1, this%nyp, MPI_real, this%mpi_rank_prev, 3, MPI_Comm_world, this%MPI_req(3), this%ierror)
 
 
-            call MPI_Irecv(this%buffer_recieve_k_2, this%nxp, MPI_real, this%mpi_rank_next, 4, MPI_Comm_world, this%MPI_req(4), this%ierror)
+            call MPI_Irecv(this%buffer_recieve_k_2, this%nyp, MPI_real, this%mpi_rank_next, 4, MPI_Comm_world, this%MPI_req(4), this%ierror)
         
-             print*, this%nxp
 
 
-            this%buffer_send_1 = this%material(2)%VF(:,1:1,:);
-            call  MPI_Issend(this%buffer_send_1,this%nxp, MPI_real, this%mpi_rank_prev, 2, MPI_Comm_world, this%MPI_req(5), this%ierror)
-             print*, this%material(2)%VF(10:10,1:1,1)
+            this%buffer_send_1 = this%material(2)%VF(1:1,:,:);
+            call  MPI_Issend(this%buffer_send_1,this%nyp, MPI_real, this%mpi_rank_prev, 2, MPI_Comm_world, this%MPI_req(5), this%ierror)
 
-            this%buffer_send_2 = this%material(2)%VF(:,this%nyp:this%nyp,:);
-            call  MPI_Issend(this%buffer_send_2,this%nxp, MPI_real, this%mpi_rank_next, 1, MPI_Comm_world, this%MPI_req(6), this%ierror)
-            print*, this%material(2)%VF(10:10,this%nxp:this%nxp,1)
+            this%buffer_send_2 = this%material(2)%VF(this%nxp:this%nxp,:, :);
+            call  MPI_Issend(this%buffer_send_2,this%nyp, MPI_real, this%mpi_rank_next, 1, MPI_Comm_world, this%MPI_req(6), this%ierror)
 
-            this%buffer_send_k_1 = this%kappa(:,1:1,:);
-            call  MPI_Issend(this%buffer_send_k_1,this%nxp, MPI_real, this%mpi_rank_prev, 4, MPI_Comm_world, this%MPI_req(7), this%ierror)
+            this%buffer_send_k_1 = this%kappa(1:1,:,:);
+            call  MPI_Issend(this%buffer_send_k_1,this%nyp, MPI_real, this%mpi_rank_prev, 4, MPI_Comm_world, this%MPI_req(7), this%ierror)
 
-            this%buffer_send_k_2 = this%kappa(:,this%nyp:this%nyp,:);
-            call  MPI_Issend(this%buffer_send_k_2,this%nxp, MPI_real, this%mpi_rank_next, 3, MPI_Comm_world, this%MPI_req(8), this%ierror)
+            this%buffer_send_k_2 = this%kappa(this%nxp:this%nxp,:, :);
+            call  MPI_Issend(this%buffer_send_k_2,this%nyp, MPI_real, this%mpi_rank_next, 3, MPI_Comm_world, this%MPI_req(8), this%ierror)
 
             call MPI_Waitall(8, this%MPI_req, this%MPI_Stats, this%ierror)
 
 
                 do k = 1, this%nzp
-                  do i = 2, (this%nxp-1)
-                     j = 1
+                  do j = 2, (this%nyp-1)
+                     i = 1
 
 
                       weight(i,j,k) = (this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
                         (this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
-                        (this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
-                        (this%buffer_recieve_1(i,1,k)*(1-this%buffer_recieve_1(i,1,k)))**2 + &
-                        (this%buffer_recieve_1(i+1,1,k)*(1-this%buffer_recieve_1(i+1,1,k)))**2 +  &
-                        (this%buffer_recieve_1(i-1,1,k)*(1-this%buffer_recieve_1(i-1,1,k)))**2 + &
                         (this%material(2)%VF(i,j+1,k)*(1-this%material(2)%VF(i,j+1,k)))**2 + &
-                        (this%material(2)%VF(i-1,j+1,k)*(1-this%material(2)%VF(i-1,j+1,k)))**2 + &
-                        (this%material(2)%VF(i+1,j+1,k)*(1-this%material(2)%VF(i+1,j+1,k)))**2
+                        (this%buffer_recieve_1(1,j,k)*(1-this%buffer_recieve_1(1,j,k)))**2 + &
+                        (this%buffer_recieve_1(1,j+1,k)*(1-this%buffer_recieve_1(1,j+1,k)))**2 +  &
+                        (this%buffer_recieve_1(1,j-1,k)*(1-this%buffer_recieve_1(1,j-1,k)))**2 + &
+                        (this%material(2)%VF(i+1,j+1,k)*(1-this%material(2)%VF(i+1,j+1,k)))**2 + &
+                        (this%material(2)%VF(i+1,j-1,k)*(1-this%material(2)%VF(i+1,j-1,k)))**2 + &
+                        (this%material(2)%VF(i,j-1,k)*(1-this%material(2)%VF(i,j-1,k)))**2
 
 
                        kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
                           this%kappa(i+1,j,k)*(this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
-                          this%kappa(i-1,j,k)*(this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
-                          this%buffer_recieve_k_1(i,1,k)*(this%buffer_recieve_1(i,1,k)*(1-this%buffer_recieve_1(i,1,k)))**2 + &
-                          this%buffer_recieve_k_1(i+1,1,k)*(this%buffer_recieve_1(i+1,1,k)*(1-this%buffer_recieve_1(i+1,1,k)))**2 +  &
-                          this%buffer_recieve_k_1(i-1,1,k)*(this%buffer_recieve_1(i-1,1,k)*(1-this%buffer_recieve_1(i-1,1,k)))**2 + &
+                          this%kappa(i+1,j-1,k)*(this%material(2)%VF(i+1,j-1,k)*(1-this%material(2)%VF(i+1,j-1,k)))**2 + &
+                          this%buffer_recieve_k_1(1,j,k)*(this%buffer_recieve_1(1,j,k)*(1-this%buffer_recieve_1(1,j,k)))**2 + &
+                          this%buffer_recieve_k_1(1,j+1,k)*(this%buffer_recieve_1(1,j+1,k)*(1-this%buffer_recieve_1(1,j+1,k)))**2 +  &
+                          this%buffer_recieve_k_1(1,j-1,k)*(this%buffer_recieve_1(1,j-1,k)*(1-this%buffer_recieve_1(1,j-1,k)))**2 + &
                           this%kappa(i,j+1,k)*(this%material(2)%VF(i,j+1,k)*(1-this%material(2)%VF(i,j+1,k)))**2 + &
-                          this%kappa(i-1,j+1,k)*(this%material(2)%VF(i-1,j+1,k)*(1-this%material(2)%VF(i-1,j+1,k)))**2 + &
+                          this%kappa(i,j-1,k)*(this%material(2)%VF(i,j-1,k)*(1-this%material(2)%VF(i,j-1,k)))**2 + &
                           this%kappa(i+1,j+1,k)*(this%material(2)%VF(i+1,j+1,k)*(1-this%material(2)%VF(i+1,j+1,k)))**2
 
                  enddo
               enddo
 
                do k = 1, this%nzp
-                  do i = 2, (this%nxp-1)
-                     j = this%nyp
+                  do j = 2, (this%nyp-1)
+                     i = this%nxp
 
 
                       weight(i,j,k) = (this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
-                        (this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
-                        (this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
-                        (this%buffer_recieve_2(i,1,k)*(1-this%buffer_recieve_2(i,1,k)))**2 + &
-                        (this%buffer_recieve_2(i+1,1,k)*(1-this%buffer_recieve_2(i+1,1,k)))**2 +  &
-                        (this%buffer_recieve_2(i-1,1,k)*(1-this%buffer_recieve_2(i-1,1,k)))**2 + &
                         (this%material(2)%VF(i,j-1,k)*(1-this%material(2)%VF(i,j-1,k)))**2 + &
+                        (this%material(2)%VF(i,j+1,k)*(1-this%material(2)%VF(i,j+1,k)))**2 + &
+                        (this%buffer_recieve_2(1,j,k)*(1-this%buffer_recieve_2(1,j,k)))**2 + &
+                        (this%buffer_recieve_2(1,j+1,k)*(1-this%buffer_recieve_2(1,j+1,k)))**2 +  &
+                        (this%buffer_recieve_2(1,j-1,k)*(1-this%buffer_recieve_2(1,j-1,k)))**2 + &
                         (this%material(2)%VF(i-1,j-1,k)*(1-this%material(2)%VF(i-1,j-1,k)))**2 + &
-                        (this%material(2)%VF(i+1,j-1,k)*(1-this%material(2)%VF(i+1,j-1,k)))**2
+                        (this%material(2)%VF(i-1,j+1,k)*(1-this%material(2)%VF(i-1,j+1,k)))**2 + &
+                        (this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2
 
 
                        kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(2)%VF(i,j,k)*(1-this%material(2)%VF(i,j,k)))**2 + &
-                          this%kappa(i+1,j,k)*(this%material(2)%VF(i+1,j,k)*(1-this%material(2)%VF(i+1,j,k)))**2 + &
-                          this%kappa(i-1,j,k)*(this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
-                          this%buffer_recieve_k_2(i,1,k)*(this%buffer_recieve_2(i,1,k)*(1-this%buffer_recieve_2(i,1,k)))**2 + &
-                          this%buffer_recieve_k_2(i+1,1,k)*(this%buffer_recieve_2(i+1,1,k)*(1-this%buffer_recieve_2(i+1,1,k)))**2 +  &
-                          this%buffer_recieve_k_2(i-1,1,k)*(this%buffer_recieve_2(i-1,1,k)*(1-this%buffer_recieve_2(i-1,1,k)))**2 + &
+                          this%kappa(i,j+1,k)*(this%material(2)%VF(i,j+1,k)*(1-this%material(2)%VF(i,j+1,k)))**2 + &
                           this%kappa(i,j-1,k)*(this%material(2)%VF(i,j-1,k)*(1-this%material(2)%VF(i,j-1,k)))**2 + &
+                          this%buffer_recieve_k_2(1,j,k)*(this%buffer_recieve_2(1,j,k)*(1-this%buffer_recieve_2(1,j,k)))**2 + &
+                          this%buffer_recieve_k_2(1,j+1,k)*(this%buffer_recieve_2(1,j+1,k)*(1-this%buffer_recieve_2(1,j+1,k)))**2 +  &
+                          this%buffer_recieve_k_2(1,j-1,k)*(this%buffer_recieve_2(1,j-1,k)*(1-this%buffer_recieve_2(1,j-1,k)))**2 + &
+                          this%kappa(i-1,j,k)*(this%material(2)%VF(i-1,j,k)*(1-this%material(2)%VF(i-1,j,k)))**2 + &
                           this%kappa(i-1,j-1,k)*(this%material(2)%VF(i-1,j-1,k)*(1-this%material(2)%VF(i-1,j-1,k)))**2 + &
-                          this%kappa(i+1,j-1,k)*(this%material(2)%VF(i+1,j-1,k)*(1-this%material(2)%VF(i+1,j-1,k)))**2
+                          this%kappa(i-1,j+1,k)*(this%material(2)%VF(i-1,j+1,k)*(1-this%material(2)%VF(i-1,j+1,k)))**2
 
                  enddo
               enddo
@@ -2537,7 +2929,7 @@ print *, 'pstart : ', this%material(1)%p(89,1,1), this%material(2)%p(89,1,1)
                endwhere
 
           this%kappa = updatedKappa         
-!        enddo
+        enddo
         
 
        endif

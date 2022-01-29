@@ -67,7 +67,8 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: rhom
         real(rkind), dimension(:,:,:),   allocatable :: p
         real(rkind), dimension(:,:,:),   allocatable :: T
-
+        real(rkind), dimension(:,:,:),   allocatable :: rho
+        
         ! species-specific artificial properties
         real(rkind), dimension(:,:,:),   allocatable :: kap
         real(rkind), dimension(:,:,:,:), allocatable :: qi
@@ -277,6 +278,10 @@ contains
         if( allocated( this%VF ) ) deallocate( this%VF )
         allocate( this%VF(this%nxp,this%nyp,this%nzp) )
         
+        !Allocate material density
+        if( allocated( this%rho ) ) deallocate( this%rho )
+        allocate( this%rho(this%nxp,this%nyp,this%nzp) )
+
         ! Allocate material hydrodynamic energy
         if( allocated( this%eh ) ) deallocate( this%eh )
         allocate( this%eh(this%nxp,this%nyp,this%nzp) )
@@ -673,6 +678,7 @@ contains
         if( allocated( this%eh )  ) deallocate( this%eh )
         if( allocated( this%VF )  ) deallocate( this%VF )
         if( allocated( this%Ys )  ) deallocate( this%Ys )
+        if( allocated( this%rho )  ) deallocate( this%rho )
 
         ! Now deallocate the EOS objects
         if ( allocated(this%hydro)   ) deallocate(this%hydro)
