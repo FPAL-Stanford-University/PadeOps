@@ -83,8 +83,8 @@ module SolidMixtureMod
         procedure :: get_intSharp
         procedure :: get_surfaceTension
         procedure :: interpolateFV !TODO: check BCs on all FV terms
-        procedure :: divergenceFV
-        procedure :: gradientFV
+        procedure :: divergenceFV  !TODO: check BCs on all FV terms
+        procedure :: gradientFV    !TODO: check BCs on all FV terms
         procedure :: get_qmix
         procedure :: get_dt
         procedure :: get_eelastic_devstress
@@ -1283,8 +1283,18 @@ stop
            if(this%intSharp_ufv) then
 
               !interpolate nodes to faces: ( i, j, k ) -> ( i+1/2, j+1/2, k+1/2 )
+              !TODO: What are the correct BCs for... 
+                ! 1)  VF
+                ! 2)  interface normal (x,y,z)
+                ! 3)  u/v/w
+                ! 4)  rho
+                ! 5)  rhoi
+                ! 6)  gradVF
+                ! 7)  antiDiffVFInt
+                ! 8)  enthalpy
+                ! 9)  g tensors
+                ! 10) products of the above
               call interpolateFV(this,this%material(i)%VF,VFint,periodicx,periodicy,periodicz,      this%x_bc, this%y_bc, this%z_bc)
-              !TODO: make sure these BCS for surface normal are correct
               call interpolateFV(this,norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
               call interpolateFV(this,norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
               call interpolateFV(this,norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
