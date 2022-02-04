@@ -20,7 +20,7 @@ module TayAnvil_data
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
     logical     :: strainHard = .FALSE., strainHard2 = .FALSE.
-    real(rkind) :: Ly = 0.03, Lx = 0.01, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = 0.03, Lx = 0.03, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
 
     type(filters) :: mygfil
 
@@ -714,8 +714,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         xspng = Lx * (one - 0.1d0)
         yspng = Ly * (one - 0.1d0)
         thick = 0.05d0*min(Lx,Ly) 
-        dumx = 0.5d0*(tanh((X-xspng)/dx1) + 1)
-        dumy = 0.5d0*(tanh((Y-yspng)/dx1) + 1)
+        dumx = 0.5d0*(tanh((x-xspng)/dx1) + one)
+        dumy = 0.5d0*(tanh((y-yspng)/dx1) + one)
         dumx = dumx+dumy - dumx*dumy !gives 1 in sponge region and 0 elsewhere
 
         !print*,decomp%yst(1),decomp%yst(2),decomp%xst(1),decomp%xst(2),decomp%ysz(2),decomp%xsz(1)!,decomp%xsz(1),decomp%xsz(2)
