@@ -306,9 +306,22 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%g31 = ( g31_R - g31_L ) * tmp_01 + g31_L; mix%material(1)%g32 = ( g32_R - g32_L ) * tmp_01 + g32_L; mix%material(1)%g33 = ( g33_R - g33_L ) * tmp_01 + g33_L
 
         if (mix%use_gTg) then
-            mix%material(1)%g11 = mix%material(1)%g11**2
-            mix%material(1)%g22 = mix%material(1)%g22**2
-            mix%material(1)%g33 = mix%material(1)%g33**2
+            select case (kos_sh)
+                case (1) !g^t-g^e 
+                    mix%material(1)%g11 = mix%material(1)%g11**2
+                    mix%material(1)%g22 = mix%material(1)%g22**2
+                    mix%material(1)%g33 = mix%material(1)%g33**2
+                case (2) !g^p-g^e; !pe
+                    continue    
+                case (3) !pe
+                    mix%material(1)%g11 = mix%material(1)%g11**2
+                    mix%material(1)%g22 = mix%material(1)%g22**2
+                    mix%material(1)%g33 = mix%material(1)%g33**2
+                case default
+                    mix%material(1)%g11 = mix%material(1)%g11**2
+                    mix%material(1)%g22 = mix%material(1)%g22**2
+                    mix%material(1)%g33 = mix%material(1)%g33**2
+            end select
         end if
         
         !gt should be same as g
@@ -611,6 +624,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               mix%material(1)%g11( 1,:,:) = ge11_L; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
               mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = ge22_L;  mix%material(1)%g23( 1,:,:) = zero
               mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = ge22_L
+
+              mix%material(1)%gt11( 1,:,:) = ge11_L; mix%material(1)%gt12( 1,:,:) = zero;    mix%material(1)%gt13( 1,:,:) = zero
+              mix%material(1)%gt21( 1,:,:) = zero;   mix%material(1)%gt22( 1,:,:) = ge22_L;  mix%material(1)%gt23( 1,:,:) = zero
+              mix%material(1)%gt31( 1,:,:) = zero;   mix%material(1)%gt32( 1,:,:) = zero;    mix%material(1)%gt33( 1,:,:) = ge22_L
   
               mix%material(1)%Ys ( 1,:,:) = one
   
@@ -626,9 +643,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             w  (nx,:,:) = zero ! w(nx-1,:,:)
             mix%material(1)%p  (nx,:,:) = p_R ! mix%material(1)%p(nx-1,:,:)
             
-            mix%material(1)%g11(nx,:,:) = ge11_R;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
-            mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = ge22_R;  mix%material(1)%g23(nx,:,:) = zero
-            mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:) = zero; mix%material(1)%g33(nx,:,:) = ge22_R
+            mix%material(1)%g11(nx,:,:) = ge11_R;  mix%material(1)%g12(nx,:,:) = zero;    mix%material(1)%g13(nx,:,:) = zero
+            mix%material(1)%g21(nx,:,:) = zero;    mix%material(1)%g22(nx,:,:) = ge22_R;  mix%material(1)%g23(nx,:,:) = zero
+            mix%material(1)%g31(nx,:,:) = zero;    mix%material(1)%g32(nx,:,:) = zero;    mix%material(1)%g33(nx,:,:) = ge22_R
+  
+            mix%material(1)%gt11(nx,:,:) = ge11_R;  mix%material(1)%gt12(nx,:,:) = zero;    mix%material(1)%gt13(nx,:,:) = zero
+            mix%material(1)%gt21(nx,:,:) = zero;    mix%material(1)%gt22(nx,:,:) = ge22_R;  mix%material(1)%gt23(nx,:,:) = zero
+            mix%material(1)%gt31(nx,:,:) = zero;    mix%material(1)%gt32(nx,:,:) = zero;    mix%material(1)%gt33(nx,:,:) = ge22_R
   
             mix%material(1)%Ys (nx,:,:) = one
   
@@ -674,6 +695,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                 tmp = mix%material(1)%g(:,:,:,j)
                 call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
                 mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
+
+                tmp = mix%material(1)%g_t(:,:,:,j)
+                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                mix%material(1)%g_t(:,:,:,j) = mix%material(1)%g_t(:,:,:,j) + dum*(tmp - mix%material(1)%g_t(:,:,:,j))
+
+                tmp = mix%material(1)%g_p(:,:,:,j)
+                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+                mix%material(1)%g_p(:,:,:,j) = mix%material(1)%g_p(:,:,:,j) + dum*(tmp - mix%material(1)%g_p(:,:,:,j))
 
             end do
         end do
