@@ -11,7 +11,7 @@
 
 module velocityDiscontinuity_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight,three,six
+    use constants,        only: one,two,eight,three,six, zero
     use FiltersMod,       only: filters
     implicit none
 
@@ -20,7 +20,9 @@ module velocityDiscontinuity_data
     !real(rkind) :: rho_0 = one, p_0 = 0.1_rkind, g_0 = 1d0, tau_0 = 1d-10, u_0 = 0d0, v_0 = 0d0
     real(rkind) :: rho_0 = one, tau_0 = 1d-10, u_L = 0d0, u_R = 0d0, v_L = 0d0, v_R =0d0
     real(rkind) :: rho_L =one, rho_R = one, p_L = one, p_R = one
-    real(rkind) :: ge11_L, ge11_R, ge22_L, ge22_R
+    real(rkind) :: ge11_L=one, ge11_R=one, ge22_L=one, ge22_R=one
+    real(rkind) :: ge21_L=zero, ge21_R=zero
+    real(rkind) :: gp11_L=one, gp11_R=one, gp22_L=one, gp22_R=one
 
     real(rkind) :: interface_init = 0.5, thick=0.01
     real(rkind) :: yield = one 
@@ -208,8 +210,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     integer :: ioUnit, ind
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp_01, dum
-    real(rkind) :: a_L, g11_L, g12_L, g13_L, g21_L, g22_L, g23_L, g31_L, g32_L, g33_L, detg_L
-    real(rkind) :: a_R, g11_R, g12_R, g13_R, g21_R, g22_R, g23_R, g31_R, g32_R, g33_R, detg_R
+    real(rkind) :: a_L, g11_L, g12_L, g13_L, g21_L, g22_L, g23_L, g31_L, g32_L, g33_L, detg_L, detgp_L
+    real(rkind) :: a_R, g11_R, g12_R, g13_R, g21_R, g22_R, g23_R, g31_R, g32_R, g33_R, detg_R, detgp_R
 
     integer :: nx,ny,nz
     nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
@@ -218,7 +220,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                           plastic, explPlast, yield, &
                           interface_init, thick, &
                           p_L, p_R, rho_L, rho_R, ge11_L, ge22_L, ge11_R, ge22_R, & 
-                          u_L, U_R, v_L, v_R, &
+                          u_L, U_R, v_L, v_R, ge21_L, ge21_R, gp11_L, gp11_R, gp22_L, gp22_R, &
                           melt_t, melt_c, kos_b, kos_t, kos_h, kos_g, kos_m, &
                           kos_q, kos_f, kos_alpha, kos_beta, kos_e, kos_sh, &    
                           eta_det_ge, eta_det_gp, eta_det_gt, diff_c_ge, &
@@ -275,71 +277,94 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         !Set gij tensor
         g11_L = ge11_L;  g12_L = zero;   g13_L = zero
-        g21_L = zero;    g22_L = ge22_L; g23_L = zero
+        g21_L = ge21_L;  g22_L = ge22_L; g23_L = zero
         g31_L = zero;    g32_L = zero;   g33_L = ge22_L
         
         g11_R = ge11_R;  g12_R = zero;   g13_R = zero
-        g21_R = zero;    g22_R = ge22_R; g23_R = zero
+        g21_R = ge21_R;  g22_R = ge22_R; g23_R = zero
         g31_R = zero;    g32_R = zero;   g33_R = ge22_R
 
         !set mixture pressure
         mix%material(1)%p = ( p_R - p_L ) * tmp_01 + p_L
         
         ! Make rho compatible with det(g) and rho0
-        detg_L = g11_L*(g22_L*g33_L-g23_L*g32_L) - g12_L*(g21_L*g33_L-g31_L*g23_L) + g13_L*(g21_L*g32_L-g31_L*g22_L)
-        detg_R = g11_R*(g22_R*g33_R-g23_R*g32_R) - g12_R*(g21_R*g33_R-g31_R*g23_R) + g13_R*(g21_R*g32_R-g31_R*g22_R)
+        detg_L  = g11_L*(g22_L*g33_L-g23_L*g32_L) - g12_L*(g21_L*g33_L-g31_L*g23_L) + g13_L*(g21_L*g32_L-g31_L*g22_L)
+        detg_R  = g11_R*(g22_R*g33_R-g23_R*g32_R) - g12_R*(g21_R*g33_R-g31_R*g23_R) + g13_R*(g21_R*g32_R-g31_R*g22_R)
+        detgp_L = gp11_L*gp22_L*gp22_L
+        detgp_R = gp11_R*gp22_R*gp22_R
 
         if (abs(rho_0 * detg_L - rho_L) > 1.0d-6 ) then
             print *, 'rho_L = ', rho_L, ', det_L = ', rho_0*detg_L
             call GracefulExit("Determinant of ge_L is not compatible with rho_L and rho_0. Please Double-check.",928)
         endif
+        if (abs(detgp_L - one) > 1.0d-6 ) then
+            print *, 'detgp_L = ', detgp_L
+            call GracefulExit("Determinant of gp_L is not equal to one. Please Double-check.",928)
+        endif
         if (abs(rho_0 * detg_R - rho_R) > 1.0d-6 ) then
             print *, 'rho_R = ', rho_R, ', det_R = ', rho_0*detg_R
             call GracefulExit("Determinant of ge_R is not compatible with rho_R and rho_0. Please Double-check.",928)
         endif
+        if (abs(detgp_R - one) > 1.0d-6 ) then
+            print *, 'detgp_R = ', detgp_R
+            call GracefulExit("Determinant of gp_R is not equal to one. Please Double-check.",928)
+        endif
 
         rho = ( rho_R - rho_L ) * tmp_01 + rho_L
 
-        ! Set initial values of g (inverse deformation gradient)
+        ! Set initial values of ge (called g) and gp (inverse deformation gradient)
         mix%material(1)%g11 = ( g11_R - g11_L ) * tmp_01 + g11_L; mix%material(1)%g12 = ( g12_R - g12_L ) * tmp_01 + g12_L; mix%material(1)%g13 = ( g13_R - g13_L ) * tmp_01 + g13_L
         mix%material(1)%g21 = ( g21_R - g21_L ) * tmp_01 + g21_L; mix%material(1)%g22 = ( g22_R - g22_L ) * tmp_01 + g22_L; mix%material(1)%g23 = ( g23_R - g23_L ) * tmp_01 + g23_L
         mix%material(1)%g31 = ( g31_R - g31_L ) * tmp_01 + g31_L; mix%material(1)%g32 = ( g32_R - g32_L ) * tmp_01 + g32_L; mix%material(1)%g33 = ( g33_R - g33_L ) * tmp_01 + g33_L
 
-        if (mix%use_gTg) then
-            select case (kos_sh)
-                case (1) !g^t-g^e 
-                    mix%material(1)%g11 = mix%material(1)%g11**2
-                    mix%material(1)%g22 = mix%material(1)%g22**2
-                    mix%material(1)%g33 = mix%material(1)%g33**2
-                case (2) !g^p-g^e; !pe
-                    continue    
-                case (3) !pe
-                    mix%material(1)%g11 = mix%material(1)%g11**2
-                    mix%material(1)%g22 = mix%material(1)%g22**2
-                    mix%material(1)%g33 = mix%material(1)%g33**2
-                case default
-                    mix%material(1)%g11 = mix%material(1)%g11**2
-                    mix%material(1)%g22 = mix%material(1)%g22**2
-                    mix%material(1)%g33 = mix%material(1)%g33**2
-            end select
-        end if
-        
-        !gt should be same as g
-        mix%material(1)%gt11 = mix%material(1)%g11
-        mix%material(1)%gt12 = mix%material(1)%g12
-        mix%material(1)%gt13 = mix%material(1)%g13
-        mix%material(1)%gt21 = mix%material(1)%g21
-        mix%material(1)%gt22 = mix%material(1)%g22
-        mix%material(1)%gt23 = mix%material(1)%g23
-        mix%material(1)%gt31 = mix%material(1)%g31
-        mix%material(1)%gt32 = mix%material(1)%g32
-        mix%material(1)%gt33 = mix%material(1)%g33
-        
-        ! what should gp be?
-        mix%material(1)%gp11 = one;  mix%material(1)%gp12 = zero; mix%material(1)%gp13 = zero
-        mix%material(1)%gp21 = zero; mix%material(1)%gp22 = one;  mix%material(1)%gp23 = zero
-        mix%material(1)%gp31 = zero; mix%material(1)%gp32 = zero; mix%material(1)%gp33 = one
-        
+        IF (plastic) THEN
+          mix%material(1)%gp11 = ( gp11_R - gp11_L ) * tmp_01 + gp11_L
+          mix%material(1)%gp12 = zero
+          mix%material(1)%gp13 = zero
+          mix%material(1)%gp21 = zero 
+          mix%material(1)%gp22 = ( gp22_R - gp22_L ) * tmp_01 + gp22_L
+          mix%material(1)%gp23 = zero
+          mix%material(1)%gp31 = zero 
+          mix%material(1)%gp32 = zero
+          mix%material(1)%gp33 = ( gp22_R - gp22_L ) * tmp_01 + gp22_L
+
+          !This is assuming that gp is diagonal
+          mix%material(1)%gt11 = mix%material(1)%gp11 * mix%material(1)%g11  
+          mix%material(1)%gt12 = mix%material(1)%gp22 * mix%material(1)%g12 
+          mix%material(1)%gt13 = mix%material(1)%gp33 * mix%material(1)%g13 
+          mix%material(1)%gt21 = mix%material(1)%gp11 * mix%material(1)%g21 
+          mix%material(1)%gt22 = mix%material(1)%gp22 * mix%material(1)%g22 
+          mix%material(1)%gt23 = mix%material(1)%gp33 * mix%material(1)%g23 
+          mix%material(1)%gt31 = mix%material(1)%gp11 * mix%material(1)%g31 
+          mix%material(1)%gt32 = mix%material(1)%gp22 * mix%material(1)%g32 
+          mix%material(1)%gt33 = mix%material(1)%gp33 * mix%material(1)%g33 
+        ELSE
+          !deformation elastic only
+          mix%material(1)%gp11 = one;  mix%material(1)%gp12 = zero; mix%material(1)%gp13 = zero
+          mix%material(1)%gp21 = zero; mix%material(1)%gp22 = one;  mix%material(1)%gp23 = zero
+          mix%material(1)%gp31 = zero; mix%material(1)%gp32 = zero; mix%material(1)%gp33 = one
+
+          !gt should be same as g
+          mix%material(1)%gt11 = mix%material(1)%g11
+          mix%material(1)%gt12 = mix%material(1)%g12
+          mix%material(1)%gt13 = mix%material(1)%g13
+          mix%material(1)%gt21 = mix%material(1)%g21
+          mix%material(1)%gt22 = mix%material(1)%g22
+          mix%material(1)%gt23 = mix%material(1)%g23
+          mix%material(1)%gt31 = mix%material(1)%g31
+          mix%material(1)%gt32 = mix%material(1)%g32
+          mix%material(1)%gt33 = mix%material(1)%g33
+        ENDIF
+
+        if ( (mix%use_gTg) .AND. (kos_sh .eq. 2) ) then
+            !assuming ge-Gp formulation
+            mix%material(1)%gp11 = mix%material(1)%gp11**2;  
+            mix%material(1)%gp22 = mix%material(1)%gp22**2;  
+            mix%material(1)%gp33 = mix%material(1)%gp33**2;  
+        else
+            call GracefulExit("This test problems assume ge-Gp formulation, which required use_gTg=.TRUE. and kos_sh=2",928)
+        endif
+
         !set mixture Volume fraction and Mass Fraction
         mix%material(1)%VF = one
         mix%material(1)%Ys = one;
@@ -621,12 +646,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               w  ( 1,:,:) = zero
               mix%material(1)%p  (1,:,:) = p_L ! mix%material(1)%p(nx-1,:,:)
               
-              mix%material(1)%g11( 1,:,:) = ge11_L; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-              mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = ge22_L;  mix%material(1)%g23( 1,:,:) = zero
-              mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = ge22_L
+              mix%material(1)%g11( 1,:,:)  = ge11_L; mix%material(1)%g12( 1,:,:) = zero;   mix%material(1)%g13( 1,:,:) = zero
+              mix%material(1)%g21( 1,:,:)  = ge21_L; mix%material(1)%g22( 1,:,:) = ge22_L; mix%material(1)%g23( 1,:,:) = zero
+              mix%material(1)%g31( 1,:,:)  = zero;   mix%material(1)%g32( 1,:,:) = zero;   mix%material(1)%g33( 1,:,:) = ge22_L
 
               mix%material(1)%gt11( 1,:,:) = ge11_L; mix%material(1)%gt12( 1,:,:) = zero;    mix%material(1)%gt13( 1,:,:) = zero
-              mix%material(1)%gt21( 1,:,:) = zero;   mix%material(1)%gt22( 1,:,:) = ge22_L;  mix%material(1)%gt23( 1,:,:) = zero
+              mix%material(1)%gt21( 1,:,:) = ge21_L; mix%material(1)%gt22( 1,:,:) = ge22_L;  mix%material(1)%gt23( 1,:,:) = zero
               mix%material(1)%gt31( 1,:,:) = zero;   mix%material(1)%gt32( 1,:,:) = zero;    mix%material(1)%gt33( 1,:,:) = ge22_L
   
               mix%material(1)%Ys ( 1,:,:) = one
@@ -643,12 +668,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             w  (nx,:,:) = zero ! w(nx-1,:,:)
             mix%material(1)%p  (nx,:,:) = p_R ! mix%material(1)%p(nx-1,:,:)
             
-            mix%material(1)%g11(nx,:,:) = ge11_R;  mix%material(1)%g12(nx,:,:) = zero;    mix%material(1)%g13(nx,:,:) = zero
-            mix%material(1)%g21(nx,:,:) = zero;    mix%material(1)%g22(nx,:,:) = ge22_R;  mix%material(1)%g23(nx,:,:) = zero
-            mix%material(1)%g31(nx,:,:) = zero;    mix%material(1)%g32(nx,:,:) = zero;    mix%material(1)%g33(nx,:,:) = ge22_R
+            mix%material(1)%g11(nx,:,:) = ge11_R;  mix%material(1)%g12(nx,:,:) = zero;   mix%material(1)%g13(nx,:,:) = zero
+            mix%material(1)%g21(nx,:,:) = ge21_R;  mix%material(1)%g22(nx,:,:) = ge22_R; mix%material(1)%g23(nx,:,:) = zero
+            mix%material(1)%g31(nx,:,:) = zero;    mix%material(1)%g32(nx,:,:) = zero;   mix%material(1)%g33(nx,:,:) = ge22_R
   
             mix%material(1)%gt11(nx,:,:) = ge11_R;  mix%material(1)%gt12(nx,:,:) = zero;    mix%material(1)%gt13(nx,:,:) = zero
-            mix%material(1)%gt21(nx,:,:) = zero;    mix%material(1)%gt22(nx,:,:) = ge22_R;  mix%material(1)%gt23(nx,:,:) = zero
+            mix%material(1)%gt21(nx,:,:) = ge21_R;  mix%material(1)%gt22(nx,:,:) = ge22_R;  mix%material(1)%gt23(nx,:,:) = zero
             mix%material(1)%gt31(nx,:,:) = zero;    mix%material(1)%gt32(nx,:,:) = zero;    mix%material(1)%gt33(nx,:,:) = ge22_R
   
             mix%material(1)%Ys (nx,:,:) = one
