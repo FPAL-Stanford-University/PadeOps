@@ -650,9 +650,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               mix%material(1)%g21( 1,:,:)  = ge21_L; mix%material(1)%g22( 1,:,:) = ge22_L; mix%material(1)%g23( 1,:,:) = zero
               mix%material(1)%g31( 1,:,:)  = zero;   mix%material(1)%g32( 1,:,:) = zero;   mix%material(1)%g33( 1,:,:) = ge22_L
 
-              mix%material(1)%gt11( 1,:,:) = ge11_L; mix%material(1)%gt12( 1,:,:) = zero;    mix%material(1)%gt13( 1,:,:) = zero
-              mix%material(1)%gt21( 1,:,:) = ge21_L; mix%material(1)%gt22( 1,:,:) = ge22_L;  mix%material(1)%gt23( 1,:,:) = zero
-              mix%material(1)%gt31( 1,:,:) = zero;   mix%material(1)%gt32( 1,:,:) = zero;    mix%material(1)%gt33( 1,:,:) = ge22_L
+              mix%material(1)%gp11( 1,:,:)  = gp11_L**2; mix%material(1)%gp12( 1,:,:) = zero;      mix%material(1)%gp13( 1,:,:) = zero
+              mix%material(1)%gp21( 1,:,:)  = zero;      mix%material(1)%gp22( 1,:,:) = gp22_L**2; mix%material(1)%gp23( 1,:,:) = zero
+              mix%material(1)%gp31( 1,:,:)  = zero;      mix%material(1)%gp32( 1,:,:) = zero;      mix%material(1)%gp33( 1,:,:) = gp22_L**2
+
+              mix%material(1)%gt11( 1,:,:) = ge11_L*gp11_L; mix%material(1)%gt12( 1,:,:) = zero;          mix%material(1)%gt13( 1,:,:) = zero
+              mix%material(1)%gt21( 1,:,:) = ge21_L*gp11_L; mix%material(1)%gt22( 1,:,:) = ge22_L*gp22_L; mix%material(1)%gt23( 1,:,:) = zero
+              mix%material(1)%gt31( 1,:,:) = zero;          mix%material(1)%gt32( 1,:,:) = zero;          mix%material(1)%gt33( 1,:,:) = ge22_L*gp22_L
   
               mix%material(1)%Ys ( 1,:,:) = one
   
@@ -672,9 +676,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             mix%material(1)%g21(nx,:,:) = ge21_R;  mix%material(1)%g22(nx,:,:) = ge22_R; mix%material(1)%g23(nx,:,:) = zero
             mix%material(1)%g31(nx,:,:) = zero;    mix%material(1)%g32(nx,:,:) = zero;   mix%material(1)%g33(nx,:,:) = ge22_R
   
-            mix%material(1)%gt11(nx,:,:) = ge11_R;  mix%material(1)%gt12(nx,:,:) = zero;    mix%material(1)%gt13(nx,:,:) = zero
-            mix%material(1)%gt21(nx,:,:) = ge21_R;  mix%material(1)%gt22(nx,:,:) = ge22_R;  mix%material(1)%gt23(nx,:,:) = zero
-            mix%material(1)%gt31(nx,:,:) = zero;    mix%material(1)%gt32(nx,:,:) = zero;    mix%material(1)%gt33(nx,:,:) = ge22_R
+            mix%material(1)%gp11(nx,:,:) = gp11_R**2; mix%material(1)%gp12(nx,:,:) = zero;      mix%material(1)%gp13(nx,:,:) = zero
+            mix%material(1)%gp21(nx,:,:) = zero;      mix%material(1)%gp22(nx,:,:) = gp22_R**2; mix%material(1)%gp23(nx,:,:) = zero
+            mix%material(1)%gp31(nx,:,:) = zero;      mix%material(1)%gp32(nx,:,:) = zero;      mix%material(1)%gp33(nx,:,:) = gp22_R**2
+  
+            mix%material(1)%gt11(nx,:,:) = ge11_R*gp11_R; mix%material(1)%gt12(nx,:,:) = zero;          mix%material(1)%gt13(nx,:,:) = zero
+            mix%material(1)%gt21(nx,:,:) = ge21_R*gp11_R; mix%material(1)%gt22(nx,:,:) = ge22_R*gp22_R; mix%material(1)%gt23(nx,:,:) = zero
+            mix%material(1)%gt31(nx,:,:) = zero;          mix%material(1)%gt32(nx,:,:) = zero;          mix%material(1)%gt33(nx,:,:) = ge22_R*gp22_R
   
             mix%material(1)%Ys (nx,:,:) = one
   
