@@ -223,8 +223,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     close(ioUnit)
 
     !Check # of species
-    if (mix%ns /= 1) then
-        call GracefulExit("Number of species must be 1 for this problem. Check the input file.",928)
+    if (mix%ns /= 2) then
+        call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
     end if
 
     ! Initialize mygfil
