@@ -214,8 +214,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                           melt_t2, melt_c2, kos_b2, kos_t2, kos_h2, kos_g2, kos_m2, &
                           kos_q2, kos_f2, kos_alpha2, kos_beta2, kos_e2, kos_sh2, &    
                           eta_det_ge_2, eta_det_gp_2, eta_det_gt_2, diff_c_ge_2, diff_c_gp_2, diff_c_gt_2 
-
-
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -510,15 +508,15 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                   mix%material(ind)%p  (1,:,:) = p_amb ! mix%material(1)%p(nx-1,:,:)
                   
                   mix%material(ind)%g11( 1,:,:)  =  one; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-                  mix%material(ind)%g21( 1,:,:)  =  one; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
+                  mix%material(ind)%g21( 1,:,:)  = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
                   mix%material(ind)%g31( 1,:,:)  = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
 
                   mix%material(ind)%gp11( 1,:,:)  =  one; mix%material(1)%gp12( 1,:,:) = zero; mix%material(1)%gp13( 1,:,:) = zero
-                  mix%material(ind)%gp21( 1,:,:)  =  one; mix%material(1)%gp22( 1,:,:) = one;  mix%material(1)%gp23( 1,:,:) = zero
+                  mix%material(ind)%gp21( 1,:,:)  = zero; mix%material(1)%gp22( 1,:,:) = one;  mix%material(1)%gp23( 1,:,:) = zero
                   mix%material(ind)%gp31( 1,:,:)  = zero; mix%material(1)%gp32( 1,:,:) = zero; mix%material(1)%gp33( 1,:,:) = one
 
                   mix%material(ind)%gt11( 1,:,:)  =  one; mix%material(1)%gt12( 1,:,:) = zero; mix%material(1)%gt13( 1,:,:) = zero
-                  mix%material(ind)%gt21( 1,:,:)  =  one; mix%material(1)%gt22( 1,:,:) = one;  mix%material(1)%gt23( 1,:,:) = zero
+                  mix%material(ind)%gt21( 1,:,:)  = zero; mix%material(1)%gt22( 1,:,:) = one;  mix%material(1)%gt23( 1,:,:) = zero
                   mix%material(ind)%gt31( 1,:,:)  = zero; mix%material(1)%gt32( 1,:,:) = zero; mix%material(1)%gt33( 1,:,:) = one
 
               ENDDO
@@ -534,23 +532,23 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         if(decomp%yen(1)==decomp%xsz(1)) then
           if(x_bc(2)==0) then
               rho( nx,:,:) = rho_BC
-              u  ( nx,:,:) = u_L
-              v  ( nx,:,:) = v_L
+              u  ( nx,:,:) = u_R
+              v  ( nx,:,:) = v_R
               w  ( nx,:,:) = zero
               
               DO ind=1,mix%ns    
                   mix%material(ind)%p  (nx,:,:) = p_amb ! mix%material(1)%p(nx-1,:,:)
                   
                   mix%material(ind)%g11( nx,:,:)  =  one; mix%material(1)%g12( nx,:,:) = zero; mix%material(1)%g13( nx,:,:) = zero
-                  mix%material(ind)%g21( nx,:,:)  =  one; mix%material(1)%g22( nx,:,:) = one;  mix%material(1)%g23( nx,:,:) = zero
+                  mix%material(ind)%g21( nx,:,:)  = zero; mix%material(1)%g22( nx,:,:) = one;  mix%material(1)%g23( nx,:,:) = zero
                   mix%material(ind)%g31( nx,:,:)  = zero; mix%material(1)%g32( nx,:,:) = zero; mix%material(1)%g33( nx,:,:) = one
 
                   mix%material(ind)%gp11( nx,:,:)  =  one; mix%material(1)%gp12( nx,:,:) = zero; mix%material(1)%gp13( nx,:,:) = zero
-                  mix%material(ind)%gp21( nx,:,:)  =  one; mix%material(1)%gp22( nx,:,:) = one;  mix%material(1)%gp23( nx,:,:) = zero
+                  mix%material(ind)%gp21( nx,:,:)  = zero; mix%material(1)%gp22( nx,:,:) = one;  mix%material(1)%gp23( nx,:,:) = zero
                   mix%material(ind)%gp31( nx,:,:)  = zero; mix%material(1)%gp32( nx,:,:) = zero; mix%material(1)%gp33( nx,:,:) = one
 
                   mix%material(ind)%gt11( nx,:,:)  =  one; mix%material(1)%gt12( nx,:,:) = zero; mix%material(1)%gt13( nx,:,:) = zero
-                  mix%material(ind)%gt21( nx,:,:)  =  one; mix%material(1)%gt22( nx,:,:) = one;  mix%material(1)%gt23( nx,:,:) = zero
+                  mix%material(ind)%gt21( nx,:,:)  = zero; mix%material(1)%gt22( nx,:,:) = one;  mix%material(1)%gt23( nx,:,:) = zero
                   mix%material(ind)%gt31( nx,:,:)  = zero; mix%material(1)%gt32( nx,:,:) = zero; mix%material(1)%gt33( nx,:,:) = one
 
               ENDDO
@@ -572,7 +570,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         dumR = half*(one + tanh( (x-xspngR)/(tspng) ))
         dum  = dumL+dumR
 
-        do i=1,10
+        do i=1,0 !sponge disabled for now
             tmp = u
             call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
             u = u + dum*(tmp - u)
