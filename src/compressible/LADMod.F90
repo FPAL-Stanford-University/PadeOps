@@ -23,12 +23,12 @@ module LADMod
         real(rkind) :: Cdiff_gp
         real(rkind) :: Cdiff_pe
         real(rkind) :: Cdiff_pe_2
-
         type(decomp_info), pointer :: decomp
         type(derivatives), pointer :: der
         type(filters),     pointer :: fil
 
         integer :: nfils
+        integer :: g_LAD_id, gp_LAD_id, gt_LAD_id
         real(rkind) :: dx, dy, dz
 
         logical :: use_gTg
@@ -48,13 +48,14 @@ module LADMod
 
 contains
 
-    subroutine init(this,decomp,der,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
+    subroutine init(this,decomp,der,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,g_LAD_id,gp_LAD_id,gt_LAD_id)
         class(ladobject),        intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
         type(filters),     target, intent(in) :: fil
         integer,           intent(in) :: nfils
         real(rkind),       intent(in) :: Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,dx,dy,dz    
+        integer, intent(in)           :: g_LAD_id, gp_LAD_id, gt_LAD_id
 
         ! Set all coefficients
         this%Cbeta = Cbeta
@@ -69,6 +70,10 @@ contains
         this%Cdiff_gp = Cdiff_gp
         this%Cdiff_pe = Cdiff_pe
         this%Cdiff_pe_2 = Cdiff_pe_2
+
+        this%g_LAD_id  = g_LAD_id
+        this%gp_LAD_id = gp_LAD_id
+        this%gt_LAD_id = gt_LAD_id
 
         ! Point type pointers to external types
         this%decomp => decomp
@@ -604,26 +609,70 @@ contains
 
 
     ! Eulerian-Almansi strain version
-    subroutine get_diff_g(this,g,g_t,g_p,sos,diff_g,diff_gt,diff_gp,use_gTg,strainHard, x_bc,y_bc,z_bc)
+    subroutine get_diff_g(this,g,g_t,g_p,sos,duidxj,diff_g,diff_gt,diff_gp,use_gTg,strainHard, x_bc,y_bc,z_bc)
         class(ladobject),  intent(in) :: this
         !real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)   :: rho,e,T,sos
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), intent(in)  :: g,g_t,g_p
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: sos
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(inout) :: diff_g,diff_gt,diff_gp
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), target, intent(in)  :: duidxj
 
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar_g,e_g,e_gt,e_gp
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5, g_switch, gt_switch, gp_switch, S
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
 
         integer :: n
 
         logical, intent(in) :: use_gTg,strainHard
 
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+
         diff_g  = zero
         diff_gt = zero
         diff_gp = zero
+
+        !Switching function for kinematic diffusivities
+        ytmp1 = dwdy-dvdz; ytmp2 = dudz-dwdx; ytmp3 = dvdx-dudy
+        ytmp4 = ytmp1*ytmp1 + ytmp2*ytmp2 + ytmp3*ytmp3 ! |curl(u)|^2
+        ytmp1 = dudx + dvdy + dwdz
+        ytmp2 = ytmp1*ytmp1 ! dilatation^2
+        ! Magnitude of strain rate
+        S = sqrt(dudx**2 + half*(dvdx+dudy)**2 + half*(dwdx+dudz)**2 &
+                         +             dvdy**2 + half*(dwdy+dvdz)**2 &
+                                               +             dwdz**2 )
+
+
+        SELECT CASE(this%g_LAD_id)
+            CASE(1)        !siwtching function, using sos as timescale     
+                g_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+            CASE(2)        !siwtching function, using strain rate as timescale     
+                g_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+            CASE DEFAULT  !no switching function, using sos as timescale
+                g_switch  = one
+        ENDSELECT
+
+        SELECT CASE(this%gt_LAD_id)
+            CASE(1)
+                gt_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+            CASE(2)
+                gt_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+            CASE DEFAULT    
+                gt_switch = one
+        ENDSELECT
+
+        SELECT CASE(this%gp_LAD_id)
+            CASE(1)
+                gp_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+            CASE(2)
+                gp_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+            CASE DEFAULT    
+                gp_switch = one
+        ENDSELECT
 
         ! -------- g_e diffusivity --------
         ! !Eulerian-Almansi strain tensor: ea = (I-(g_e)^T.g_e)/2 --- not explicitly calculated
@@ -648,7 +697,14 @@ contains
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        diffstar_g = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        SELECT CASE(this%g_LAD_id)
+            CASE(1)        !siwtching function, using sos as timescale     
+                diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+            CASE(2)        !siwtching function, using strain rate as timescale     
+                diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2  ! Add eps in case den=0
+            CASE DEFAULT  !no switching function, using sos as timescale
+                diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+        ENDSELECT
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(e_g,ztmp1,this%decomp)
@@ -656,15 +712,29 @@ contains
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
         ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        diffstar_g = diffstar_g + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        SELECT CASE(this%g_LAD_id)
+            CASE(1)        !siwtching function, using sos as timescale     
+                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+            CASE(2)        !siwtching function, using strain rate as timescale     
+                diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+            CASE DEFAULT  !no switching function, using sos as timescale
+                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+        ENDSELECT
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(e_g,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
         ytmp4 = ytmp5*this%dy**4
-        diffstar_g = diffstar_g + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        SELECT CASE(this%g_LAD_id)
+            CASE(1)        !siwtching function, using sos as timescale     
+                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+            CASE(2)        !siwtching function, using strain rate as timescale     
+                diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+            CASE DEFAULT  !no switching function, using sos as timescale
+                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+        ENDSELECT
 
-        diffstar_g = this%Cdiff_g*sos*abs(diffstar_g)
+        diffstar_g = this%Cdiff_g*g_switch*abs(diffstar_g)
 
         ! Filter diffstar_g
         call this%filter(diffstar_g, x_bc, y_bc, z_bc)
@@ -695,7 +765,14 @@ contains
            call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
            xtmp2 = xtmp1*this%dx**4
            call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-           diffstar_g = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+           SELECT CASE(this%gt_LAD_id)
+               CASE(1)        !siwtching function, using sos as timescale     
+                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+               CASE(2)        !siwtching function, using strain rate as timescale     
+                   diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2  ! Add eps in case den=0
+               CASE DEFAULT  !no switching function, using sos as timescale
+                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+           ENDSELECT
 
            ! Step 3: Get 4th derivative in Z
            call transpose_y_to_z(e_gt,ztmp1,this%decomp)
@@ -703,15 +780,29 @@ contains
            call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
            ztmp2 = ztmp1*this%dz**4
            call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-           diffstar_g = diffstar_g + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+           SELECT CASE(this%gt_LAD_id)
+               CASE(1)        !siwtching function, using sos as timescale     
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+               CASE(2)        !siwtching function, using strain rate as timescale     
+                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+               CASE DEFAULT  !no switching function, using sos as timescale
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+           ENDSELECT
 
            ! Step 4: Get 4th derivative in Y
            call this%der%d2dy2(e_gt,ytmp4,y_bc(1),y_bc(2))
            call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
            ytmp4 = ytmp5*this%dy**4
-           diffstar_g = diffstar_g + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+           SELECT CASE(this%gt_LAD_id)
+               CASE(1)        !siwtching function, using sos as timescale     
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+               CASE(2)        !siwtching function, using strain rate as timescale     
+                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+               CASE DEFAULT  !no switching function, using sos as timescale
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+           ENDSELECT
 
-           diffstar_g = this%Cdiff_gt*sos*abs(diffstar_g)
+           diffstar_g = this%Cdiff_gt*gt_switch*abs(diffstar_g)
 
            ! Filter diffstar_g
            call this%filter(diffstar_g, x_bc, y_bc, z_bc)
@@ -749,7 +840,14 @@ contains
            call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
            xtmp2 = xtmp1*this%dx**4
            call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-           diffstar_g = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+           SELECT CASE(this%gp_LAD_id)
+               CASE(1)        !siwtching function, using sos as timescale     
+                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+               CASE(2)        !siwtching function, using strain rate as timescale     
+                   diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2  ! Add eps in case den=0
+               CASE DEFAULT  !no switching function, using sos as timescale
+                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+           ENDSELECT
 
            ! Step 3: Get 4th derivative in Z
            call transpose_y_to_z(e_gp,ztmp1,this%decomp)
@@ -757,15 +855,29 @@ contains
            call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
            ztmp2 = ztmp1*this%dz**4
            call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-           diffstar_g = diffstar_g + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+           SELECT CASE(this%gp_LAD_id)
+               CASE(1)        !siwtching function, using sos as timescale     
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+               CASE(2)        !siwtching function, using strain rate as timescale     
+                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+               CASE DEFAULT  !no switching function, using sos as timescale
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+           ENDSELECT
 
            ! Step 4: Get 4th derivative in Y
            call this%der%d2dy2(e_gp,ytmp4,y_bc(1),y_bc(2))
            call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
            ytmp4 = ytmp5*this%dy**4
-           diffstar_g = diffstar_g + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+           SELECT CASE(this%gp_LAD_id)
+               CASE(1)        !siwtching function, using sos as timescale     
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+               CASE(2)        !siwtching function, using strain rate as timescale     
+                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+               CASE DEFAULT  !no switching function, using sos as timescale
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+           ENDSELECT
 
-           diffstar_g = this%Cdiff_gp*sos*abs(diffstar_g)
+           diffstar_g = this%Cdiff_gp*gp_switch*abs(diffstar_g)
 
            ! Filter diffstar_g
            call this%filter(diffstar_g, x_bc, y_bc, z_bc)

@@ -817,9 +817,10 @@ stop
     end subroutine
 
     ! Subroutine to get species art. conductivities and diffusivities
-    subroutine getLAD(this,rho,p,e,sos,use_gTg,strainHard,x_bc,y_bc,z_bc,tfloor)
+    subroutine getLAD(this,rho,p,e,sos,duidxj,use_gTg,strainHard,x_bc,y_bc,z_bc,tfloor)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos,p  ! Mixture density and speed of sound
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), target, intent(in)  :: duidxj
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: tfloor
 
@@ -847,7 +848,8 @@ stop
             call this%LAD%get_diff_pe(this%material(i)%pe, sos, this%material(i)%diff_pe, x_bc, y_bc, z_bc)
 
 
-            call this%LAD%get_diff_g(this%material(i)%g, this%material(i)%g_t, this%material(i)%g_p, sos, this%material(i)%diff_g, this%material(i)%diff_gt, this%material(i)%diff_gp, use_gTg, strainHard,x_bc, y_bc, z_bc)
+            !call this%LAD%get_diff_g(this%material(i)%g, this%material(i)%g_t, this%material(i)%g_p, sos, this%material(i)%diff_g, this%material(i)%diff_gt, this%material(i)%diff_gp, use_gTg, strainHard,x_bc, y_bc, z_bc)
+            call this%LAD%get_diff_g(this%material(i)%g, this%material(i)%g_t, this%material(i)%g_p, sos, duidxj, this%material(i)%diff_g, this%material(i)%diff_gt, this%material(i)%diff_gp, use_gTg, strainHard,x_bc, y_bc, z_bc)
 
         end do
 
