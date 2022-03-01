@@ -83,14 +83,15 @@ module ibmgpmod
 
 contains
 
-subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, spectE, mesh, Lx, Ly, zBot, zTop, dz, rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE)
-  class(ibmgp),     intent(inout) :: this
+subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, spectE, mesh, Lx, Ly, zBot, zTop, dz, rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE, maskSolidXc_ptr)
+  class(ibmgp),     intent(inout), target :: this
   character(len=*), intent(in)    :: inputFile, inputDir, outputDir
   integer, intent(in) :: runID
   type(decomp_info), intent(in), target :: gpC, gpE
   type(spectral),    intent(in), target :: spectC, spectE
   real(rkind), dimension(:,:,:,:), intent(in) :: mesh
   real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyC, rbuffzC, rbuffxE, rbuffyE, rbuffzE
+  real(rkind), dimension(:,:,:), pointer, intent(inout) :: maskSolidXc_ptr
   real(rkind), intent(in) :: Lx, Ly, zBot, zTop, dz
 
   character(len=clen)    :: surfaceMeshFile, fname, dumstr
@@ -105,6 +106,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   real(rkind), allocatable, dimension(:,:,:) :: levelsetC, levelsetE
   real(rkind), dimension(3) :: vec1, vec2, xk
   real(rkind) :: ibwm_ustar = one, ibwm_z0 = 1.0d-4
+  integer     :: predominant_direc = 3;
 
   namelist /IBMGP/ surfaceMeshFile, Lscale_x, Lscale_y, Lscale_z, translate_x, translate_y, translate_z, &
                    solidpt_x, solidpt_y, solidpt_z, nlayers, ibwm, ibwm_ustar, ibwm_z0
@@ -218,6 +220,8 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
         print '(a,3(1x,e19.12))', '(zmin, zmax):=', zmin_ib, zmax_ib
         print *, '------------------------------------------------------'
   endif
+  call message(1,"No. of Points Below IB:", nint(zmin_ib/dz))
+  
 
   if((xmax_ib > Lx) .or. (xmin_ib < zero)) then
       call GracefulExit("x dimension of IB is larger than domain", 111)
@@ -257,6 +261,12 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
       this%surfnormal(jj,3) = xk(3)/(xkmag + 1.0d-18)
 
       ! ensure it points into the fluid
+      if(predominant_direc==3) then
+        solidpt_x = this%surfcent(jj,1);
+        solidpt_y = this%surfcent(jj,2);
+        solidpt_z = this%surfcent(jj,3) - 0.1d0;
+      else
+      endif
       vec1(1) = solidpt_x-this%surfcent(jj,1)
       vec1(2) = solidpt_y-this%surfcent(jj,2)
       vec1(3) = solidpt_z-this%surfcent(jj,3)
@@ -281,6 +291,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
       print '(a,3(e19.12,1x))', 'normal: ', this%surfnormal(jj,:)
     endif
   endif
+  print '(a,1x,e12.5,1x,e12.5)', 'Surf Normal k component ::', p_minval(minval(this%surfnormal(:,3))), p_maxval(maxval(this%surfnormal(:,3)))
 
   ! create local grid lines
   allocate(xlinepart(this%gpC%xsz(1)), ylinepart(this%gpC%xsz(2)) )
@@ -439,6 +450,8 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   call this%setup_interpolation(dx,dy,dz, zBot, Lx, Ly, xlinepart, ylinepart, zlinepart, zlinepartE)
 
   deallocate(flagE, flagC, mapC, mapE, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE)
+
+  maskSolidXc_ptr => this%mask_solid_xC(:,:,:)
 
 end subroutine
 

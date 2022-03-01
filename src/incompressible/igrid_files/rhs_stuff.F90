@@ -338,6 +338,35 @@
 
    subroutine addExtraForcingTerm(this)
        class(igrid), intent(inout) :: this
+       real(rkind) :: multfac, dpFdx_new, relax_fac = 0.0, ubulk_target = 0.8
+       integer     :: a_avg = 1
+
+       !if(this%adjustPresGradForce) then
+           !print *, 'u: ', nrank, size(this%u)
+           !print *, 'mask: ', nrank, size(this%mask_solid_xC)
+         if(this%useibm) then
+           this%ubulk = p_sum(sum(this%u(1,:,:)*(one-this%mask_solid_xC(1,:,:))))
+           a_avg = p_sum(sum((one-this%mask_solid_xC(1,:,:))))
+         else
+           this%ubulk = p_sum(sum(this%u(1,:,:)))
+           a_avg = this%ny * this%nz
+         endif
+           this%ubulk = this%ubulk/real(a_avg, rkind)
+           !if(nrank==0) 
+           !  print *, nrank, a_avg, this%ubulk
+       !endif
+       if(this%newTimeStep) then
+         dpFdx_new = this%dpFdx + relax_fac*this%dt * (ubulk_target - this%ubulk) / this%dt
+         multfac = 1.0d0 + (relax_fac * this%dt * (ubulk_target - this%ubulk) / this%dt) / this%dpFdx
+         !if(nrank==0) then
+         !  print '(5(e12.5,1x))', this%ubulk, ubulk_target, this%dt, this%dpFdx, dpFdx_new
+         !endif
+         this%dpFdx = dpFdx_new
+         this%dpF_dxhat(1,1,:) = multfac * this%dpF_dxhat(1,1,:)
+       endif
+       !write (100+nrank, '(800(e12.5,1x))') real(this%dpF_dxhat(1,1,:))
+       !write (200+nrank, '(800(e12.5,1x))') aimag(this%dpF_dxhat(1,1,:))
+
        this%u_rhs = this%u_rhs + this%dpF_dxhat
        if (this%storeFbody) then
            this%fbody_x = this%fbody_x + this%dpFdx 

@@ -131,7 +131,7 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
 
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
-        real(rkind) :: Re, G_Geostrophic, G_alpha, frameAngle, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz
+        real(rkind) :: Re, G_Geostrophic, G_alpha, frameAngle, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz, ubulk
         complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat, GxHat_Edge, GyHat_Edge
         real(rkind) :: Ro = 1.d5, Fr = 1000.d0, PrandtlFluid = 1.d0, BulkRichardson = 0.d90
         logical :: assume_fplane = .true.
@@ -209,6 +209,7 @@ module IncompressibleGrid
 
         ! Immersed Boundary (IBM) stuff 
         type(ibmgp), allocatable :: ibm
+        real(rkind), dimension(:,:,:), pointer :: mask_solid_xC
 
         ! KS preprocessor 
         type(ksprep), allocatable :: LES2KS
@@ -1032,7 +1033,7 @@ contains
                               this%spectC, this%spectE, this%mesh, &
                               this%Lx, this%Ly, this%zBot, this%zTop, this%dz, &
                               this%rbuffxC, this%rbuffyC, this%rbuffzC,        &
-                              this%rbuffxE, this%rbuffyE, this%rbuffzE)
+                              this%rbuffxE, this%rbuffyE, this%rbuffzE, this%mask_solid_xC)
        end if
 
        ! STEP 14: Set visualization planes for io
@@ -1445,6 +1446,7 @@ contains
        deallocate(this%xline, this%yline, this%zline, this%zEline)
 
        if(this%useibm) then
+         nullify(this%mask_solid_xC)
          call this%ibm%destroy()
          deallocate(this%ibm)
        endif
