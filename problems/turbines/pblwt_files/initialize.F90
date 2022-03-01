@@ -30,7 +30,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one, zpeak
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, init_profile
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -89,11 +89,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr
     real(rkind) :: z0init = 1.0d-4, epsnd = 0.1, sig, ustarinit = 1.0d0
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, ioUnit, k
+    integer :: nz, nzE, ioUnit, k, init_profile = 1
     real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0
     real(rkind) :: zpeak = 0.2d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, init_profile
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -110,7 +110,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    epsnd = 2.0d-0
+    epsnd = 0.0d-1
 
     !!!! Laminar Channel flow solution
     !!!! 0 = (2/Re) + (1/Re)*d2u/dz2
@@ -121,15 +121,22 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     !!!! u(1) = 0 ==> c = 1
     !!!! u(z) = z-z^2 = z*(1-z)
 
-    !u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    !u = 22.0d0*(one-(z-one)*(z-one)) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    !--parabolic --!u = 2.0d1*z*(Lz-z) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-    u = 2.0d1*(one-(z-1.125d0)**6) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    if(init_profile==1) then
+        ! log law init (PBL)
+        u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    elseif(init_profile==2) then
+        ! parabolic init (centerline = 1)
+        !--parabolic --!u = 2.0d1*z*(Lz-z) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+        u = 1.0d0*(one-(z-1.125d0)**2) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    elseif(init_profile==3) then
+        ! parabolic init (utau = 1)
+        u = 22.0d0*(one-(z-one)*(z-one)) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    endif
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
    
     !Add random numbers
-    randomScaleFact = 2.00d-1
+    randomScaleFact = 0.00d-1
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     do k = 1,size(u,3)
@@ -214,8 +221,8 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
     real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, zpeak
-    integer :: iounit
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak
+    integer :: iounit, init_profile = 1
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak, init_profile
     
     wTh_surf = zero;
     
@@ -236,8 +243,8 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, zpeak
-    integer :: iounit
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak 
+    integer :: iounit, init_profile = 1
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak , init_profile
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -256,9 +263,9 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
     real(rkind) :: Lx, Ly, Lz, z0init, zpeak
-    integer :: iounit
+    integer :: iounit, init_profile = 1
     
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak, init_profile
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -278,9 +285,9 @@ subroutine set_Reference_Temperatur(inputfile, Tref)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
     real(rkind) :: Lx, Ly, Lz, z0init, zpeak
-    integer :: iounit
+    integer :: iounit, init_profile = 1
     
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak, init_profile
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
