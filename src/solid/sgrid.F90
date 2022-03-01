@@ -74,6 +74,7 @@ module SolidGrid
         type( IOsgrid ),        allocatable :: viz
 
         logical     :: PTeqb                       ! Use pressure and temperature equilibrium formulation
+        logical     :: PTeqb_new                   ! Use new version of pressure and temperature equilibrium formulation, with pressure floor
         logical     :: pEqb                        ! Use pressure equilibrium formulation
         logical     :: pRelax                      ! Use pressure and temperature non-equilibrium formulation, but relax pressure at each substep
         logical     :: use_gTg                     ! Use formulation with the Finger tensor g^T.g instead of the full g tensor
@@ -220,7 +221,7 @@ contains
         real(rkind) :: Cdiff_pe = 0.003_rkind
         real(rkind) :: Cdiff_pe_2 = 100._rkind
         integer     :: g_LAD_id = zero, gp_LAD_id = zero, gt_LAD_id = zero
-        logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
+        logical     :: PTeqb = .TRUE., PTeqb_new=.TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         logical     :: use_surfaceTension = .FALSE.  
@@ -246,7 +247,7 @@ contains
                                                      filter_alpha
 
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
-                           PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, g_LAD_id, gp_LAD_id, gt_LAD_id, &
+                           PTeqb, PTeqb_new, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, g_LAD_id, gp_LAD_id, gt_LAD_id, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
                            use_surfaceTension, surfaceTension_coeff
@@ -279,6 +280,7 @@ contains
         this%nsteps = nsteps
 
         this%PTeqb  = PTeqb
+        this%PTeqb_new  = PTeqb_new
         this%pEqb   = pEqb
         this%pRelax = pRelax
         this%use_gTg = use_gTg
@@ -312,7 +314,7 @@ contains
         this%use_surfaceTension   = use_surfaceTension  
         this%surfaceTension_coeff = surfaceTension_coeff
 
-        itmp(1:3) = 0; if(this%PTeqb) itmp(1) = 1; if(this%pEqb) itmp(2) = 1; if(this%pRelax) itmp(3) = 1; 
+        itmp(1:3) = 0; if(this%PTeqb) itmp(1) = 1; if(this%pEqb) itmp(2) = 1; if(this%pRelax) itmp(3) = 1;
         if(sum(itmp) .ne. 1) then
             call GracefulExit("Exactly one among PTeqb, pEqb and pRelax should be true",4634)
         endif
@@ -1072,15 +1074,11 @@ contains
             ! end if
             
             if (this%PTeqb) then
-               !call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T, isub)
-
-               ! do i=1,2
+                if(this%PTeqb_new) then    
                   call this%mix%equilibratePressureTemperature_new(this%rho, this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
-                  !call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T, isub) !JRW change: reverting for LAD tuning tests
-               !    call this%mix%get_pmix(this%p)                         ! Get mixture pressure
-               !    call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
-               ! enddo
-
+                else
+                  call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T, isub) !JRW change: reverting for LAD tuning tests
+                endif
             elseif (this%pEqb) then
                 call this%mix%equilibratePressure(this%rho, this%e, this%p)
             elseif (this%pRelax) then
