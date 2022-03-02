@@ -28,7 +28,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind) :: z0init = 1.0d-4, ustarinit  = 1.0d0
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
-    integer :: ix1, ixn, iy1, iyn, iz1, izn
+    integer :: ix1, ixn, iy1, iyn, iz1, izn, init_profile
     real(rkind)  :: Lx = one, Ly = one, Lz = one, zpeak
     namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, init_profile
 
@@ -110,7 +110,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
  
-    epsnd = 0.0d-1
 
     !!!! Laminar Channel flow solution
     !!!! 0 = (2/Re) + (1/Re)*d2u/dz2
@@ -123,13 +122,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
 
     if(init_profile==1) then
         ! log law init (PBL)
+        epsnd = 2.0d-1
         u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     elseif(init_profile==2) then
         ! parabolic init (centerline = 1)
         !--parabolic --!u = 2.0d1*z*(Lz-z) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+        epsnd = 0.0d-1
         u = 1.0d0*(one-(z-1.125d0)**2) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     elseif(init_profile==3) then
         ! parabolic init (utau = 1)
+        epsnd = 2.0d-1
         u = 22.0d0*(one-(z-one)*(z-one)) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     endif
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
