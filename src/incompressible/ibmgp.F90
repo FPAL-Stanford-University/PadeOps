@@ -762,7 +762,7 @@ subroutine update_ghostptsCE(this, u, v, w)
 
   integer :: ii, jj, kk, i, j, k
   real(rkind) :: vec1(3), vec2(3), unrm(3), utan(3), dotpr, dist
-  real(rkind) :: ibwallvel, utan_gp(3), unrm_gp(3), vmax, vmin
+  real(rkind) :: ibwallvel, utan_gp(3), unrm_gp(3), vmax, vmin, finv, utau_local_ib
 
   !ubnp = (uimp*dist1 + ughpt*dist2)/(dist1+dist2)
   !ughpt = ((dist1+dist2)*ubnp - uimp*dist1)/dist2
@@ -807,8 +807,6 @@ subroutine update_ghostptsCE(this, u, v, w)
           !endif
 
       enddo
-      this%ibwm_utau_avg = p_sum(sum(this%utauC_ib))/(real(this%num_imptsC_glob, rkind) + 1.0d-18)
-      this%ibwm_utau_max = p_maxval(maxval(this%utauC_ib));  this%ibwm_utau_min = p_minval(minval(this%utauC_ib))
   elseif(this%ibwm==2) then
       ! simple log-law immersed boundary
       do ii = 1, this%num_gptsC
@@ -821,13 +819,24 @@ subroutine update_ghostptsCE(this, u, v, w)
           unrm = vec2*dotpr
           utan = vec1-unrm
 
-          dist = this%gptsC_dst(ii,2) ! distance from ghost pt to image point
+          dist = this%gptsC_dst(ii,2)  ! distance from boundary pt to image point
+          finv = this%gptsC_dst(ii,1) / this%gptsC_dst(ii,2)
+          !! ---(WM01)----
           !ibwallvel = this%ibwm_ustar/kappa*log(dist/this%ibwm_z0)
-          !utan_gp = -utan+two*ibwallvel   ! (WM01)
-           utan_gp = utan*(one - two*kappa/log(dist/this%ibwm_z0)) ! (WM04) 
+          !utan_gp = -utan+two*ibwallvel
+          !! ---(WM02)----
+          !utan_gp = utan - (one+finv) * this%ibwm_ustar/kappa ! (WM02) 
+          !! ---(WM03)----
           !utan_gp = utan  ! (WM03)
-          !utan_gp = utan - two*this%ibwm_ustar/kappa ! (WM02) 
+          !! ---(WM04)----
+          utau_local_ib = sqrt(sum(utan*utan))*kappa/log(dist/this%ibwm_z0)
+          utan_gp = utan * (one - (one + finv)/log(dist/this%ibwm_z0))
+
+
+          this%utauC_ib(ii) = utau_local_ib
+
           unrm_gp = -unrm
+
 
           i = this%gptsC_ind(ii,1);  j = this%gptsC_ind(ii,2);  k = this%gptsC_ind(ii,3)
           u(i,j,k) = utan_gp(1) + unrm_gp(1)
@@ -860,12 +869,19 @@ subroutine update_ghostptsCE(this, u, v, w)
           unrm = vec2*dotpr
           utan = vec1-unrm
 
-          dist = this%gptsE_dst(ii,2) ! distance from ghost pt to image point
+          dist = this%gptsE_dst(ii,2) ! distance from boundary pt to image point
+          finv = this%gptsE_dst(ii,1) / this%gptsE_dst(ii,2)
+          !! ---(WM01)----
           !ibwallvel = this%ibwm_ustar/kappa*log(dist/this%ibwm_z0)
           !utan_gp = -utan+two*ibwallvel ! (WM01)
-           utan_gp = utan*(one - two*kappa/log(dist/this%ibwm_z0)) ! (WM04) 
-          !utan_gp = utan  ! (WM03)
-          !utan_gp = utan - two*this%ibwm_ustar/kappa ! (WM02)
+          !! ---(WM02)----
+          !utan_gp = utan - (one + finv)*this%ibwm_ustar/kappa
+          !! ---(WM03)----
+          !utan_gp = utan
+          !! ---(WM04)----
+          utau_local_ib = sqrt(sum(utan*utan))*kappa/log(dist/this%ibwm_z0)
+          utan_gp = utan * (one - (one + finv)/log(dist/this%ibwm_z0))
+
           unrm_gp = -unrm
 
           i = this%gptsE_ind(ii,1);   j = this%gptsE_ind(ii,2);  k = this%gptsE_ind(ii,3)
@@ -875,6 +891,8 @@ subroutine update_ghostptsCE(this, u, v, w)
       enddo
 
   endif
+  this%ibwm_utau_avg = p_sum(sum(this%utauC_ib))/(real(this%num_imptsC_glob, rkind) + 1.0d-18)
+  this%ibwm_utau_max = p_maxval(maxval(this%utauC_ib));  this%ibwm_utau_min = p_minval(minval(this%utauC_ib))
 
 end subroutine
 
