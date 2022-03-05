@@ -23,7 +23,6 @@ module notched_bar_data
     real(rkind) :: eta_det_ge_2 = one, eta_det_gp_2 = one, eta_det_gt_2 = one, diff_c_ge_2 = one
     real(rkind) :: diff_c_gp = one, diff_c_gt = one
     real(rkind) :: diff_c_gp_2 = one, diff_c_gt_2 = one
-    logical     :: strainHard = .FALSE., strainHard2 = .FALSE.
     
     !logical     :: ignore_gij = .false.
 
@@ -262,8 +261,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! set logicals for plasticity
         mix%material(1)%plast = plastic; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
-        mix%material(1)%strainHard = strainHard
-        mix%material(2)%strainHard = strainHard2
 
         ! write material properties
         if (nrank == 0) then
@@ -317,9 +314,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         !Set mixture velocity
         tmp_01 = half * (erf( (x-(Lx/2.0d0 + lBar/4.0d0))/(thick*dx) ) + erf( (x-(Lx/2.0d0 - lBar/4.0d0))/(thick*dx) )) ! goes from -1 to 0 to 1
-        !tmp_01 = tmp_01 * mix%material(1)%Ys ! applies velocity only to material 1
+        tmp_01 = tmp_01 * mix%material(1)%Ys ! applies velocity only to material 1
         u   = u_jump * tmp_01
-        v   = zero !v_jump * tmp_01
+        v   = v_jump * tmp_01
         w   = zero
 
 
@@ -546,7 +543,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
       !overwrite plastic entropy equation
       mix%material(1)%pe = zero
 
-        IF (.FALSE.) THEN
+        IF (.FALSE.) THEN !designed to be used with periodic BC
 
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then

@@ -19,7 +19,6 @@ module TayAnvil_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    logical     :: strainHard = .FALSE., strainHard2 = .FALSE.
     real(rkind) :: Ly = 0.03, Lx = 0.03, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
 
     type(filters) :: mygfil
@@ -211,7 +210,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, plastic, explPlast, yield, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic2, explPlast2, yield2,   &
                           p_amb, xint, yint, minVF, thick, dxdyfixed, vimpact, & 
-                          melt_t, melt_c, melt_t2, melt_c2,strainHard,strainHard2, &
+                          melt_t, melt_c, melt_t2, melt_c2, &
                           kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e,kos_sh, &
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
@@ -267,8 +266,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! set logicals for plasticity
         mix%material(1)%plast = plastic; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
-        mix%material(1)%strainHard = strainHard
-        mix%material(2)%strainHard = strainHard2
 
         do k=1,decomp%ysz(3)
            do j=1,decomp%ysz(2)
