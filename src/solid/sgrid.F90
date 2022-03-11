@@ -743,6 +743,14 @@ contains
         !call this%mix%getLAD(this%rho,this%p,this%e,this%sos,this%use_gTg,this%strainHard,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
         call this%mix%getLAD(this%rho,this%p,this%e,this%sos,duidxj,this%use_gTg,this%strainHard,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
         ! ------------------------------------------------
+        IF (this%LAD%g_LAD_id .eq. 3) THEN
+            DO imat = 1, this%mix%ns
+                !TODO: add switching function and make the strain for these specific to elastic or plastic
+                this%mix%material(imat)%diff_g  = this%LAD%Cdiff_g  * this%mu / (this%LAD%Cmu * this%rho ) !assuming no physical viscosity and that Cmu>0
+                this%mix%material(imat)%diff_gt = this%LAD%Cdiff_gt * this%mu / (this%LAD%Cmu * this%rho ) !assuming no physical viscosity and that Cmu>0
+                this%mix%material(imat)%diff_gp = this%LAD%Cdiff_gp * this%mu / (this%LAD%Cmu * this%rho ) !assuming no physical viscosity and that Cmu>0
+            ENDDO    
+        ENDIF
 
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
