@@ -648,9 +648,9 @@ contains
 
 
         SELECT CASE(this%g_LAD_id)
-            CASE(1)        !siwtching function, using sos as timescale     
+            CASE(1)        !switching function, using sos as timescale     
                 g_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
-            CASE(2)        !siwtching function, using strain rate as timescale     
+            CASE(2)        !switching function, using strain rate as timescale     
                 g_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
             CASE DEFAULT  !no switching function, using sos as timescale
                 g_switch  = one
@@ -698,9 +698,9 @@ contains
         xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         SELECT CASE(this%g_LAD_id)
-            CASE(1)        !siwtching function, using sos as timescale     
+            CASE(1)        !switching function, using sos as timescale     
                 diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
-            CASE(2)        !siwtching function, using strain rate as timescale     
+            CASE(2)        !switching function, using strain rate as timescale     
                 diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2  ! Add eps in case den=0
             CASE DEFAULT  !no switching function, using sos as timescale
                 diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
@@ -713,9 +713,9 @@ contains
         ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         SELECT CASE(this%g_LAD_id)
-            CASE(1)        !siwtching function, using sos as timescale     
+            CASE(1)        !switching function, using sos as timescale     
                 diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
-            CASE(2)        !siwtching function, using strain rate as timescale     
+            CASE(2)        !switching function, using strain rate as timescale     
                 diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
             CASE DEFAULT  !no switching function, using sos as timescale
                 diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
@@ -726,9 +726,9 @@ contains
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
         ytmp4 = ytmp5*this%dy**4
         SELECT CASE(this%g_LAD_id)
-            CASE(1)        !siwtching function, using sos as timescale     
+            CASE(1)        !switching function, using sos as timescale     
                 diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
-            CASE(2)        !siwtching function, using strain rate as timescale     
+            CASE(2)        !switching function, using strain rate as timescale     
                 diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
             CASE DEFAULT  !no switching function, using sos as timescale
                 diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
@@ -766,9 +766,9 @@ contains
            xtmp2 = xtmp1*this%dx**4
            call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
            SELECT CASE(this%gt_LAD_id)
-               CASE(1)        !siwtching function, using sos as timescale     
+               CASE(1)        !switching function, using sos as timescale     
                    diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
-               CASE(2)        !siwtching function, using strain rate as timescale     
+               CASE(2)        !switching function, using strain rate as timescale     
                    diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2  ! Add eps in case den=0
                CASE DEFAULT  !no switching function, using sos as timescale
                    diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
@@ -781,9 +781,9 @@ contains
            ztmp2 = ztmp1*this%dz**4
            call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
            SELECT CASE(this%gt_LAD_id)
-               CASE(1)        !siwtching function, using sos as timescale     
+               CASE(1)        !switching function, using sos as timescale     
                    diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
-               CASE(2)        !siwtching function, using strain rate as timescale     
+               CASE(2)        !switching function, using strain rate as timescale     
                    diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
                CASE DEFAULT  !no switching function, using sos as timescale
                    diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
@@ -794,9 +794,9 @@ contains
            call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
            ytmp4 = ytmp5*this%dy**4
            SELECT CASE(this%gt_LAD_id)
-               CASE(1)        !siwtching function, using sos as timescale     
+               CASE(1)        !switching function, using sos as timescale     
                    diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
-               CASE(2)        !siwtching function, using strain rate as timescale     
+               CASE(2)        !switching function, using strain rate as timescale     
                    diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
                CASE DEFAULT  !no switching function, using sos as timescale
                    diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
@@ -841,9 +841,9 @@ contains
            xtmp2 = xtmp1*this%dx**4
            call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
            SELECT CASE(this%gp_LAD_id)
-               CASE(1)        !siwtching function, using sos as timescale     
+               CASE(1)        !switching function, using sos as timescale     
                    diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
-               CASE(2)        !siwtching function, using strain rate as timescale     
+               CASE(2)        !switching function, using strain rate as timescale     
                    diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2  ! Add eps in case den=0
                CASE DEFAULT  !no switching function, using sos as timescale
                    diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
@@ -856,9 +856,9 @@ contains
            ztmp2 = ztmp1*this%dz**4
            call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
            SELECT CASE(this%gp_LAD_id)
-               CASE(1)        !siwtching function, using sos as timescale     
+               CASE(1)        !switching function, using sos as timescale     
                    diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
-               CASE(2)        !siwtching function, using strain rate as timescale     
+               CASE(2)        !switching function, using strain rate as timescale     
                    diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
                CASE DEFAULT  !no switching function, using sos as timescale
                    diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
@@ -869,9 +869,9 @@ contains
            call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
            ytmp4 = ytmp5*this%dy**4
            SELECT CASE(this%gp_LAD_id)
-               CASE(1)        !siwtching function, using sos as timescale     
+               CASE(1)        !switching function, using sos as timescale     
                    diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
-               CASE(2)        !siwtching function, using strain rate as timescale     
+               CASE(2)        !switching function, using strain rate as timescale     
                    diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
                CASE DEFAULT  !no switching function, using sos as timescale
                    diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
