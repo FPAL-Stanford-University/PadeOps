@@ -7,7 +7,7 @@ module notched_bar_data
     real(rkind) :: p_amb = one
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one
-    real(rkind) :: u_jump = 0d0, v_jump = 0d0, rho_BC = one, u_L=zero, u_R=zero
+    real(rkind) :: u_jump = 0d0, v_jump = 0d0, rho_BC = one 
 
     real(rkind) :: interface_init = 0.5, thick=0.001, minVF = 1.0d-16
     real(rkind) :: lBar=8.0d-2, wBar=2.0d-2, bNotch=0.6d-2, hNotch=0.5d-2
@@ -312,8 +312,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%Ys = rho_0  *mix%material(1)%VF / rho
         mix%material(2)%Ys = one - mix%material(1)%Ys
 
-        !Set mixture velocity
-        tmp_01 = half * (erf( (x-(Lx/2.0d0 + lBar/4.0d0))/(thick*dx) ) + erf( (x-(Lx/2.0d0 - lBar/4.0d0))/(thick*dx) )) ! goes from -1 to 0 to 1
+        !Set mixture velocity (discontinuity is away from notch)
+        !tmp_01 = half * (erf( (x-(Lx/2.0d0 + lBar/4.0d0))/(thick*dx) ) + erf( (x-(Lx/2.0d0 - lBar/4.0d0))/(thick*dx) )) ! goes from -1 to 0 to 1
+        !Set mixture velocity (discontinuity is at notch)
+        tmp_01 = half * (erf( (x-(Lx/2.0d0             ))/(thick*dx) ) + erf( (x-(Lx/2.0d0             ))/(thick*dx) )) ! goes from -1 to 0 to 1
         tmp_01 = tmp_01 * mix%material(1)%Ys ! applies velocity only to material 1
         u   = u_jump * tmp_01
         v   = v_jump * tmp_01
@@ -346,8 +348,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         !set boundary values
         rho_BC = rho_0*minVF + rho_0_2*(one-minVF) !ambient density
 
-        u_L    = u(1,int(decomp%ysz(2)/2),1)
-        u_R    = u(decomp%ysz(1),int(decomp%ysz(2)/2),1)
 
 
     end associate
@@ -527,11 +527,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
-    integer :: nx, i, j, ind
+    integer :: nx,ny, i, j, ind
     real(rkind) :: dx, xspng, tspng, xspngL, xspngR
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR
     
     nx = decomp%ysz(1)
+    ny = decomp%ysz(2)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -543,17 +544,20 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
       !overwrite plastic entropy equation
       mix%material(1)%pe = zero
 
-        IF (.FALSE.) THEN !designed to be used with periodic BC
+        IF (.TRUE.) THEN !designed to be used with periodic BC
 
+        !Left and Right BCs
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then
               rho( 1,:,:) = rho_BC
-              u  ( 1,:,:) = u_L
+              u  ( 1,:,:) = zero
               v  ( 1,:,:) = zero
               w  ( 1,:,:) = zero
               
               DO ind=1,mix%ns    
-                  mix%material(ind)%p  (1,:,:) = p_amb ! mix%material(1)%p(nx-1,:,:)
+                  do i=1,5
+                      mix%material(ind)%p(i,:,:) = mix%material(ind)%p(6,:,:)
+                  end do
                   
                   mix%material(ind)%g11( 1,:,:)  =  one; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
                   mix%material(ind)%g21( 1,:,:)  = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
@@ -580,12 +584,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         if(decomp%yen(1)==decomp%xsz(1)) then
           if(x_bc(2)==0) then
               rho( nx,:,:) = rho_BC
-              u  ( nx,:,:) = u_R
+              u  ( nx,:,:) = zero
               v  ( nx,:,:) = zero
               w  ( nx,:,:) = zero
               
               DO ind=1,mix%ns    
-                  mix%material(ind)%p  (nx,:,:) = p_amb ! mix%material(1)%p(nx-1,:,:)
+                  do i=nx-4,nx
+                      mix%material(ind)%p(i,:,:) = mix%material(ind)%p(nx-5,:,:)
+                  end do
                   
                   mix%material(ind)%g11( nx,:,:)  =  one; mix%material(1)%g12( nx,:,:) = zero; mix%material(1)%g13( nx,:,:) = zero
                   mix%material(ind)%g21( nx,:,:)  = zero; mix%material(1)%g22( nx,:,:) = one;  mix%material(1)%g23( nx,:,:) = zero
@@ -609,7 +615,76 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           endif
         endif
 
-        ! apply sponge at left and right boundaries to damp outgoing waves
+        !Top and Bottom BCs
+        if(decomp%yst(2)==1) then
+          if(x_bc(1)==0) then
+              rho( :,1,:) = rho_BC
+              u  ( :,1,:) = zero
+              v  ( :,1,:) = zero
+              w  ( :,1,:) = zero
+              
+              DO ind=1,mix%ns    
+                  do i=1,5
+                      mix%material(ind)%p(:,i,:) = mix%material(ind)%p(:,6,:)
+                  end do
+                  
+                  mix%material(ind)%g11(  :,1,:)  =  one;  mix%material(1)%g12( :,1,:) = zero;  mix%material(1)%g13( :,1,:) = zero
+                  mix%material(ind)%g21(  :,1,:)  = zero;  mix%material(1)%g22( :,1,:) = one;   mix%material(1)%g23( :,1,:) = zero
+                  mix%material(ind)%g31(  :,1,:)  = zero;  mix%material(1)%g32( :,1,:) = zero;  mix%material(1)%g33( :,1,:) = one
+
+                  mix%material(ind)%gp11( :,1,:)  =  one; mix%material(1)%gp12( :,1,:) = zero; mix%material(1)%gp13( :,1,:) = zero
+                  mix%material(ind)%gp21( :,1,:)  = zero; mix%material(1)%gp22( :,1,:) = one;  mix%material(1)%gp23( :,1,:) = zero
+                  mix%material(ind)%gp31( :,1,:)  = zero; mix%material(1)%gp32( :,1,:) = zero; mix%material(1)%gp33( :,1,:) = one
+
+                  mix%material(ind)%gt11( :,1,:)  =  one; mix%material(1)%gt12( :,1,:) = zero; mix%material(1)%gt13( :,1,:) = zero
+                  mix%material(ind)%gt21( :,1,:)  = zero; mix%material(1)%gt22( :,1,:) = one;  mix%material(1)%gt23( :,1,:) = zero
+                  mix%material(ind)%gt31( :,1,:)  = zero; mix%material(1)%gt32( :,1,:) = zero; mix%material(1)%gt33( :,1,:) = one
+
+              ENDDO
+  
+              mix%material(1)%VF ( :,1,:) = minVF 
+              mix%material(2)%VF ( :,1,:) = one - minVF 
+
+              mix%material(1)%Ys ( :,1,:) = rho_0 * mix%material(1)%VF( :,1,:) / rho( :,1,:)
+              mix%material(2)%Ys ( :,1,:) = one   - mix%material(1)%Ys( :,1,:)
+          end if
+        endif
+        
+        if(decomp%yen(2)==decomp%ysz(2)) then
+          if(x_bc(2)==0) then
+              rho( nx,:,:) = rho_BC
+              u  ( nx,:,:) = zero
+              v  ( nx,:,:) = zero
+              w  ( nx,:,:) = zero
+              
+              DO ind=1,mix%ns    
+                  do i=ny-4,ny
+                      mix%material(ind)%p(:,i,:) = mix%material(ind)%p(:,ny-5,:)
+                  end do
+                  
+                  mix%material(ind)%g11(  :,ny,:)  =  one; mix%material(1)%g12(  :,ny,:) = zero; mix%material(1)%g13(  :,ny,:) = zero
+                  mix%material(ind)%g21(  :,ny,:)  = zero; mix%material(1)%g22(  :,ny,:) = one;  mix%material(1)%g23(  :,ny,:) = zero
+                  mix%material(ind)%g31(  :,ny,:)  = zero; mix%material(1)%g32(  :,ny,:) = zero; mix%material(1)%g33(  :,ny,:) = one
+
+                  mix%material(ind)%gp11( :,ny,:)  =  one; mix%material(1)%gp12( :,ny,:) = zero; mix%material(1)%gp13( :,ny,:) = zero
+                  mix%material(ind)%gp21( :,ny,:)  = zero; mix%material(1)%gp22( :,ny,:) = one;  mix%material(1)%gp23( :,ny,:) = zero
+                  mix%material(ind)%gp31( :,ny,:)  = zero; mix%material(1)%gp32( :,ny,:) = zero; mix%material(1)%gp33( :,ny,:) = one
+
+                  mix%material(ind)%gt11( :,ny,:)  =  one; mix%material(1)%gt12( :,ny,:) = zero; mix%material(1)%gt13( :,ny,:) = zero
+                  mix%material(ind)%gt21( :,ny,:)  = zero; mix%material(1)%gt22( :,ny,:) = one;  mix%material(1)%gt23( :,ny,:) = zero
+                  mix%material(ind)%gt31( :,ny,:)  = zero; mix%material(1)%gt32( :,ny,:) = zero; mix%material(1)%gt33( :,ny,:) = one
+
+              ENDDO
+  
+              mix%material(1)%VF ( :,ny,:) = minVF 
+              mix%material(2)%VF ( :,ny,:) = one - minVF 
+
+              mix%material(1)%Ys ( :,ny,:) = rho_0 * mix%material(1)%VF( :,ny,:) / rho( :,ny,:)
+              mix%material(2)%Ys ( :,ny,:) = one   - mix%material(1)%Ys( :,ny,:)
+          endif
+        endif
+
+        ! apply sponge at left and right and top and bottom boundaries to damp outgoing waves
         xspngL = 0.10d0*Lx
         xspngR = 0.90d0*Lx
         dx = x(2,1,1) - x(1,1,1)
@@ -617,6 +692,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         dumL = half*(one - tanh( (x-xspngL)/(tspng) ))
         dumR = half*(one + tanh( (x-xspngR)/(tspng) ))
         dum  = dumL+dumR
+
+        xspngL = 0.10d0*Ly
+        xspngR = 0.90d0*Ly
+        dx = y(1,2,1) - y(1,1,1)
+        tspng = dx
+        dumL = half*(one - tanh( (y-xspngL)/(tspng) ))
+        dumR = half*(one + tanh( (y-xspngR)/(tspng) ))
+        dum  = dum + dumL+dumR
 
         do i=1,4 
             tmp = u
