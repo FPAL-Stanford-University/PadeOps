@@ -28,7 +28,7 @@ module LADMod
         type(filters),     pointer :: fil
 
         integer :: nfils
-        integer :: g_LAD_id, gp_LAD_id, gt_LAD_id
+        integer :: g_LAD_id, gp_LAD_id, gt_LAD_id, beta_LAD_id 
         real(rkind) :: dx, dy, dz
 
         logical :: use_gTg
@@ -48,14 +48,14 @@ module LADMod
 
 contains
 
-    subroutine init(this,decomp,der,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,g_LAD_id,gp_LAD_id,gt_LAD_id)
+    subroutine init(this,decomp,der,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,g_LAD_id,gp_LAD_id,gt_LAD_id, beta_LAD_id)
         class(ladobject),        intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
         type(filters),     target, intent(in) :: fil
         integer,           intent(in) :: nfils
         real(rkind),       intent(in) :: Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,dx,dy,dz    
-        integer, intent(in)           :: g_LAD_id, gp_LAD_id, gt_LAD_id
+        integer, intent(in)           :: g_LAD_id, gp_LAD_id, gt_LAD_id, beta_LAD_id
 
         ! Set all coefficients
         this%Cbeta = Cbeta
@@ -74,6 +74,7 @@ contains
         this%g_LAD_id  = g_LAD_id
         this%gp_LAD_id = gp_LAD_id
         this%gt_LAD_id = gt_LAD_id
+        this%beta_LAD_id = beta_LAD_id
 
         ! Point type pointers to external types
         this%decomp => decomp
@@ -197,9 +198,14 @@ contains
         ! original
         ! Calculate the switching function
         ytmp1 = ytmp2 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
-        where (func .GE. zero)
-            ytmp1 = zero
-        end where
+        SELECT CASE(this%beta_LAD_id)
+            CASE(1)       !modified switching function to target tension as well
+                CONTINUE
+            CASE DEFAULT  !switching function to target only compression
+                where (func .GE. zero)
+                    ytmp1 = zero
+                end where
+        ENDSELECT
 
         ! ! new
         ! ! Calculate the switching function

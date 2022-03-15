@@ -220,7 +220,7 @@ contains
         real(rkind) :: Cdiff_gp = 0.003_rkind
         real(rkind) :: Cdiff_pe = 0.003_rkind
         real(rkind) :: Cdiff_pe_2 = 100._rkind
-        integer     :: g_LAD_id = zero, gp_LAD_id = zero, gt_LAD_id = zero
+        integer     :: g_LAD_id = zero, gp_LAD_id = zero, gt_LAD_id = zero, beta_LAD_id
         logical     :: PTeqb = .TRUE., PTeqb_new=.TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
@@ -247,7 +247,7 @@ contains
                                                      filter_alpha
 
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
-                           PTeqb, PTeqb_new, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, g_LAD_id, gp_LAD_id, gt_LAD_id, &
+                           PTeqb, PTeqb_new, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, g_LAD_id, gp_LAD_id, gt_LAD_id, beta_LAD_id, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
                            use_surfaceTension, surfaceTension_coeff
@@ -462,7 +462,7 @@ contains
         allocate(this%LAD)
         !call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,Cmu,Ckap,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
         !call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
-        call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,g_LAD_id,gp_LAD_id,gt_LAD_id)
+        call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,g_LAD_id,gp_LAD_id,gt_LAD_id,beta_LAD_id)
 
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
@@ -926,6 +926,25 @@ contains
             ! call this%mix%getSOS(this%rho,this%p,this%sos)
             !call this%mix%getLAD(this%rho,this%p,this%e,this%sos,this%use_gTg,this%strainHard,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
             call this%mix%getLAD(this%rho,this%p,this%e,this%sos,duidxj,this%use_gTg,this%strainHard,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+
+            IF (this%LAD%g_LAD_id .eq. 3) THEN
+                DO imat = 1, this%mix%ns
+                    !TODO: add switching function and make the strain for these specific to elastic or plastic
+                    this%mix%material(imat)%diff_g  = this%LAD%Cdiff_g  * this%mu / (this%LAD%Cmu * this%rho ) !assuming no physical viscosity and that Cmu>0
+                ENDDO    
+            ENDIF
+            IF (this%LAD%gt_LAD_id .eq. 3) THEN
+                DO imat = 1, this%mix%ns
+                    !TODO: add switching function and make the strain for these specific to elastic or plastic
+                    this%mix%material(imat)%diff_gt = this%LAD%Cdiff_gt * this%mu / (this%LAD%Cmu * this%rho ) !assuming no physical viscosity and that Cmu>0
+                ENDDO    
+            ENDIF
+            IF (this%LAD%gp_LAD_id .eq. 3) THEN
+                DO imat = 1, this%mix%ns
+                    !TODO: add switching function and make the strain for these specific to elastic or plastic
+                    this%mix%material(imat)%diff_gp = this%LAD%Cdiff_gp * this%mu / (this%LAD%Cmu * this%rho ) !assuming no physical viscosity and that Cmu>0
+                ENDDO    
+            ENDIF
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
             
