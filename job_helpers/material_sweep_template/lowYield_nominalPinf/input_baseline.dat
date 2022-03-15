@@ -1,0 +1,122 @@
+&INPUT
+
+inputdir  =  "./"      ! Directory for input files
+outputdir  = "./out_baseline"      ! Directory for output files
+
+nx=101                  ! Number of points in X
+ny = 1                    ! Number of points in Y
+nz = 1                    ! Number of points in Z
+
+dt    = 1.0D-10              ! Fixed time step value (Set to negative to disable)
+tstop = 1.1d-2            ! Physical time to stop the simulation
+CFL   = .5D0             ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 1.0d-3            ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "LAD_test" ! Prefix for the visualization files
+
+periodicx = .false.       ! Periodic in X?
+periodicy = .TRUE.        ! Periodic in Y?
+periodicz = .TRUE.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+/
+
+&SINPUT
+beta_LAD_id = 0
+g_LAD_id = 0
+gp_LAD_id = 0
+gt_LAD_id = 0
+intSharp          = .FALSE.  ! Include interface sharpening terms
+
+gam      = 2.00          ! Ratio of specific heats
+Rgas     = 1.D0          ! Gas constant
+PInf     = 6.823d10    ! P_infinity, material stiffness
+shmod    = 3.938e10    ! Shear modulus
+PTeqb    = .TRUE.
+PTeqb_new = .FALSE.            ! Yield strength of material
+SOSmodel = .FALSE.            ! Yield strength of material
+ns       = 1               ! Number of species
+
+Cmu = 0.002d0       ! Coefficient for artificial shear viscosity
+Cbeta = 0.0d0          ! Coefficient for artificial bulk viscosity
+Ckap    = 0.01d0        ! Coefficient for artificial thermal conductivity
+Cdiff   = 0d0           ! Coefficient for artificial mass diffusion (ringing)
+CY      = 0d0           ! Coefficient for artificial mass diffusion (OOB) 
+
+x_bc1   = 0               ! 0: general, 1: symmetric/anti-symmetric
+x_bcn   = 0               ! 0: general, 1: symmetric/anti-symmetric
+y_bc1   = 0               ! 0: general, 1: symmetric/anti-symmetric
+y_bcn   = 0               ! 0: general, 1: symmetric/anti-symmetric
+z_bc1   = 0               ! 0: general, 1: symmetric/anti-symmetric
+z_bcn   = 0               ! 0: general, 1: symmetric/anti-symmetric
+
+use_gTg  = .TRUE.          ! Use the symmetric Finger tensor formulation?
+        
+strainHard = .true.  ! Solve the equations for strain hardening
+cnsrv_g  = .FALSE.   ! Use the conservative form for ge equations
+cnsrv_gt = .FALSE.   ! Use the conservative form for gt equations
+cnsrv_gp = .FALSE.   ! Use the conservative form for gp equations
+cnsrv_pe = .FALSE.   ! Use the conservative form for pe equations
+Cdiff_g = 0.0d0     ! Coefficient for artificial g_e diffusivity
+Cdiff_gt = 0.0d0     ! Coefficient for artificial g_t diffusivity
+Cdiff_gp = 0.0d0     ! Coefficient for artificial g_p diffusivity
+Cdiff_pe = 0.0d0     ! Coefficient for artificial pe diffusivity
+/
+
+&PROBINPUT
+p_infty = 6.823000000000000e+10
+gamma = 2.000000000000000e+00
+u_L = -2.099965349455000e+03
+u_R = -2.099965332358479e+03
+v_L = 0.000000000000000e+00
+v_R = -3.696289062500000e-01
+rho_L = 8.929999960564721e+03
+rho_R = 8.930000033266842e+03
+p_L = 9.939738566589355e+04
+p_R = 1.005083538513184e+05
+ge11_L = 9.999999955839552e-01
+ge11_R = 1.000000003725290e+00
+ge21_L = 1.760166692016747e-04
+ge21_R = 0.000000000000000e+00
+
+plastic = .false.       ! Logical to turn on plasticity
+mu  = 3.938e10       ! Shear modulus 
+rho_0 = 8930.0d0       ! No deformation density
+ge22_L   = 1.0d0
+ge22_R   = 1.0d0
+Rgas     = 1.D0           ! Gas constant
+yield = 1.0e20        ! Yield strength of material
+explPlast  = .false.        ! Logical to switch between explicit (T) and implicit (F) plastic update
+tau_0      = 1d-14
+thick    = 0.001d
+melt_t  = 4.52D0  !1.0E32     !melt temperature
+melt_c  = 0.0 !0.21D0       !melt model coef
+kos_b = 0.0D0
+kos_t = 0.0D0
+kos_h = 0.0D0
+kos_g = 0.0D0
+kos_m = 0.0D0
+kos_q = 0.0D0
+kos_f = 0.0D0
+kos_alpha = 1.0D0
+kos_beta  = 0.20D0
+kos_e  = 0.0D0
+kos_sh      = 2 !1 ! 1 g^t-g^e; 2 g^p-g^e; 3 pe
+eta_det_ge  = 0.5  !0.5  !0.5!0.16667!0.1!0.001!0.01	       !density correction factor in g equations
+eta_det_gp  = 0.5  !0.5  !1.0D-10!1.0D-10 !0.001 41
+eta_det_gt  = 0.5 !0.25 !1.0D-2!0.01
+diff_c_ge   = 0.00!0.25      !curl diffusion factor in g equations
+diff_c_gp   = 0.00!0.25
+diff_c_gt   = 0.00!0.25
+interface_init = 5.0d-1
+/
