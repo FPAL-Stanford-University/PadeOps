@@ -14,9 +14,10 @@ module Efield_mod
         real(rkind), dimension(3) :: delta
         real(rkind), dimension(2) :: xRange, yRange, zRange  
         contains 
-        procedure :: init
-        procedure :: AggDown    
-        procedure :: destroy 
+          procedure :: init
+          procedure :: AggDown    
+          procedure :: destroy
+          procedure :: getMeshSize 
     end type 
 
 contains 
@@ -98,5 +99,14 @@ subroutine destroy(this)
         deallocate(this%interpToFinerLevel)
     end if 
 end subroutine 
+
+subroutine getMeshSize(this,Nmesh)
+    class(Efield), intent(inout) :: this
+    integer, dimension(3), intent(out) :: Nmesh
+
+    Nmesh(1) = this%gp%xsz(1)
+    Nmesh(2) = this%gp%ysz(2)
+    Nmesh(3) = this%gp%zsz(3)
+end subroutine
 
 end module 

@@ -2,6 +2,7 @@ module GaborModeMod
     use constants
     use kind_parameters, only: rkind, clen
     use fortran_assert, only: assert
+    use decomp_2d
     
     implicit none 
     logical :: useStrain = .true.
@@ -31,7 +32,7 @@ contains
         class(gaborMode), intent(inout) :: this
         complex(kind=8), intent(in) :: uhat, vhat, what
         real(rkind), intent(in) :: x, y, z, kx, ky, kz
-        real(rkind), intent(in), optional :: wSupport 
+        real(rkind), intent(in) :: wSupport 
 
         this%uhatR = real(uhat, kind=rkind)
         this%uhatI = dimag(uhat)
@@ -50,11 +51,7 @@ contains
         this%ky = ky
         this%kz = kz
 
-        if (present(wSupport)) then
-            this%wSupport = wSupport 
-        else
-            this%wSupport = 1.d0 ! temporary  
-        end if 
+        this%wSupport = wSupport 
     end subroutine
     
     subroutine evolve(this, ules, vles, wles, dudx, dudy, dudz, dvdx, dvdy, &
@@ -103,19 +100,13 @@ contains
         ymax = min(this%y + half*this%wSupport, yRange(2))
         zmax = min(this%z + half*this%wSupport, zRange(2))
        
-        !xst = floor(((xmin - xRange(1)))/delta(1)) + 1 
-        !yst = floor(((ymin - yRange(1)))/delta(2)) + 1 
-        !zst = floor(((zmin - zRange(1)))/delta(3)) + 1 
-        xst = nint(((xmin - xRange(1)))/delta(1)) + 1 
-        yst = nint(((ymin - yRange(1)))/delta(2)) + 1 
-        zst = nint(((zmin - zRange(1)))/delta(3)) + 1 
+        xst = ceiling(((xmin - xRange(1)))/delta(1)) + 1 
+        yst = ceiling(((ymin - yRange(1)))/delta(2)) + 1 
+        zst = ceiling(((zmin - zRange(1)))/delta(3)) + 1 
         
-        !xen = floor(((xmax - xRange(1)))/delta(1)) + 1 
-        !yen = floor(((ymax - yRange(1)))/delta(2)) + 1 
-        !zen = floor(((zmax - zRange(1)))/delta(3)) + 1 
-        xen = nint(((xmax - xRange(1)))/delta(1)) + 1 
-        yen = nint(((ymax - yRange(1)))/delta(2)) + 1 
-        zen = nint(((zmax - zRange(1)))/delta(3)) + 1 
+        xen = floor(((xmax - xRange(1)))/delta(1)) + 1 
+        yen = floor(((ymax - yRange(1)))/delta(2)) + 1 
+        zen = floor(((zmax - zRange(1)))/delta(3)) + 1 
 
         Lw = real(pi/this%wSupport ,kind=4)
 
