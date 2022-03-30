@@ -161,6 +161,7 @@ module SolidGrid
             procedure, private :: get_conserved
             procedure, private :: get_conserved_g
             procedure, private :: post_bc
+            procedure, private :: post_bc_2
             procedure, private :: getRHS
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
@@ -1074,7 +1075,9 @@ contains
                !call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T, isub)
 
                ! do i=1,2
-                  call this%mix%equilibratePressureTemperature_new(this%rho, this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
+
+               !    call this%mix%equilibrateTemperature(this%rho, this%e, this%p, this%T, isub, RK45_steps) 
+                    call this%mix%equilibratePressureTemperature_new(this%rho, this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
                !    call this%mix%get_pmix(this%p)                         ! Get mixture pressure
                !    call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
                ! enddo
@@ -1100,7 +1103,12 @@ contains
 
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
+            
+            if(this%pEqb) then
+            call this%post_bc_2()
+            else
             call this%post_bc()
+            endif
             !print *, nrank, 12
         end do
 
@@ -1386,6 +1394,25 @@ contains
         ! materials equals e
         call this%mix%get_emix(this%e)
        
+    end subroutine
+
+    subroutine post_bc_2(this)
+        class(sgrid), intent(inout) :: this
+
+        if(this%useOneG) then
+            call this%mix%get_mixture_properties()
+        endif
+        call this%mix%get_eelastic_devstress(this%devstress)   ! Get specieselastic energies, and mixture and species devstress
+        ! Get specieshydrodynamic energy, temperature; and mixture pressure, temperature
+        call this%mix%get_pmix(this%p)                         ! Get mixturepressure
+        call this%mix%get_Tmix(this%T)                         ! Get mixturetemperature
+        call this%mix%getSOS(this%rho,this%p,this%sos)
+!print *, 'SOS: ', this%sos(179,1,1)
+        ! assuming pressures have relaxed and sum( (Ys*(ehydro + eelastic) )
+        ! over all
+        ! materials equals e
+        call this%mix%get_emix(this%e)
+
     end subroutine
 
     subroutine getRHS(this, rhs, divu, viscwork)
