@@ -101,6 +101,8 @@ module SolidGrid
         logical :: intSharp_flt                    ! Use dealliasing filter for interface sharpening derivatives
         logical :: intSharp_flp                    ! Filter pressure
 	
+
+        logical     :: use_sponge
         logical     :: weightedcurvature
 	logical     :: surface_mask
 	logical     :: use_FV               !flag to use FV in surface tension scheme
@@ -116,7 +118,8 @@ module SolidGrid
 
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
-       
+        real(rkind), dimension(:,:,:,:), allocatable :: sponge     
+
         real(rkind), dimension(:,:,:), pointer :: x 
         real(rkind), dimension(:,:,:), pointer :: y 
         real(rkind), dimension(:,:,:), pointer :: z 
@@ -146,7 +149,7 @@ module SolidGrid
         real(rkind) :: phys_bulk1, phys_bulk2
         real(rkind) :: phys_kap1, phys_kap2
         real(rkind) :: st_limit
-
+        real(rkind)  :: u1_ref, u2_ref, v1_ref, v2_ref, E1_ref, E2_ref, rh0_1, rh0_2, w1_ref, w2_ref, delta_sponge, Ly
        
         contains
             procedure          :: init
@@ -227,12 +230,13 @@ contains
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-        logical     :: use_surfaceTension = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_FV = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. 
+        logical     :: use_surfaceTension = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_FV = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE., use_sponge = .FALSE. 
         real(rkind) :: surfaceTension_coeff = 0.0d0, R = 1d0, p_amb = 1d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0
         real(rkind) :: phys_bulk1 = 0.0d0, phys_bulk2 =0.0d0
         real(rkind) :: phys_kap1 = 0.0d0, phys_kap2 =0.0d0
+        real(rkind) :: w1_ref = 0, w2_ref = 0, v2_ref = 0, v1_ref = 0, u1_ref = 0, u2_ref = 0, E1_ref = 0, E2_ref = 0, rh0_1 = 0, rh0_2 = 0, Ly = 0, delta_sponge = 0
 
         real(rkind) :: intSharp_gam = 0.0d0, intSharp_eps = 0.0d0, intSharp_cut = 1.0d-2, intSharp_dif = 1.0d1, intSharp_tnh = 1.0D-2, intSharp_pfloor = 0.0D0, intSharp_tfloor = 0.0D0
 
@@ -253,8 +257,7 @@ contains
                            PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
-                           use_surfaceTension, use_gradphi, use_gradVF, use_FV, surface_mask, weightedcurvature, surfaceTension_coeff, R, p_amb
-
+                           use_surfaceTension, use_gradphi, use_gradVF, use_FV,surface_mask, weightedcurvature, surfaceTension_coeff, R, p_amb, v2_ref,  Ly, delta_sponge,  use_sponge, u1_ref, w1_ref, v1_ref, rh0_1, rh0_2, E1_ref, E2_ref, u1_ref, u2_ref, w2_ref
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
         read(unit=ioUnit, NML=INPUT)
@@ -322,6 +325,22 @@ contains
         this%surfaceTension_coeff = surfaceTension_coeff
         this%R                    = R
         this%p_amb                = p_amb
+
+        this%Ly = Ly
+        this%use_sponge = use_sponge
+        this%u1_ref = u1_ref
+        this%u2_ref = u2_ref
+        this%v1_ref = v1_ref
+        this%v2_ref = v2_ref
+        this%w1_ref = w1_ref
+        this%w2_ref = w2_ref
+        this%rh0_1  = rh0_1
+        this%rh0_2  = rh0_2
+        this%E1_ref = E1_ref
+        this%E2_ref = E2_ref
+        this%delta_sponge = delta_sponge
+
+
         itmp(1:3) = 0; if(this%PTeqb) itmp(1) = 1; if(this%pEqb) itmp(2) = 1; if(this%pRelax) itmp(3) = 1; 
 
         if(sum(itmp) .ne. 1) then
@@ -413,6 +432,11 @@ contains
                       derivative_x,  derivative_y,   derivative_z, &
                            .false.,       .false.,        .false., &
                            .false.)      
+
+
+        !Allocate Sponge
+        if ( allocated(this%sponge) ) deallocate(this%sponge)
+        allocate(this%sponge(this%nxp, this%nyp, this%nzp,4))
 
 
         ! Allocate derD02
@@ -1557,6 +1581,33 @@ contains
             rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%mix%surfaceTension_e
         endif
 
+        if (this%use_sponge) then
+
+            where ( this%x .LE. this%delta_sponge)
+               this%sponge(:,:,:,1) = ((this%delta_sponge-this%x)**3)*(this%rh0_1*this%u1_ref - this%rho*this%u)
+               this%sponge(:,:,:,2) = ((this%delta_sponge-this%x)**3)*(this%rh0_1*this%v1_ref - this%rho*this%v)
+               this%sponge(:,:,:,3) = ((this%delta_sponge-this%x)**3)*(this%rh0_1*this%w1_ref -this%rho*this%w)
+               this%sponge(:,:,:,4) = ((this%delta_sponge-this%x)**3)*(this%E1_ref - this%e)
+            elsewhere ( this%x .GE. (this%Ly-this%delta_sponge))
+               this%sponge(:,:,:,1) = this%sponge(:,:,:,1) +((this%delta_sponge+this%x-this%Ly)**3)*(this%rh0_2*this%u2_ref - this%rho*this%u)
+               this%sponge(:,:,:,2) = this%sponge(:,:,:,2) +((this%delta_sponge+this%x-this%Ly)**3)*(this%rh0_2*this%v2_ref - this%rho*this%v)
+               this%sponge(:,:,:,3) = this%sponge(:,:,:,3) +((this%delta_sponge+this%x-this%Ly)**3)*(this%rh0_2*this%w2_ref - this%rho*this%w)
+               this%sponge(:,:,:,4) = this%sponge(:,:,:,1) +((this%delta_sponge+this%x-this%Ly)**3)*(this%E2_ref - this%e)
+            elsewhere
+               this%sponge(:,:,:,1) = 0
+               this%sponge(:,:,:,2) = 0
+               this%sponge(:,:,:,3) = 0
+               this%sponge(:,:,:, 4) = 0
+            endwhere
+
+            rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + this%sponge(:,:,:,1)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + this%sponge(:,:,:,2)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + this%sponge(:,:,:,3)
+            rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%sponge(:,:,:,4)
+
+        endif
+
+
         ! Call problem source hook
         call hook_mixture_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
  
@@ -1884,4 +1935,5 @@ contains
         ! Done
     end subroutine
 
+    
 end module 
