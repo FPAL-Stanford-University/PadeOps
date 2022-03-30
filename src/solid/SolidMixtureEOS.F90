@@ -551,29 +551,39 @@ stop
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix, rhom, tmp
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix,rhom, rhom2, rhom1,denom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rho1gambyone, rho2gambyone, diffPInf,  tmp
 
         integer :: imat, i,j,k,a(3)
-        real(rkind) :: gamfac
+        real(rkind) :: gamfac, eps = 1D-16, minVF = 1D-6
 
         ! print *, '---'
         ! subtract elastic energy to determine hydrostatic energy. Temperature
         ! is assumed a function of only hydrostatic energy. Not sure if this is
         ! correct.
         ehmix = mixE
-        tmp = zero
-        do imat = 1, this%ns
-            ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+        !ehmix = ehmix*mixRho
+        !tmp = zero
+        !do imat = 1, this%ns
+        
+      
+         !   ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
 
-            gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
-            call this%material(imat)%getSpeciesDensity(mixRho,rhom)
+          !  gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
+          !  call this%material(imat)%getSpeciesDensity(mixRho,rhom)
+      
+          !  where( this%material(imat)%VF .gt. minVF)      
+          !       ehmix = ehmix - gamfac*this%material(imat)%VF
+           !ehmix = ehmix - gamfac*this%material(imat)%VF/mixRho
+           !  tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%Ys/rhom
+          !       tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
+          !  elsewhere
+          !       ehmix = ehmix - gamfac*eps
+          !       tmp = tmp + this%material(imat)%hydro%onebygam_m1*eps
+          !  endwhere
             
-            ! ehmix = ehmix - gamfac*this%material(imat)%Ys/rhom
-            ehmix = ehmix - gamfac*this%material(imat)%VF/mixRho
-            ! tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%Ys/rhom
-            tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF/mixRho
 
-            !do k=1,this%nzp
+!do k=1,this%nzp
             !    do j = 1,this%nyp
             !        do i = 1,this%nxp
             !            if ( this%material(imat)%Ys(i,j,k) * this%material(imat)%VF(i,j,k) < zero ) then
@@ -586,7 +596,7 @@ stop
             !    end do
             !end do
 
-        enddo
+       ! enddo
 
          mixP = ehmix/tmp
 
@@ -612,10 +622,45 @@ stop
          !    print *, "  loc: ", minloc(mixP)
          !end if
 
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         !! Zoe's scheme for 2 species!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+         !! Retrieve material densities
+         call this%material(1)%getSpeciesDensity(mixRho,rhom1)
+         call this%material(2)%getSpeciesDensity(mixRho,rhom2)
+    
+         rho2gambyone = rhom2*(this%material(2)%hydro%gam -1)
+         rho1gambyone = rhom1*(this%material(1)%hydro%gam -1)
+ 
+         denom = this%material(1)%Ys*rho2gambyone + this%material(2)%Ys*rho1gambyone
+            
+         diffPInf = this%material(1)%hydro%gam*this%material(1)%hydro%PInf - this%material(2)%hydro%gam*this%material(2)%hydro%PInf
+
+         !! Solve for species energys (these formulas are from Conservation of
+         !Energy where emix = summation Yi*eh_i & from isobaric assumption p1 = p2 = ei*rho_i*(gam_i-1)
+         where(this%material(2)%Ys .gt. eps)
+         this%material(1)%eh = (rho2gambyone*ehmix +  diffPInf*this%material(2)%Ys)/denom
+         elsewhere
+         this%material(1)%eh =(rho2gambyone*ehmix)/denom
+         endwhere
+     
+         where(this%material(1)%Ys .gt. eps)
+         this%material(2)%eh = (rho1gambyone*ehmix -diffPInf*this%material(1)%Ys)/denom
+         elsewhere
+         this%material(2)%eh =(rho1gambyone*ehmix)/denom
+         endwhere
+
+      
+         mixP = this%material(2)%eh*rhom2*(this%material(2)%hydro%gam -1)-this%material(2)%hydro%gam*this%material(2)%hydro%PInf
          do imat = 1, this%ns
              this%material(imat)%p = mixP
-             call this%material(imat)%get_ehydroT_from_p(mixRho)
+        !     call this%material(imat)%get_ehydroT_from_p(mixRho)
          end do
+
+         call this%material(1)%hydro%get_T(this%material(1)%eh,this%material(1)%T, rhom1)
+         call this%material(2)%hydro%get_T(this%material(2)%eh,this%material(2)%T, rhom2)
 
     end subroutine
 
@@ -632,7 +677,7 @@ stop
         ! real(rkind), dimension(:), pointer :: vf, psph, pinf
 
         integer :: i,j,k,imat,icount
-        real(rkind) :: maxp, peqb,rhomin,pmin,pmax !, pest, pdiffmax
+        real(rkind) :: maxp, peqb,rhomin,pmin,pmax, minVF = 1d-6 !, pest, pdiffmax
         
         ! rhomin = 1.0/eps
         ! pmin = 1.0/eps
@@ -2684,7 +2729,11 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 	if (this%use_gradVF) then
 
+<<<<<<< HEAD
 		call gradient(this%decomp,this%der,phi_normal,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+=======
+		call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+>>>>>>> aa6e386a97a0c985e7576e2db8bb3eb47a4e6dfa
 	
 		 !calculate surface normal
            
@@ -2825,7 +2874,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
             this%buffer_send_1 = this%material(1)%VF(1:1,:,:);
             call  MPI_Issend(this%buffer_send_1,this%nyp, MPI_real, this%mpi_rank_prev, 2, MPI_Comm_world, this%MPI_req(5), this%ierror)
 
-            this%buffer_send_2 = this%material(2)%VF(this%nxp:this%nxp,:, :);
+            this%buffer_send_2 = this%material(1)%VF(this%nxp:this%nxp,:, :);
             call  MPI_Issend(this%buffer_send_2,this%nyp, MPI_real, this%mpi_rank_next, 1, MPI_Comm_world, this%MPI_req(6), this%ierror)
 
             this%buffer_send_k_1 = this%kappa(1:1,:,:);
@@ -2980,6 +3029,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
 	this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
 
+        
     end subroutine get_surfaceTension
 
     subroutine interpolateFV(this,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
