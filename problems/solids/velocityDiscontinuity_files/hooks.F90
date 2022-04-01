@@ -21,7 +21,7 @@ module velocityDiscontinuity_data
     real(rkind) :: rho_0 = one, tau_0 = 1d-10, u_L = 0d0, u_R = 0d0, v_L = 0d0, v_R =0d0
     real(rkind) :: rho_L =one, rho_R = one, p_L = one, p_R = one
     real(rkind) :: ge11_L=one, ge11_R=one, ge22_L=one, ge22_R=one
-    real(rkind) :: ge21_L=zero, ge21_R=zero
+    real(rkind) :: ge21_L=zero, ge21_R=zero, ge12_L=zero, ge12_R=zero
     real(rkind) :: gp11_L=one, gp11_R=one, gp22_L=one, gp22_R=one
 
     real(rkind) :: interface_init = 0.5, thick=0.01
@@ -212,6 +212,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp_01, dum
     real(rkind) :: a_L, g11_L, g12_L, g13_L, g21_L, g22_L, g23_L, g31_L, g32_L, g33_L, detg_L, detgp_L
     real(rkind) :: a_R, g11_R, g12_R, g13_R, g21_R, g22_R, g23_R, g31_R, g32_R, g33_R, detg_R, detgp_R
+    real(rkind) ::             gp12_L, gp13_L, gp21_L,     gp23_L, gp31_L, gp32_L, gp33_L
+    real(rkind) ::             gp12_R, gp13_R, gp21_R,     gp23_R, gp31_R, gp32_R, gp33_R
 
     integer :: nx,ny,nz
     nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
@@ -220,7 +222,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                           plastic, explPlast, yield, &
                           interface_init, thick, &
                           p_L, p_R, rho_L, rho_R, ge11_L, ge22_L, ge11_R, ge22_R, & 
-                          u_L, U_R, v_L, v_R, ge21_L, ge21_R, gp11_L, gp11_R, gp22_L, gp22_R, &
+                          u_L, U_R, v_L, v_R, ge21_L, ge21_R, ge12_L, ge12_R, gp11_L, gp11_R, gp22_L, gp22_R, &
                           melt_t, melt_c, kos_b, kos_t, kos_h, kos_g, kos_m, &
                           kos_q, kos_f, kos_alpha, kos_beta, kos_e, kos_sh, &    
                           eta_det_ge, eta_det_gp, eta_det_gt, diff_c_ge, &
@@ -276,22 +278,38 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         w   = zero
 
         !Set gij tensor
-        g11_L = ge11_L;  g12_L = zero;   g13_L = zero
+        g11_L = ge11_L;  g12_L = ge12_L; g13_L = zero
         g21_L = ge21_L;  g22_L = ge22_L; g23_L = zero
-        g31_L = zero;    g32_L = zero;   g33_L = ge22_L
+        g31_L = zero;    g32_L = zero;  
         
-        g11_R = ge11_R;  g12_R = zero;   g13_R = zero
+        g11_R = ge11_R;  g12_R = ge12_R;   g13_R = zero
         g21_R = ge21_R;  g22_R = ge22_R; g23_R = zero
-        g31_R = zero;    g32_R = zero;   g33_R = ge22_R
+        g31_R = zero;    g32_R = zero;  
+
+        !Set gij tensor
+        gp11_L = gp11_L;  gp12_L = zero;   gp13_L = zero
+        gp21_L = zero;    gp22_L = gp22_L; gp23_L = zero
+        gp31_L = zero;    gp32_L = zero;  
+        
+        gp11_R = gp11_R;  gp12_R = zero;   gp13_R = zero
+        gp21_R = zero;    gp22_R = gp22_R; gp23_R = zero
+        gp31_R = zero;    gp32_R = zero;  
+
 
         !set mixture pressure
         mix%material(1)%p = ( p_R - p_L ) * tmp_01 + p_L
         
-        ! Make rho compatible with det(g) and rho0
+        ! Make rho compatible with det(g) and rho0 by adjusting ge33 and gp33
+        g33_L = (rho_L/rho_0 - g13_L*(g21_L*g32_L-g31_L*g22_L) + (g11_L*g23_L*g32_L - g12_L*g31_L*g23_L)) / (g11_L*g22_L - g12_L*g21_L)
+        g33_R = (rho_R/rho_0 - g13_R*(g21_R*g32_R-g31_R*g22_R) + (g11_R*g23_R*g32_R - g12_R*g31_R*g23_R)) / (g11_R*g22_R - g12_R*g21_R)
+
+        gp33_L = (1.0d0 - gp13_L*(gp21_L*gp32_L-gp31_L*gp22_L) + (gp11_L*gp23_L*gp32_L - gp12_L*gp31_L*gp23_L)) / (gp11_L*gp22_L - gp12_L*gp21_L)
+        gp33_R = (1.0d0 - gp13_R*(gp21_R*gp32_R-gp31_R*gp22_R) + (gp11_R*gp23_R*gp32_R - gp12_R*gp31_R*gp23_R)) / (gp11_R*gp22_R - gp12_R*gp21_R)
+
         detg_L  = g11_L*(g22_L*g33_L-g23_L*g32_L) - g12_L*(g21_L*g33_L-g31_L*g23_L) + g13_L*(g21_L*g32_L-g31_L*g22_L)
         detg_R  = g11_R*(g22_R*g33_R-g23_R*g32_R) - g12_R*(g21_R*g33_R-g31_R*g23_R) + g13_R*(g21_R*g32_R-g31_R*g22_R)
-        detgp_L = gp11_L*gp22_L*gp22_L
-        detgp_R = gp11_R*gp22_R*gp22_R
+        detgp_L  = gp11_L*(gp22_L*gp33_L-gp23_L*gp32_L) - gp12_L*(gp21_L*gp33_L-gp31_L*gp23_L) + gp13_L*(gp21_L*gp32_L-gp31_L*gp22_L)
+        detgp_R  = gp11_R*(gp22_R*gp33_R-gp23_R*gp32_R) - gp12_R*(gp21_R*gp33_R-gp31_R*gp23_R) + gp13_R*(gp21_R*gp32_R-gp31_R*gp22_R)
 
         if (abs(rho_0 * detg_L - rho_L) > 1.0d-6 ) then
             print *, 'rho_L = ', rho_L, ', det_L = ', rho_0*detg_L
