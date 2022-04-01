@@ -2,6 +2,8 @@
 SetupEnv.sh
 build*
 *.mod
+*.vts
+*.pvts
 *.F90.swp
 *.F90~
 dependencies/*[^gz]
