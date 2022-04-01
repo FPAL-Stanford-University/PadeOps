@@ -29,7 +29,7 @@ module LADMod
 
         integer :: nfils
         integer :: g_LAD_id, gp_LAD_id, gt_LAD_id, beta_LAD_id 
-        real(rkind) :: dx, dy, dz
+        real(rkind) :: dx, dy, dz, gridLen
 
         logical :: use_gTg
 
@@ -48,13 +48,13 @@ module LADMod
 
 contains
 
-    subroutine init(this,decomp,der,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,g_LAD_id,gp_LAD_id,gt_LAD_id, beta_LAD_id)
+    subroutine init(this,decomp,der,fil,nfils,dx,dy,dz,gridLen,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,g_LAD_id,gp_LAD_id,gt_LAD_id, beta_LAD_id)
         class(ladobject),        intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
         type(filters),     target, intent(in) :: fil
         integer,           intent(in) :: nfils
-        real(rkind),       intent(in) :: Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,dx,dy,dz    
+        real(rkind),       intent(in) :: Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,dx,dy,dz,gridLen    
         integer, intent(in)           :: g_LAD_id, gp_LAD_id, gt_LAD_id, beta_LAD_id
 
         ! Set all coefficients
@@ -88,6 +88,7 @@ contains
         this%dx = dx
         this%dy = dy
         this%dz = dz
+        this%gridLen = gridLen
     end subroutine
 
 
@@ -197,7 +198,7 @@ contains
 
         ! original
         ! Calculate the switching function
-        ytmp1 = ytmp2 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+        ytmp1 = ytmp2 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)*(sos/this%gridLen)**2 ) ! Switching function f_sw, with correct dimensions for epsilon
         SELECT CASE(this%beta_LAD_id)
             CASE(1)       !modified switching function to target tension as well
                 CONTINUE
@@ -655,27 +656,27 @@ contains
 
         SELECT CASE(this%g_LAD_id)
             CASE(1)        !switching function, using sos as timescale     
-                g_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+                g_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ! Switching function f_sw
             CASE(2)        !switching function, using strain rate as timescale     
-                g_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+                g_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ! Switching function f_sw
             CASE DEFAULT  !no switching function, using sos as timescale
                 g_switch  = one
         ENDSELECT
 
         SELECT CASE(this%gt_LAD_id)
             CASE(1)
-                gt_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+                gt_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ! Switching function f_sw
             CASE(2)
-                gt_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+                gt_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ! Switching function f_sw
             CASE DEFAULT    
                 gt_switch = one
         ENDSELECT
 
         SELECT CASE(this%gp_LAD_id)
             CASE(1)
-                gp_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+                gp_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ! Switching function f_sw
             CASE(2)
-                gp_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)) ! Switching function f_sw
+                gp_switch = ytmp4 / (ytmp2 + ytmp4 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ! Switching function f_sw
             CASE DEFAULT    
                 gp_switch = one
         ENDSELECT
@@ -705,11 +706,11 @@ contains
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         SELECT CASE(this%g_LAD_id)
             CASE(1)        !switching function, using sos as timescale     
-                diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+                diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) ! Add eps in case den=0
             CASE(2)        !switching function, using strain rate as timescale     
-                diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2  ! Add eps in case den=0
+                diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) )**2  ! Add eps in case den=0
             CASE DEFAULT  !no switching function, using sos as timescale
-                diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+                diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) ! Add eps in case den=0
         ENDSELECT
 
         ! Step 3: Get 4th derivative in Z
@@ -720,11 +721,11 @@ contains
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         SELECT CASE(this%g_LAD_id)
             CASE(1)        !switching function, using sos as timescale     
-                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
             CASE(2)        !switching function, using strain rate as timescale     
-                diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+                diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) )**2 
             CASE DEFAULT  !no switching function, using sos as timescale
-                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
         ENDSELECT
 
         ! Step 4: Get 4th derivative in Y
@@ -733,11 +734,11 @@ contains
         ytmp4 = ytmp5*this%dy**4
         SELECT CASE(this%g_LAD_id)
             CASE(1)        !switching function, using sos as timescale     
-                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
             CASE(2)        !switching function, using strain rate as timescale     
-                diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+                diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) )**2 
             CASE DEFAULT  !no switching function, using sos as timescale
-                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
         ENDSELECT
 
         diffstar_g = this%Cdiff_g*g_switch*abs(diffstar_g)
@@ -773,11 +774,11 @@ contains
            call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
            SELECT CASE(this%gt_LAD_id)
                CASE(1)        !switching function, using sos as timescale     
-                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) ! Add eps in case den=0
                CASE(2)        !switching function, using strain rate as timescale     
-                   diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2  ! Add eps in case den=0
+                   diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) )**2  ! Add eps in case den=0
                CASE DEFAULT  !no switching function, using sos as timescale
-                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) ! Add eps in case den=0
            ENDSELECT
 
            ! Step 3: Get 4th derivative in Z
@@ -788,11 +789,11 @@ contains
            call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
            SELECT CASE(this%gt_LAD_id)
                CASE(1)        !switching function, using sos as timescale     
-                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
                CASE(2)        !switching function, using strain rate as timescale     
-                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) )**2 
                CASE DEFAULT  !no switching function, using sos as timescale
-                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
            ENDSELECT
 
            ! Step 4: Get 4th derivative in Y
@@ -801,11 +802,11 @@ contains
            ytmp4 = ytmp5*this%dy**4
            SELECT CASE(this%gt_LAD_id)
                CASE(1)        !switching function, using sos as timescale     
-                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
                CASE(2)        !switching function, using strain rate as timescale     
-                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) )**2 
                CASE DEFAULT  !no switching function, using sos as timescale
-                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
            ENDSELECT
 
            diffstar_g = this%Cdiff_gt*gt_switch*abs(diffstar_g)
@@ -848,11 +849,11 @@ contains
            call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
            SELECT CASE(this%gp_LAD_id)
                CASE(1)        !switching function, using sos as timescale     
-                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) ! Add eps in case den=0
                CASE(2)        !switching function, using strain rate as timescale     
-                   diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2  ! Add eps in case den=0
+                   diffstar_g =   S *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) )**2  ! Add eps in case den=0
                CASE DEFAULT  !no switching function, using sos as timescale
-                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case den=0
+                   diffstar_g = sos *  ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) ! Add eps in case den=0
            ENDSELECT
 
            ! Step 3: Get 4th derivative in Z
@@ -863,11 +864,11 @@ contains
            call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
            SELECT CASE(this%gp_LAD_id)
                CASE(1)        !switching function, using sos as timescale     
-                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
                CASE(2)        !switching function, using strain rate as timescale     
-                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) )**2 
                CASE DEFAULT  !no switching function, using sos as timescale
-                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
            ENDSELECT
 
            ! Step 4: Get 4th derivative in Y
@@ -876,11 +877,11 @@ contains
            ytmp4 = ytmp5*this%dy**4
            SELECT CASE(this%gp_LAD_id)
                CASE(1)        !switching function, using sos as timescale     
-                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
                CASE(2)        !switching function, using strain rate as timescale     
-                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2 
+                   diffstar_g = diffstar_g +   S * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) )**2 
                CASE DEFAULT  !no switching function, using sos as timescale
-                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) 
+                   diffstar_g = diffstar_g + sos * ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)*(sos/this%gridLen)**2) ) 
            ENDSELECT
 
            diffstar_g = this%Cdiff_gp*gp_switch*abs(diffstar_g)

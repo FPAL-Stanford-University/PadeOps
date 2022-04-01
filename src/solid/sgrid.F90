@@ -143,6 +143,8 @@ module SolidGrid
         real(rkind) :: phys_kap1, phys_kap2
         real(rkind) :: st_limit
 
+        real(rkind) :: gridLen 
+
        
         contains
             procedure          :: init
@@ -230,6 +232,7 @@ contains
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0
         real(rkind) :: phys_bulk1 = 0.0d0, phys_bulk2 =0.0d0
         real(rkind) :: phys_kap1 = 0.0d0, phys_kap2 =0.0d0
+        real(rkind) :: d1, d2, d3
 
         real(rkind) :: intSharp_gam = 0.0d0, intSharp_eps = 0.0d0, intSharp_cut = 1.0d-2, intSharp_dif = 1.0d1, intSharp_tnh = 1.0D-2, intSharp_pfloor = 0.0D0, intSharp_tfloor = 0.0D0
 
@@ -393,6 +396,28 @@ contains
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
 
+        !TODO: complete this correctly:
+        !Compute minimum grid length
+        select case (nx)
+            case(1)
+                d1 = max(this%dy,this%dz) 
+            case default                        
+                d1 = this%dx      
+        endselect
+        select case (ny)
+            case(1)
+                d2 = max(this%dx,this%dy) 
+            case default                        
+                d2 = this%dy      
+        endselect
+        select case (nz)
+            case(1)
+                d3 = max(this%dx,this%dy) 
+            case default                        
+                d3 = this%dz      
+        endselect
+        this%gridLen = min(d1,d2,d3)
+
         ! Allocate der
         if ( allocated(this%der) ) deallocate(this%der)
         allocate(this%der)
@@ -462,7 +487,7 @@ contains
         allocate(this%LAD)
         !call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,Cmu,Ckap,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
         !call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
-        call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,g_LAD_id,gp_LAD_id,gt_LAD_id,beta_LAD_id)
+        call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,this%gridLen,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,g_LAD_id,gp_LAD_id,gt_LAD_id,beta_LAD_id)
 
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
