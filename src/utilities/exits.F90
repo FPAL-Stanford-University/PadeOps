@@ -26,11 +26,16 @@ module exits
 contains
 
     subroutine GracefulExit(message, errcode)
-        
+        use mpi, only: MPI_COMM_WORLD, MPI_Barrier, MPI_Abort 
         character(len=*), intent(in) :: message
         integer, intent(in) :: errcode
-
-        call decomp_2d_abort(errcode, message)
+        integer :: ierr
+        if (nrank == 0) then
+          print*, trim(message)
+        end if
+        call MPI_Barrier(MPI_COMM_WORLD,ierr)
+        call MPI_Abort(MPI_COMM_WORLD,errcode,ierr)
+        !call decomp_2d_abort(errcode, message)
     
     end subroutine
 

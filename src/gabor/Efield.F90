@@ -22,13 +22,12 @@ module Efield_mod
 
 contains 
 
-subroutine init(this, gp)
-    use domainSetup, only: xDom, yDom, zDom
+subroutine init(this, gp, xDom, yDom, zDom)
     ! External module parameters:
     !     xDom, yDom, zDom  --> bounds of domain, dimension(2)
-    
     class(Efield), intent(inout) :: this 
     type(decomp_info), intent(in), target :: gp 
+    real(rkind), dimension(2), intent(in) :: xDom, yDom, zDom
     real(rkind), dimension(:), allocatable :: x, y, z, xFine, yFine, zFine
     integer :: nx, ny, nz
     real(rkind), parameter :: small = 1.d-13 

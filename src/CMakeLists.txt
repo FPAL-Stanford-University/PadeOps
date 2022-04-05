@@ -65,7 +65,7 @@ endif()
 
 # Create a library called GaborOps
 add_library(GaborOps STATIC ${grid_source_files} ${poisson_source_files} ${incompressible_source_files} ${gabor_source_files})
-target_link_libraries(GaborOps IncompressibleOps PadeOps ${MPI_LIBRARIES})
+target_link_libraries(GaborOps PUBLIC IncompressibleOps PadeOps ${MPI_LIBRARIES})
 
 if (MPI_Fortran_COMPILER_FLAGS)
     set_target_properties(GaborOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")
