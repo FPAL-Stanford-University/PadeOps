@@ -13,7 +13,7 @@ module GaborModeMod
     type :: gaborMode 
         !private   
         real(rkind) :: uhatR, uhatI, vhatR, vhatI, whatR, whatI, kx, ky, kz, x, y, z
-        real(rkind) :: wSupport
+        real(rkind) :: Wx, Wy, Wz ! Window function support widths
          
         contains 
             procedure          :: init 
@@ -28,11 +28,11 @@ contains
 
 #include "GaborMode_files/timeSteppingStuff.F90"
 
-    subroutine init(this, uhat, vhat, what, x, y, z, kx, ky, kz, wSupport)
+    subroutine init(this, uhat, vhat, what, x, y, z, kx, ky, kz, Wx, Wy, Wz)
         class(gaborMode), intent(inout) :: this
         complex(kind=8), intent(in) :: uhat, vhat, what
         real(rkind), intent(in) :: x, y, z, kx, ky, kz
-        real(rkind), intent(in) :: wSupport 
+        real(rkind), intent(in) :: Wx, Wy, Wz
 
         this%uhatR = real(uhat, kind=rkind)
         this%uhatI = dimag(uhat)
@@ -51,7 +51,9 @@ contains
         this%ky = ky
         this%kz = kz
 
-        this%wSupport = wSupport 
+        this%Wx = Wx 
+        this%Wy = Wy 
+        this%Wz = Wz 
     end subroutine
     
     subroutine evolve(this, ules, vles, wles, dudx, dudy, dudz, dvdx, dvdy, &
@@ -82,23 +84,30 @@ contains
     end subroutine 
 
     subroutine render(this, u, v, w, xRange, yRange, zRange, delta)
+        ! Compute the real-space velocity contribution from a Gabor Mode
+        ! Inputs:
+        !   u, v, w, --> velocity field arrays. These use global indices
+        !   xRange, yRange, zRange --> The domain bounds for the current MPI rank
+        !   delta --> Grid spacing of the Eulerian mesh
+
         class(gaborMode), intent(in) :: this
         real(rkind), dimension(2), intent(in) :: xRange, yRange, zRange
         real(rkind), dimension(3), intent(in) :: delta  
         real(kind=4), dimension(:,:,:), intent(inout) :: u, v, w
         integer :: xst, xen, yst, yen, zst, zen, i, j, k 
         real(rkind) :: xmin, xmax, ymin, ymax, zmin, zmax 
-        real(kind=4) :: Lw, uhatR, vhatR, whatR, uhatI, vhatI, whatI
+        real(kind=4) :: Lwx, Lwy, Lwz
+        real(kind=4) :: uhatR, vhatR, whatR, uhatI, vhatI, whatI
         real(kind=4) :: kx_sp, ky_sp, kz_sp, kdotx, cs, weight, weight_z, weight_yz
         real(kind=4) :: xshift, yshift, zshift, ss 
       
-        xmin = max(this%x - half*this%wSupport, xRange(1))
-        ymin = max(this%y - half*this%wSupport, yRange(1))
-        zmin = max(this%z - half*this%wSupport, zRange(1))
+        xmin = max(this%x - half*this%Wx, xRange(1))
+        ymin = max(this%y - half*this%Wy, yRange(1))
+        zmin = max(this%z - half*this%Wz, zRange(1))
         
-        xmax = min(this%x + half*this%wSupport, xRange(2))
-        ymax = min(this%y + half*this%wSupport, yRange(2))
-        zmax = min(this%z + half*this%wSupport, zRange(2))
+        xmax = min(this%x + half*this%Wx, xRange(2))
+        ymax = min(this%y + half*this%Wy, yRange(2))
+        zmax = min(this%z + half*this%Wz, zRange(2))
        
         xst = ceiling(((xmin - xRange(1)))/delta(1)) + 1 
         yst = ceiling(((ymin - yRange(1)))/delta(2)) + 1 
@@ -108,7 +117,9 @@ contains
         yen = floor(((ymax - yRange(1)))/delta(2)) + 1 
         zen = floor(((zmax - zRange(1)))/delta(3)) + 1 
 
-        Lw = real(pi/this%wSupport ,kind=4)
+        Lwx = real(pi/this%Wx ,kind=4)
+        Lwy = real(pi/this%Wy ,kind=4)
+        Lwz = real(pi/this%Wz ,kind=4)
 
         uhatR = real(this%uhatR, kind=4)
         vhatR = real(this%vhatR, kind=4)
@@ -125,15 +136,15 @@ contains
         ! Induce velocity 
         do k = zst,zen
             zshift = real( ((k-1)*delta(3) + zRange(1)) - this%z, kind=4 )
-            weight_z = cos(zshift*Lw)
+            weight_z = cos(zshift*Lwz)
 
             do j = yst,yen
                 yshift = real( ((j-1)*delta(2) + yRange(1)) - this%y, kind=4 )
-                weight_yz = cos(yshift*Lw)*weight_z
+                weight_yz = cos(yshift*Lwy)*weight_z
                 
                 do i = xst,xen
                     xshift = real( ((i-1)*delta(1) + xRange(1)) - this%x, kind=4 )
-                    weight = cos(xshift*Lw)*weight_yz 
+                    weight = cos(xshift*Lwx)*weight_yz 
 
                     kdotx = kx_sp*xshift + ky_sp*yshift + kz_sp*zshift 
                     
