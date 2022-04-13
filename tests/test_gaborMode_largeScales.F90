@@ -33,7 +33,6 @@ program test_gaborMode_largeScales
   character(len=2) :: dsetname
   integer :: dset_rank
 
-
   namelist /IO/ datadir
 
   ! Initialize MPI
@@ -53,7 +52,8 @@ program test_gaborMode_largeScales
 
     ! Read full fields
     allocate(Uascii(nxLES,nyLES,nzLES))
-
+    allocate(Vascii(nxLES,nyLES,nzLES))
+    allocate(Wascii(nxLES,nyLES,nzLES))
     
     write(fname,'(A5)')'U.dat'
     call read_1d_ascii(Uascii1,trim(datadir)//'/'//trim(fname))
@@ -90,6 +90,8 @@ program test_gaborMode_largeScales
   ! Initialize derivative object
   call grad%init(gpLES,dxLES,dyLES,dzLES,periodic(1),periodic(2),periodic(3),&
     method_x, method_y, method_z)
+
+  ! Compute velocity gradient
   call grad%ddx(U,gradU(1,1,:,:,:))
   call grad%ddx(V,gradU(2,1,:,:,:))
   call grad%ddx(W,gradU(3,1,:,:,:))
@@ -101,6 +103,20 @@ program test_gaborMode_largeScales
   call grad%ddz(U,gradU(1,3,:,:,:))
   call grad%ddz(V,gradU(2,3,:,:,:))
   call grad%ddz(W,gradU(3,3,:,:,:))
+
+  ! Verify this is the same as MATLAB
+  print*, nrank, jst, kst
+  print*, nrank, "Ux", maxval(abs(gradU(1,1,:,:,:) - gradUascii(1,1,ist:ien,jst:jen,kst:ken)))
+  print*, nrank, "Vx", maxval(abs(gradU(2,1,:,:,:) - gradUascii(2,1,ist:ien,jst:jen,kst:ken)))
+  print*, nrank, "Wx", maxval(abs(gradU(3,1,:,:,:) - gradUascii(3,1,ist:ien,jst:jen,kst:ken)))
+  print*, nrank, "Uy", maxval(abs(gradU(1,1,:,:,:) - gradUascii(1,1,ist:ien,jst:jen,kst:ken)))
+  print*, nrank, "Vy", maxval(abs(gradU(2,1,:,:,:) - gradUascii(2,1,ist:ien,jst:jen,kst:ken)))
+  print*, nrank, "Wy", maxval(abs(gradU(3,1,:,:,:) - gradUascii(3,1,ist:ien,jst:jen,kst:ken)))
+  call MPI_Barrier(MPI_COMM_WORLD,ierr)
+  call assert(maxval(abs(gradU - gradUascii(:,:,ist:ien,jst:jen,kst:ken))) < 1.d-4,'Test FAILED')
+  call MPI_Barrier(MPI_COMM_WORLD,ierr)
+  if (nrank == 0) print*, "Test PASSED!"
+  call MPI_Barrier(MPI_COMM_WORLD,ierr)
 
   ! Free up memory
   deallocate(Uascii,Uascii1,Vascii,Vascii1,Wascii,Wascii1)

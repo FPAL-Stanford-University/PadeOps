@@ -99,7 +99,7 @@ contains
     if (present(communicator)) cart_comm = communicator
 
     ! Setup file access property list with parllel I/O access
-    call h5pcreate_f(H5P_FILE_CREATE_F, plist_id, error) ! 1
+    call h5pcreate_f(H5P_FILE_ACCESS_F, plist_id, error) ! 1
     call assert(error == 0,'Error with h5pcreate_f() in hdf5_fcns.F90')
     call h5pset_fapl_mpio_f(plist_id, cart_comm, MPI_INFO_NULL, error) ! 2
 
