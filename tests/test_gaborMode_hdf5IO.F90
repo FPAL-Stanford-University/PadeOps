@@ -63,11 +63,9 @@ program test_gaborMode_hdf5IO
     call read_1d_ascii(Wascii1,trim(datadir)//'/'//trim(fname))
     Wascii = reshape(Wascii1,[nxLES,nyLES,nzLES])
 
-    !allocate(gradUascii(3,3,nxLES+1,nyLES+1,nzLES+2))
     allocate(gradUascii(3,3,nxLES,nyLES,nzLES))
     write(fname,'(A9)')'gradU.dat'
     call read_1d_ascii(gradUascii1,trim(datadir)//'/'//trim(fname))
-    !gradUascii = reshape(gradUascii1,[3,3,nxLES+1,nyLES+1,nzLES+2])
     gradUascii = reshape(gradUascii1,[3,3,nxLES,nyLES,nzLES])
     
     ! Read partitioned fields
@@ -82,9 +80,9 @@ program test_gaborMode_hdf5IO
     call readLargeScaleData(trim(fname),U,V,W,nxLES,nyLES,nzLES,gpLES)
 
     ! Read in data
-    call assert(maxval(abs(U-Uascii(ist:ien,jst:jen,kst:ken)))<1.d-5,'U diff')
-    call assert(maxval(abs(V-Vascii(ist:ien,jst:jen,kst:ken)))<1.d-5,'V diff')
-    call assert(maxval(abs(W-Wascii(ist:ien,jst:jen,kst:ken)))<1.d-5,'W diff')
+    call assert(maxval(abs(U-Uascii(ist:ien,jst:jen,kst:ken)))<1.d-14,'U diff')
+    call assert(maxval(abs(V-Vascii(ist:ien,jst:jen,kst:ken)))<1.d-14,'V diff')
+    call assert(maxval(abs(W-Wascii(ist:ien,jst:jen,kst:ken)))<1.d-14,'W diff')
     
     memtype = H5T_NATIVE_DOUBLE
     dset_rank = 5
@@ -101,7 +99,7 @@ program test_gaborMode_hdf5IO
     write(fname,'(A)') trim(datadir)//'/'//'LargeScaleGradient.h5'
     call read_h5_chunk_data(block2, chunk_dims2, count2, dimsf2, dsetname2, &
       dset_rank, trim(fname), memtype, offset2, stride2, gradU, MPI_COMM_WORLD)
-    call assert(maxval(abs(gradU-gradUascii(:,:,ist:ien,jst:jen,kst:ken)))<1.d-5,'gradU diff')
+    call assert(maxval(abs(gradU-gradUascii(:,:,ist:ien,jst:jen,kst:ken)))<1.d-14,'gradU diff')
 
     call MPI_Barrier(MPI_COMM_WORLD,ierr)
     if (nrank == 0) print*, "Test PASSED!"
