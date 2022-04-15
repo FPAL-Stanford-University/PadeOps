@@ -369,6 +369,9 @@ contains
             end if 
             this%zmethod = 2 
         case ("four")
+            call message('WARNING: Fourier derivatives in z-direction gave'//&
+              ' unexpected result in test_derivatives_parllel.F90 and has not been'//&
+              ' debugged by the current user.')
             allocate(this%zfour)
             ierr = this % zfour%init( this%zsz(3), "z", this%zsz(1), this%zsz(2), dz)
             if (ierr .ne. 0) then

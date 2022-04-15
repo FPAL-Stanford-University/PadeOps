@@ -10,7 +10,7 @@ program test_gaborMode_largeScales
   use basic_io, only: read_1d_ascii
   use hdf5 
   use hdf5_fcns, only: read_h5_chunk_data
-  use gaborIO_mod, only: readLargeScaleData
+  use gaborIO_mod, only: readVelocityField, writeFields
   use DerivativesMod, only: derivatives
 
   implicit none
@@ -21,38 +21,25 @@ program test_gaborMode_largeScales
   real(rkind), dimension(:), allocatable :: Uascii1, Vascii1, Wascii1
   real(rkind), dimension(:), allocatable :: gradUascii1
   real(rkind), dimension(:,:,:), allocatable :: U, V, W
+  real(rkind), dimension(:,:,:), allocatable :: UinY
+  real(rkind), dimension(:,:,:), allocatable :: UinZ
+  real(rkind), dimension(:,:,:), allocatable :: dUinY, dUinZ
   real(rkind), dimension(:,:,:,:,:), allocatable :: gradU
   character(len=clen) :: fname, datadir, inputfile
-  integer :: ist, ien, jst, jen, kst, ken
+  integer :: ist, ien, jst, jen, kst, ken, isz, jsz, ksz
 
   ! Derivatives
   type(derivatives) :: grad
   character(len=4) :: method_x = 'four'
   character(len=4) :: method_y = 'four'
   character(len=4) :: method_z = 'cd06'
-  
-  ! HDF5 variables
-  integer(HID_T) :: memtype
-  integer(HSIZE_T), dimension(3) :: dimsf, chunk_dims, stride, count1, block, offset
-  character(len=2) :: dsetname
-  integer :: dset_rank
 
   namelist /IO/ datadir
 
   ! Initialize MPI, HDF5, & generate numerical mesh
   call initializeProblem(inputfile)
-  !call initializeExternalLibraries(ierr)
-  !call MPI_Init(ierr)
-
-  ! Initialize HDF5
-  !call H5open_f(ierr)
-
-  ! Get the input file path and file name
-  !call GETARG(1,inputfile)
   
-  ! Setup the domain
-  !call setupDomainXYperiodic(inputfile)
-  call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken)
+  call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
 
   ! Get ground truth from MATLAB
     ! Read inputfile
@@ -84,15 +71,12 @@ program test_gaborMode_largeScales
     gradUascii = reshape(gradUascii1,[3,3,nxLES,nyLES,nzLES])
     
     ! Read partitioned fields
-    allocate(U(ist:ien,jst:jen,kst:ken))
-    allocate(V(ist:ien,jst:jen,kst:ken))
-    allocate(W(ist:ien,jst:jen,kst:ken))
+    allocate(U(isz,jsz,ksz))
+    allocate(V(isz,jsz,ksz))
+    allocate(W(isz,jsz,ksz))
     
     write(fname,'(A)')trim(datadir)//'/'//'LargeScaleVelocity.h5'
-    call readLargeScaleData(trim(fname),U,V,W,nxLES,nyLES,nzLES,gpLES)
-    !U = Uascii(ist:ien,jst:jen,kst:ken) 
-    !V = Vascii(ist:ien,jst:jen,kst:ken) 
-    !W = Wascii(ist:ien,jst:jen,kst:ken)
+    call readVelocityField(trim(fname),U,V,W,gpLES)
 
   ! First, compute velocity gradient
   ! NOTE: gradU is stored as dUidXj = gradU(i,j)
@@ -103,41 +87,63 @@ program test_gaborMode_largeScales
     method_x, method_y, method_z)
 
   ! Compute velocity gradient
+
   call grad%ddx(U,gradU(1,1,:,:,:))
   call grad%ddx(V,gradU(2,1,:,:,:))
   call grad%ddx(W,gradU(3,1,:,:,:))
 
-  call grad%ddy(U,gradU(1,2,:,:,:))
-  call grad%ddy(V,gradU(2,2,:,:,:))
-  call grad%ddy(W,gradU(3,2,:,:,:))
+  ! First allocate memory and transpose arrays to use operators in specified
+  ! direction
+  allocate(UinY(gpLES%ysz(1),gpLES%ysz(2),gpLES%ysz(3)))
+  allocate(dUinY(gpLES%ysz(1),gpLES%ysz(2),gpLES%ysz(3)))
+  call transpose_x_to_y(U,UinY,gpLES)
+  call grad%ddy(UinY,dUinY)
+  call transpose_y_to_x(dUinY,gradU(1,2,:,:,:),gpLES)
+  
+  call transpose_x_to_y(V,UinY,gpLES)
+  call grad%ddy(UinY,dUinY)
+  call transpose_y_to_x(dUinY,gradU(2,2,:,:,:),gpLES)
+  
+  call transpose_x_to_y(W,UinY,gpLES)
+  call grad%ddy(UinY,dUinY)
+  call transpose_y_to_x(dUinY,gradU(3,2,:,:,:),gpLES)
 
-  call grad%ddz(U,gradU(1,3,:,:,:))
-  call grad%ddz(V,gradU(2,3,:,:,:))
-  call grad%ddz(W,gradU(3,3,:,:,:))
+  allocate(UinZ(gpLES%zsz(1),gpLES%zsz(2),gpLES%zsz(3)))
+  allocate(dUinZ(gpLES%zsz(1),gpLES%zsz(2),gpLES%zsz(3)))
+  call transpose_x_to_y(U,UinY,gpLES)
+  call transpose_y_to_z(UinY,UinZ,gpLES)
+  call grad%ddz(UinZ,dUinZ)
+  call transpose_z_to_y(dUinZ,dUinY,gpLES)
+  call transpose_y_to_x(dUinY,gradU(1,3,:,:,:),gpLES)
+
+  call transpose_x_to_y(V,UinY,gpLES)
+  call transpose_y_to_z(UinY,UinZ,gpLES)
+  call grad%ddz(UinZ,dUinZ)
+  call transpose_z_to_y(dUinZ,dUinY,gpLES)
+  call transpose_y_to_x(dUinY,gradU(2,3,:,:,:),gpLES)
+
+  call transpose_x_to_y(W,UinY,gpLES)
+  call transpose_y_to_z(UinY,UinZ,gpLES)
+  call grad%ddz(UinZ,dUinZ)
+  call transpose_z_to_y(dUinZ,dUinY,gpLES)
+  call transpose_y_to_x(dUinY,gradU(3,3,:,:,:),gpLES)
 
   ! Verify this is the same as MATLAB
-  print*, nrank, jst, kst
-  print*, nrank, "Ux", maxval(abs(gradU(1,1,:,:,:) - gradUascii(1,1,ist:ien,jst:jen,kst:ken)))
-  print*, nrank, "Vx", maxval(abs(gradU(2,1,:,:,:) - gradUascii(2,1,ist:ien,jst:jen,kst:ken)))
-  print*, nrank, "Wx", maxval(abs(gradU(3,1,:,:,:) - gradUascii(3,1,ist:ien,jst:jen,kst:ken)))
-  print*, nrank, "Uy", maxval(abs(gradU(1,2,:,:,:) - gradUascii(1,2,ist:ien,jst:jen,kst:ken)))
-  print*, nrank, "Vy", maxval(abs(gradU(2,2,:,:,:) - gradUascii(2,2,ist:ien,jst:jen,kst:ken)))
-  print*, nrank, "Wy", maxval(abs(gradU(3,2,:,:,:) - gradUascii(3,2,ist:ien,jst:jen,kst:ken)))
-  print*, nrank, "Uz", maxval(abs(gradU(1,3,:,:,:) - gradUascii(1,3,ist:ien,jst:jen,kst:ken)))
-  print*, nrank, "Vz", maxval(abs(gradU(2,3,:,:,:) - gradUascii(2,3,ist:ien,jst:jen,kst:ken)))
-  print*, nrank, "Wz", maxval(abs(gradU(3,3,:,:,:) - gradUascii(3,3,ist:ien,jst:jen,kst:ken)))
   call MPI_Barrier(MPI_COMM_WORLD,ierr)
   call assert(maxval(abs(gradU - gradUascii(:,:,ist:ien,jst:jen,kst:ken))) < 1.d-11,'Test FAILED')
   call MPI_Barrier(MPI_COMM_WORLD,ierr)
   if (nrank == 0) print*, "Test PASSED!"
   call MPI_Barrier(MPI_COMM_WORLD,ierr)
 
+  ! Write gradient to disk
+  write(fname,'(A)')trim(datadir)//'/'//'LargeScaleGradientOUT.h5'
+  call writeFields(trim(fname),gradU,'/gradU',gpLES)
+
   ! Free up memory
   deallocate(Uascii,Uascii1,Vascii,Vascii1,Wascii,Wascii1)
   deallocate(gradUascii1,gradUascii)
-  deallocate(U,V,W,gradU) 
-  !call finalizeDomainSetup()
-  !call H5close_f(ierr)
-  !call MPI_Finalize(ierr)
+  deallocate(U,V,W,gradU)
+  deallocate(UinY,dUinY) 
+  deallocate(UinZ,dUinZ) 
   call finalizeProblem()
 end program

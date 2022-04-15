@@ -25,9 +25,6 @@ program test_gaborMode_domainSetup
   integer :: nxLESperQH, nyLESperQH, nzLESperQH
   integer :: pcol, prow
   namelist /IO/ datadir
-  namelist /DOMAIN/ Lx, Ly, Lz, nxLES, nyLES, nzLES, &
-    nxLESperQH, nyLESperQH, nzLESperQH, &
-    nxF, nyF, nzF, pcol, prow
   
   ! Initialize MPI
   call MPI_Init(ierr)
@@ -37,10 +34,11 @@ program test_gaborMode_domainSetup
 
   ! Setup the domain
   call setupDomainXYperiodic(inputfile)
+
   ! Get ground truth from MATLAB
     ! Read inputfile
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
-      read(unit=ioUnit, NML=DOMAIN)
+!      read(unit=ioUnit, NML=DOMAIN)
       read(unit=ioUnit, NML=IO)
       close(ioUnit)
     
@@ -140,7 +138,6 @@ program test_gaborMode_domainSetup
       call assert(size(xQHcent) == size(xQHcentTrue(ist:ien)),'xQHcent size comparison',nrank)
       call assert(size(yQHcent) == size(yQHcentTrue(jst:jen)),'yQHcent size comparison',nrank)
       call assert(size(zQHcent) == size(zQHcentTrue(kst:ken)),'zQHcent size comparison',nrank)
-      
       write(mssg,'(A,F10.8)') "xQHcent discrepency. Max difference = ",&
         maxval(xQHcent - xQHcentTrue(ist:ien))
       call assert(maxval(xQHcent - xQHcentTrue(ist:ien)) < small,trim(mssg),nrank)

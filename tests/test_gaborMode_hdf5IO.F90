@@ -4,17 +4,17 @@ program test_gaborMode_hdf5IO
   use hdf5_fcns, only: read_h5_chunk_data
   use mpi
   use domainSetup, only: setupDomainXYperiodic, finalizeDomainSetup, nxLES, nyLES, nzLES, &
-    gpLES, getStartAndEndIndices, dxLES, dyLES, dzLES, periodic
+    gpLES, getStartAndEndIndices
   use decomp_2d
   use basic_io, only: read_1d_ascii
   use fortran_assert, only: assert
-  use gaborIO_mod, only: readLargeScaleData
+  use gaborIO_mod, only: readVelocityField, writeFields
   
   implicit none
   
   character(len=clen) :: fname, datadir, inputfile
   integer :: ierr, ioUnit
-  integer :: ist, ien, jst, jen, kst, ken
+  integer :: ist, ien, jst, jen, kst, ken, isz, jsz, ksz
   real(rkind), dimension(:,:,:), allocatable :: Uascii, Vascii, Wascii
   real(rkind), dimension(:,:,:,:,:), allocatable :: gradUascii
   real(rkind), dimension(:), allocatable :: Uascii1, Vascii1, Wascii1, gradUascii1
@@ -23,9 +23,7 @@ program test_gaborMode_hdf5IO
 
   ! HDF5 variables
   integer(HID_T) :: memtype
-  integer(HSIZE_T), dimension(3) :: dimsf, chunk_dims, stride, count, block, offset
   integer(HSIZE_T), dimension(5) :: dimsf2, chunk_dims2, stride2, count2, block2, offset2
-  character(len=2) :: dsetname
   character(len=6) :: dsetname2
   integer :: dset_rank
   
@@ -40,7 +38,6 @@ program test_gaborMode_hdf5IO
   
   ! Setup the domain
   call setupDomainXYperiodic(inputfile)
-  call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken)
 
   ! Get ground truth from MATLAB
     ! Read inputfile
@@ -69,15 +66,15 @@ program test_gaborMode_hdf5IO
     gradUascii = reshape(gradUascii1,[3,3,nxLES,nyLES,nzLES])
     
     ! Read partitioned fields
-    call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken)
-    allocate(U(ist:ien,jst:jen,kst:ken))
-    allocate(V(ist:ien,jst:jen,kst:ken))
-    allocate(W(ist:ien,jst:jen,kst:ken))
-    allocate(gradU(3,3,ist:ien,jst:jen,kst:ken))
+    call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+    allocate(U(isz,jsz,ksz))
+    allocate(V(isz,jsz,ksz))
+    allocate(W(isz,jsz,ksz))
+    allocate(gradU(3,3,isz,jsz,ksz))
 
     ! HDF5 specific variables
     write(fname,'(A)') trim(datadir)//'/'//'LargeScaleVelocity.h5'
-    call readLargeScaleData(trim(fname),U,V,W,nxLES,nyLES,nzLES,gpLES)
+    call readVelocityField(trim(fname),U,V,W,gpLES)
 
     ! Read in data
     call assert(maxval(abs(U-Uascii(ist:ien,jst:jen,kst:ken)))<1.d-14,'U diff')
@@ -102,9 +99,16 @@ program test_gaborMode_hdf5IO
     call assert(maxval(abs(gradU-gradUascii(:,:,ist:ien,jst:jen,kst:ken)))<1.d-14,'gradU diff')
 
     call MPI_Barrier(MPI_COMM_WORLD,ierr)
-    if (nrank == 0) print*, "Test PASSED!"
+    if (nrank == 0) print*, "Reading test PASSED!"
     call MPI_Barrier(MPI_COMM_WORLD,ierr)
 
+  ! Run writing test
+    write(fname,'(A)') trim(datadir)//'/'//'LargeScaleVelocityOUT.h5'
+    call writeFields(trim(fname),U,V,W,'/u','/v','/w',gpLES)  
+
+    call MPI_Barrier(MPI_COMM_WORLD,ierr)
+    if (nrank == 0) print*, "Finished writing data."
+    call MPI_Barrier(MPI_COMM_WORLD,ierr)
   ! Deallocate all memory
   deallocate(U,V,W,gradU)
   deallocate(Uascii1,Vascii1,Wascii1,gradUascii1)

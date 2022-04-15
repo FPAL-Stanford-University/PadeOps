@@ -1,24 +1,24 @@
 &DOMAIN
-  Lx         = 6.283185307179586d0
-  Ly         = 3.141592653589793d0
-  Lz         = 1.d0
+  Lx             = 6.283185307179586d0
+  Ly             = 3.141592653589793d0
+  Lz             = 1.d0
   
-  nxLES      = 16
-  nyLES      = 16
-  nzLES      = 8
+  nxLES          = 16
+  nyLES          = 16
+  nzLES          = 8
 
-  nxLESperQH = 2
-  nyLESperQH = 2
-  nzLESperQH = 2
+  nxLESperQH     = 2
+  nyLESperQH     = 2
+  nzLESperQH     = 2
 
-  nxF        = 64 
-  nyF        = 64 
-  nzF        = 32
+  nxF            = 64 
+  nyF            = 64 
+  nzF            = 32
 
-  prow       = 0
-  pcol       = 0
+  prow           = 0
+  pcol           = 0
 /
 /
 &IO
-  datadir    = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V2Data/tests/domainSetup'
+  datadir = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V2Data/tests/domainSetup'
 /

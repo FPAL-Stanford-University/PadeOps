@@ -21,6 +21,12 @@ module domainSetup
     type(decomp_info), allocatable :: gpLES
     type(decomp_info), allocatable :: gpQHcent
     type(decomp_info), allocatable :: gpF
+    character(len=1) :: decomp2Dpencil = 'x' ! <-- This must be 'x' for now. If
+                                             ! flexibility is desired, further
+                                             ! implementation is required.
+                                             ! Specifically, the IO routines
+                                             ! using HDF5 assumes
+                                             ! x-decomposition
     type(EulerG) :: fineMesh
     logical, dimension(3) :: periodic ! <-- Boundary conditions
  
@@ -60,6 +66,7 @@ module domainSetup
         !   - High resolution mesh to render Gabor-induced fields
         character(len=*), intent(in) :: inputfile
         integer :: ist, ien, jst, jen, kst, ken
+        integer :: isz, jsz, ksz
         integer :: ierr, pcol, prow
         real(rkind) :: wSupport
 
@@ -100,10 +107,10 @@ module domainSetup
           call getMeshSpacing(Lx,Ly,Lz,nxLES,nyLES,nzLES,dxLES,dyLES,dzLES)
 
           ! Define start and end global indidces
-            call getStartAndEndIndices(gpLESb,ist,ien,jst,jen,kst,ken)
+            call getStartAndEndIndices(gpLESb,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
           
           ! Allocate memory for the 1D vectors defining coordinate axes
-            allocate(xLESb(ist:ien),yLESb(jst:jen),zLESb(kst:ken))
+            allocate(xLESb(isz+1),yLESb(jsz+1),zLESb(ksz+1))
 
           ! Define the physical space grid
             xLESb = getPeriodicNodeValues(ist,ien,dxLES)
@@ -116,33 +123,33 @@ module domainSetup
               zLESb(1) = 0.d0
               zLESb(2:ken) = getWallNormalNodeValues(1,ken,dzLES)
             elseif (ken == nzLES+2) then
-              zLESb(nzLES+2) = Lz
-              zLESb(kst:nzLES+1) = getWallNormalNodeValues(kst-1,nzLES+1,dzLES)
+              zLESb(ksz) = Lz
+              zLESb(1:ksz-1) = getWallNormalNodeValues(kst-1,nzLES+1,dzLES)
             else
               zLESb = getWallNormalNodeValues(kst-1,ken,dzLES)
             end if
 
           ! Repeat for LES domain without domain boundaries
-          call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken)
-          allocate(xLES(ist:ien),yLES(jst:jen),zLES(kst:ken))
+          call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+          allocate(xLES(isz),yLES(jsz),zLES(ksz))
           xLES = getPeriodicNodeValues(ist,ien,dxLES)
           yLES = getPeriodicNodeValues(jst,jen,dyLES)
           zLES = getWallNormalNodeValues(kst,ken,dzLES)
   
         ! QH mesh
           call getMeshSpacing(Lx,Ly,Lz,nxQH,nyQH,nzQH,dxQH,dyQH,dzQH)
-          call getStartAndEndIndices(gpQHcent,ist,ien,jst,jen,kst,ken)
-          allocate(xQHcent(ist:ien),yQHcent(jst:jen),zQHcent(kst:ken))
-          allocate(xQHedge(ist:ien+1),yQHedge(jst:jen+1),zQHedge(kst:ken+1))
+          call getStartAndEndIndices(gpQHcent,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+          allocate(xQHcent(gpQHcent%xsz(1))  ,yQHcent(gpQHcent%xsz(2))  ,zQHcent(gpQHcent%xsz(3)))
+          allocate(xQHedge(gpQHcent%xsz(1)+1),yQHedge(gpQHcent%xsz(2)+1),zQHedge(gpQHcent%xsz(3)+1))
           
           xQHedge = getPeriodicNodeValues(ist,ien+1,dxQH)
           yQHedge = getPeriodicNodeValues(jst,jen+1,dyQH)
           ! While the z-direction is not periodic, the QH edges are equivalently defined by this routine:
           zQHedge = getPeriodicNodeValues(kst,ken+1,dzQH)
           
-          xQHcent = 0.5d0*(xQHedge(ist+1:ien+1)+xQHedge(ist:ien))
-          yQHcent = 0.5d0*(yQHedge(jst+1:jen+1)+yQHedge(jst:jen))
-          zQHcent = 0.5d0*(zQHedge(kst+1:ken+1)+zQHedge(kst:ken))
+          xQHcent = 0.5d0*(xQHedge(2:isz+1)+xQHedge(1:isz))
+          yQHcent = 0.5d0*(yQHedge(2:jsz+1)+yQHedge(1:jsz))
+          zQHcent = 0.5d0*(zQHedge(2:ksz+1)+zQHedge(1:ksz))
 
           ! Define support window 
           Wx = 2.d0*dxQH
@@ -154,7 +161,8 @@ module domainSetup
           ! TODO: implement hierarchy of fine meshes
           !call fineMesh%init(gpLESb,nlevels,xDom,yDom,zDom)
           call getMeshSpacing(Lx,Ly,Lz,nxF,nyF,nzF,dxF,dyF,dzF)
-          call getStartAndEndIndices(gpF,ist,ien,jst,jen,kst,ken)
+          call getStartAndEndIndices(gpF,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+          allocate(xF(isz),yF(jsz),zF(ksz))
           xF = getPeriodicNodeValues(ist,ien,dxF)
           yF = getPeriodicNodeValues(jst,jen,dyF)
           zF = getWallNormalNodeValues(kst,ken,dzF)
@@ -165,7 +173,8 @@ module domainSetup
           jst = jst - nysupp/2; jen = jen + nysupp/2
           kst = max(1,kst-nzsupp/2)
           ken = min(nzF+1,ken+nzsupp/2) 
-         
+        
+          allocate(xFh(isz+nxsupp),yFh(jsz+nysupp),zFh(ksz+nzsupp))  
           xFh = getPeriodicNodeValues(ist,ien,dxF)
           yFh = getPeriodicNodeValues(jst,jen,dyF)
           zFh = getPeriodicNodeValues(kst,ken,dzF)
@@ -252,14 +261,42 @@ module domainSetup
         dz = Lz/real(nz,rkind)
       end subroutine
 
-      pure subroutine getStartAndEndIndices(gp,ist,ien,jst,jen,kst,ken)
-        ! Grab the gp%xst(i) and gp%xen(i) values for more readable code
+      subroutine getStartAndEndIndices(gp,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+        ! Grab the gp%xst(i), gp%xen(i), and gp%xsz(i) values for more readable code
+
+        use exits, only: gracefulExit
         type(decomp_info), intent(in) :: gp
         integer, intent(out) :: ist, ien, jst, jen, kst, ken
+        integer, intent(out) :: isz, jsz, ksz
+        integer :: ierr
         
-        ist = gp%xst(1); ien = gp%xen(1)
-        jst = gp%xst(2); jen = gp%xen(2)
-        kst = gp%xst(3); ken = gp%xen(3)
+        if (decomp2Dpencil == 'x') then
+          ist = gp%xst(1); ien = gp%xen(1)
+          jst = gp%xst(2); jen = gp%xen(2)
+          kst = gp%xst(3); ken = gp%xen(3)
+          
+          isz = gp%xsz(1)
+          jsz = gp%xsz(2)
+          ksz = gp%xsz(3)
+        elseif (decomp2Dpencil == 'y') then
+          ist = gp%yst(1); ien = gp%yen(1)
+          jst = gp%yst(2); jen = gp%yen(2)
+          kst = gp%yst(3); ken = gp%yen(3)
+          
+          isz = gp%ysz(1)
+          jsz = gp%ysz(2)
+          ksz = gp%ysz(3)
+        elseif (decomp2Dpencil == 'z') then
+          ist = gp%zst(1); ien = gp%zen(1)
+          jst = gp%zst(2); jen = gp%zen(2)
+          kst = gp%zst(3); ken = gp%zen(3)
+          
+          isz = gp%zsz(1)
+          jsz = gp%zsz(2)
+          ksz = gp%zsz(3)
+        else
+          call gracefulExit("Must specify decomp2Dpencil as either 'x', 'y', or 'z'",ierr)
+        end if
       end subroutine
 
       pure function log2(x) result(y)
