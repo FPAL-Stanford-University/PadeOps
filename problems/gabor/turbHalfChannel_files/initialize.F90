@@ -1,16 +1,21 @@
 subroutine initializeProblem(inputfile)
   use domainSetup, only: setupDomainXYperiodic
+  use largeScalesMod, only: initLargeScales
+  use kind_parameters, only: clen
   implicit none
-  character(len=*) :: inputfile
+  character(len=clen), intent(inout) :: inputfile
   call initializeExternalLibraries()
   call GETARG(1,inputfile)
   call setupDomainXYperiodic(inputfile)
+  call initLargeScales()
 end subroutine
 
 subroutine finalizeProblem()
   use domainSetup, only: finalizeDomainSetup
+  use largeScalesMod, only: finalizeLargeScales
   implicit none
   call finalizeDomainSetup()
+  call finalizeLargeScales()
   call finalizeExternalLibraries()
 end subroutine
 

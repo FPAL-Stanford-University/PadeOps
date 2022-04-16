@@ -17,7 +17,7 @@ module domainSetup
     implicit none
     real(rkind), dimension(2) :: xDom, yDom, zDom
     real(rkind) :: Lx, Ly, Lz
-    type(decomp_info), allocatable :: gpLESb 
+    type(decomp_info), allocatable :: gpLESb
     type(decomp_info), allocatable :: gpLES
     type(decomp_info), allocatable :: gpQHcent
     type(decomp_info), allocatable :: gpF
@@ -186,6 +186,10 @@ module domainSetup
           call decomp_info_finalize(gpLESb)
           deallocate(gpLESb)
         end if
+        if (allocated(gpLES)) then
+          call decomp_info_finalize(gpLES)
+          deallocate(gpLES)
+        end if
         if (allocated(gpQHcent)) then
           call decomp_info_finalize(gpQHcent)
           deallocate(gpQHcent)
@@ -194,10 +198,14 @@ module domainSetup
           call decomp_info_finalize(gpF)
           deallocate(gpF)
         end if
+        call decomp_2d_finalize
 
         if (allocated(xLES)) deallocate(xLES)
         if (allocated(yLES)) deallocate(yLES)
         if (allocated(zLES)) deallocate(zLES)
+        if (allocated(xLESb)) deallocate(xLESb)
+        if (allocated(yLESb)) deallocate(yLESb)
+        if (allocated(zLESb)) deallocate(zLESb)
         if (allocated(xQHedge)) deallocate(xQHedge)
         if (allocated(yQHedge)) deallocate(yQHedge)
         if (allocated(zQHedge)) deallocate(zQHedge)

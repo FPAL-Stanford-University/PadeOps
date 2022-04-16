@@ -1,24 +1,26 @@
-! Template for PadeOps
+include 'turbulenHalfChannel_files/intialize.F90'
 
 program turbHalfChannel
-  use mpi
+  use largeScalesMod, only: getLargeScaleData, computeLargeScaleGradient
   
   implicit none
-
+  character(len=clen) :: inputfile
   integer :: ierr
-
-  call MPI_Init(ierr)       ! Initialize MPI
-  call GETARG(1,inputfile)  ! Get the location of the input file
-  call setupDomainXYperiodic(inputfile) ! Define all numerical meshes (LES, QH, and high resolution)
   
-  ! TODO: Read large scale initial condition data
+  call initializeProblem(inputfile)
 
-  ! TODO: Compute large scale gradient from velocity data
+  ! Read large scale initial condition data
+  write(fname,'(A)')trim(datadir)//'/'//'largeScaleFile.h5'
+  call getLargeScaleData(fname)
+
+  ! Compute large scale gradient from velocity data
+  call computeLargeScaleGradient()
+
+  ! TODO: Extend large scale data to domain boundaries
 
   ! TODO: Compute or read large scale parameters
 
   ! TODO: extend large scale fields to domain boundaries
 
-
-  call MPI_Finalize(ierr) 
+  call finalizeProblem()
 end program turbHalfChannel

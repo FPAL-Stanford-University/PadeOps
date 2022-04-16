@@ -8,7 +8,7 @@ program test_gaborMode_hdf5IO
   use decomp_2d
   use basic_io, only: read_1d_ascii
   use fortran_assert, only: assert
-  use gaborIO_mod, only: readVelocityField, writeFields
+  use gaborIO_mod, only: readFields, writeFields
   
   implicit none
   
@@ -74,7 +74,7 @@ program test_gaborMode_hdf5IO
 
     ! HDF5 specific variables
     write(fname,'(A)') trim(datadir)//'/'//'LargeScaleVelocity.h5'
-    call readVelocityField(trim(fname),U,V,W,gpLES)
+    call readFields(trim(fname),U,V,W,'/u','/v','/w',gpLES)
 
     ! Read in data
     call assert(maxval(abs(U-Uascii(ist:ien,jst:jen,kst:ken)))<1.d-14,'U diff')
