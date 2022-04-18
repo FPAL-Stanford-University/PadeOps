@@ -48,9 +48,17 @@ module largeScalesMod
             allocate(Ubuff2 (gpLES%zsz(1),gpLES%zsz(2),gpLES%zsz(3)))
             allocate(dUbuff2(gpLES%zsz(1),gpLES%zsz(2),gpLES%zsz(3)))
           case('y')
-            call gracefulExit('y-decomposition not implemented',ierr)
+            allocate(Ubuff1 (gpLES%xsz(1),gpLES%xsz(2),gpLES%xsz(3)))
+            allocate(dUbuff1(gpLES%xsz(1),gpLES%xsz(2),gpLES%xsz(3)))
+            
+            allocate(Ubuff2 (gpLES%zsz(1),gpLES%zsz(2),gpLES%zsz(3)))
+            allocate(dUbuff2(gpLES%zsz(1),gpLES%zsz(2),gpLES%zsz(3)))
           case('z')
-            call gracefulExit('z-decomposition not implemented',ierr)
+            allocate(Ubuff2 (gpLES%xsz(1),gpLES%xsz(2),gpLES%xsz(3)))
+            allocate(dUbuff2(gpLES%xsz(1),gpLES%xsz(2),gpLES%xsz(3)))
+            
+            allocate(Ubuff1 (gpLES%ysz(1),gpLES%ysz(2),gpLES%ysz(3)))
+            allocate(dUbuff1(gpLES%ysz(1),gpLES%ysz(2),gpLES%ysz(3)))
           case default
             call gracefulExit("Must select 'x', 'y', or 'z' domain decomposition",ierr)
         end select
@@ -148,6 +156,74 @@ module largeScalesMod
             call grad%ddz(Ubuff2,dUbuff2)
             call transpose_z_to_y(dUbuff2,dUbuff1,gpLES)
             call transpose_y_to_x(dUbuff1,gradU(3,3,:,:,:),gpLES)
+          case('y')
+            ! x derivatives
+            call transpose_y_to_x(U,Ubuff1,gpLES)
+            call grad%ddx(Ubuff1,dUbuff1)
+            call transpose_x_to_y(dUbuff1,gradU(1,1,:,:,:),gpLES)
+
+            call transpose_y_to_x(V,Ubuff1,gpLES)
+            call grad%ddx(Ubuff1,dUbuff1)
+            call transpose_x_to_y(dUbuff1,gradU(2,1,:,:,:),gpLES)
+
+            call transpose_y_to_x(W,Ubuff1,gpLES)
+            call grad%ddx(Ubuff1,dUbuff1)
+            call transpose_x_to_y(dUbuff1,gradU(3,1,:,:,:),gpLES)
+
+            ! y derivatives
+            call grad%ddy(U,gradU(1,2,:,:,:))
+            call grad%ddy(V,gradU(2,2,:,:,:))
+            call grad%ddy(W,gradU(3,2,:,:,:))
+           
+            ! z derivatives
+            call transpose_y_to_z(U,Ubuff2,gpLES)
+            call grad%ddz(Ubuff2,dUbuff2)
+            call transpose_z_to_y(dUbuff2,gradU(1,3,:,:,:),gpLES)
+
+            call transpose_y_to_z(V,Ubuff2,gpLES)
+            call grad%ddz(Ubuff2,dUbuff2)
+            call transpose_z_to_y(dUbuff2,gradU(2,3,:,:,:),gpLES)
+
+            call transpose_y_to_z(W,Ubuff2,gpLES)
+            call grad%ddz(Ubuff2,dUbuff2)
+            call transpose_z_to_y(dUbuff2,gradU(3,3,:,:,:),gpLES)
+          case('z')
+            ! x derivatives
+            call transpose_z_to_y(U,Ubuff1,gpLES)
+            call transpose_y_to_x(Ubuff1,Ubuff2,gpLES)
+            call grad%ddx(Ubuff2,dUbuff2)
+            call transpose_x_to_y(dUbuff2,dUbuff1,gpLES)
+            call transpose_y_to_z(dUbuff1,gradU(1,1,:,:,:),gpLES)
+
+            call transpose_z_to_y(V,Ubuff1,gpLES)
+            call transpose_y_to_x(Ubuff1,Ubuff2,gpLES)
+            call grad%ddx(Ubuff2,dUbuff2)
+            call transpose_x_to_y(dUbuff2,dUbuff1,gpLES)
+            call transpose_y_to_z(dUbuff1,gradU(2,1,:,:,:),gpLES)
+
+            call transpose_z_to_y(W,Ubuff1,gpLES)
+            call transpose_y_to_x(Ubuff1,Ubuff2,gpLES)
+            call grad%ddx(Ubuff2,dUbuff2)
+            call transpose_x_to_y(dUbuff2,dUbuff1,gpLES)
+            call transpose_y_to_z(dUbuff1,gradU(3,1,:,:,:),gpLES)
+  
+            ! y derivatives
+            call transpose_z_to_y(U,Ubuff1,gpLES)
+            call grad%ddy(Ubuff1,dUbuff1)
+            call transpose_y_to_z(dUbuff1,gradU(1,2,:,:,:),gpLES)
+            
+            call transpose_z_to_y(V,Ubuff1,gpLES)
+            call grad%ddy(Ubuff1,dUbuff1)
+            call transpose_y_to_z(dUbuff1,gradU(2,2,:,:,:),gpLES)
+            
+            call transpose_z_to_y(W,Ubuff1,gpLES)
+            call grad%ddy(Ubuff1,dUbuff1)
+            call transpose_y_to_z(dUbuff1,gradU(3,2,:,:,:),gpLES)
+  
+            ! z derivatives
+            call grad%ddz(U,gradU(1,3,:,:,:))
+            call grad%ddz(V,gradU(2,3,:,:,:))
+            call grad%ddz(W,gradU(3,3,:,:,:))
           case default
             call gracefulExit("Code does not support y or z "//&
               "domain decompositions", ierr)

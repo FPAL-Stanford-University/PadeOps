@@ -20,12 +20,6 @@ program test_gaborMode_hdf5IO
   real(rkind), dimension(:), allocatable :: Uascii1, Vascii1, Wascii1, gradUascii1
   real(rkind), dimension(:,:,:), allocatable :: U, V, W
   real(rkind), dimension(:,:,:,:,:), allocatable :: gradU
-
-  ! HDF5 variables
-  integer(HID_T) :: memtype
-  integer(HSIZE_T), dimension(5) :: dimsf2, chunk_dims2, stride2, count2, block2, offset2
-  character(len=6) :: dsetname2
-  integer :: dset_rank
   
   namelist /IO/ datadir
 
@@ -81,22 +75,8 @@ program test_gaborMode_hdf5IO
     call assert(maxval(abs(V-Vascii(ist:ien,jst:jen,kst:ken)))<1.d-14,'V diff')
     call assert(maxval(abs(W-Wascii(ist:ien,jst:jen,kst:ken)))<1.d-14,'W diff')
     
-    memtype = H5T_NATIVE_DOUBLE
-    dset_rank = 5
-    dimsf2 = [3,3,nxLES,nyLES,nzLES]
-    chunk_dims2 = [3,3,gpLES%xsz(1),gpLES%xsz(2),gpLES%xsz(3)]
-    stride2 = 1
-    count2 = 1
-    block2 = chunk_dims2
-    offset2(1:3) = 0
-    offset2(4) = gpLES%xst(2)-1
-    offset2(5) = gpLES%xst(3)-1
-
-    dsetname2 = '/gradU'
     write(fname,'(A)') trim(datadir)//'/'//'LargeScaleGradient.h5'
-    call read_h5_chunk_data(block2, chunk_dims2, count2, dimsf2, dsetname2, &
-      dset_rank, trim(fname), memtype, offset2, stride2, gradU, MPI_COMM_WORLD)
-    call assert(maxval(abs(gradU-gradUascii(:,:,ist:ien,jst:jen,kst:ken)))<1.d-14,'gradU diff')
+    call readFields(trim(fname),gradU,'/gradU',gpLES)
 
     call MPI_Barrier(MPI_COMM_WORLD,ierr)
     if (nrank == 0) print*, "Reading test PASSED!"

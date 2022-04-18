@@ -38,8 +38,6 @@ module gaborIO_mod
       integer(HSIZE_T), dimension(5) :: dimsf, chunk_dims, stride, count, block, offset
       integer :: dset_rank
 
-      call assert(decomp2Dpencil == 'x','IO routines only support x-pencil'//&
-        ' decomposition')
       nx = gp%xsz(1)
       ny = gp%ysz(2)
       nz = gp%zsz(3)
@@ -57,9 +55,10 @@ module gaborIO_mod
       stride = 1
       count = 1
       block = chunk_dims
-      offset(1:3) = 0
-      offset(4) = gp%xst(2)-1
-      offset(5) = gp%xst(3)-1
+      offset(1:2) = 0
+      offset(3) = ist - 1
+      offset(4) = jst - 1
+      offset(5) = kst - 1
       
       call read_h5_chunk_data(block, chunk_dims, count, dimsf, dsetnm1, &
         dset_rank, trim(fname), memtype, offset, stride, f1, MPI_COMM_WORLD)
@@ -81,8 +80,6 @@ module gaborIO_mod
       integer(HSIZE_T), dimension(3) :: dimsf, chunk_dims, stride, count, block, offset
       integer :: dset_rank
 
-      call assert(decomp2Dpencil == 'x','IO routines only support x-pencil'//&
-        ' decomposition')
       nx = gp%xsz(1)
       ny = gp%ysz(2)
       nz = gp%zsz(3)
@@ -100,9 +97,9 @@ module gaborIO_mod
       stride = 1
       count = 1
       block = chunk_dims
-      offset(1) = 0
-      offset(2) = gp%xst(2)-1
-      offset(3) = gp%xst(3)-1
+      offset(1) = ist - 1
+      offset(2) = jst - 1
+      offset(3) = kst - 1
       
       call read_h5_chunk_data(block, chunk_dims, count, dimsf, dsetnm1, &
         dset_rank, trim(fname), memtype, offset, stride, f1, MPI_COMM_WORLD)
@@ -127,8 +124,6 @@ module gaborIO_mod
       integer(HSIZE_T), dimension(3) :: dimsf, chunk_dims, stride, count, block, offset
       integer :: dset_rank
 
-      call assert(decomp2Dpencil == 'x','IO routines only support x-pencil'//&
-        ' decomposition')
       nx = gp%xsz(1)
       ny = gp%ysz(2)
       nz = gp%zsz(3)
@@ -146,9 +141,9 @@ module gaborIO_mod
       stride = 1
       count = 1
       block = chunk_dims
-      offset(1) = 0
-      offset(2) = gp%xst(2)-1
-      offset(3) = gp%xst(3)-1
+      offset(1) = ist - 1
+      offset(2) = jst - 1
+      offset(3) = kst - 1
       
       call read_h5_chunk_data(block, chunk_dims, count, dimsf, dsetnm1, &
         dset_rank, trim(fname), memtype, offset, stride, f1, MPI_COMM_WORLD)
@@ -178,8 +173,6 @@ module gaborIO_mod
       integer :: dset_rank, error
       integer(HID_T) :: file_id, dset_id, plist_id, filespace, memspace, dataspace
 
-      call assert(decomp2Dpencil == 'x','IO routines only support x-pencil'//&
-        ' decomposition')
       nx = gp%xsz(1)
       ny = gp%ysz(2)
       nz = gp%zsz(3)
@@ -197,9 +190,9 @@ module gaborIO_mod
       stride = 1
       count = 1
       block = chunk_dims
-      offset(1) = 0
-      offset(2) = gp%xst(2)-1
-      offset(3) = gp%xst(3)-1
+      offset(1) = ist - 1
+      offset(2) = jst - 1
+      offset(3) = kst - 1
  
       ! Create the file and other HDF5 stuff without creating the dataspace or
       ! writing the data
@@ -235,8 +228,6 @@ module gaborIO_mod
       integer :: dset_rank, error
       integer(HID_T) :: file_id, dset_id, plist_id, filespace, memspace, dataspace
 
-      call assert(decomp2Dpencil == 'x','IO routines only support x-pencil'//&
-        ' decomposition')
       nx = gp%xsz(1)
       ny = gp%ysz(2)
       nz = gp%zsz(3)
@@ -254,9 +245,9 @@ module gaborIO_mod
       stride = 1
       count = 1
       block = chunk_dims
-      offset(1) = 0
-      offset(2) = gp%xst(2)-1
-      offset(3) = gp%xst(3)-1
+      offset(1) = ist - 1
+      offset(2) = jst - 1
+      offset(3) = kst - 1
  
       ! Create the file and other HDF5 stuff without creating the dataspace or
       ! writing the data
@@ -299,8 +290,6 @@ module gaborIO_mod
       integer :: dset_rank, error
       integer(HID_T) :: file_id, dset_id, plist_id, filespace, memspace, dataspace
 
-      call assert(decomp2Dpencil == 'x','IO routines only support x-pencil'//&
-        ' decomposition')
       nx = gp%xsz(1)
       ny = gp%ysz(2)
       nz = gp%zsz(3)
@@ -318,9 +307,10 @@ module gaborIO_mod
       stride = 1
       count = 1
       block = chunk_dims
-      offset(1:3) = 0
-      offset(4) = gp%xst(2)-1
-      offset(5) = gp%xst(3)-1
+      offset(1:2) = 0
+      offset(3) = ist - 1
+      offset(4) = jst - 1
+      offset(5) = kst - 1
  
       ! Create the file and other HDF5 stuff without creating the dataspace or
       ! writing the data

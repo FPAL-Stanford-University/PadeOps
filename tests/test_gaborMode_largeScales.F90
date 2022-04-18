@@ -58,7 +58,6 @@ program test_gaborMode_largeScales
     allocate(gradUascii(3,3,nxLES,nyLES,nzLES))
     write(fname,'(A9)')'gradU.dat'
     call read_1d_ascii(gradUascii1,trim(datadir)//'/'//trim(fname))
-    !gradUascii = reshape(gradUascii1,[3,3,nxLES+1,nyLES+1,nzLES+2])
     gradUascii = reshape(gradUascii1,[3,3,nxLES,nyLES,nzLES])
     
     write(fname,'(A)')trim(datadir)//'/'//'LargeScaleVelocity.h5'
@@ -66,7 +65,7 @@ program test_gaborMode_largeScales
 
   ! First, compute velocity gradient
   call computeLargeScaleGradient()
-
+  
   ! Verify this is the same as MATLAB
   call MPI_Barrier(MPI_COMM_WORLD,ierr)
   call assert(maxval(abs(gradU - gradUascii(:,:,ist:ien,jst:jen,kst:ken))) < 1.d-11,'Test FAILED')

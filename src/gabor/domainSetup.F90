@@ -72,7 +72,7 @@ module domainSetup
 
         namelist /DOMAIN/ Lx, Ly, Lz, nxLES, nyLES, nzLES, &
           nxLESperQH, nyLESperQH, nzLESperQH, &
-          nxF, nyF, nzF, pcol, prow
+          nxF, nyF, nzF, pcol, prow, decomp2Dpencil
 
         ! Read inputfile
         open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
