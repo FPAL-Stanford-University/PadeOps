@@ -18,11 +18,16 @@
   prow       = 0
   pcol       = 0
 
-  decomp2Dpencil = y
+  decomp2Dpencil = x
+/
+/
+&LARGESCALES
+  cL = 1 ! Coefficient on length scale definition
 /
 /
 &IO
   datadir    = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V2Data/tests/largeScaleData'
+  outputdir  = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V2Data/tests/GaborModes'
 /
 /
 &GABOR

@@ -17,6 +17,8 @@
 
   prow           = 0
   pcol           = 0
+
+  decomp2Dpencil = x
 /
 /
 &IO

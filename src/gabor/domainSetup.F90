@@ -14,6 +14,8 @@ module domainSetup
     use kind_parameters, only: rkind
     use decomp_2d
     use EulerG_mod, only: EulerG
+    use constants, only: pi
+    use mpi
     implicit none
     real(rkind), dimension(2) :: xDom, yDom, zDom
     real(rkind) :: Lx, Ly, Lz
@@ -21,14 +23,10 @@ module domainSetup
     type(decomp_info), allocatable :: gpLES
     type(decomp_info), allocatable :: gpQHcent
     type(decomp_info), allocatable :: gpF
-    character(len=1) :: decomp2Dpencil = 'x' ! <-- This must be 'x' for now. If
-                                             ! flexibility is desired, further
-                                             ! implementation is required.
-                                             ! Specifically, the IO routines
-                                             ! using HDF5 assumes
-                                             ! x-decomposition
+    character(len=1) :: decomp2Dpencil = 'x'
     type(EulerG) :: fineMesh
     logical, dimension(3) :: periodic ! <-- Boundary conditions
+    logical :: finishDomainSetup = .false.
  
     ! LES discretization
       real(rkind), dimension(:), allocatable :: xLESb, yLESb, zLESb
@@ -51,10 +49,13 @@ module domainSetup
       ! Number of "levels" to fine mesh. One level constitutes a factor of 2
       ! refinment in each coordinate direction
       integer :: nlevels
-      ! Numerical mesh corresponding to high res LES
+      ! Numerical mesh corresponding to high resolution fields
       real(rkind), dimension(:), allocatable :: xF, yF, zF
       ! Numerical mesh for velocity rendering including halo regions for each MPI rank
       real(rkind), dimension(:), allocatable :: xFh, yFh, zFh
+
+    ! Max and min wavenumber based on LES and high resolution meshes
+      real(rkind) :: kmin, kmax
     
     contains
       
@@ -67,7 +68,7 @@ module domainSetup
         character(len=*), intent(in) :: inputfile
         integer :: ist, ien, jst, jen, kst, ken
         integer :: isz, jsz, ksz
-        integer :: ierr, pcol, prow
+        integer :: ierr, ioUnit, pcol, prow
         real(rkind) :: wSupport
 
         namelist /DOMAIN/ Lx, Ly, Lz, nxLES, nyLES, nzLES, &
@@ -75,9 +76,10 @@ module domainSetup
           nxF, nyF, nzF, pcol, prow, decomp2Dpencil
 
         ! Read inputfile
-        open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
-        read(unit=123, NML=DOMAIN)
-        close(123)
+        ioUnit = 1
+        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+        read(unit=ioUnit, NML=DOMAIN)
+        close(ioUnit)
 
         ! Define domain bounds
         xDom = [0.d0, Lx]
@@ -110,7 +112,7 @@ module domainSetup
             call getStartAndEndIndices(gpLESb,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
           
           ! Allocate memory for the 1D vectors defining coordinate axes
-            allocate(xLESb(isz+1),yLESb(jsz+1),zLESb(ksz+1))
+            allocate(xLESb(isz),yLESb(jsz),zLESb(ksz))
 
           ! Define the physical space grid
             xLESb = getPeriodicNodeValues(ist,ien,dxLES)
@@ -174,11 +176,19 @@ module domainSetup
           kst = max(1,kst-nzsupp/2)
           ken = min(nzF+1,ken+nzsupp/2) 
         
-          allocate(xFh(isz+nxsupp),yFh(jsz+nysupp),zFh(ksz+nzsupp))  
+          !allocate(xFh(isz+nxsupp),yFh(jsz+nysupp),zFh(ksz+nzsupp))  
+          allocate(xFh(ist:ien),yFh(jst:jen),zFh(kst:ken))  
           xFh = getPeriodicNodeValues(ist,ien,dxF)
           yFh = getPeriodicNodeValues(jst,jen,dyF)
-          zFh = getPeriodicNodeValues(kst,ken,dzF)
-          
+          zFh = getPeriodicNodeValues(kst,ken,dzF) ! <-- While not periodic in
+                                                   ! z, the mesh is defined from 
+                                                   ! the wall so uses the same routine
+                                                   ! as the periodic directions
+
+        ! kmin and kmax for enrichment
+          call computeKminKmax()
+
+        finishDomainSetup = .true.
       end subroutine
 
       subroutine finalizeDomainSetup()
@@ -337,4 +347,29 @@ module domainSetup
         nysupp = 2*nyPerQH
         nzsupp = 2*nzPerQH
       end subroutine
+      
+      subroutine computeKminKmax()
+        real(rkind) :: kxNyqLES, kyNyqLES, kzNyqLES
+        real(rkind) :: kxNyqF, kyNyqF, kzNyqF
+
+        kxNyqLES = getNyquist(Lx,nxLES)
+        kyNyqLES = getNyquist(Ly,nyLES)
+        kzNyqLES = getNyquist(Lz,nzLES)
+
+        kxNyqF = getNyquist(Lx,nxF)
+        kyNyqF = getNyquist(Ly,nyF)
+        kzNyqF = getNyquist(Lz,nzF)
+
+        kmin = minval([kxNyqLES, kyNyqLES, kzNyqLES])
+        kmax = minval([kxNyqF,   kyNyqF,   kzNyqF])
+      end subroutine
+
+      pure function getNyquist(L,n) result(kNyq)
+        real(rkind), intent(in) :: L
+        integer, intent(in) :: n
+        real(rkind) :: kNyq
+
+        kNyq = real(n,rkind)*0.5d0*(2.d0*pi/L)
+      end function
+
 end module

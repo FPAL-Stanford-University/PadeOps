@@ -1,7 +1,7 @@
 module largeScalesMod
   use kind_parameters, only: rkind
   use domainSetup, only: gpLES, gpLESb, getStartAndEndIndices, decomp2Dpencil, &
-    periodic, dxLES, dyLES, dzLES
+    periodic, dxLES, dyLES, dzLES, gpQHcent
   use DerivativesMod, only: derivatives
   use decomp_2d
   use exits, only: gracefulExit
@@ -16,18 +16,39 @@ module largeScalesMod
   real(rkind), dimension(:,:,:), allocatable :: dUbuff1, dUbuff2
   type(derivatives) :: grad
   logical :: gradientPossible = .true.
+
+  ! Large scale integral quantities
+  real(rkind), dimension(:,:,:), allocatable :: KE, L
+  real(rkind) :: cL = 1.d0
+  
+  ! Error checks
+  logical :: initialized = .false., readUVW = .false., gradUcomputed = .false.
+  logical :: computeLrgSclQOIs = .false. ! computed large scale (Q)uantities
+                                         ! (O)f (I)nterest? See
+                                         ! computeLargeScaleParams.F90 in
+                                         ! problems/gabor/<current problem files>/
+
   contains
-    subroutine initLargeScales(gradPossible)
+    subroutine initLargeScales(inputfile,gradPossible)
       ! Initialize variables and allocate memory for the large scale field
       ! Inputs:
       !     gradPossible --> If we decide to read the gradient from disk
       !                      (instead of compute on the fly) this will 
       !                      be false. Default is true
       logical, intent(in), optional :: gradPossible
+      character(len=*), intent(in) :: inputfile
       character(len=4) :: ddxMethod, ddyMethod, ddzMethod
       integer :: ist, ien, jst, jen, kst, ken
       integer :: isz, jsz, ksz
-      integer :: ierr
+      integer :: ierr, ioUnit
+      
+      namelist /LARGESCALES/ cL
+
+      ! Read cL from inputfile
+      ioUnit = 1
+      open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+      read(unit=ioUnit, NML=LARGESCALES)
+      close(ioUnit)
 
       if (present(gradPossible)) gradientPossible = gradPossible
 
@@ -73,6 +94,11 @@ module largeScalesMod
 
         call grad%init(gpLES,dxLES,dyLES,dzLES,periodic(1),periodic(2),periodic(3),&
           ddxMethod,ddyMethod,ddzMethod)
+
+        ! Initialize memory for the large scale parameters
+        call getStartAndEndIndices(gpQHcent,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+        allocate(KE(isz,jsz,ksz), L(isz,jsz,ksz))
+        initialized = .true.
       end if 
     end subroutine
 
@@ -86,6 +112,8 @@ module largeScalesMod
       if (allocated(dUbuff1)) deallocate(dUbuff1)
       if (allocated(dUbuff2)) deallocate(dUbuff2)
       if (gradientPossible) call grad%destroy()
+      if (allocated(KE)) deallocate(KE)
+      if (allocated(L)) deallocate(L)
     end subroutine
 
     subroutine getLargeScaleData(fname,useBoundaryData)
@@ -105,6 +133,7 @@ module largeScalesMod
       logical, intent(in), optional :: useBoundaryData
       logical :: bdryData = .false.
 
+      call assert(initialized,'Trying to read data without initializing large scales')
       if (present(useBoundaryData)) bdryData = useBoundaryData
       if (bdryData) then
         gradientPossible = .false.
@@ -112,11 +141,15 @@ module largeScalesMod
       else
         call readFields(fname,U,V,W,'/u','/v','/w',gpLES)
       end if
+
+      readUVW = .true.
     end subroutine
 
     subroutine computeLargeScaleGradient(fname)
       character(len=*), intent(in), optional :: fname
       integer :: ierr
+      call assert(initialized,'Trying to read data without initializing large scales')
+      call assert(readUVW,'Trying to compute gradient without velocity data')
       if (gradientPossible) then
         select case (decomp2Dpencil) 
           case('x')
@@ -225,11 +258,11 @@ module largeScalesMod
             call grad%ddz(V,gradU(2,3,:,:,:))
             call grad%ddz(W,gradU(3,3,:,:,:))
           case default
-            call gracefulExit("Code does not support y or z "//&
-              "domain decompositions", ierr)
+            call gracefulExit("ERROR: must set decomp2Dpencil to 'x', 'y', or 'z'", ierr)
         end select
       else
         call readFields(fname,gradU,'/gradU',gpLESb)
       end if
+      gradUcomputed = .true.
     end subroutine
 end module

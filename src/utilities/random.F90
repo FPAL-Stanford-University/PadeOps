@@ -12,7 +12,7 @@ module random
     public :: uniform_random, gaussian_random
 
     interface uniform_random
-        module procedure unrand3R, unrand2R, unrand1R, unrand0R
+        module procedure unrand5R, unrand4R, unrand3R, unrand2R, unrand1R, unrand0R
     end interface 
     interface gaussian_random
         module procedure grand3R, grand2R, grand1R
@@ -100,6 +100,54 @@ contains
         nullify(uarr1, uarr2)
         nullify(uarr1, uarr2)
         deallocate(uarr)
+    end subroutine
+    
+    subroutine unrand5R(array,left, right, seed)
+        real(rkind), dimension(:,:,:,:,:), intent(inout) :: array
+        real(rkind), intent(in) :: left, right
+        integer, optional, intent(in) :: seed
+        real(rkind) :: diff
+        integer, allocatable :: iseed(:)
+        integer :: n
+
+        diff = right - left
+   
+        if (present(seed)) then
+            call random_seed(size = n)
+            allocate(iseed(n))
+            iseed = seed
+            call random_seed(put=iseed)
+            deallocate(iseed)
+        else
+            call init_random_seed()
+        end if 
+        call random_number(array)
+        array = diff*array
+        array = array + left
+    end subroutine
+    
+    subroutine unrand4R(array,left, right, seed)
+        real(rkind), dimension(:,:,:,:), intent(inout) :: array
+        real(rkind), intent(in) :: left, right
+        integer, optional, intent(in) :: seed
+        real(rkind) :: diff
+        integer, allocatable :: iseed(:)
+        integer :: n
+
+        diff = right - left
+   
+        if (present(seed)) then
+            call random_seed(size = n)
+            allocate(iseed(n))
+            iseed = seed
+            call random_seed(put=iseed)
+            deallocate(iseed)
+        else
+            call init_random_seed()
+        end if 
+        call random_number(array)
+        array = diff*array
+        array = array + left
     end subroutine
     
     subroutine unrand3R(array,left, right, seed)

@@ -5,16 +5,16 @@ program test_gaborMode_domainSetup
   use domainSetup, only: setupDomainXYperiodic, finalizeDomainSetup, xLESb, yLESb, zLESb, gpLESb, &
     xQHedge, yQHedge, zQHedge, gpQHcent, nxLES, nyLES, nzLES, nxF, nyF, nzF, nxQH, nyQH, nzQH, &
     xQHcent, yQHcent, zQHcent, xF, yF, zF, gpF, xFh, yFh, zFh, nxsupp, nysupp, nzsupp, &
-    Lx, Ly, Lz, xLES, yLES, zLES, gpLES
+    Lx, Ly, Lz, xLES, yLES, zLES, gpLES, kmin, kmax
   use fortran_assert, only: assert
   use basic_io, only: read_1d_ascii
 
   implicit none
   character(len=clen) :: inputfile, datadir, fname, mssg
   integer :: i, ist, ien, jst, jen, kst, ken
-  integer :: istF, ienF, jstF, jenF, kstF, kenF
-  integer :: istM, ienM, jstM, jenM, kstM, kenM
-  integer :: ierr, ioUnit
+  integer :: istF, ienF, jstF, jenF
+  integer :: istM, ienM, jstM, jenM
+  integer :: ierr, ioUnit = 1
   real(rkind), dimension(:), allocatable :: xLESbTrue, yLESbTrue, zLESbTrue
   real(rkind), dimension(:), allocatable :: xLEStrue, yLEStrue, zLEStrue
   real(rkind), dimension(:), allocatable :: xQHedgeTrue, yQHedgeTrue, zQHedgeTrue
@@ -22,8 +22,7 @@ program test_gaborMode_domainSetup
   real(rkind), dimension(:), allocatable :: xFtrue, yFtrue, zFtrue
   real(rkind), dimension(:), allocatable :: xFpTrue, yFpTrue, zFbTrue
   real(rkind) :: small = 1.d-7
-  integer :: nxLESperQH, nyLESperQH, nzLESperQH
-  integer :: pcol, prow
+  real(rkind) :: kminTrue = 8.d0, kmaxTrue = 32.d0
   namelist /IO/ datadir
   
   ! Initialize MPI
@@ -179,6 +178,9 @@ program test_gaborMode_domainSetup
         maxval(zFh - zFbTrue(kst:ken))
       call assert(maxval(zFh - zFbTrue(kst:ken)) < small,trim(mssg),nrank)
 
+      ! Confirm kmin and kmax
+      call assert(abs(kmin - kminTrue) < small,'kmin discrepency')
+      call assert(abs(kmax - kmaxTrue) < small,'kmax discrepency')
     end if
     call MPI_Barrier(MPI_COMM_WORLD,ierr)
   end do

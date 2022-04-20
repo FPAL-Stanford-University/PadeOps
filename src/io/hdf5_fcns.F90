@@ -11,15 +11,73 @@ module hdf5_fcns
   implicit none
   
   interface read_h5_chunk_data
-    module procedure read_h5_chunk_data2, read_h5_chunk_data3, &
-                     read_h5_chunk_data4, read_h5_chunk_data5
+    module procedure read_h5_chunk_data1, read_h5_chunk_data2, &
+                     read_h5_chunk_data3, read_h5_chunk_data4, &
+                     read_h5_chunk_data5
   end interface
   interface write_h5_chunk_data
     module procedure write_h5_chunk_data2, write_h5_chunk_data3, &
                      write_h5_chunk_data3_alt, write_h5_chunk_data5_alt, &
-                     write_h5_chunk_data4
+                     write_h5_chunk_data4, write_h5_chunk_data1_alt
   end interface
 contains
+  
+  subroutine read_h5_chunk_data1(block, chunk_dims, count, dimsf, dsetname, &
+                                dset_rank, fname, memtype, offset, stride, &
+                                d_read, communicator)
+    !-------------------------------------------------------------------------!
+    ! Read HDF5 data in parallel. This will read a 1 dimensional dataset      !
+    !-------------------------------------------------------------------------!
+    character(len=*), intent(in) :: fname
+    real(rkind), dimension(:), intent(inout) :: d_read
+    integer(HSIZE_T), dimension(:), intent(in) :: dimsf, chunk_dims, count, &
+                                                  offset, stride, block
+    integer(HID_T), intent(in) :: memtype
+    integer, intent(in) :: dset_rank
+    character(len=*), intent(in) :: dsetname
+    integer, intent(in), optional :: communicator
+    integer :: cart_comm
+    integer(HID_T) :: file_id, dset_id, plist_id, filespace, memspace, dataspace 
+    integer :: error
+
+    cart_comm = MPI_COMM_WORLD
+    if (present(communicator)) cart_comm = communicator
+
+    ! Setup file access property list with parllel I/O access
+    call h5pcreate_f(H5P_FILE_ACCESS_F, plist_id, error) ! 1
+    call h5pset_fapl_mpio_f(plist_id, cart_comm, MPI_INFO_NULL, error) ! 2
+
+    ! Create the file collectively
+    call h5fopen_f(fname, H5F_ACC_RDONLY_F, file_id, error, access_prp = plist_id) ! 3
+    call h5pclose_f(plist_id, error) ! 4
+
+    ! Create the data space for the dataset
+    call h5screate_simple_f(dset_rank, dimsf, dataspace, error) ! 5
+    call h5screate_simple_f(dset_rank, dimsf, filespace, error) ! 7
+    call h5screate_simple_f(dset_rank, chunk_dims, memspace, error) ! 6
+
+    ! Select hyperslab in the file
+    call h5sselect_hyperslab_f(filespace, H5S_SELECT_SET_F, offset, count, &
+                               error, stride, block) ! 8
+
+    ! Create property list for collective dataset write
+    call h5pcreate_f(H5P_DATASET_XFER_F, plist_id, error)
+    call h5pset_dxpl_mpio_f(plist_id, H5FD_MPIO_COLLECTIVE_F, error)
+    
+    ! Read the dataset collectively
+    call h5dopen_f(file_id, trim(dsetname), dset_id, error, H5P_DEFAULT_F) ! 9
+    call h5dread_f(dset_id, memtype, d_read, dimsf, error, &
+                   mem_space_id = memspace, file_space_id = filespace,&
+                   xfer_prp = plist_id) ! 10
+
+    ! Close resources
+    call h5dclose_f(dset_id, error)
+    call h5sclose_f(dataspace, error)
+    call h5sclose_f(filespace, error)
+    call h5sclose_f(memspace, error)
+    call h5pclose_f(plist_id, error)
+    call h5fclose_f(file_id, error)    
+  end subroutine
   
   subroutine read_h5_chunk_data2(block, chunk_dims, count, dimsf, dsetname, &
                                 dset_rank, fname, memtype, offset, stride, &
@@ -337,8 +395,8 @@ contains
 
     ! Close resources
     call h5dclose_f(dset_id, error)
-    call assert(error == 0, 'h5dclose_f in write_h5_chunk_data3_alt')
-    call closeFileResources(filespace,memspace,dset_id,plist_id)
+    call assert(error == 0, 'h5dclose_f in write_h5_chunk_data3')
+    call closeFileResources(filespace,memspace,plist_id)
     call h5fclose_f(file_id, error)    
 
   end subroutine
@@ -381,14 +439,40 @@ contains
     
     call h5dcreate_f(file_id, trim(dsetname), memtype, dataspace, dset_id,&
                      error) ! 11 This is in Hang's code, but not mine.
-    call assert(error == 0,'h5dcreate_f in write_h5_chunk_data3_alt')
+    call assert(error == 0,'h5dcreate_f in write_h5_chunk_data5_alt')
     call h5dwrite_f(dset_id, memtype, d_write, dimsf, error, &
                     file_space_id = filespace, mem_space_id = memspace, &
                     xfer_prp = plist_id) ! 12
-    call assert(error == 0,'h5dwrite_f in write_h5_chunk_data3_alt')
+    call assert(error == 0,'h5dwrite_f in write_h5_chunk_data5_alt')
     call h5dclose_f(dset_id, error)
-    call assert(error == 0, 'h5dclose_f in write_h5_chunk_data3_alt')
+    call assert(error == 0, 'h5dclose_f in write_h5_chunk_data5_alt')
   end subroutine
+  
+  subroutine write_h5_chunk_data1_alt(file_id, dsetname, memtype, dataspace, &
+      dset_id, dimsf, filespace, memspace, plist_id, d_write)
+    ! This does the same thing as the routine above, but it only creates the
+    ! dataspace and writes the data. The opening and closing of other HDF5
+    ! derived types must be handled elsewhere. This allows one to write multiple
+    ! variables to the same file 
+    integer(HID_T), intent(in) :: memtype
+    integer(HID_T), intent(in) :: file_id, plist_id, filespace, memspace, dataspace
+    integer(HID_T), intent(out) :: dset_id
+    character(len=*), intent(in) :: dsetname
+    integer(HSIZE_T), dimension(1), intent(in) :: dimsf
+    real(rkind), dimension(:), intent(in) :: d_write
+    integer :: error
+    
+    call h5dcreate_f(file_id, trim(dsetname), memtype, dataspace, dset_id,&
+                     error) ! 11 This is in Hang's code, but not mine.
+    call assert(error == 0,'h5dcreate_f in write_h5_chunk_data1_alt')
+    call h5dwrite_f(dset_id, memtype, d_write, dimsf, error, &
+                    file_space_id = filespace, mem_space_id = memspace, &
+                    xfer_prp = plist_id) ! 12
+    call assert(error == 0,'h5dwrite_f in write_h5_chunk_data1_alt')
+    call h5dclose_f(dset_id, error)
+    call assert(error == 0, 'h5dclose_f in write_h5_chunk_data1_alt')
+  end subroutine
+  
   
   subroutine createAndOpenFile(block, chunk_dims, count, dimsf, dset_rank, &
       fname, offset, stride, communicator, file_id, plist_id, &
@@ -403,29 +487,39 @@ contains
 
     ! Setup file access property list with parllel I/O access
     call h5pcreate_f(H5P_FILE_ACCESS_F, plist_id, error) ! 1
+    call assert(error == 0, 'h5pcreate_f in createAndOpenFile')
     call h5pset_fapl_mpio_f(plist_id, communicator, MPI_INFO_NULL, error) ! 2
+    call assert(error == 0, 'h5pset_fapl_mpio_f in createAndOpenFile')
 
     ! Create the file collectively
     call h5fcreate_f(fname, H5F_ACC_TRUNC_F, file_id, error, access_prp = plist_id) ! 3
+    call assert(error == 0, 'h5fcreate_f in createAndOpenFile')
     call h5pclose_f(plist_id, error) ! 4
+    call assert(error == 0, 'h5pclose_f in createAndOpenFile')
 
     ! Create the data space for the dataset
     call h5screate_simple_f(dset_rank, dimsf, dataspace, error) ! 5 This is in
+    call assert(error == 0, 'h5screate_simple_f in createAndOpenFile')
                                                           ! Hang's code, but not mine.
     call h5screate_simple_f(dset_rank, dimsf, filespace, error) ! 6
+    call assert(error == 0, 'h5screate_simple_f in createAndOpenFile (1)')
     call h5screate_simple_f(dset_rank, chunk_dims, memspace, error) ! 7
+    call assert(error == 0, 'h5screate_simple_f in createAndOpenFile (2)')
 
     ! Select hyperslab in the file
     call h5sselect_hyperslab_f(filespace, H5S_SELECT_SET_F, offset, count, &
                                error, stride, block) ! 8
+    call assert(error == 0, 'h5sselect_hyperslab_f in createAndOpenFile')
 
     ! Create property list for collective dataset write
     call h5pcreate_f(H5P_DATASET_XFER_F, plist_id, error) ! 9
+    call assert(error == 0, 'h5pcreate_f in createAndOpenFile')
     call h5pset_dxpl_mpio_f(plist_id, H5FD_MPIO_COLLECTIVE_F, error) ! 10
+    call assert(error == 0, 'h5pset_dxpl_mpio_f in createAndOpenFile')
   end subroutine 
  
-  subroutine closeFileResources(filespace,memspace,dset_id,plist_id)
-    integer(HID_T), intent(in) :: dset_id, plist_id, filespace, memspace
+  subroutine closeFileResources(filespace,memspace,plist_id)
+    integer(HID_T), intent(in) :: plist_id, filespace, memspace
     integer :: error
     call h5sclose_f(filespace, error)
     call assert(error == 0, 'h5sclose_f for filespace in closeFileResources')
