@@ -1,12 +1,15 @@
 module largeScalesMod
   use kind_parameters, only: rkind
   use domainSetup, only: gpLES, gpLESb, getStartAndEndIndices, decomp2Dpencil, &
-    periodic, dxLES, dyLES, dzLES, gpQHcent
+    isBCperiodic, dxLES, dyLES, dzLES, gpQHcent
   use DerivativesMod, only: derivatives
   use decomp_2d
-  use exits, only: gracefulExit
-  use gaborIO_mod, only: readFields, writeFields
+  use exits, only: gracefulExit, message
   use fortran_assert, only: assert
+  use hdf5
+  use hdf5_fcns, only: read_h5_chunk_data, write_h5_chunk_data, &
+    createAndOpenFile, closeFileResources
+  use mpi, only: MPI_COMM_WORLD
 
   implicit none
 
@@ -27,8 +30,17 @@ module largeScalesMod
                                          ! (O)f (I)nterest? See
                                          ! computeLargeScaleParams.F90 in
                                          ! problems/gabor/<current problem files>/
+  
+  interface readFields
+    module procedure read3Fields3D, read2Fields3D, read1Field5D
+  end interface
+  interface writeFields
+    module procedure write3Fields3D, write1Field3D, write1Field5D
+  end interface
 
   contains
+    include "largeScales_files/generalIO.F90"
+
     subroutine initLargeScales(inputfile,gradPossible)
       ! Initialize variables and allocate memory for the large scale field
       ! Inputs:
@@ -41,6 +53,7 @@ module largeScalesMod
       integer :: ist, ien, jst, jen, kst, ken
       integer :: isz, jsz, ksz
       integer :: ierr, ioUnit
+      logical, dimension(3) :: periodic
       
       namelist /LARGESCALES/ cL
 
@@ -88,6 +101,8 @@ module largeScalesMod
         ddxMethod = 'cd06'
         ddyMethod = 'cd06'
         ddzMethod = 'cd06'
+
+        call isBCperiodic(periodic)
         if (periodic(1)) ddxMethod = 'four'
         if (periodic(2)) ddyMethod = 'four'
         if (periodic(3)) ddzMethod = 'four'

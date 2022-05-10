@@ -52,9 +52,8 @@ module turbHalfChanMod
     end subroutine
    
     subroutine computeLargeScaleParams(fname,KEname,Lname)
-      use largeScalesMod, only: KE, L, readUVW, computeLrgSclQOIs, cL
+      use largeScalesMod, only: KE, L, readUVW, computeLrgSclQOIs, cL, readFields
       use domainSetup, only: gpQHcent
-      use gaborIO_mod, only: readFields
       use exits, only: gracefulExit
       implicit none
       character(len=*), intent(in), optional :: fname, KEname, Lname

@@ -4,14 +4,16 @@ program test_gaborMode_domainSetup
   use kind_parameters, only: rkind, clen
   use domainSetup, only: setupDomainXYperiodic, finalizeDomainSetup, xLESb, yLESb, zLESb, gpLESb, &
     xQHedge, yQHedge, zQHedge, gpQHcent, nxLES, nyLES, nzLES, nxF, nyF, nzF, nxQH, nyQH, nzQH, &
-    xQHcent, yQHcent, zQHcent, xF, yF, zF, gpF, xFh, yFh, zFh, nxsupp, nysupp, nzsupp, &
-    Lx, Ly, Lz, xLES, yLES, zLES, gpLES, kmin, kmax
+    xQHcent, yQHcent, zQHcent, xF, yF, zFC, gpFC, xFh, yFh, zFh, nxsupp, nysupp, nzsupp, &
+    Lx, Ly, Lz, xLES, yLES, zLES, gpLES, kmin, kmax, nprocX, nprocY, nprocZ, &
+    getStartAndEndIndices, nrankX, nrankY, nrankZ
   use fortran_assert, only: assert
   use basic_io, only: read_1d_ascii
 
   implicit none
   character(len=clen) :: inputfile, datadir, fname, mssg
   integer :: i, ist, ien, jst, jen, kst, ken
+  integer :: isz, jsz, ksz
   integer :: istF, ienF, jstF, jenF
   integer :: istM, ienM, jstM, jenM
   integer :: ierr, ioUnit = 1
@@ -96,44 +98,30 @@ program test_gaborMode_domainSetup
   do i = 1,nproc
     if (nrank == i - 1) then
       ! LES mesh:
+      call getStartAndEndIndices(gpLESb,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
       write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", xLESb discrepency. Max difference = ",&
-        maxval(xLESb - xLESbTrue(gpLESb%xst(1):gpLESb%xen(1)))
-      call assert(maxval(xLESb - xLESbTrue(gpLESb%xst(1):gpLESb%xen(1))) < small,trim(mssg))
+        maxval(xLESb - xLESbTrue(ist:ien))
+      call assert(maxval(xLESb - xLESbTrue(ist:ien)) < small,trim(mssg))
       write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", yLESb discrepency. Max difference = ",&
-        maxval(yLESb - yLESbTrue(gpLESb%xst(2):gpLESb%xen(2)))
-      call assert(maxval(yLESb - yLESbTrue(gpLESb%xst(2):gpLESb%xen(2))) < small,trim(mssg))
+        maxval(yLESb - yLESbTrue(jst:jen))
+      call assert(maxval(yLESb - yLESbTrue(jst:jen)) < small,trim(mssg))
       write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", zLESb discrepency. Max difference = ",&
-        maxval(zLESb - zLESbTrue(gpLESb%xst(3):gpLESb%xen(3)))
-      call assert(maxval(zLESb - zLESbTrue(gpLESb%xst(3):gpLESb%xen(3))) < small,trim(mssg))
+        maxval(zLESb - zLESbTrue(kst:ken))
+      call assert(maxval(zLESb - zLESbTrue(kst:ken)) < small,trim(mssg))
 
+      call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
       write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", xLES discrepency. Max difference = ",&
-        maxval(xLES - xLEStrue(gpLES%xst(1):gpLES%xen(1)))
-      call assert(maxval(xLES - xLEStrue(gpLES%xst(1):gpLES%xen(1))) < small,trim(mssg))
+        maxval(xLES - xLEStrue(ist:ien))
+      call assert(maxval(xLES - xLEStrue(ist:ien)) < small,trim(mssg))
       write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", yLES discrepency. Max difference = ",&
-        maxval(yLES - yLEStrue(gpLES%xst(2):gpLES%xen(2)))
-      call assert(maxval(yLES - yLEStrue(gpLES%xst(2):gpLES%xen(2))) < small,trim(mssg))
+        maxval(yLES - yLEStrue(jst:jen))
+      call assert(maxval(yLES - yLEStrue(jst:jen)) < small,trim(mssg))
       write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", zLES discrepency. Max difference = ",&
-        maxval(zLES - zLEStrue(gpLES%xst(3):gpLES%xen(3)))
-      call assert(maxval(zLES - zLEStrue(gpLES%xst(3):gpLES%xen(3))) < small,trim(mssg))
-
-      ! QH edges:
-      ist = gpQHcent%xst(1); ien = gpQHcent%xen(1)+1
-      jst = gpQHcent%xst(2); jen = gpQHcent%xen(2)+1
-      kst = gpQHcent%xst(3); ken = gpQHcent%xen(3)+1
-      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", xQHedge discrepency. Max difference = ",&
-        maxval(xQHedge - xQHedgeTrue(ist:ien))
-      call assert(maxval(xQHedge - xQHedgeTrue(ist:ien)) < small,trim(mssg))
-      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", yQHedge discrepency. Max difference = ",&
-        maxval(yQHedge - yQHedgeTrue(jst:jen))
-      call assert(maxval(yQHedge - xQHedgeTrue(jst:jen)) < small,trim(mssg))
-      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", zQHedge discrepency. Max difference = ",&
-        maxval(zQHedge - zQHedgeTrue(kst:ken))
-      call assert(maxval(zQHedge - xQHedgeTrue(kst:ken)) < small,trim(mssg))
+        maxval(zLES - zLEStrue(kst:ken))
+      call assert(maxval(zLES - zLEStrue(kst:ken)) < small,trim(mssg))
       
       ! QH centers:
-      ist = gpQHcent%xst(1); ien = gpQHcent%xen(1)
-      jst = gpQHcent%xst(2); jen = gpQHcent%xen(2)
-      kst = gpQHcent%xst(3); ken = gpQHcent%xen(3)
+      call getStartAndEndIndices(gpQHcent,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
       call assert(size(xQHcent) == size(xQHcentTrue(ist:ien)),'xQHcent size comparison',nrank)
       call assert(size(yQHcent) == size(yQHcentTrue(jst:jen)),'yQHcent size comparison',nrank)
       call assert(size(zQHcent) == size(zQHcentTrue(kst:ken)),'zQHcent size comparison',nrank)
@@ -147,10 +135,22 @@ program test_gaborMode_domainSetup
         maxval(zQHcent - zQHcentTrue(kst:ken))
       call assert(maxval(zQHcent - zQHcentTrue(kst:ken)) < small,trim(mssg))
 
+      ! QH edges:
+      ien = ien + 1
+      jen = jen + 1
+      ken = ken + 1
+      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", xQHedge discrepency. Max difference = ",&
+        maxval(xQHedge - xQHedgeTrue(ist:ien))
+      call assert(maxval(xQHedge - xQHedgeTrue(ist:ien)) < small,trim(mssg))
+      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", yQHedge discrepency. Max difference = ",&
+        maxval(yQHedge - yQHedgeTrue(jst:jen))
+      call assert(maxval(yQHedge - xQHedgeTrue(jst:jen)) < small,trim(mssg))
+      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", zQHedge discrepency. Max difference = ",&
+        maxval(zQHedge - zQHedgeTrue(kst:ken))
+      call assert(maxval(zQHedge - xQHedgeTrue(kst:ken)) < small,trim(mssg))
+
       ! High resolution mesh:
-      ist = gpF%xst(1); ien = gpF%xen(1)
-      jst = gpF%xst(2); jen = gpF%xen(2)
-      kst = gpF%xst(3); ken = gpF%xen(3)
+      call getStartAndEndIndices(gpFC,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
       write(mssg,'(A,F10.8)') "xF discrepency. Max difference = ",&
         maxval(xF - xFtrue(ist:ien))
       call assert(maxval(xF - xFtrue(ist:ien)) < small,trim(mssg),nrank)
@@ -158,8 +158,8 @@ program test_gaborMode_domainSetup
         maxval(yF - yFtrue(jst:jen))
       call assert(maxval(yF - yFtrue(jst:jen)) < small,trim(mssg),nrank)
       write(mssg,'(A,F10.8)') "zF discrepency. Max difference = ",&
-        maxval(zF - zFtrue(kst:ken))
-      call assert(maxval(zF - zFtrue(kst:ken)) < small,trim(mssg),nrank)
+        maxval(zFC - zFtrue(kst:ken))
+      call assert(maxval(zFC - zFtrue(kst:ken)) < small,trim(mssg),nrank)
       
       istF = ist-nxsupp/2; ienF = ien+nzsupp/2 
       jstF = jst-nysupp/2; jenF = jen+nysupp/2 
@@ -167,7 +167,6 @@ program test_gaborMode_domainSetup
 
       istM = istF + nxsupp/2; ienM = ienF + nxsupp/2 
       jstM = jstF + nysupp/2; jenM = jenF + nysupp/2 
-      
       write(mssg,'(A,F10.8)') "xFh discrepency. Max difference = ",&
         maxval(xFh - xFpTrue(istM:ienM))
       call assert(maxval(xFh - xFpTrue(istM:ienM)) < small,trim(mssg),nrank)
@@ -181,6 +180,22 @@ program test_gaborMode_domainSetup
       ! Confirm kmin and kmax
       call assert(abs(kmin - kminTrue) < small,'kmin discrepency')
       call assert(abs(kmax - kmaxTrue) < small,'kmax discrepency')
+    end if
+    call MPI_Barrier(MPI_COMM_WORLD,ierr)
+  end do
+  call MPI_Barrier(MPI_COMM_WORLD,ierr)
+  if (nrank == 0) then
+    print*, "Number of partitions in x:", nprocX
+    print*, "Number of partitions in y:", nprocY
+    print*, "Number of partitions in z:", nprocZ
+  end if
+  call MPI_Barrier(MPI_COMM_WORLD,ierr)
+  do i = 1,nproc
+    if (nrank == i-1) then
+      call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+      print*, nrank, "ist: ", ist, "nrankX: ", nrankX
+      print*, nrank, "jst: ", jst, "nrankY: ", nrankY
+      print*, nrank, "kst: ", kst, "nrankZ: ", nrankZ
     end if
     call MPI_Barrier(MPI_COMM_WORLD,ierr)
   end do

@@ -16,13 +16,17 @@ module domainSetup
     use EulerG_mod, only: EulerG
     use constants, only: pi
     use mpi
+    use fortran_assert, only: assert
     implicit none
     real(rkind), dimension(2) :: xDom, yDom, zDom
     real(rkind) :: Lx, Ly, Lz
-    type(decomp_info), allocatable :: gpLESb
+    type(decomp_info), allocatable :: gpLESb ! <-- Includes domain boundaries
     type(decomp_info), allocatable :: gpLES
     type(decomp_info), allocatable :: gpQHcent
-    type(decomp_info), allocatable :: gpF
+    type(decomp_info), allocatable :: gpFC ! <-- "Fine" mesh. This corresponds to
+                                          ! the "cell" locations in PadeOps
+    type(decomp_info), allocatable :: gpFE ! <-- "Fine" mesh. This corresponds to
+                                           ! the "edge" locations in PadeOps
     character(len=1) :: decomp2Dpencil = 'x'
     type(EulerG) :: fineMesh
     logical, dimension(3) :: periodic ! <-- Boundary conditions
@@ -50,12 +54,17 @@ module domainSetup
       ! refinment in each coordinate direction
       integer :: nlevels
       ! Numerical mesh corresponding to high resolution fields
-      real(rkind), dimension(:), allocatable :: xF, yF, zF
+      real(rkind), dimension(:), allocatable :: xF, yF, zFC, zFE
       ! Numerical mesh for velocity rendering including halo regions for each MPI rank
       real(rkind), dimension(:), allocatable :: xFh, yFh, zFh
 
     ! Max and min wavenumber based on LES and high resolution meshes
       real(rkind) :: kmin, kmax
+
+    ! The number of MPI ranks partitioning the domain in each coordinate
+    ! direction
+      integer :: nprocX, nprocY, nprocZ
+      integer :: nrankX, nrankY, nrankZ
     
     contains
       
@@ -87,7 +96,7 @@ module domainSetup
         zDom = [0.d0, Lz]
         
         ! Allocate memory for grid partitions
-        allocate(gpLES,gpLESb,gpQHcent,gpF)
+        allocate(gpLES,gpLESb,gpQHcent,gpFC,gpFE)
 
         ! Initialize grid partition for LES mesh
         periodic = [.true.,.true.,.false.]
@@ -103,7 +112,8 @@ module domainSetup
         call decomp_info_init(nxQH,nyQH,nzQH,gpQHcent)
         
         ! Initialize grid partition for high resolution mesh  
-        call decomp_info_init(nxF,nyF,nzF,gpF)
+        call decomp_info_init(nxF,nyF,nzF,gpFC)
+        call decomp_info_init(nxF,nyF,nzF+1,gpFE)
 
         ! LES field
           call getMeshSpacing(Lx,Ly,Lz,nxLES,nyLES,nzLES,dxLES,dyLES,dzLES)
@@ -163,14 +173,17 @@ module domainSetup
           ! TODO: implement hierarchy of fine meshes
           !call fineMesh%init(gpLESb,nlevels,xDom,yDom,zDom)
           call getMeshSpacing(Lx,Ly,Lz,nxF,nyF,nzF,dxF,dyF,dzF)
-          call getStartAndEndIndices(gpF,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
-          allocate(xF(isz),yF(jsz),zF(ksz))
+          call getStartAndEndIndices(gpFC,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+          allocate(xF(isz),yF(jsz),zFC(ksz))
           xF = getPeriodicNodeValues(ist,ien,dxF)
           yF = getPeriodicNodeValues(jst,jen,dyF)
-          zF = getWallNormalNodeValues(kst,ken,dzF)
+          
+          ! Define z at "C"ells (i.e. dzF/2:dzF:Lz-dzF/2)
+          zFC = getWallNormalNodeValues(kst,ken,dzF)
 
           ! High res mesh including halo regions for each MPI process 
           call getWindowFunctionBounds(nlevels,nxsupp,nysupp,nzsupp)
+          call getStartAndEndIndices(gpFE,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
           ist = ist - nxsupp/2; ien = ien + nxsupp/2
           jst = jst - nysupp/2; jen = jen + nysupp/2
           kst = max(1,kst-nzsupp/2)
@@ -185,10 +198,85 @@ module domainSetup
                                                    ! the wall so uses the same routine
                                                    ! as the periodic directions
 
+          ! Define the grid on z "E"dges (i.e. 0:dzF:Lz)
+          call getStartAndEndIndices(gpFE,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+          allocate(zFE(ksz))
+          zFE = getPeriodicNodeValues(kst,ken,dzF)
+
+          ! Bounds check. We must make sure that the parition sizes in each
+          ! dimension are not smaller than the support length or else halo
+          ! exchanges during velocity rendering will give segmentation fault
+          call assert(ist+nxsupp < ien,'ist+nxsupp < ien -- domainSetup.F90')
+          call assert(jst+nysupp < jen,'jst+nysupp < jen -- domainSetup.F90')
+          call assert(kst+nzsupp < ken,'kst+nzsupp < ken -- domainSetup.F90')
+
         ! kmin and kmax for enrichment
           call computeKminKmax()
 
+        ! Get the total number of partitions in each coordinate direction
+        call howManyPartitions()
+
         finishDomainSetup = .true.
+      end subroutine
+
+      pure subroutine getMyPartition(idxSt,nrankI)
+        ! This determines the "order" of the MPI rank in one coordinate
+        ! direction
+        ! Inputs:
+        !   idxSt --> The global starting indices for a particular direction
+        ! Calculated:
+        !   nrankI--> where the current rank is in the order from "front" to "back"
+        !             in the I'th direction
+        ! Example: If I am nrank=0 and my global starting index in x is ist=8,
+        ! clearly I am not nrankX=0 since I do not possess the first chunk of
+        ! data in the x-direction. The algorithm below will determine if I am
+        ! the 2nd, 3rd, etc. from i=1. We need this information for MPI data
+        ! exchange of halo regions
+        use sorting_algorithms, only: binary_sort
+        integer, dimension(nproc), intent(in) :: idxSt
+        integer, intent(out) :: nrankI
+        integer, dimension(nproc,2) :: idxID
+        integer, dimension(1) :: myIdx
+        integer :: i
+        
+        do i = 1,nproc
+          idxID(i,1) = i-1
+        end do
+        idxID(:,2) = idxSt
+
+        call binary_sort(idxID,2)
+
+        myIdx = findloc(idxID(:,1), nrank)
+        nrankI = 0
+        do i = 1,myIdx(1)-1
+          if (idxID(i,2) .ne. idxID(i+1,2)) nrankI = nrankI + 1
+        end do 
+
+      end subroutine
+
+      subroutine howManyPartitions()
+        integer, dimension(nproc) :: istAll, jstAll, kstAll
+        integer, dimension(nproc) :: myIst, myJst, myKst
+        integer :: ist, ien, jst, jen, kst, ken
+        integer :: isz, jsz, ksz
+        integer :: ierr
+
+        call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+        call MPI_Allgather(ist,1,MPI_INTEGER,istAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
+        call MPI_Allgather(jst,1,MPI_INTEGER,jstAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
+        call MPI_Allgather(kst,1,MPI_INTEGER,kstAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
+
+        myIst = ist
+        myJst = jst
+        myKst = kst
+
+        nprocX = count(myIst .ne. istAll) + 1
+        nprocY = count(myJst .ne. jstAll) + 1
+        nprocZ = count(myKst .ne. kstAll) + 1
+
+        call getMyPartition(istAll,nrankX)
+        call getMyPartition(jstAll,nrankY)
+        call getMyPartition(kstAll,nrankZ)
       end subroutine
 
       subroutine finalizeDomainSetup()
@@ -204,9 +292,13 @@ module domainSetup
           call decomp_info_finalize(gpQHcent)
           deallocate(gpQHcent)
         end if
-        if (allocated(gpF)) then
-          call decomp_info_finalize(gpF)
-          deallocate(gpF)
+        if (allocated(gpFC)) then
+          call decomp_info_finalize(gpFC)
+          deallocate(gpFC)
+        end if
+        if (allocated(gpFE)) then
+          call decomp_info_finalize(gpFE)
+          deallocate(gpFE)
         end if
         call decomp_2d_finalize
 
@@ -224,7 +316,8 @@ module domainSetup
         if (allocated(zQHcent)) deallocate(zQHcent)
         if (allocated(xF)) deallocate(xF)
         if (allocated(yF)) deallocate(yF)
-        if (allocated(zF)) deallocate(zF)
+        if (allocated(zFC)) deallocate(zFC)
+        if (allocated(zFE)) deallocate(zFE)
         if (allocated(xFh)) deallocate(xFh)
         if (allocated(yFh)) deallocate(yFh)
         if (allocated(zFh)) deallocate(zFh)
@@ -371,5 +464,10 @@ module domainSetup
 
         kNyq = real(n,rkind)*0.5d0*(2.d0*pi/L)
       end function
+
+      pure subroutine isBCperiodic(BC)
+        logical, dimension(3), intent(out) :: BC
+        BC = periodic
+      end subroutine
 
 end module
