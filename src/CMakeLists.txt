@@ -22,7 +22,7 @@ link_directories(${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${VTK_IO_LIBRARY_PA
 # Create a library called PadeOps
 add_library(PadeOps STATIC ${utilities_source_files} ${derivatives_source_files} ${filters_source_files} ${io_source_files} )
 if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
-   target_link_libraries(PadeOps fftw3 2decomp_fft ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a ${HDF5_LIBRARY_PATH}/libhdf5hl_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5_hl.a ${HDF5_LIBRARY_PATH}/libhdf5_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5.a ${MPI_LIBRARIES} -lz -ldl -lm -Wl,-rpath -Wl,${HDF5_LIBRARY_PATH})
+  target_link_libraries(PadeOps PUBLIC fftw3 2decomp_fft ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a ${HDF5_LIBRARY_PATH}/libhdf5hl_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5_hl.a ${HDF5_LIBRARY_PATH}/libhdf5_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5.a ${MPI_LIBRARIES} -lz -ldl -lm -Wl,-rpath -Wl,${HDF5_LIBRARY_PATH})
 else()
    target_link_libraries(PadeOps fftw3 2decomp_fft blas lapack ${VTK_IO_LIBRARY_PATH}/libVTK_IO.a ${HDF5_LIBRARY_PATH}/libhdf5hl_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5_hl.a ${HDF5_LIBRARY_PATH}/libhdf5_fortran.a ${HDF5_LIBRARY_PATH}/libhdf5.a ${MPI_LIBRARIES} -lz -ldl -lm -Wl,-rpath -Wl,${HDF5_LIBRARY_PATH})
 endif()

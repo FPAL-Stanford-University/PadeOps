@@ -6,12 +6,13 @@ module GaborModeRoutines
   use domainSetup, only: getStartAndEndIndices, gpQHcent, kmin, kmax, dxQH, &
     dyQH, dzQH, xQHedge, yQHedge, zQHedge, finishDomainSetup, nprocX, nprocY, &
     nprocZ, nrankX, nrankY, nrankZ, nzF, nxF, nyF, nxsupp, nysupp, nzsupp, &
-    periodic, gpFE, dxF, dyF, dzF, xFh, yFh, zFh, decomp2Dpencil
+    periodic, gpFE, gpFC, dxF, dyF, dzF, xFh, yFh, zFh, decomp2Dpencil
   use constants, only: pi
   use decomp_2D
   use mpi
   use fortran_assert, only: assert
   use exits, only: gracefulExit
+  use PadeDerOps, only: Pade6stagg
   implicit none
 
   ! Complex vector amplitudes
@@ -48,6 +49,10 @@ module GaborModeRoutines
   integer, private :: istFE, ienFE, jstFE, jenFE, kstFE, kenFE
   integer, private :: iszFE, jszFE, kszFE
 
+  ! Array indices for halo-padded arrays
+  integer, private :: istFh, ienFh, jstFh, jenFh, kstFh, kenFh
+  integer, private :: iszFh, jszFh, kszFh
+
   ! Grid partition for halo-padded arrays
   !type(decomp_info), allocatable :: gpFh
   
@@ -66,6 +71,13 @@ module GaborModeRoutines
 
   ! Rendered velocity fields
   real(rkind), dimension(:,:,:), allocatable :: uG, vG, wG
+  real(rkind), dimension(:,:,:), allocatable :: uGout, vGout, wGout
+
+  ! Interpolator for output velocity field
+  type(Pade6stagg) :: interp
+
+  ! Number of OpenMP threads
+  integer :: nthreads = 1
 
   interface mpiIsendIrecv
     module procedure mpiIsendIrecv2D, mpiIsendIrecv3D
@@ -78,7 +90,7 @@ module GaborModeRoutines
     subroutine initializeModes(inputfile)
       use domainSetup
       character(len=*), intent(in) :: inputfile
-      integer :: ierr, ioUnit
+      integer :: ierr, ioUnit, scheme
       namelist /GABOR/ nk, ntheta, scalefact, ctau, Anu
 
       ! Verify that the domain has been setup
@@ -93,14 +105,18 @@ module GaborModeRoutines
 
       call allocateMemory()
 
+      if (.not. periodic(3)) then
+        scheme = 1 ! 0: fd02, 1: cd06, 2: fourierColl
+        call interp%init(gpFC,gpFC,gpFE,gpFE,dzF,scheme,periodic(3))
+      end if
+
       modeMemoryInitialized = .true.
     end subroutine
 
     subroutine allocateMemory()
       integer :: ierr
       integer, dimension(:), allocatable :: myIst, myIen, myJst, myJen, myKst, myKen
-      !integer :: iist, iien, jjst, jjen, kkst, kken, iisz, jjsz, kksz
-      integer :: ksth, kenh, kszh
+      integer :: ist, ien, jst, jen, kst, ken, isz, jsz, ksz
 
       call getStartAndEndIndices(gpQHcent,istQH,ienQH,jstQH,jenQH,kstQH,kenQH,iszQH,jszQH,kszQH)
       
@@ -131,66 +147,52 @@ module GaborModeRoutines
       allocate(nmodesALL(nproc))
       call MPI_Allgather(nmodes,1,MPI_INTEGER,nmodesALL,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
 
-      ! Define the grid partition for the halo-padded arrays. The global,
-      ! periodic array should be nx+nxsupp X ny+nysupp X nz+1. If we have nprocX
-      ! partitions in x, nprocY in y, and nprocZ in z, then the global array
-      ! incurrs an additional nprocX*nxsupp, nprocY*nysupp, and
-      ! (nprocZ-1)*nzsupp grid points in each dimension.
-!      allocate(gpFh)
-!      call decomp_info_init(nxF + nprocX*nxsupp,&
-!                            nyF + nprocY*nysupp,&
-!                            nzF + 1 + (nprocZ-1)*nzsupp,gpFh)
-
-      ! Allocate memory for the halo-padded velocity fields
-!      call getStartAndEndIndices(gpFh,iist,iien,jjst,jjen,kkst,kken,iisz,jjsz,kksz)
-!      allocate(uFh(iist:iien,jjst:jjen,kkst:kken))
-!      allocate(vFh(iist:iien,jjst:jjen,kkst:kken))
-!      allocate(wFh(iist:iien,jjst:jjen,kkst:kken))
-!      uFh = 0.d0; vFh = 0.d0; wFh = 0.d0
-
       ! Allocate memory for the velocity field to be written
+      if (.not. periodic(3)) then
+        call getStartAndEndIndices(gpFC,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+        allocate(uGout(isz,jsz,ksz),&
+                 vGout(isz,jsz,ksz),&
+                 wGout(isz,jsz,ksz))
+      end if
       call getStartAndEndIndices(gpFE,istFE,ienFE,jstFE,jenFE,kstFE,kenFE,iszFE,jszFE,kszFE)
-      allocate(uG(iszFE,jszFE,kszFE),vG(iszFE,jszFE,kszFE),wG(iszFE,jszFE,kszFE))
+      allocate(uG(iszFE,jszFE,kszFE),&
+               vG(iszFE,jszFE,kszFE),&
+               wG(iszFE,jszFE,kszFE))
       uG = 0.d0; vG = 0.d0; wG = 0.d0
 
 ! I need things below this line if implementing my own update_halo
 !-----------------------------------------------------------------
-      call getStartAndEndIndices(gpFE,istFE,ienFE,jstFE,jenFE,kstFE,kenFE,iszFE,jszFE,kszFE)
-      istFE = istFE - nxsupp/2; ienFE = ienFE + nxsupp/2
-      jstFE = jstFE - nysupp/2; jenFE = jenFE + nysupp/2
-      kstFE = kstFE - nzsupp/2; kenFE = kenFE + nzsupp/2
+      istFh = istFE - nxsupp/2; ienFh = ienFE + nxsupp/2
+      jstFh = jstFE - nysupp/2; jenFh = jenFE + nysupp/2
+      kstFh = kstFE - nzsupp/2; kenFh = kenFE + nzsupp/2
       if (.not. periodic(1)) then
-        istFE = max(1,istFE)
-        ienFE = min(nxF+1,ienFE)
+        istFh = max(1,istFh)
+        ienFh = min(nxF+1,ienFh)
       end if
       if (.not. periodic(2)) then
-        jstFE = max(1,jstFE)
-        jenFE = min(nyF+1,jenFE)
+        jstFh = max(1,jstFh)
+        jenFh = min(nyF+1,jenFh)
       end if
       if (.not. periodic(3)) then
-        kstFE = max(1,kstFE)
-        kenFE = min(nzF+1,kenFE)
+        kstFh = max(1,kstFh)
+        kenFh = min(nzF+1,kenFh)
       end if
-      iszFE = ienFE - istFE + 1
-      jszFE = jenFE - jstFE + 1
-      kszFE = kenFE - kstFE + 1
-      allocate(uFh(istFE:ienFE,jstFE:jenFE,kstFE:kenFE))
-      allocate(vFh(istFE:ienFE,jstFE:jenFE,kstFE:kenFE))
-      allocate(wFh(istFE:ienFE,jstFE:jenFE,kstFE:kenFE))
-      uFh = 0.d0; vFh = 0.d0; wFh = 0.d0
+      iszFh = ienFh - istFh + 1
+      jszFh = jenFh - jstFh + 1
+      kszFh = kenFh - kstFh + 1
+      allocate(uFh(istFh:ienFh,jstFh:jenFh,kstFh:kenFh))
+      allocate(vFh(istFh:ienFh,jstFh:jenFh,kstFh:kenFh))
+      allocate(wFh(istFh:ienFh,jstFh:jenFh,kstFh:kenFh))
 
       select case (decomp2Dpencil)
       case ('x')
-        ksth = max(1,kstFE-nzsupp/2)
-        kenh = min(nzF+1,kenFE+nzsupp/2)
-        kszh = kenh - ksth + 1
-        allocate(buff1(iszFE+nxsupp,jszFE+nysupp,nzsupp/2))
-        allocate(buff2(iszFE+nxsupp,jszFE+nysupp,nzsupp/2))
-        allocate(buff3(iszFE+nxsupp,nysupp/2,kszh))
-        allocate(buff4(iszFE+nxsupp,nysupp/2,kszh))
+        allocate(buff1(iszFh,jszFh,nzsupp/2))
+        allocate(buff2(iszFh,jszFh,nzsupp/2))
+        allocate(buff3(iszFh,nysupp/2,kszFh))
+        allocate(buff4(iszFh,nysupp/2,kszFh))
 
-        allocate(sendReqHi(kszh),sendReqLo(kszh))
-        allocate(recvReqHi(kszh),recvReqLo(kszh))
+        allocate(sendReqHi(kszFh),sendReqLo(kszFh))
+        allocate(recvReqHi(kszFh),recvReqLo(kszFh))
       case ('y')
         call assert(.false.,'TODO: y pencil stuff')
       case ('z')
@@ -248,6 +250,8 @@ module GaborModeRoutines
 
       ! Confirm we have allocated the required memory
       call assert(modeMemoryInitialized,"Gabor mode memory not allocated")
+
+      call message("Initializing isotropic modes")
       
       ! Assign wave-vector magnitudes based on logarithmically spaced shells
       ! (non-dimensionalized with L)
@@ -263,11 +267,11 @@ module GaborModeRoutines
           do i = 1,iszQH
             xmin = xQHedge(i)
     
-            !seed1 = 1 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
-            !seed2 = 2 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
-            !seed3 = 3 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
-            !seed4 = 4 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
-            !seed5 = 5 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
+            seed1 = 1 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
+            seed2 = 2 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
+            seed3 = 3 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
+            seed4 = 4 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
+            seed5 = 5 + (istQH + i - 1) + (jstQH + j - 1) + (kstQH + k - 1)
 
             ! Uniformily distribute modes in QH region
             call uniform_random(rand1,0.d0,1.d0,seed1)
@@ -301,7 +305,7 @@ module GaborModeRoutines
           end do
         end do
       end do
-      
+
       ! Replicate array to match array dimensions for multiplication below
       do thetaID = 2,ntheta
         umag(:,:,:,:,thetaID) = umag(:,:,:,:,1)
@@ -419,6 +423,10 @@ module GaborModeRoutines
       if (allocated(vG)) deallocate(vG)
       if (allocated(wG)) deallocate(wG)
 
+      if (allocated(uGout)) deallocate(uGout)
+      if (allocated(vGout)) deallocate(vGout)
+      if (allocated(wGout)) deallocate(wGout)
+
       if (allocated(istAll)) deallocate(istAll)
       if (allocated(ienAll)) deallocate(ienAll)
       if (allocated(jstAll)) deallocate(jstAll)
@@ -430,6 +438,8 @@ module GaborModeRoutines
       if (allocated(sendReqHi)) deallocate(sendReqHi)
       if (allocated(recvReqLo)) deallocate(recvReqLo)
       if (allocated(recvReqHi)) deallocate(recvReqHi)
+
+      if (.not. periodic(3)) call interp%destroy()
     end subroutine
 
     function getModelSpectrum(k,KE,L,nk) result(E) 

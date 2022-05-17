@@ -1,24 +1,26 @@
 module turbHalfChanMod
-  use fortran_assert, only: assert
+  use fortran_assert,  only: assert
   use kind_parameters, only: rkind, clen
   implicit none
   contains
     subroutine initializeProblem(inputfile)
-      use domainSetup, only: setupDomainXYperiodic
-      use largeScalesMod, only: initLargeScales
-      use GaborModeRoutines, only: initializeModes
+      use domainSetup,           only: setupDomainXYperiodic
+      use largeScalesMod,        only: initLargeScales
+      use GaborModeRoutines,     only: initializeModes, nthreads
+      use auxiliary_openmp_subs, only: getArguments
       implicit none
       character(len=clen), intent(inout) :: inputfile
       call initializeExternalLibraries()
       call GETARG(1,inputfile)
+      call getArguments(nthreads) 
       call setupDomainXYperiodic(inputfile)
-      call initLargeScales(inputfile)
+      call initLargeScales(inputfile,.false.)
       call initializeModes(inputfile)
     end subroutine
     
     subroutine finalizeProblem()
-      use domainSetup, only: finalizeDomainSetup
-      use largeScalesMod, only: finalizeLargeScales
+      use domainSetup,       only: finalizeDomainSetup
+      use largeScalesMod,    only: finalizeLargeScales
       use GaborModeRoutines, only: finalizeGaborModes
       implicit none
       call finalizeGaborModes()
@@ -31,9 +33,10 @@ module turbHalfChanMod
       use mpi
       use hdf5
       implicit none
-      integer :: ierr
+      integer :: ierr, provided
     
-      call MPI_Init(ierr)
+      call MPI_Init_thread(MPI_THREAD_FUNNELED,provided,ierr)
+      !call MPI_Init(ierr)
       call assert(ierr == MPI_SUCCESS,'MPI initialization failed.')
       call H5open_f(ierr)
       call assert(ierr == 0,'HDF5 initialization failed.')
@@ -53,8 +56,8 @@ module turbHalfChanMod
    
     subroutine computeLargeScaleParams(fname,KEname,Lname)
       use largeScalesMod, only: KE, L, readUVW, computeLrgSclQOIs, cL, readFields
-      use domainSetup, only: gpQHcent
-      use exits, only: gracefulExit
+      use domainSetup,    only: gpQHcent
+      use exits,          only: gracefulExit
       implicit none
       character(len=*), intent(in), optional :: fname, KEname, Lname
       integer :: ierr

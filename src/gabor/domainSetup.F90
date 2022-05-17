@@ -59,7 +59,7 @@ module domainSetup
       real(rkind), dimension(:), allocatable :: xFh, yFh, zFh
 
     ! Max and min wavenumber based on LES and high resolution meshes
-      real(rkind) :: kmin, kmax
+      real(rkind) :: kmin = -1.d0, kmax = -1.d0
 
     ! The number of MPI ranks partitioning the domain in each coordinate
     ! direction
@@ -82,7 +82,8 @@ module domainSetup
 
         namelist /DOMAIN/ Lx, Ly, Lz, nxLES, nyLES, nzLES, &
           nxLESperQH, nyLESperQH, nzLESperQH, &
-          nxF, nyF, nzF, pcol, prow, decomp2Dpencil
+          nxF, nyF, nzF, pcol, prow, decomp2Dpencil, &
+          kmin, kmax
 
         ! Read inputfile
         ioUnit = 1
@@ -211,7 +212,11 @@ module domainSetup
           call assert(kst+nzsupp < ken,'kst+nzsupp < ken -- domainSetup.F90')
 
         ! kmin and kmax for enrichment
-          call computeKminKmax()
+          if (kmin < 0.d0) then
+            call computeKminKmax()
+          else
+            call assert(kmax > kmin,'kmax must be greater than kmin -- domainSetup.F90')
+          end if
 
         ! Get the total number of partitions in each coordinate direction
         call howManyPartitions()

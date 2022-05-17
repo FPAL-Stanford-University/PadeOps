@@ -109,12 +109,12 @@ module largeScalesMod
 
         call grad%init(gpLES,dxLES,dyLES,dzLES,periodic(1),periodic(2),periodic(3),&
           ddxMethod,ddyMethod,ddzMethod)
-
-        ! Initialize memory for the large scale parameters
-        call getStartAndEndIndices(gpQHcent,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
-        allocate(KE(isz,jsz,ksz), L(isz,jsz,ksz))
-        initialized = .true.
       end if 
+      
+      ! Initialize memory for the large scale parameters
+      call getStartAndEndIndices(gpQHcent,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+      allocate(KE(isz,jsz,ksz), L(isz,jsz,ksz))
+      initialized = .true.
     end subroutine
 
     subroutine finalizeLargeScales()

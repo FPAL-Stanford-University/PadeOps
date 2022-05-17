@@ -2,10 +2,9 @@
 
 program test_gaborMode_IsotropicModes
   use kind_parameters, only: rkind, clen
-  use largeScalesMod, only: getLargeScaleData, computeLargeScaleGradient, U
-  use domainSetup, only: yLES
+  use largeScalesMod, only: getLargeScaleData, computeLargeScaleGradient
   use GaborModeRoutines, only: generateIsotropicModes, getModelSpectrum, nk, &
-    renderVelocity
+    renderVelocityXYperiodic
   use GaborIO_mod, only: writeModes, readModes
   use fortran_assert, only: assert
   use mpi
@@ -25,6 +24,7 @@ program test_gaborMode_IsotropicModes
   ! Initiaize MPI, HDF5, & generate numerical mesh
   call initializeProblem(inputfile)
 
+
   ! Read inputfile to get datadir
   ioUnit = 1
   open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -32,10 +32,10 @@ program test_gaborMode_IsotropicModes
   close(ioUnit)
  
   ! Get large scale data 
-  write(fname,'(A)')trim(datadir)//'/'//'LargeScaleVelocity.h5'
+  write(fname,'(A)')trim(datadir)//'/'//'LargeScaleVelocityB.h5'
   call getLargeScaleData(trim(fname))
 
-  write(fname,'(A)')trim(datadir)//'/'//'LargeScaleGradient.h5'
+  write(fname,'(A)')trim(datadir)//'/'//'LargeScaleGradientB.h5'
   call computeLargeScaleGradient(trim(fname))
 
   write(fname,'(A)')trim(datadir)//'/'//'LargeScaleParams.h5'
@@ -56,7 +56,7 @@ program test_gaborMode_IsotropicModes
   call writeModes(trim(fname))
 
   ! Render the velocity field
-  call renderVelocity()
+!  call renderVelocityXYperiodic()
 
   call MPI_Barrier(MPI_COMM_WORLD,ierr)
   if (nrank == 0) print*, "Test PASSED!"

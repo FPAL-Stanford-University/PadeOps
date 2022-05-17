@@ -1,5 +1,3 @@
-include "../problems/gabor/turbHalfChannel_files/initialize.F90"
-
 program test_gaborMode_largeScales
   use kind_parameters, only: rkind, clen
   use decomp_2d

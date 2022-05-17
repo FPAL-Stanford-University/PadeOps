@@ -132,10 +132,6 @@ subroutine haloExchangeMPI(u)
   jsz = size(u,2)
   ksz = size(u,3)
 
-  ! Initial error handling
-  call assert(ksz <= 100,'MPI request arrays too small -- '//&
-    'haloExchangeMPI() in GaborModeRoutines.F90')
-
   select case(decomp2Dpencil)
   case('x')
 
