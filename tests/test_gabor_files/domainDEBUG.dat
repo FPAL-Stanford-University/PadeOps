@@ -3,22 +3,22 @@
   Ly             = 3.141592653589793d0
   Lz             = 1.d0
   
-  nxLES          = 32
-  nyLES          = 32
-  nzLES          = 16
+  nxLES          = 192
+  nyLES          = 192
+  nzLES          = 64
 
   nxLESperQH     = 2
   nyLESperQH     = 2
   nzLESperQH     = 2
 
-  nxF            = 64 
-  nyF            = 64 
-  nzF            = 32
+  nxF            = 768 
+  nyF            = 768 
+  nzF            = 256
 
   prow           = 0
   pcol           = 0
 
-  decomp2Dpencil = z
+  decomp2Dpencil = x
 /
 /
 &IO

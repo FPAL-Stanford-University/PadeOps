@@ -14,7 +14,7 @@ contains
     if (present(pe)) then
       write(root_stmt,'(A,I2.2,A)')'PE', pe, ' -- assert statement failed:'
     else
-      root_stmt = 'assert statement failed:'
+      root_stmt = 'Assert statement FAILED:'
     end if
     if (.not. expression) then
       if (present(description)) then

@@ -1,21 +1,24 @@
+#include "../problems/gabor/turbHalfChannel_files/turbHalfChanMod.F90"
+
 program test_gaborMode_largeScales
   use kind_parameters, only: rkind, clen
   use decomp_2d
   use mpi
-  use domainSetup, only: nxLES, nyLES, nzLES, gpLESb, gpLES, getStartAndEndIndices, &
+  use domainSetup, only: nxLES, nyLES, nzLES, gpLESe, gpLESc, getStartAndEndIndices, &
     finalizeDomainSetup, setupDomainXYperiodic
   use fortran_assert, only: assert
   use basic_io, only: read_1d_ascii
   use hdf5 
   use hdf5_fcns, only: read_h5_chunk_data
-  use gaborIO_mod, only: writeFields
   use DerivativesMod, only: derivatives
   use largeScalesMod, only: gradU, getLargeScaleData, computeLargeScaleGradient, &
-    finalizeLargeScales, initLargeScales, U, V, W
+    finalizeLargeScales, initLargeScales, U, V, W, writeFields
+  use turbHalfChanMod, only: initializeExternalLibraries,&
+    finalizeProblem
 
   implicit none
 
-  integer :: ierr, ioUnit
+  integer :: ierr, ioUnit = 123
   real(rkind), dimension(:,:,:), allocatable :: Uascii, Vascii, Wascii
   real(rkind), dimension(:,:,:,:,:), allocatable :: gradUascii
   real(rkind), dimension(:), allocatable :: Uascii1, Vascii1, Wascii1
@@ -26,9 +29,12 @@ program test_gaborMode_largeScales
   namelist /IO/ datadir
 
   ! Initialize MPI, HDF5, & generate numerical mesh
-  call initializeProblem(inputfile)
+  call initializeExternalLibraries()
+  call GETARG(1,inputfile)
+  call setupDomainXYperiodic(inputfile)
+  call initLargeScales(inputfile)
   
-  call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+  call getStartAndEndIndices(gpLESe,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
 
   ! Get ground truth from MATLAB
     ! Read inputfile
@@ -37,35 +43,36 @@ program test_gaborMode_largeScales
       close(ioUnit)
 
     ! Read full fields
-    allocate(Uascii(nxLES,nyLES,nzLES))
-    allocate(Vascii(nxLES,nyLES,nzLES))
-    allocate(Wascii(nxLES,nyLES,nzLES))
+    allocate(Uascii(nxLES+1,nyLES+1,nzLES+1))
+    allocate(Vascii(nxLES+1,nyLES+1,nzLES+1))
+    allocate(Wascii(nxLES+1,nyLES+1,nzLES+1))
     
     write(fname,'(A5)')'U.dat'
     call read_1d_ascii(Uascii1,trim(datadir)//'/'//trim(fname))
-    Uascii = reshape(Uascii1,[nxLES,nyLES,nzLES])
+    Uascii = reshape(Uascii1,[nxLES+1,nyLES+1,nzLES+1])
     write(fname,'(A5)')'V.dat'
     call read_1d_ascii(Vascii1,trim(datadir)//'/'//trim(fname))
-    Vascii = reshape(Vascii1,[nxLES,nyLES,nzLES])
+    Vascii = reshape(Vascii1,[nxLES+1,nyLES+1,nzLES+1])
     write(fname,'(A5)')'W.dat'
     call read_1d_ascii(Wascii1,trim(datadir)//'/'//trim(fname))
-    Wascii = reshape(Wascii1,[nxLES,nyLES,nzLES])
+    Wascii = reshape(Wascii1,[nxLES+1,nyLES+1,nzLES+1])
 
 
     !allocate(gradUascii(3,3,nxLES+1,nyLES+1,nzLES+2))
-    allocate(gradUascii(3,3,nxLES,nyLES,nzLES))
+    allocate(gradUascii(3,3,nxLES+1,nyLES+1,nzLES+1))
     write(fname,'(A9)')'gradU.dat'
     call read_1d_ascii(gradUascii1,trim(datadir)//'/'//trim(fname))
-    gradUascii = reshape(gradUascii1,[3,3,nxLES,nyLES,nzLES])
+    gradUascii = reshape(gradUascii1,[3,3,nxLES+1,nyLES+1,nzLES+1])
     
     write(fname,'(A)')trim(datadir)//'/'//'LargeScaleVelocity.h5'
     call getLargeScaleData(fname)
 
-  ! First, compute velocity gradient
-  call computeLargeScaleGradient()
-  
+    write(fname,'(A)')trim(datadir)//'/'//'LargeScalesTestFortran.h5'
+    call writeFields(trim(fname),U,V,W,'/u','/v','/w',gpLESe)
+
   ! Verify this is the same as MATLAB
   call MPI_Barrier(MPI_COMM_WORLD,ierr)
+  print*, maxval(abs(U - Uascii(ist:ien,jst:jen,kst:ken)))
   call assert(maxval(abs(gradU - gradUascii(:,:,ist:ien,jst:jen,kst:ken))) < 1.d-11,'Test FAILED')
   call MPI_Barrier(MPI_COMM_WORLD,ierr)
   if (nrank == 0) print*, "PART1 of test PASSED!"
@@ -73,7 +80,7 @@ program test_gaborMode_largeScales
 
   ! Write gradient to disk
   write(fname,'(A)')trim(datadir)//'/'//'LargeScaleGradientOUT.h5'
-  call writeFields(trim(fname),gradU,'/gradU',gpLES)
+  call writeFields(trim(fname),gradU,'/gradU',gpLESc)
 
   ! Free up memory
   deallocate(Uascii,Uascii1,Vascii,Vascii1,Wascii,Wascii1)
@@ -86,9 +93,9 @@ program test_gaborMode_largeScales
   ! Now make sure we can alternativel read the velocity and gradient from disk
   !call initializeProblem(inputfile)
   call setupDomainXYperiodic(inputfile)
-  call initLargeScales(.false.)
+  call initLargeScales(inputfile,.false.)
   
-  call getStartAndEndIndices(gpLESb,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+  call getStartAndEndIndices(gpLESe,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
 
   ! Get ground truth from MATLAB
     ! Read inputfile
@@ -117,7 +124,7 @@ program test_gaborMode_largeScales
     gradUascii = reshape(gradUascii1,[3,3,nxLES+1,nyLES+1,nzLES+2])
     
     write(fname,'(A)')trim(datadir)//'/'//'LargeScaleVelocityB.h5'
-    call getLargeScaleData(fname,.true.)
+    call getLargeScaleData(fname)
 
   ! First, compute velocity gradient
     write(fname,'(A)')trim(datadir)//'/'//'LargeScaleGradientB.h5'

@@ -1,15 +1,15 @@
 module domainSetup
     ! This module stores key domain information and routines to defined the
     ! computational mesh. Here are descriptions of some of the variables:
-    !      gpLESb --> grid partition for the LES field including the following boundaries:
+    !      gpLESe --> grid partition for the LES field including the following boundaries:
     !                 x=Lx, y=Ly, z=0, z=Lz
-    !      gpLES  --> grid partition for LES field used by LES solver (i.e.
+    !      gpLESc  --> grid partition for LES field used by LES solver (i.e.
     !                 excluding the boundaries listed above)
     !      gpQHcent --> grid partition for QH regions (the center of the QH regions)
     !      gpF --> grid partition for the high resolution mesh used to render
     !              the velocity
-    !      xLESb --> LES mesh including the boundary points x=Lx, y=Ly, z=0, z=Lz
-    !      xLES  --> LES mesh excluding the aforementioned boundary points
+    !      xLESe --> LES mesh including the boundary points x=Lx, y=Ly, z=0, z=Lz
+    !      xLESc  --> LES mesh excluding the aforementioned boundary points
 
     use kind_parameters, only: rkind
     use decomp_2d
@@ -20,8 +20,8 @@ module domainSetup
     implicit none
     real(rkind), dimension(2) :: xDom, yDom, zDom
     real(rkind) :: Lx, Ly, Lz
-    type(decomp_info), allocatable :: gpLESb ! <-- Includes domain boundaries
-    type(decomp_info), allocatable :: gpLES
+    type(decomp_info), allocatable :: gpLESe ! <-- Includes domain boundaries
+    type(decomp_info), allocatable :: gpLESc
     type(decomp_info), allocatable :: gpQHcent
     type(decomp_info), allocatable :: gpFC ! <-- "Fine" mesh. This corresponds to
                                           ! the "cell" locations in PadeOps
@@ -33,8 +33,8 @@ module domainSetup
     logical :: finishDomainSetup = .false.
  
     ! LES discretization
-      real(rkind), dimension(:), allocatable :: xLESb, yLESb, zLESb
-      real(rkind), dimension(:), allocatable :: xLES, yLES, zLES
+      real(rkind), dimension(:), allocatable :: xLESe, yLESe, zLESe
+      real(rkind), dimension(:), allocatable :: xLESc, yLESc, zLESc
       real(rkind) :: dxLES, dyLES, dzLES
       integer :: nxLES, nyLES, nzLES
     
@@ -97,13 +97,13 @@ module domainSetup
         zDom = [0.d0, Lz]
         
         ! Allocate memory for grid partitions
-        allocate(gpLES,gpLESb,gpQHcent,gpFC,gpFE)
+        allocate(gpLESc,gpLESe,gpQHcent,gpFC,gpFE)
 
         ! Initialize grid partition for LES mesh
         periodic = [.true.,.true.,.false.]
-        call decomp_2d_init(nxLES+1,nyLES+1,nzLES+2,prow,pcol,periodic)
-        call get_decomp_info(gpLESb) ! Includes domain boundaries
-        call decomp_info_init(nxLES,nyLES,nzLES,gpLES) ! Excludes wall-normal boundaries 
+        call decomp_2d_init(nxLES+1,nyLES+1,nzLES+1,prow,pcol,periodic)
+        call get_decomp_info(gpLESe) ! Includes domain boundaries
+        call decomp_info_init(nxLES,nyLES,nzLES,gpLESc) ! Excludes wall-normal boundaries 
                                                        ! and redundant periodic boundary
 
         ! Initializ grid partition for QH edges and centers
@@ -120,45 +120,34 @@ module domainSetup
           call getMeshSpacing(Lx,Ly,Lz,nxLES,nyLES,nzLES,dxLES,dyLES,dzLES)
 
           ! Define start and end global indidces
-            call getStartAndEndIndices(gpLESb,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+            call getStartAndEndIndices(gpLESe,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
           
           ! Allocate memory for the 1D vectors defining coordinate axes
-            allocate(xLESb(isz),yLESb(jsz),zLESb(ksz))
+            allocate(xLESe(isz),yLESe(jsz),zLESe(ksz))
 
           ! Define the physical space grid
-            xLESb = getPeriodicNodeValues(ist,ien,dxLES)
-            yLESb = getPeriodicNodeValues(jst,jen,dyLES)
-            if (kst == 1 .and. ken == nzLES+2) then
-              zLESb(1) = 0.d0
-              zLESb(nzLES+2) = Lz
-              zLESb(2:nzLES+1) = getWallNormalNodeValues(1,nzLES+1,dzLES)
-            elseif (kst == 1) then
-              zLESb(1) = 0.d0
-              zLESb(2:ken) = getWallNormalNodeValues(1,ken,dzLES)
-            elseif (ken == nzLES+2) then
-              zLESb(ksz) = Lz
-              zLESb(1:ksz-1) = getWallNormalNodeValues(kst-1,nzLES+1,dzLES)
-            else
-              zLESb = getWallNormalNodeValues(kst-1,ken,dzLES)
-            end if
+            xLESe = getMeshEdgeNodeValues(ist,ien,dxLES)
+            yLESe = getMeshEdgeNodeValues(jst,jen,dyLES)
+            zLESe = getMeshEdgeNodeValues(kst,ken,dzLES)
 
           ! Repeat for LES domain without domain boundaries
-          call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
-          allocate(xLES(isz),yLES(jsz),zLES(ksz))
-          xLES = getPeriodicNodeValues(ist,ien,dxLES)
-          yLES = getPeriodicNodeValues(jst,jen,dyLES)
-          zLES = getWallNormalNodeValues(kst,ken,dzLES)
+          call getStartAndEndIndices(gpLESc,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+          allocate(xLESc(isz),yLESc(jsz),zLESc(ksz))
+          xLESc = getMeshEdgeNodeValues(ist,ien,dxLES)
+          yLESc = getMeshEdgeNodeValues(jst,jen,dyLES)
+          zLESc = getMeshCenterNodeValues(kst,ken,dzLES)
   
         ! QH mesh
           call getMeshSpacing(Lx,Ly,Lz,nxQH,nyQH,nzQH,dxQH,dyQH,dzQH)
           call getStartAndEndIndices(gpQHcent,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
-          allocate(xQHcent(gpQHcent%xsz(1))  ,yQHcent(gpQHcent%xsz(2))  ,zQHcent(gpQHcent%xsz(3)))
-          allocate(xQHedge(gpQHcent%xsz(1)+1),yQHedge(gpQHcent%xsz(2)+1),zQHedge(gpQHcent%xsz(3)+1))
+          allocate(xQHcent(gpQHcent%xsz(1))  ,yQHcent(gpQHcent%xsz(2))  ,&
+            zQHcent(gpQHcent%xsz(3)))
+          allocate(xQHedge(gpQHcent%xsz(1)+1),yQHedge(gpQHcent%xsz(2)+1),&
+            zQHedge(gpQHcent%xsz(3)+1))
           
-          xQHedge = getPeriodicNodeValues(ist,ien+1,dxQH)
-          yQHedge = getPeriodicNodeValues(jst,jen+1,dyQH)
-          ! While the z-direction is not periodic, the QH edges are equivalently defined by this routine:
-          zQHedge = getPeriodicNodeValues(kst,ken+1,dzQH)
+          xQHedge = getMeshEdgeNodeValues(ist,ien+1,dxQH)
+          yQHedge = getMeshEdgeNodeValues(jst,jen+1,dyQH)
+          zQHedge = getMeshEdgeNodeValues(kst,ken+1,dzQH)
           
           xQHcent = 0.5d0*(xQHedge(2:isz+1)+xQHedge(1:isz))
           yQHcent = 0.5d0*(yQHedge(2:jsz+1)+yQHedge(1:jsz))
@@ -172,15 +161,15 @@ module domainSetup
         ! High resolution mesh
           nlevels = nint(log2(real(nxF/nxLES,rkind)))
           ! TODO: implement hierarchy of fine meshes
-          !call fineMesh%init(gpLESb,nlevels,xDom,yDom,zDom)
+          !call fineMesh%init(gpLESe,nlevels,xDom,yDom,zDom)
           call getMeshSpacing(Lx,Ly,Lz,nxF,nyF,nzF,dxF,dyF,dzF)
           call getStartAndEndIndices(gpFC,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
           allocate(xF(isz),yF(jsz),zFC(ksz))
-          xF = getPeriodicNodeValues(ist,ien,dxF)
-          yF = getPeriodicNodeValues(jst,jen,dyF)
+          xF = getMeshEdgeNodeValues(ist,ien,dxF)
+          yF = getMeshEdgeNodeValues(jst,jen,dyF)
           
           ! Define z at "C"ells (i.e. dzF/2:dzF:Lz-dzF/2)
-          zFC = getWallNormalNodeValues(kst,ken,dzF)
+          zFC = getMeshCenterNodeValues(kst,ken,dzF)
 
           ! High res mesh including halo regions for each MPI process 
           call getWindowFunctionBounds(nlevels,nxsupp,nysupp,nzsupp)
@@ -192,9 +181,9 @@ module domainSetup
         
           !allocate(xFh(isz+nxsupp),yFh(jsz+nysupp),zFh(ksz+nzsupp))  
           allocate(xFh(ist:ien),yFh(jst:jen),zFh(kst:ken))  
-          xFh = getPeriodicNodeValues(ist,ien,dxF)
-          yFh = getPeriodicNodeValues(jst,jen,dyF)
-          zFh = getPeriodicNodeValues(kst,ken,dzF) ! <-- While not periodic in
+          xFh = getMeshEdgeNodeValues(ist,ien,dxF)
+          yFh = getMeshEdgeNodeValues(jst,jen,dyF)
+          zFh = getMeshEdgeNodeValues(kst,ken,dzF) ! <-- While not periodic in
                                                    ! z, the mesh is defined from 
                                                    ! the wall so uses the same routine
                                                    ! as the periodic directions
@@ -202,7 +191,7 @@ module domainSetup
           ! Define the grid on z "E"dges (i.e. 0:dzF:Lz)
           call getStartAndEndIndices(gpFE,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
           allocate(zFE(ksz))
-          zFE = getPeriodicNodeValues(kst,ken,dzF)
+          zFE = getMeshEdgeNodeValues(kst,ken,dzF)
 
           ! Bounds check. We must make sure that the parition sizes in each
           ! dimension are not smaller than the support length or else halo
@@ -266,7 +255,7 @@ module domainSetup
         integer :: isz, jsz, ksz
         integer :: ierr
 
-        call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+        call getStartAndEndIndices(gpLESc,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
         call MPI_Allgather(ist,1,MPI_INTEGER,istAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
         call MPI_Allgather(jst,1,MPI_INTEGER,jstAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
         call MPI_Allgather(kst,1,MPI_INTEGER,kstAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
@@ -285,13 +274,13 @@ module domainSetup
       end subroutine
 
       subroutine finalizeDomainSetup()
-        if (allocated(gpLESb)) then
-          call decomp_info_finalize(gpLESb)
-          deallocate(gpLESb)
+        if (allocated(gpLESe)) then
+          call decomp_info_finalize(gpLESe)
+          deallocate(gpLESe)
         end if
-        if (allocated(gpLES)) then
-          call decomp_info_finalize(gpLES)
-          deallocate(gpLES)
+        if (allocated(gpLESc)) then
+          call decomp_info_finalize(gpLESc)
+          deallocate(gpLESc)
         end if
         if (allocated(gpQHcent)) then
           call decomp_info_finalize(gpQHcent)
@@ -307,12 +296,12 @@ module domainSetup
         end if
         call decomp_2d_finalize
 
-        if (allocated(xLES)) deallocate(xLES)
-        if (allocated(yLES)) deallocate(yLES)
-        if (allocated(zLES)) deallocate(zLES)
-        if (allocated(xLESb)) deallocate(xLESb)
-        if (allocated(yLESb)) deallocate(yLESb)
-        if (allocated(zLESb)) deallocate(zLESb)
+        if (allocated(xLESc)) deallocate(xLESc)
+        if (allocated(yLESc)) deallocate(yLESc)
+        if (allocated(zLESc)) deallocate(zLESc)
+        if (allocated(xLESe)) deallocate(xLESe)
+        if (allocated(yLESe)) deallocate(yLESe)
+        if (allocated(zLESe)) deallocate(zLESe)
         if (allocated(xQHedge)) deallocate(xQHedge)
         if (allocated(yQHedge)) deallocate(yQHedge)
         if (allocated(zQHedge)) deallocate(zQHedge)
@@ -330,7 +319,7 @@ module domainSetup
       end subroutine
 
 
-      pure function getPeriodicNodeValues(st,en,h) result(x)
+      pure function getMeshEdgeNodeValues(st,en,h) result(x)
         ! Define a 1D vector based on global indices and uniform grid spacing
         ! The global mesh begins at the domain boundary
         ! Inputs:
@@ -345,7 +334,7 @@ module domainSetup
           x(i) = (i - 1)*h
         end do
       end function
-      pure function getWallNormalNodeValues(st,en,h) result(x)
+      pure function getMeshCenterNodeValues(st,en,h) result(x)
         ! Define a 1D vector based on global indices and uniform grid spacing
         ! The global mesh is defined as h/2:h:L-h/2
         ! Inputs:

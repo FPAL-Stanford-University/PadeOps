@@ -2,10 +2,10 @@ program test_gaborMode_domainSetup
   use mpi
   use decomp_2d
   use kind_parameters, only: rkind, clen
-  use domainSetup, only: setupDomainXYperiodic, finalizeDomainSetup, xLESb, yLESb, zLESb, gpLESb, &
+  use domainSetup, only: setupDomainXYperiodic, finalizeDomainSetup, xLESe, yLESe, zLESe, gpLESe, &
     xQHedge, yQHedge, zQHedge, gpQHcent, nxLES, nyLES, nzLES, nxF, nyF, nzF, nxQH, nyQH, nzQH, &
     xQHcent, yQHcent, zQHcent, xF, yF, zFC, gpFC, xFh, yFh, zFh, nxsupp, nysupp, nzsupp, &
-    Lx, Ly, Lz, xLES, yLES, zLES, gpLES, kmin, kmax, nprocX, nprocY, nprocZ, &
+    Lx, Ly, Lz, xLESc, yLESc, zLESc, gpLESc, kmin, kmax, nprocX, nprocY, nprocZ, &
     getStartAndEndIndices, nrankX, nrankY, nrankZ
   use fortran_assert, only: assert
   use basic_io, only: read_1d_ascii
@@ -17,8 +17,8 @@ program test_gaborMode_domainSetup
   integer :: istF, ienF, jstF, jenF
   integer :: istM, ienM, jstM, jenM
   integer :: ierr, ioUnit = 1
-  real(rkind), dimension(:), allocatable :: xLESbTrue, yLESbTrue, zLESbTrue
-  real(rkind), dimension(:), allocatable :: xLEStrue, yLEStrue, zLEStrue
+  real(rkind), dimension(:), allocatable :: xLESeTrue, yLESeTrue, zLESeTrue
+  real(rkind), dimension(:), allocatable :: xLESctrue, yLESctrue, zLESctrue
   real(rkind), dimension(:), allocatable :: xQHedgeTrue, yQHedgeTrue, zQHedgeTrue
   real(rkind), dimension(:), allocatable :: xQHcentTrue, yQHcentTrue, zQHcentTrue
   real(rkind), dimension(:), allocatable :: xFtrue, yFtrue, zFtrue
@@ -44,21 +44,21 @@ program test_gaborMode_domainSetup
       close(ioUnit)
     
     ! Read LES mesh data
-      allocate(xLESbTrue(nxLES+1),yLESbTrue(nyLES+1),zLESbTrue(nzLES+2))
-      write(fname,'(A9)') 'xLESb.dat'
-      call read_1d_ascii(xLESbTrue,trim(datadir)//'/'//trim(fname))
-      write(fname,'(A9)') 'yLESb.dat'
-      call read_1d_ascii(yLESbTrue,trim(datadir)//'/'//trim(fname))
-      write(fname,'(A9)') 'zLESb.dat'
-      call read_1d_ascii(zLESbTrue,trim(datadir)//'/'//trim(fname))
+      allocate(xLESeTrue(nxLES+1),yLESeTrue(nyLES+1),zLESeTrue(nzLES+1))
+      write(fname,'(A9)') 'xLESe.dat'
+      call read_1d_ascii(xLESeTrue,trim(datadir)//'/'//trim(fname))
+      write(fname,'(A9)') 'yLESe.dat'
+      call read_1d_ascii(yLESeTrue,trim(datadir)//'/'//trim(fname))
+      write(fname,'(A9)') 'zLESe.dat'
+      call read_1d_ascii(zLESeTrue,trim(datadir)//'/'//trim(fname))
   
-      allocate(xLEStrue(nxLES),yLEStrue(nyLES),zLEStrue(nzLES))
+      allocate(xLESctrue(nxLES),yLESctrue(nyLES),zLESctrue(nzLES))
       write(fname,'(A8)') 'xLES.dat'
-      call read_1d_ascii(xLEStrue,trim(datadir)//'/'//trim(fname))
+      call read_1d_ascii(xLESctrue,trim(datadir)//'/'//trim(fname))
       write(fname,'(A8)') 'yLES.dat'
-      call read_1d_ascii(yLEStrue,trim(datadir)//'/'//trim(fname))
+      call read_1d_ascii(yLESctrue,trim(datadir)//'/'//trim(fname))
       write(fname,'(A8)') 'zLES.dat'
-      call read_1d_ascii(zLEStrue,trim(datadir)//'/'//trim(fname))
+      call read_1d_ascii(zLESctrue,trim(datadir)//'/'//trim(fname))
   
     ! Read QHmesh data
       allocate(xQHcentTrue(nxQH),yQHcentTrue(nyQH),zQHcentTrue(nzQH))
@@ -98,27 +98,27 @@ program test_gaborMode_domainSetup
   do i = 1,nproc
     if (nrank == i - 1) then
       ! LES mesh:
-      call getStartAndEndIndices(gpLESb,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
-      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", xLESb discrepency. Max difference = ",&
-        maxval(xLESb - xLESbTrue(ist:ien))
-      call assert(maxval(xLESb - xLESbTrue(ist:ien)) < small,trim(mssg))
-      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", yLESb discrepency. Max difference = ",&
-        maxval(yLESb - yLESbTrue(jst:jen))
-      call assert(maxval(yLESb - yLESbTrue(jst:jen)) < small,trim(mssg))
-      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", zLESb discrepency. Max difference = ",&
-        maxval(zLESb - zLESbTrue(kst:ken))
-      call assert(maxval(zLESb - zLESbTrue(kst:ken)) < small,trim(mssg))
+      call getStartAndEndIndices(gpLESe,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", xLESe discrepency. Max difference = ",&
+        maxval(xLESe - xLESeTrue(ist:ien))
+      call assert(maxval(xLESe - xLESeTrue(ist:ien)) < small,trim(mssg))
+      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", yLESe discrepency. Max difference = ",&
+        maxval(yLESe - yLESeTrue(jst:jen))
+      call assert(maxval(yLESe - yLESeTrue(jst:jen)) < small,trim(mssg))
+      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", zLESe discrepency. Max difference = ",&
+        maxval(zLESe - zLESeTrue(kst:ken))
+      call assert(maxval(zLESe - zLESeTrue(kst:ken)) < small,trim(mssg))
 
-      call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
-      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", xLES discrepency. Max difference = ",&
-        maxval(xLES - xLEStrue(ist:ien))
-      call assert(maxval(xLES - xLEStrue(ist:ien)) < small,trim(mssg))
-      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", yLES discrepency. Max difference = ",&
-        maxval(yLES - yLEStrue(jst:jen))
-      call assert(maxval(yLES - yLEStrue(jst:jen)) < small,trim(mssg))
-      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", zLES discrepency. Max difference = ",&
-        maxval(zLES - zLEStrue(kst:ken))
-      call assert(maxval(zLES - zLEStrue(kst:ken)) < small,trim(mssg))
+      call getStartAndEndIndices(gpLESc,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", xLESc discrepency. Max difference = ",&
+        maxval(xLESc - xLESctrue(ist:ien))
+      call assert(maxval(xLESc - xLESctrue(ist:ien)) < small,trim(mssg))
+      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", yLESc discrepency. Max difference = ",&
+        maxval(yLESc - yLESctrue(jst:jen))
+      call assert(maxval(yLESc - yLESctrue(jst:jen)) < small,trim(mssg))
+      write(mssg,'(A,I2,A,F10.8)') "rank ", nrank, ", zLESc discrepency. Max difference = ",&
+        maxval(zLESc - zLESctrue(kst:ken))
+      call assert(maxval(zLESc - zLESctrue(kst:ken)) < small,trim(mssg))
       
       ! QH centers:
       call getStartAndEndIndices(gpQHcent,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
@@ -192,7 +192,7 @@ program test_gaborMode_domainSetup
   call MPI_Barrier(MPI_COMM_WORLD,ierr)
   do i = 1,nproc
     if (nrank == i-1) then
-      call getStartAndEndIndices(gpLES,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
+      call getStartAndEndIndices(gpLESc,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
       print*, nrank, "ist: ", ist, "nrankX: ", nrankX
       print*, nrank, "jst: ", jst, "nrankY: ", nrankY
       print*, nrank, "kst: ", kst, "nrankZ: ", nrankZ
@@ -208,7 +208,8 @@ program test_gaborMode_domainSetup
   ! deallocate memory used by domain setup
   deallocate(xQHedgeTrue,yQHedgeTrue,zQHedgeTrue)
   deallocate(xQHcentTrue,yQHcentTrue,zQHcentTrue)
-  deallocate(xLESbTrue,yLESbTrue,zLESbTrue)
+  deallocate(xLESeTrue,yLESeTrue,zLESeTrue)
+  deallocate(xLEScTrue,yLEScTrue,zLEScTrue)
   call finalizeDomainSetup()
 
   ! Finalize MPI

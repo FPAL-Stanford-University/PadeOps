@@ -44,10 +44,6 @@ subroutine renderVelocityXYperiodic()
     kkst = max(1    ,ceiling((gmzloc(n)+small)/dzF) - nzsupp/2)
     kken = min(nzF+1,floor(  (gmzloc(n)+small)/dzF) + nzsupp/2)
 
-    !!$OMP PARALLEL SHARED(uFh, vFh, wFh) PRIVATE(tid,i,j,k)
-    !tid = omp_get_thread_num()
-    !if (n == 1 .and. tid == 0) print*, "# of threads spawned:", omp_get_num_threads()
-    !!$OMP DO
     do k = kkst,kken
       kdotx3 = kz(n)*(zFh(k)-gmzloc(n))
       fz = cos(pi*(zFh(k)-gmzloc(n))/wzSupport)
@@ -66,9 +62,6 @@ subroutine renderVelocityXYperiodic()
           utmp(i,j,k,tid+1) = utmp(i,j,k,tid+1) + f*(2.d0*uhatR(n)*cs - 2.d0*uhatI(n)*ss)
           vtmp(i,j,k,tid+1) = vtmp(i,j,k,tid+1) + f*(2.d0*vhatR(n)*cs - 2.d0*vhatI(n)*ss)
           wtmp(i,j,k,tid+1) = wtmp(i,j,k,tid+1) + f*(2.d0*whatR(n)*cs - 2.d0*whatI(n)*ss)
-          !uFh(i,j,k) = uFh(i,j,k) + f*(2.d0*uhatR(n)*cs - 2.d0*uhatI(n)*ss)
-          !vFh(i,j,k) = vFh(i,j,k) + f*(2.d0*vhatR(n)*cs - 2.d0*vhatI(n)*ss)
-          !wFh(i,j,k) = wFh(i,j,k) + f*(2.d0*whatR(n)*cs - 2.d0*whatI(n)*ss)
         end do
       end do
     end do

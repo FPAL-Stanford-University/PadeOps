@@ -6,7 +6,9 @@ module GaborModeRoutines
   use domainSetup, only: getStartAndEndIndices, gpQHcent, kmin, kmax, dxQH, &
     dyQH, dzQH, xQHedge, yQHedge, zQHedge, finishDomainSetup, nprocX, nprocY, &
     nprocZ, nrankX, nrankY, nrankZ, nzF, nxF, nyF, nxsupp, nysupp, nzsupp, &
-    periodic, gpFE, gpFC, dxF, dyF, dzF, xFh, yFh, zFh, decomp2Dpencil
+    periodic, gpFE, gpFC, dxF, dyF, dzF, xFh, yFh, zFh, decomp2Dpencil, &
+    nxLES, nyLES, nzLES, xLESe, yLESe, zLESe, dxLES, dyLES, dzLES, gpLESe
+  use largeScalesMod, only: KE, L, computeLrgSclQOIs, Uph, Vph, Wph, gradUh, Sh
   use constants, only: pi
   use decomp_2D
   use mpi
@@ -27,13 +29,16 @@ module GaborModeRoutines
   real(rkind), dimension(:), allocatable :: gmxloc, gmyloc, gmzloc
   real(rkind), dimension(:,:,:,:), allocatable, private :: gmx, gmy, gmz
 
+  ! QH region index of Gabor mode location
+  real(rkind), dimension(:,:), allocatable :: QH
+
   ! Misc variables
   integer :: nmodes
   integer, dimension(:), allocatable :: nmodesALL
 
   ! Problem parameters
   integer :: nk, ntheta
-  real(rkind) :: scalefact = 1.d0, ctau, Anu = 1.d-4
+  real(rkind) :: scalefact = 1.d0, ctau, Anu = 1.d-4, numolec = 0.d0
 
   ! Warning handling
   logical, private :: doWarning = .true.
@@ -86,12 +91,15 @@ module GaborModeRoutines
   contains
     include "GaborMode_files/renderVelocity.F90"
     include "GaborMode_files/GaborMode_MPI.F90"
+    include "GaborMode_files/strainModes.F90"
+    include "GaborMode_files/GmodeInterp.F90"
+    include "GaborMode_files/timeSteppingStuffV2.F90"
 
     subroutine initializeModes(inputfile)
       use domainSetup
       character(len=*), intent(in) :: inputfile
       integer :: ierr, ioUnit, scheme
-      namelist /GABOR/ nk, ntheta, scalefact, ctau, Anu
+      namelist /GABOR/ nk, ntheta, scalefact, ctau, Anu, numolec
 
       ! Verify that the domain has been setup
       call assert(finishDomainSetup,'Attempting to initialize Gabor modes '//&
@@ -107,8 +115,10 @@ module GaborModeRoutines
 
       if (.not. periodic(3)) then
         scheme = 1 ! 0: fd02, 1: cd06, 2: fourierColl
-        call interp%init(gpFC,gpFC,gpFE,gpFE,dzF,scheme,periodic(3))
+      else
+        scheme = 2
       end if
+      call interp%init(gpFC,gpFC,gpFE,gpFE,dzF,scheme,periodic(3))
 
       modeMemoryInitialized = .true.
     end subroutine
@@ -225,7 +235,6 @@ module GaborModeRoutines
     subroutine generateIsotropicModes()
       use exits, only: message
       use gridtools, only: logspace
-      use largeScalesMod, only: KE, L, computeLrgSclQOIs
       use random, only: uniform_random
       integer :: i, j, k, kid, thetaID
       real(rkind), dimension(nk+1) :: kedge

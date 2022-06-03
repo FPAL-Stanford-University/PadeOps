@@ -26,12 +26,14 @@
 /
 /
 &IO
-  datadir    = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V2Data/tests/largeScaleData'
+  datadir    = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V2Data/tests/GaborModes/strainTests'
+  outputdir  = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V2Data/tests/GaborModes/strainTests/strainedModes'
 /
 /
 &GABOR
   nk        = 10                    ! Number of wavenumber shells spanned by Gabor modes
   ntheta    = 10                    ! Number of modes per wavenumber shell
   scalefact = 0.670820393249937d0   ! A tuneable parameters to get correct energy spectrum 
-  ctau      = 7.d0                  ! Model parameter for mode straining
+  ctau      = 1.d0                  ! Model parameter for mode straining
+  Anu       = 1.d-4
 /

@@ -6,14 +6,13 @@ program turbHalfChannel
   use largeScalesMod, only: getLargeScaleData, computeLargeScaleGradient, &
     writeFields
   use gaborModeRoutines, only: generateIsotropicModes, renderVelocityXYperiodic,&
-    uGout, vGout, wGout
+    uGout, vGout, wGout, strainIsotropicModes
   use domainSetup, only: gpFC
   use kind_parameters, only: clen
   
   implicit none
   character(len=clen) :: inputfile, datadir, fname, outputdir
   integer :: ioUnit, ierr
-  character(len=clen) :: numThreads
         
   namelist /IO/ datadir, outputdir
   
@@ -29,9 +28,6 @@ program turbHalfChannel
   write(fname,'(A)')trim(datadir)//'/'//'LargeScaleField.h5'
   call getLargeScaleData(fname)
 
-  ! Compute or read large scale gradient from velocity data
-  call computeLargeScaleGradient(fname)
-
   ! TODO: Extend large scale data to domain boundaries
 
   ! Compute or read large scale parameters
@@ -42,7 +38,7 @@ program turbHalfChannel
 
   ! Initialize the Gabor Modes
   call generateIsotropicModes()
-  !call strainIsotropicModes()
+  call strainIsotropicModes()
 
   ! Render initialized velocity field (optional)
   call renderVelocityXYperiodic()
