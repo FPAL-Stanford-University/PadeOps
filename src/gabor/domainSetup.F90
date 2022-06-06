@@ -13,7 +13,6 @@ module domainSetup
 
     use kind_parameters, only: rkind
     use decomp_2d
-    use EulerG_mod, only: EulerG
     use constants, only: pi
     use mpi
     use fortran_assert, only: assert
@@ -28,7 +27,6 @@ module domainSetup
     type(decomp_info), allocatable :: gpFE ! <-- "Fine" mesh. This corresponds to
                                            ! the "edge" locations in PadeOps
     character(len=1) :: decomp2Dpencil = 'x'
-    type(EulerG) :: fineMesh
     logical, dimension(3) :: periodic ! <-- Boundary conditions
     logical :: finishDomainSetup = .false.
  

@@ -278,6 +278,9 @@ module largeScalesMod
       deallocate(Ubar,Vbar,Wbar)
 
       call update_halo(U,Uh,1)
+!print*, minval(abs(Uh(:,jsz+1,:))) !DEBUG
+!call MPI_Barrier(MPI_COMM_WORLD,ierr) !DEBUG
+!call assert(.false.) !DEBUG
       call update_halo(V,Vh,1)
       call update_halo(W,Wh,1)
 
