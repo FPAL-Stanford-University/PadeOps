@@ -1,7 +1,7 @@
 &INPUT
 
-inputdir  =  "/home/akshays/Data/PadeOps/shocktube"      ! Directory for input files
-outputdir  = "/home/akshays/Data/PadeOps/shocktube"      ! Directory for output files
+inputdir  =  "/home/nghaisas/runs/PadeOps_startup/compressible/shocktube"      ! Directory for input files
+outputdir  = "/home/nghaisas/runs/PadeOps_startup/compressible/shocktube"      ! Directory for output files
 
 nx = 201                  ! Number of points in X
 ny = 1                    ! Number of points in Y
@@ -14,6 +14,7 @@ nsteps = -1               ! Number of time steps before stopping (Set to negativ
 
 tviz = 1.0D-2             ! Time between visualization dumps (Set to negative to disable)
 vizprefix = "shocktube"   ! Prefix for the visualization files
+reduce_precision  = .false.
 
 periodicx = .FALSE.       ! Periodic in X?
 periodicy = .TRUE.        ! Periodic in Y?
@@ -30,15 +31,27 @@ filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq"
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 
+SkewSymm   = .false.
 /
 
 &CINPUT
+ns   = 1
 gam  = 1.4D0              ! Ratio of specific heats
 Rgas = 1.D0               ! Ratio of specific heats
 x_bc1 = 1                 ! Left  X boundary ( 0 => general, 1 => symmetric ) 
 x_bcn = 1                 ! Right X boundary ( 0 => general, 1 => symmetric ) 
+compute_tke_budget = .false.
+compute_scale_decomposition = .false.
+forcing = .false
 /
 
 &IINPUT
 nu = 0.02D0               ! Kinematic viscosity
 /
+
+
+
+
+
+
+
