@@ -1,6 +1,7 @@
 module enrichmentMod
   use kind_parameters,    only: rkind
   use incompressibleGrid, only: igrid
+  use QHmeshMod,          only: QHmesh
   implicit none
 
   type :: enrichmentOperator
@@ -9,19 +10,19 @@ module enrichmentMod
     real(rkind), dimension(:),     allocatable :: uhatR, uhatI, vhatR, vhatI, whatR, whatI
     real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh
     type(igrid), pointer :: largeScales, smallScales
-    integer :: trender, tio , tid, tidStop 
+    integer :: tidRender, tio , tid, tidStop 
 
     contains
       procedure :: init
       procedure :: destroy
-      !procedure :: generateIsotropicModes
+      procedure :: generateIsotropicModes
       !procedure :: strainModes
       procedure :: advanceTime
       procedure :: renderVelocity
       procedure :: updateLargeScales
       procedure :: wrapupTimeStep
       procedure :: continueSimulation 
-    end type
+  end type
 
 contains
   subroutine init(this,smallScales,largeScales,inputfile)
@@ -30,22 +31,23 @@ contains
     character(len=*), intent(in) :: inputfile   
     integer :: ierr, ioUnit
     integer :: nk, ntheta
-    integer :: trender, tio, tidStop 
+    integer :: tidRender, tio, tidStop 
     real(rkind) :: scalefact, Anu, numolec, ctau
      
     namelist /GABOR/ nk, ntheta, scalefact, ctau, Anu, numolec
-    namelist /CONTROL/ trender, tio, tidStop 
+    namelist /CONTROL/ tidRender, tio, tidStop 
 
     ! Read inputfile
     ioUnit = 1
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
     read(unit=ioUnit, NML=GABOR)
+    read(unit=ioUnit, NML=CONTROL)
     close(ioUnit)
 
     this%largeScales => largeScales 
     this%smallScales => smallScales
 
-    this%trender = trender 
+    this%tidRender = tidRender 
     this%tio = tio
     this%tidStop = tidStop 
   end subroutine
@@ -55,7 +57,27 @@ contains
 
     if (associated(this%largeScales)) nullify(this%largeScales)
     if (associated(this%smallScales)) nullify(this%smallScales)
-  end subroutine  
+  end subroutine 
+
+  subroutine generateIsotropicModes(this,QHregions)
+    class(enrichmentOperator), intent(inout) :: this
+    type(QHmesh), intent(in) :: QHregions
+    integer :: i, j, k
+    real(rkind) :: xmin, ymin, zmin
+
+    do k = 1,QHregions%nz
+      zmin = QHregions%xC(k)
+      do j = 1,QHregions%ny
+        ymin = QHregions%yC(j)
+        do i = 1,QHregions%nx
+          xmin = QHregions%xC(i)
+
+          ! Initialize modes
+
+        end do
+      end do
+    end do
+  end subroutine 
 
   subroutine updateLargeScales(this)
     class(enrichmentOperator), intent(inout) :: this 
@@ -77,7 +99,7 @@ contains
   subroutine wrapupTimeStep(this)
     class(enrichmentOperator), intent(inout) :: this 
 
-    if (mod(this%tid,this%trender) == 0) then 
+    if (mod(this%tid,this%tidRender) == 0) then 
       call this%renderVelocity()
     end if 
 
