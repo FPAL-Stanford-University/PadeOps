@@ -10,10 +10,10 @@ subroutine strainIsotropicModes()
   kabs = sqrt(kx*kx + ky*ky + kz*kz)
   input = -(kabs)**(-2.0_rkind)
 
-  !$OMP PARALLEL SHARED(input,kx,ky,kz,uhatR,uhatI,vhatR,vhatI,whatR,whatI) &
-  !$OMP SHARED(Anu,numolec,S,ctau,kabs)
-  !$OMP PRIVATE(output,n,k,uRtmp,uItmp,tid,tauEddy,dt,KEgm,Lgm,dudx,Sgm)
-  !$OMP DO
+  !!$OMP PARALLEL SHARED(input,kx,ky,kz,uhatR,uhatI,vhatR,vhatI,whatR,whatI) &
+  !!$OMP SHARED(Anu,numolec,S,ctau,kabs)
+  !!$OMP PRIVATE(output,n,k,uRtmp,uItmp,tid,tauEddy,dt,KEgm,Lgm,dudx,Sgm)
+  !!$OMP DO
   do n = 1,nmodes
     CALL PFQ(input(n),output)
     call getLargeScaleDataAtModeLocation(n,Sgm,dudx,Lgm,KEgm,UpGM,VpGM,WpGM)
@@ -43,8 +43,8 @@ subroutine strainIsotropicModes()
       print*, trim(mssg)
     end if
   end do
-  !$OMP END DO
-  !$OMP END PARALLEL
+  !!$OMP END DO
+  !!$OMP END PARALLEL
 end subroutine
 
 subroutine getLargeScaleDataAtModeLocation(gmID,Sgm,dudx,Lgm,KEgm,&

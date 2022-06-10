@@ -1,0 +1,61 @@
+&INPUT
+inputdir              = "/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V3"   ! Directory for any input files
+outputdir             = "/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V3"   ! Directory for all output files
+nx                    = 32          ! Number of points in X
+ny                    = 32          ! Number of points in Y
+nz                    = 32          ! Number of points in Z
+dt                    = 1
+/
+/
+&NUMERICS
+/
+/
+&IO
+RunID                 = 8          ! Run Label (All output files will be tagged with this nubber)
+/
+/
+&STATS
+/
+/
+&OS_INTERACTIONS
+/
+/
+&PHYSICS
+/
+/
+&PRESSURE_CALC
+fastCalcPressure = .false.
+/
+/
+&BCs
+PeriodicInZ           = .TRUE.      ! Is the problem periodic in Z? If yes, then everything below is ignored. 
+botWall               = 2           ! no_slip = 1, slip = 2
+topWall               = 2           ! no_slip = 1, slip = 2
+/
+/
+&WINDTURBINES
+/
+/
+&KSPREPROCESS
+/
+/
+&MOISTURE
+/
+/
+&SCALARS
+/
+/
+&SGS_MODEL
+/
+/
+&BUDGET_VOL_AVG
+/
+/
+&HIT_Forcing 
+/
+/
+&TURB_PRESSURE
+/
+/
+&HIT_PeriodicINPUT
+/

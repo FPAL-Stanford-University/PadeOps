@@ -1,6 +1,6 @@
-#include "turbHalfChannel_files/turbHalfChanMod.F90"
+#include "hitEnrich_files/initialize.F90"
 
-program turbHalfChannel
+program hitEnrich
   use kind_parameters, only: clen
   use enrichmentMod, only: enrichmentOperator  
   use IncompressibleGrid, only: igrid
@@ -15,6 +15,7 @@ program turbHalfChannel
   
   call GETARG(1,inputfileLS)
   call GETARG(2,inputfileSS)
+  call GETARG(3,inputfileGM)
   
   call largeScales%init(inputfileLS, .true.) 
   call smallScales%init(inputfileSS, .false.)
@@ -33,4 +34,4 @@ program turbHalfChannel
 
   
   call MPI_Finalize(ierr)
-end program turbHalfChannel
+end program hitEnrich

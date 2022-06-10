@@ -138,10 +138,13 @@ module domainSetup
         ! QH mesh
           call getMeshSpacing(Lx,Ly,Lz,nxQH,nyQH,nzQH,dxQH,dyQH,dzQH)
           call getStartAndEndIndices(gpQHcent,ist,ien,jst,jen,kst,ken,isz,jsz,ksz)
-          allocate(xQHcent(gpQHcent%xsz(1))  ,yQHcent(gpQHcent%xsz(2))  ,&
-            zQHcent(gpQHcent%xsz(3)))
-          allocate(xQHedge(gpQHcent%xsz(1)+1),yQHedge(gpQHcent%xsz(2)+1),&
-            zQHedge(gpQHcent%xsz(3)+1))
+          allocate(xQHcent(isz),yQHcent(jsz),zQHcent(ksz))
+          allocate(xQHedge(isz+1),yQHedge(jsz+1),&
+            zQHedge(ksz+1))
+          !allocate(xQHcent(gpQHcent%xsz(1))  ,yQHcent(gpQHcent%xsz(2))  ,&
+          !  zQHcent(gpQHcent%xsz(3)))
+          !allocate(xQHedge(gpQHcent%xsz(1)+1),yQHedge(gpQHcent%xsz(2)+1),&
+          !  zQHedge(gpQHcent%xsz(3)+1))
           
           xQHedge = getMeshEdgeNodeValues(ist,ien+1,dxQH)
           yQHedge = getMeshEdgeNodeValues(jst,jen+1,dyQH)
@@ -166,7 +169,7 @@ module domainSetup
           xF = getMeshEdgeNodeValues(ist,ien,dxF)
           yF = getMeshEdgeNodeValues(jst,jen,dyF)
           
-          ! Define z at "C"ells (i.e. dzF/2:dzF:Lz-dzF/2)
+          ! Define z at cell "C"enters (i.e. dzF/2:dzF:Lz-dzF/2)
           zFC = getMeshCenterNodeValues(kst,ken,dzF)
 
           ! High res mesh including halo regions for each MPI process 
