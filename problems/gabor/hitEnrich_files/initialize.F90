@@ -1,15 +1,17 @@
 module HIT_Periodic_parameters
-
-    use exits, only: message
+    use exits,            only: message
     use kind_parameters,  only: rkind
+    use constants,        only: two, pi
     implicit none
+
+    real(rkind) :: Lx = two*pi, Ly = two*pi, Lz = two*pi
 
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use HIT_Periodic_parameters    
     use kind_parameters,  only: rkind, clen
-    use constants,        only: one,two, pi
+    use constants,        only: one
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -19,7 +21,6 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn, nxg, nyg, nzg
-    real(rkind)  :: Lx = two*pi, Ly = two*pi, Lz = two*pi
     namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
 
     !Lx = two*pi; Ly = two*pi; Lz = one
@@ -81,7 +82,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: Lx, Ly, Lz 
     namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
@@ -146,7 +146,6 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     character(len=clen),                intent(in)    :: inputfile
     integer :: ioUnit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) ::  Lx, Ly, Lz
     namelist /HIT_PeriodicINPUT/  Lx, Ly, Lz
     
     ioUnit = 11
@@ -169,7 +168,6 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind) :: ThetaRef
     integer :: iounit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: Lx, Ly, Lz
     namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
@@ -191,7 +189,6 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
     integer :: iounit
-    real(rkind) :: Lx, Ly, Lz
     namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
     
     ioUnit = 11

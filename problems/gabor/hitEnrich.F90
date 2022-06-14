@@ -4,6 +4,7 @@ program hitEnrich
   use kind_parameters, only: clen
   use enrichmentMod, only: enrichmentOperator  
   use IncompressibleGrid, only: igrid
+  use HIT_Periodic_parameters, only: Lx, Ly, Lz
   implicit none
   character(len=clen) :: inputfileLS, inputfileSS, inputfileGM 
   character(len=clen) :: datadir, fname, outputdir
@@ -20,7 +21,7 @@ program hitEnrich
   call largeScales%init(inputfileLS, .true.) 
   call smallScales%init(inputfileSS, .false.)
 
-  call enrich%init(smallScales,largeScales,inputfileGM)
+  call enrich%init(smallScales,largeScales,inputfileGM,Lx,Ly,Lz)
 
   do while (enrich%continueSimulation())
     call enrich%updateLargeScales()

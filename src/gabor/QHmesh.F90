@@ -2,6 +2,7 @@ module QHmeshMod
   use kind_parameters,    only: rkind, clen
   use decomp_2d
   use incompressibleGrid, only: igrid
+  use exits,              only: message
   implicit none
 
   type QHmesh
@@ -11,6 +12,7 @@ module QHmeshMod
     real(rkind) :: dx, dy, dz 
     integer :: nx, ny, nz
     type(igrid), pointer :: LES
+    real(rkind), dimension(:,:,:), allocatable :: KE, L 
     
     contains
       procedure :: init
@@ -39,11 +41,15 @@ module QHmeshMod
       this%nz = this%LES%nz/nzLESperQH
 
       call decomp_info_init(this%nx,this%ny,this%nz,this%gpC)
-
+      
+      call message('WARNING: QHmesh class assumes x-pencil decomposition')
       allocate(this%xC(this%gpC%xsz(1)),   this%yC(this%gpC%xsz(2)),   &
         this%zC(this%gpC%xsz(3)))
       allocate(this%xE(this%gpC%xsz(1)+1), this%yE(this%gpC%xsz(2)+1), &
         this%zE(this%gpC%xsz(3)+1))
+
+      allocate(this%KE(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), &
+               this%L( this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
 
     end subroutine
     
@@ -57,6 +63,8 @@ module QHmeshMod
       if (allocated(this%xC)) deallocate(this%xC)
       if (allocated(this%yC)) deallocate(this%yC)
       if (allocated(this%zC)) deallocate(this%zC)
+      if (allocated(this%KE)) deallocate(this%KE)
+      if (allocated(this%L))  deallocate(this%L)
       call decomp_info_finalize(this%gpC)
     end subroutine
 end module

@@ -320,9 +320,9 @@ module IncompressibleGrid
             procedure, private :: AdamsBashforth
             procedure, private :: TVD_RK3
             procedure, private :: SSP_RK45
-            procedure, private :: ComputePressure
+            procedure          :: ComputePressure
             procedure, private :: interp_primitiveVars
-            procedure, private :: compute_duidxj
+            procedure          :: compute_duidxj
             procedure, private :: compute_Sijmean
             procedure, private :: compute_dTdxi
             procedure, private :: addNonLinearTerm_Rot
@@ -333,7 +333,7 @@ module IncompressibleGrid
             procedure, private :: addExtraForcingTerm 
             procedure, private :: addForcedStratification
             procedure, private :: dumpRestartFile
-            procedure, private :: readRestartFile
+            procedure          :: readRestartFile
             procedure, private :: compute_z_mean 
             procedure, private :: compute_deltaT
             procedure, private :: dump_pointProbes
@@ -379,7 +379,12 @@ module IncompressibleGrid
             procedure          :: advance_SSP_RK45_Stage_2 
             procedure          :: advance_SSP_RK45_Stage_3 
             procedure          :: advance_SSP_RK45_Stage_4 
-            procedure          :: advance_SSP_RK45_Stage_5 
+            procedure          :: advance_SSP_RK45_Stage_5
+
+            ! Gabor mode specific procedures (ignored for normal igrid runs)
+            procedure          :: initLargeScales 
+            procedure          :: HaloUpdateVelocities
+            procedure          :: ProjectToFixBC 
    end type
 
 contains 
@@ -392,6 +397,7 @@ contains
 #include "igrid_files/budgets_stuff.F90"
 #include "igrid_files/popRHS_stuff.F90"
 #include "igrid_files/RK45_staging.F90"
+#include "igrid_files/gaborMode_helpers.F90"
 
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
