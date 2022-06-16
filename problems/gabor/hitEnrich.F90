@@ -1,11 +1,13 @@
 #include "hitEnrich_files/initialize.F90"
 
 program hitEnrich
-  use kind_parameters, only: clen
-  use enrichmentMod, only: enrichmentOperator  
-  use IncompressibleGrid, only: igrid
+  use kind_parameters,         only: clen
+  use enrichmentMod,           only: enrichmentOperator, nthreads
+  use IncompressibleGrid,      only: igrid
   use HIT_Periodic_parameters, only: Lx, Ly, Lz
+  use auxiliary_openmp_subs,   only: GetArguments
   implicit none
+
   character(len=clen) :: inputfileLS, inputfileSS, inputfileGM 
   character(len=clen) :: datadir, fname, outputdir
   integer :: ioUnit, ierr
@@ -17,6 +19,7 @@ program hitEnrich
   call GETARG(1,inputfileLS)
   call GETARG(2,inputfileSS)
   call GETARG(3,inputfileGM)
+  call GetArguments(nthreads)
   
   call largeScales%init(inputfileLS, .true.) 
   call smallScales%init(inputfileSS, .false.)
@@ -33,6 +36,5 @@ program hitEnrich
   call largeScales%destroy()
   call smallScales%destroy()
 
-  
   call MPI_Finalize(ierr)
 end program hitEnrich

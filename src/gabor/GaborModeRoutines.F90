@@ -6,6 +6,8 @@ module GaborModeRoutines
   logical :: doWarning = .true.
 
   contains
+  include "GaborModeRoutines_files/timeSteppingStuff.F90"
+  include "GaborModeRoutines_files/interpolation.F90"
     
     function getModelSpectrum(k,KE,L,nk) result(E) 
       use exits, only: warning
@@ -85,4 +87,24 @@ module GaborModeRoutines
       kmin = minval([kxNyqLES, kyNyqLES, kzNyqLES])
       kmax = minval([kxNyqF,   kyNyqF,   kzNyqF])
     end subroutine
+
+    SUBROUTINE PFQ(X_ACT,Z_ACT)
+      use hygfx_mod, only: HYGFX
+      REAL(kind=8) :: A, B, C, X, HF
+      REAL(kind=8) :: A_ACT, B_ACT, C_ACT
+      REAL(rkind), intent(in) :: X_ACT
+      real(rkind), intent(out) :: Z_ACT
+      A_ACT = 0.333333d0
+      B_ACT = 2.833333d0
+      C_ACT = 1.333333d0
+      A = A_ACT
+      B = B_ACT
+      C = C_ACT
+      X = real(X_ACT,kind=8)
+      
+      CALL HYGFX(A,B,C,X,HF)
+      Z_ACT = real(HF,rkind)
+      RETURN
+    END SUBROUTINE PFQ 
+
 end module

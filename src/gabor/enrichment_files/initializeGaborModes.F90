@@ -150,7 +150,7 @@ subroutine generateIsotropicModes(this)
     wI = uImag*orientationZ
   
   ! Collapse the Gabor mode data into a 1D vector
-  nmodes = nk*ntheta
+  nmodes = this%nmodes 
   this%uhatR = this%scalefact*reshape(uR,(/nmodes/))
   this%uhatI = this%scalefact*reshape(uI,(/nmodes/))
   
@@ -187,3 +187,101 @@ subroutine generateIsotropicModes(this)
 
 end subroutine 
 
+subroutine strainModes(this)
+  use GaborModeRoutines, only: PFQ, getDtMax, rk4Step
+  use decomp_2D,         only: nrank
+  class(enrichmentOperator), intent(inout) :: this 
+  real(rkind), dimension(this%nmodes) :: kabs, input
+  real(rkind) :: output, tauEddy, S, L, KE, U, V, W
+  real(rkind), dimension(3,3) :: dudx
+  integer :: n, tid
+  real(rkind) :: dt
+  real(rkind), dimension(3) :: k, uRtmp, uItmp
+  character(len=clen) :: mssg
+
+  kabs = sqrt(this%kx*this%kx + this%ky*this%ky + this%kz*this%kz)
+  input = -(kabs)**(-2.0_rkind)
+
+  !!$OMP PARALLEL SHARED(input,kx,ky,kz,uhatR,uhatI,vhatR,vhatI,whatR,whatI) &
+  !!$OMP SHARED(this%Anu,this%numolec,S,this%ctauGlobal,kabs)
+  !!$OMP PRIVATE(output,n,k,uRtmp,uItmp,tid,tauEddy,dt,KE,L,dudx,S)
+  !!$OMP DO
+  do n = 1,this%nmodes
+    CALL PFQ(input(n),output)
+    call this%getLargeScaleDataAtModeLocation(n,dudx,L,KE,U,V,W)
+    S = sqrt(dudx(1,1)*dudx(1,1) + dudx(1,2)*dudx(1,2) + dudx(1,3)*dudx(1,3) + &
+             dudx(2,1)*dudx(2,1) + dudx(2,2)*dudx(2,2) + dudx(2,3)*dudx(2,3) + &
+             dudx(3,1)*dudx(3,1) + dudx(3,2)*dudx(3,2) + dudx(3,3)*dudx(3,3))
+    call getDtMax(dt,[this%uhatR(n), this%vhatR(n), this%whatR(n)],&
+                     [this%uhatI(n), this%vhatI(n), this%whatI(n)],&
+                     S,kabs(n))
+    
+    k     = [this%kx(n),    this%ky(n),    this%kz(n)]
+    uRtmp = [this%uhatR(n), this%vhatR(n), this%whatR(n)]
+    uItmp = [this%uhatI(n), this%vhatI(n), this%whatI(n)]
+
+    tauEddy = this%ctauGlobal/S*((kabs(n))**(-2.0_rkind/3.0_rkind))/sqrt(output) 
+    
+    do tid = 1,nint(tauEddy/dt)
+      call rk4Step(uRtmp,uItmp,k,dt,this%Anu,KE,L,this%numolec,dudx)
+    end do
+    this%kx(n) = k(1)
+    this%ky(n) = k(2)
+    this%kz(n) = k(3)
+    this%uhatR(n) = uRtmp(1)
+    this%uhatI(n) = uItmp(1)
+    this%vhatR(n) = uRtmp(2)
+    this%vhatI(n) = uItmp(2)
+    this%whatR(n) = uRtmp(3)
+    this%whatI(n) = uItmp(3)
+    
+    if (mod(n,10000) == 0 .and. nrank == 0) then
+      write(mssg,'(F8.5,A)') real(n,rkind)/real(this%nmodes,rkind)*100.d0,'% complete'
+      print*, trim(mssg)
+    end if
+  end do
+  !!$OMP END DO
+  !!$OMP END PARALLEL
+end subroutine
+
+subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
+  use GaborModeRoutines, only: interpToLocation, findMeshIdx, getNearestNeighborValue
+  class(enrichmentOperator), intent(inout) :: this
+  integer, intent(in) :: gmID
+  real(rkind), dimension(3,3), intent(out) :: dudx
+  real(rkind), intent(out) :: L, KE, U, V, W
+  real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh 
+  integer :: i, j, idx, QHx, QHy, QHz
+
+
+  call this%largeScales%HaloUpdateVelocities(uh,vh,wh)
+  call interpToLocation(uh,U,this%largeScales%gpC,&
+    this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
+    this%x(gmID), this%y(gmID), this%z(gmID))
+  call interpToLocation(vh,V,this%largeScales%gpC,&
+    this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
+    this%x(gmID), this%y(gmID), this%z(gmID))
+  call interpToLocation(wh,W,this%largeScales%gpC,&
+    this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
+    this%x(gmID), this%y(gmID), this%z(gmID))
+  
+  deallocate(uh,vh,wh)
+
+  do i = 1,3
+    do j = 1,3
+      call getNearestNeighborValue(this%duidxj_LS(:,:,:,idx),dudx(i,j),this%largeScales%gpC, &
+        this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
+        this%x(gmID), this%y(gmID), this%z(gmID))
+      idx = idx + 1
+    end do
+  end do
+   
+  ! Find the index of the mode's QH region
+  QHx = findMeshIdx(this%x(gmID),this%QHgrid%xE)
+  QHy = findMeshIdx(this%y(gmID),this%QHgrid%yE)
+  QHz = findMeshIdx(this%z(gmID),this%QHgrid%zE)
+  
+  ! Use L and KE for the QH region that the mode resides in
+  L = this%QHgrid%L(QHx,QHy,QHz)
+  KE = this%QHgrid%KE(QHx,QHy,QHz)
+end subroutine

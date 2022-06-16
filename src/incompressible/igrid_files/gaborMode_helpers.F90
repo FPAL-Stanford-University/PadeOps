@@ -59,4 +59,9 @@ subroutine ProjectToFixBC(this)
     call this%spectC%ifft(this%vhat ,this%v )   
     call this%spectC%ifft(this%whatC,this%wC)   
 
+end subroutine
+
+subroutine getPressure(this)
+    class(igrid), intent(inout) :: this
+
 end subroutine 

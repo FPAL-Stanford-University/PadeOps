@@ -1,5 +1,5 @@
 module enrichmentMod
-  use kind_parameters,    only: rkind
+  use kind_parameters,    only: rkind, clen
   use incompressibleGrid, only: igrid
   use QHmeshMod,          only: QHmesh
   use exits,              only: message
@@ -7,11 +7,13 @@ module enrichmentMod
   use fortran_assert,     only: assert
   implicit none
 
+  integer :: nthreads
   type :: enrichmentOperator
-    real(rkind), dimension(:),     allocatable :: kx, ky, kz
-    real(rkind), dimension(:),     allocatable :: x, y, z
-    real(rkind), dimension(:),     allocatable :: uhatR, uhatI, vhatR, vhatI, whatR, whatI
+    real(rkind), dimension(:), allocatable :: kx, ky, kz
+    real(rkind), dimension(:), allocatable :: x, y, z
+    real(rkind), dimension(:), allocatable :: uhatR, uhatI, vhatR, vhatI, whatR, whatI
     real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh
+    integer :: nxsupp, nysupp, nzsupp
     type(igrid), pointer :: largeScales, smallScales
     type(QHmesh) :: QHgrid 
     real(rkind), dimension(:,:,:,:), pointer :: duidxj_LS
@@ -19,25 +21,28 @@ module enrichmentMod
     logical :: imposeNoPenetrationBC = .false. 
 
     ! Initialization parameters
-    integer :: nk, ntheta 
+    integer     :: nk, ntheta, nmodes
     real(rkind) :: scalefact, Anu, numolec, ctauGlobal
-    logical :: renderPressure = .false.
-    integer :: tidRender, tio , tid, tidStop 
+    logical     :: renderPressure = .false.
+    integer     :: tidRender, tio , tid, tidStop 
 
     contains
-      procedure :: init
-      procedure :: destroy
-      procedure :: generateIsotropicModes
-      !procedure :: strainModes
-      procedure :: advanceTime
-      procedure :: renderVelocity
-      procedure :: updateLargeScales
-      procedure :: wrapupTimeStep
-      procedure :: continueSimulation 
+      procedure          :: init
+      procedure          :: destroy
+      procedure          :: generateIsotropicModes
+      procedure          :: strainModes
+      procedure          :: getLargeScaleDataAtModeLocation
+      procedure          :: advanceTime
+      procedure          :: renderVelocity
+      procedure, private :: renderLocalVelocity
+      procedure          :: updateLargeScales
+      procedure          :: wrapupTimeStep
+      procedure          :: continueSimulation 
   end type
 
 contains
   include 'enrichment_files/initializeGaborModes.F90'
+  include 'enrichment_files/renderVelocity.F90'
 
   subroutine init(this,smallScales,largeScales,inputfile,Lx,Ly,Lz)
     use GaborModeRoutines, only: computeKminKmax
@@ -85,7 +90,16 @@ contains
     call this%QHgrid%init(inputfile,this%largeScales)
     ! TODO: Use largeScales velocity data to compute KE and L for QHmesh
     this%QHgrid%KE = 0.d0
-    this%QHgrid%L  = 0.d0 
+    this%QHgrid%L  = 0.d0
+
+    this%nxsupp = 2 * this%smallScales%nx/this%largeScales%nx * &
+      nint(this%QHgrid%dx / this%largeScales%dx)
+    this%nysupp = 2 * this%smallScales%ny/this%largeScales%ny * &
+      nint(this%QHgrid%dy / this%largeScales%dy)
+    this%nzsupp = 2 * this%smallScales%nz/this%largeScales%nz * &
+      nint(this%QHgrid%dz / this%largeScales%dz)
+
+    this%nmodes = this%nk*this%ntheta*this%QHgrid%nx*this%QHgrid%ny*this%QHgrid%nz
 
     ! Compute kmin and kmax based on LES and high-resolution grids 
     call computeKminKmax(Lx, Ly, Lz, &
@@ -147,8 +161,8 @@ contains
 
 
     ! Ryan
-    ! STEP 2: Render local velocity 
-
+    ! STEP 2: Render local velocity
+    call this%renderLocalVelocity() 
 
     ! Aditya
     ! STEP 3: Impose boundary condition (no-penetration BC)
