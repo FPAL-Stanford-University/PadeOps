@@ -2,8 +2,9 @@ subroutine generateIsotropicModes(this)
   use gridtools, only: logspace
   use random,    only: uniform_random
   use GaborModeRoutines, only: normalizeVec, isOrthogonal, getModelSpectrum, &
-                               doWarning
+                               doWarning, small
   class(enrichmentOperator), intent(inout) :: this
+  character(len=clen) :: mssg1, mssg2, mssg3, mssg4
   real(rkind) :: xmin, ymin, zmin
   integer :: i, j, k, kid, thetaID, nk, ntheta, nmodes, nx, ny, nz
   integer :: seed1=1, seed2=2, seed3=3, seed4=4, seed5=5, seed6=6, seed7=7
@@ -25,7 +26,21 @@ subroutine generateIsotropicModes(this)
   real(rkind), dimension(:,:,:,:,:), allocatable :: uR, uI, vR, vI, wR, wI
 
 
-  call message("Initializing isotropic modes")
+  call message("                                                                ")
+  call message("================================================================")
+  call message("============== Initializing isotropic Gabor modes ==============")
+  write(mssg1,'(A)') 'Total modes to initialize:'
+  write(mssg2,'(A,I2,A,I2,A)') '(', this%nk,' shells per QH region) X (',&
+    this%ntheta, ' modes per shell) X ...'
+  write(mssg3,'(A,I2,A,I2,A,I2,A)') &
+    '(', this%QHgrid%nx,' QH regions in x) X (', &
+    this%QHgrid%ny,' QH regions in y) X (', this%QHgrid%nz, ' QH regions in z) = ...'
+  write(mssg4,'(I6,A)') this%nmodes, ' modes'
+  call message(                          trim(mssg1)                             )
+  call message(                          trim(mssg2)                             )
+  call message(                          trim(mssg3)                             )
+  call message(                          trim(mssg4)                             )
+  call message("                                                                ")
   
   ! Allocate memory
   nk = this%nk
@@ -170,7 +185,7 @@ subroutine generateIsotropicModes(this)
 
   ! Confirm modes are divergence free
   call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&
-    this%kz,this%ky,this%kz),'Velocity not divergence free (R)')
+    this%kx,this%ky,this%kz),'Velocity not divergence free (R)')
   call assert(isOrthogonal(this%uhatI,this%vhatI,this%whatI,&
     this%kx,this%ky,this%kz),'Velocity not divergence free (I)')
   
@@ -188,7 +203,7 @@ subroutine generateIsotropicModes(this)
 end subroutine 
 
 subroutine strainModes(this)
-  use GaborModeRoutines, only: PFQ, getDtMax, rk4Step
+  use GaborModeRoutines, only: PFQ, getDtMax, rk4Step, small
   use decomp_2D,         only: nrank
   class(enrichmentOperator), intent(inout) :: this 
   real(rkind), dimension(this%nmodes) :: kabs, input
@@ -219,8 +234,12 @@ subroutine strainModes(this)
     k     = [this%kx(n),    this%ky(n),    this%kz(n)]
     uRtmp = [this%uhatR(n), this%vhatR(n), this%whatR(n)]
     uItmp = [this%uhatI(n), this%vhatI(n), this%whatI(n)]
-
-    tauEddy = this%ctauGlobal/S*((kabs(n))**(-2.0_rkind/3.0_rkind))/sqrt(output) 
+    
+    if (S < small) then
+      tauEddy = 0.d0
+    else
+      tauEddy = this%ctauGlobal/S*((kabs(n))**(-2.0_rkind/3.0_rkind))/sqrt(output) 
+    end if
     
     do tid = 1,nint(tauEddy/dt)
       call rk4Step(uRtmp,uItmp,k,dt,this%Anu,KE,L,this%numolec,dudx)
@@ -253,7 +272,6 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh 
   integer :: i, j, idx, QHx, QHy, QHz
 
-
   call this%largeScales%HaloUpdateVelocities(uh,vh,wh)
   call interpToLocation(uh,U,this%largeScales%gpC,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
@@ -267,6 +285,7 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   
   deallocate(uh,vh,wh)
 
+  idx = 1
   do i = 1,3
     do j = 1,3
       call getNearestNeighborValue(this%duidxj_LS(:,:,:,idx),dudx(i,j),this%largeScales%gpC, &

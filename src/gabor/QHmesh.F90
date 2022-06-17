@@ -32,6 +32,7 @@ module QHmeshMod
 
       namelist /QHMESH/ nxLESperQH, nyLESperQH, nzLESperQH
 
+      ioUnit = 1
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
       read(unit=ioUnit, NML=QHMESH)
       close(ioUnit)

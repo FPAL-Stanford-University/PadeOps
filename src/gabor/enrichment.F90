@@ -5,9 +5,11 @@ module enrichmentMod
   use exits,              only: message
   use constants,          only: pi
   use fortran_assert,     only: assert
+  use omp_lib
   implicit none
 
   integer :: nthreads
+
   type :: enrichmentOperator
     real(rkind), dimension(:), allocatable :: kx, ky, kz
     real(rkind), dimension(:), allocatable :: x, y, z
@@ -52,7 +54,7 @@ contains
     character(len=*), intent(in) :: inputfile   
     integer :: ierr, ioUnit
     integer :: nk, ntheta
-    integer :: tidRender, tio, tidStop, tidInit
+    integer :: tidRender, tio, tidStop, tidInit = 0
     real(rkind) :: scalefact, Anu, numolec, ctauGlobal
      
     namelist /GABOR/ nk, ntheta, scalefact, ctauGlobal, Anu, numolec
@@ -89,8 +91,8 @@ contains
     ! STEP 1: Finish the QH region code to fill Gabor Modes (kx, ky, kz, x, y, z, uhat, ...)
     call this%QHgrid%init(inputfile,this%largeScales)
     ! TODO: Use largeScales velocity data to compute KE and L for QHmesh
-    this%QHgrid%KE = 0.d0
-    this%QHgrid%L  = 0.d0
+    this%QHgrid%KE = 1.d0
+    this%QHgrid%L  = 1.d0
 
     this%nxsupp = 2 * this%smallScales%nx/this%largeScales%nx * &
       nint(this%QHgrid%dx / this%largeScales%dx)
@@ -107,8 +109,11 @@ contains
       this%smallScales%nx, this%smallScales%ny, this%smallScales%nz, &
       this%kmin, this%kmax)
 
-    call this%wrapupTimeStep()
+    ! Initialize the Gabor modes
+    call this%generateIsotropicModes()
+    call this%strainModes()
 
+    call this%wrapupTimeStep()
 
   end subroutine
 

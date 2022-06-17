@@ -90,7 +90,11 @@ subroutine getDtMax(dt,uhatR,uhatI,S,kmag)
               uhatR(3)*uhatR(3) + uhatI(3)*uhatI(3))
   
   tau1 = 1.d0/(kmag*umax)
-  tau2 = 1.d0/S
+  if (S > small) then 
+    tau2 = 1.d0/S
+  else
+    tau2 = big
+  end if
 
   dt = minval([tau1,tau2])/3.d0
 end subroutine

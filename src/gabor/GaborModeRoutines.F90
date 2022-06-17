@@ -2,8 +2,9 @@ module GaborModeRoutines
   use kind_parameters, only: rkind
   use constants, only: pi
   implicit none
-
+  
   logical :: doWarning = .true.
+  real(rkind), parameter :: small = 1.d-10, big = 1.d12
 
   contains
   include "GaborModeRoutines_files/timeSteppingStuff.F90"

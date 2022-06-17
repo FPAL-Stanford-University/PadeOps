@@ -69,31 +69,31 @@ pure subroutine getWeightsForLinInterp(x, y, z, xlo, xhi, ylo, yhi, zlo, zhi,&
     integer, dimension(8), intent(out) :: xid, yid, zid
 
     ! Step2: assemble xid, yid, zid
-    xid(1) = xlo; xid(2) = xlo; xid(3) = xlo; xid(4) = xlo;
-    xid(5) = xhi; xid(6) = xhi; xid(7) = xhi; xid(8) = xhi;
+    xid(1) = xlo; xid(2) = xlo; xid(3) = xlo; xid(4) = xlo
+    xid(5) = xhi; xid(6) = xhi; xid(7) = xhi; xid(8) = xhi
     
-    yid(1) = ylo; yid(2) = ylo; yid(3) = yhi; yid(4) = yhi;
-    yid(5) = ylo; yid(6) = ylo; yid(7) = yhi; yid(8) = yhi;
+    yid(1) = ylo; yid(2) = ylo; yid(3) = yhi; yid(4) = yhi
+    yid(5) = ylo; yid(6) = ylo; yid(7) = yhi; yid(8) = yhi
     
-    zid(1) = zlo; zid(2) = zhi; zid(3) = zlo; zid(4) = zhi;
-    zid(5) = zlo; zid(6) = zhi; zid(7) = zlo; zid(8) = zhi;
+    zid(1) = zlo; zid(2) = zhi; zid(3) = zlo; zid(4) = zhi
+    zid(5) = zlo; zid(6) = zhi; zid(7) = zlo; zid(8) = zhi
 
     ! Step3: Compute weights for each of the 8 points
     xweight = (x - xLESlo)/dx
     yweight = (y - yLESlo)/dy
     zweight = (z - zLESlo)/dz
 
-    weights(1) = (1-yweight) * (1-zweight) * (1-xweight);
-    weights(2) = (1-yweight) * zweight     * (1-xweight);
+    weights(1) = (1-yweight) * (1-zweight) * (1-xweight)
+    weights(2) = (1-yweight) * zweight     * (1-xweight)
 
-    weights(3) = yweight     * (1-zweight) * (1-xweight);
-    weights(4) = yweight     * zweight     * (1-xweight);
+    weights(3) = yweight     * (1-zweight) * (1-xweight)
+    weights(4) = yweight     * zweight     * (1-xweight)
 
-    weights(5) = (1-yweight) * (1-zweight) * xweight;
-    weights(6) = (1-yweight) * zweight     * xweight;
+    weights(5) = (1-yweight) * (1-zweight) * xweight
+    weights(6) = (1-yweight) * zweight     * xweight
 
-    weights(7) = yweight     * (1-zweight) * xweight;
-    weights(8) = yweight     * zweight     * xweight;
+    weights(7) = yweight     * (1-zweight) * xweight
+    weights(8) = yweight     * zweight     * xweight
 
 end subroutine
   

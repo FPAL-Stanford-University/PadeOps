@@ -38,4 +38,5 @@ module constants
 
     real(rkind), parameter :: deg_to_radians   = pi/180.0_rkind
     real(rkind), parameter :: rpm_to_radpersec = twopi/60.0_rkind
+
 end module
