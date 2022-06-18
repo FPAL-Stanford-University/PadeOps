@@ -41,14 +41,17 @@ subroutine renderLocalVelocity(this)
     !$OMP DO
     do n = 1,this%nmodes  
       ! NOTE: These are global indices of the physical domain
-      iist = ceiling((this%x(n)+small)/this%smallScales%dx) - this%nxsupp/2
-      iien = floor(  (this%x(n)+small)/this%smallScales%dx) + this%nxsupp/2
+      ! NOTE: The contribution of Gabor modes on neighboring processes is not
+      ! accounted for here, nor is the periodic contribution for periodic
+      ! directions whose data resides exlusively on the process (e.g. in x)
+      iist = max(ceiling((this%x(n)+small)/this%smallScales%dx) - this%nxsupp/2, ist)
+      iien = min(floor(  (this%x(n)+small)/this%smallScales%dx) + this%nxsupp/2, ien)
 
-      jjst = ceiling((this%y(n)+small)/this%smallScales%dy) - this%nysupp/2
-      jjen = floor(  (this%y(n)+small)/this%smallScales%dy) + this%nysupp/2
+      jjst = max(ceiling((this%y(n)+small)/this%smallScales%dy) - this%nysupp/2, jst)
+      jjen = min(floor(  (this%y(n)+small)/this%smallScales%dy) + this%nysupp/2, jen)
 
-      kkst = ceiling((this%z(n)+small)/this%smallScales%dz) - this%nzsupp/2
-      kken = floor(  (this%z(n)+small)/this%smallScales%dz) + this%nzsupp/2
+      kkst = max(ceiling((this%z(n)+small)/this%smallScales%dz) - this%nzsupp/2, kst)
+      kken = min(floor(  (this%z(n)+small)/this%smallScales%dz) + this%nzsupp/2, ken)
 
       do k = kkst,kken
         zF = this%smallScales%dz*real(kkst - 1, rkind)

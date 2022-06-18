@@ -58,7 +58,10 @@ subroutine getUrhs(rhs,u,dudx,k,nuMod,KE,L,nu)
       end do
     end do
   end do
-  nuk = sqrt(nu*nu + nuMod*KE*L*3.d0/8.d0*ksq**(-4.d0/3.d0)) - nu ! Spectral eddy viscosity. Eqn (3.22) in Aditya's thesis
+  
+  ! Spectral eddy viscosity. Eqn (3.22) in Aditya's thesis
+  nuk = sqrt(nu*nu + nuMod*KE*L*3.d0/8.d0*ksq**(-4.d0/3.d0)) - nu
+ 
   rhs = rhs - nuk*ksq*u
 end subroutine
 

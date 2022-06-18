@@ -1,8 +1,6 @@
 &GABOR
   nk         = 1                    ! Number of wavenumber shells spanned by Gabor modes
   ntheta     = 1                    ! Number of modes per wavenumber shell
-  scalefact  = 0.670820393249937d0   ! A tuneable parameters to get correct energy spectrum 
-  ctauGlobal = 7.d0                  ! Model parameter for mode straining
 /
 /
 &CONTROL

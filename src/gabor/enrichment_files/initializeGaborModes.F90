@@ -6,8 +6,9 @@ subroutine generateIsotropicModes(this)
   class(enrichmentOperator), intent(inout) :: this
   character(len=clen) :: mssg1, mssg2, mssg3, mssg4
   real(rkind) :: xmin, ymin, zmin
-  integer :: i, j, k, kid, thetaID, nk, ntheta, nmodes, nx, ny, nz
+  integer :: i, j, k, kid, thetaID, nk, ntheta, nmodes
   integer :: seed1=1, seed2=2, seed3=3, seed4=4, seed5=5, seed6=6, seed7=7
+  integer :: isz, jsz, ksz
   real(rkind), dimension(:),         allocatable :: kedge, kmag, dk, rand1, &
                                                     theta, kztemp, r, E
   real(rkind), dimension(:,:,:,:,:), allocatable :: umag, thetaVel, &
@@ -45,30 +46,30 @@ subroutine generateIsotropicModes(this)
   ! Allocate memory
   nk = this%nk
   ntheta = this%ntheta 
-  nx = this%QHgrid%nx 
-  ny = this%QHgrid%ny 
-  nz = this%QHgrid%nz
+  isz = this%QHgrid%gpC%xsz(1) 
+  jsz = this%QHgrid%gpC%xsz(2)
+  ksz = this%QHgrid%gpC%xsz(3)
 
   allocate(kedge(nk+1))
   allocate(kmag(nk),dk(nk),E(nk))
   allocate(rand1(nk*ntheta))
   allocate(theta(ntheta),kztemp(ntheta),r(ntheta))
-  allocate(umag(nx,ny,nz,nk,ntheta), thetaVel(nx,ny,nz,nk,ntheta), &
-           uRmag(nx,ny,nz,nk,ntheta), uImag(nx,ny,nz,nk,ntheta),&
-           rand2(nx,ny,nz,nk,ntheta), p1x(nx,ny,nz,nk,ntheta), &
-           p1y(nx,ny,nz,nk,ntheta), p1z(nx,ny,nz,nk,ntheta), &
-           p2x(nx,ny,nz,nk,ntheta), p2y(nx,ny,nz,nk,ntheta), &
-           p2z(nx,ny,nz,nk,ntheta), orientationX(nx,ny,nz,nk,ntheta), &
-           orientationY(nx,ny,nz,nk,ntheta), orientationZ(nx,ny,nz,nk,ntheta))
+  allocate(umag(isz,jsz,ksz,nk,ntheta), thetaVel(isz,jsz,ksz,nk,ntheta), &
+           uRmag(isz,jsz,ksz,nk,ntheta), uImag(isz,jsz,ksz,nk,ntheta),&
+           rand2(isz,jsz,ksz,nk,ntheta), p1x(isz,jsz,ksz,nk,ntheta), &
+           p1y(isz,jsz,ksz,nk,ntheta), p1z(isz,jsz,ksz,nk,ntheta), &
+           p2x(isz,jsz,ksz,nk,ntheta), p2y(isz,jsz,ksz,nk,ntheta), &
+           p2z(isz,jsz,ksz,nk,ntheta), orientationX(isz,jsz,ksz,nk,ntheta), &
+           orientationY(isz,jsz,ksz,nk,ntheta), orientationZ(isz,jsz,ksz,nk,ntheta))
 
   ! Allocate memory for ND attribute arrays
-  allocate(gmx(nx,ny,nz,nk*ntheta), gmy(nx,ny,nz,nk*ntheta), &
-           gmz(nx,ny,nz,nk*ntheta))
-  allocate(uR(nx,ny,nz,nk,ntheta),uI(nx,ny,nz,nk,ntheta),&
-           vR(nx,ny,nz,nk,ntheta),vI(nx,ny,nz,nk,ntheta),&
-           wR(nx,ny,nz,nk,ntheta),wI(nx,ny,nz,nk,ntheta))
-  allocate(k1(nx,ny,nz,nk,ntheta),k2(nx,ny,nz,nk,ntheta),&
-           k3(nx,ny,nz,nk,ntheta))
+  allocate(gmx(isz,jsz,ksz,nk*ntheta), gmy(isz,jsz,ksz,nk*ntheta), &
+           gmz(isz,jsz,ksz,nk*ntheta))
+  allocate(uR(isz,jsz,ksz,nk,ntheta),uI(isz,jsz,ksz,nk,ntheta),&
+           vR(isz,jsz,ksz,nk,ntheta),vI(isz,jsz,ksz,nk,ntheta),&
+           wR(isz,jsz,ksz,nk,ntheta),wI(isz,jsz,ksz,nk,ntheta))
+  allocate(k1(isz,jsz,ksz,nk,ntheta),k2(isz,jsz,ksz,nk,ntheta),&
+           k3(isz,jsz,ksz,nk,ntheta))
 
   ! Assign wave-vector magnitudes based on logarithmically spaced shells
   ! (non-dimensionalized with L)
@@ -77,11 +78,11 @@ subroutine generateIsotropicModes(this)
   kmag = 0.5d0*(kedge(1:nk) + kedge(2:nk+1))
   dk = kedge(2:nk+1) - kedge(1:nk)
   
-  do k = 1,this%QHgrid%nx
+  do k = 1,this%QHgrid%gpC%xsz(1)
     zmin = this%QHgrid%zE(k)
-    do j = 1,this%QHgrid%ny
+    do j = 1,this%QHgrid%gpC%xsz(2)
       ymin = this%QHgrid%yE(j)
-      do i = 1,this%QHgrid%nz
+      do i = 1,this%QHgrid%gpC%xsz(3)
         xmin = this%QHgrid%xE(i)
 
         !TODO: Need better seed selection 
@@ -269,32 +270,28 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   integer, intent(in) :: gmID
   real(rkind), dimension(3,3), intent(out) :: dudx
   real(rkind), intent(out) :: L, KE, U, V, W
-  real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh 
   integer :: i, j, idx, QHx, QHy, QHz
 
-  call this%largeScales%HaloUpdateVelocities(uh,vh,wh)
-  call interpToLocation(uh,U,this%largeScales%gpC,&
+  call interpToLocation(this%uh,U,this%largeScales%gpC,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%x(gmID), this%y(gmID), this%z(gmID))
-  call interpToLocation(vh,V,this%largeScales%gpC,&
+  call interpToLocation(this%vh,V,this%largeScales%gpC,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%x(gmID), this%y(gmID), this%z(gmID))
-  call interpToLocation(wh,W,this%largeScales%gpC,&
+  call interpToLocation(this%wh,W,this%largeScales%gpC,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%x(gmID), this%y(gmID), this%z(gmID))
   
-  deallocate(uh,vh,wh)
-
   idx = 1
   do i = 1,3
     do j = 1,3
-      call getNearestNeighborValue(this%duidxj_LS(:,:,:,idx),dudx(i,j),this%largeScales%gpC, &
+      call getNearestNeighborValue(this%duidxj_h(:,:,:,idx),dudx(i,j),this%largeScales%gpC, &
         this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
         this%x(gmID), this%y(gmID), this%z(gmID))
       idx = idx + 1
     end do
   end do
-   
+
   ! Find the index of the mode's QH region
   QHx = findMeshIdx(this%x(gmID),this%QHgrid%xE)
   QHy = findMeshIdx(this%y(gmID),this%QHgrid%yE)

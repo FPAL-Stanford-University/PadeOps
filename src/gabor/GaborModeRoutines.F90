@@ -1,6 +1,7 @@
 module GaborModeRoutines
   use kind_parameters, only: rkind
-  use constants, only: pi
+  use constants,       only: pi
+  use fortran_assert,  only: assert
   implicit none
   
   logical :: doWarning = .true.

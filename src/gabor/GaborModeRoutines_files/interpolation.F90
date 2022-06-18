@@ -17,6 +17,7 @@ subroutine interpToLocation(datIn,datOut,gp,dx,dy,dz,x,y,z)
   integer, dimension(8) :: xid, yid, zid
   integer :: ist, jst, kst
   real(rkind) :: xst, yst, zst
+  integer :: nx, ny, nz
 
   ist = gp%xst(1)
   jst = gp%xst(2)
@@ -26,11 +27,24 @@ subroutine interpToLocation(datIn,datOut,gp,dx,dy,dz,x,y,z)
   yst = (real(jst,rkind)-1.d0)*dy
   zst = (real(kst,rkind)-1.d0)*dz
 
+  nx = gp%xsz(1)
+  ny = gp%ysz(2)
+  nz = gp%zsz(3)
+
   call getXYZneighbors(x,y,z,ist,jst,kst,dx,dy,dz,xlo,xhi,ylo,yhi,zlo,zhi)
+! DELETE IF INPUT ARRAY IS 0-INDEXED IN ALL THREE DIRECTIONS -----------------
+  if (xlo == 0      .and. size(datIn,1) == nx) xlo = nx
+  if (xhi == nx + 1 .and. size(datIn,1) == nx) xhi = 1
+  if (ylo == 0      .and. size(datIn,2) == ny) ylo = ny
+  if (yhi == ny + 1 .and. size(datIn,2) == ny) yhi = 1
+  if (zlo == 0      .and. size(datIn,3) == nz) zlo = nz
+  if (zhi == nz + 1 .and. size(datIn,3) == nz) zhi = 1
+! ----------------------------------------------------------------------------
   call getWeightsForLinInterp(x,y,z,xlo,xhi,ylo,yhi,zlo,zhi,&
     xst,yst,zst,dx,dy,dz,weights,xid,yid,zid)
   !call getWeightsForLinInterp(idx,xlo,xhi,ylo,yhi,zlo,zhi,&
   !  x(xlo),y(ylo),z(zlo),dx,dy,dz,weights,xid,yid,zid)
+
   call interpDat(datOut,datIn,weights,xid,yid,zid)
 end subroutine
 
@@ -38,9 +52,9 @@ subroutine interpDat(datOut, datIn, weights, xid, yid, zid)
     real(rkind), intent(out) :: datOut
     real(rkind), dimension(:,:,:), intent(in) :: datIn
     real(rkind), dimension(8), intent(in) :: weights
-    integer :: idx
     integer, dimension(8), intent(in) :: xid, yid, zid
-    
+    integer :: idx
+
     ! Get interpolated value
     datOut  = weights(1)*datIn(xid(1),yid(1),zid(1))
     do idx = 2,8
@@ -150,6 +164,7 @@ subroutine getNearestNeighborValue(datIn, datOut, gp, dx, dy, dz, x, y, z)
   integer :: ist, jst, kst
   integer :: xlo, xhi, ylo, yhi, zlo, zhi, idx, neighIdx
   real(rkind) :: minDist, dist, xst, yst, zst, xneigh, yneigh, zneigh 
+  integer :: nx, ny, nz
 
   ist = gp%xst(1)
   jst = gp%xst(2)
@@ -176,6 +191,19 @@ subroutine getNearestNeighborValue(datIn, datOut, gp, dx, dy, dz, x, y, z)
       neighIdx = idx 
     end if 
   end do 
+
+! DELETE IF INPUT ARRAY IS 0-INDEXED IN ALL THREE DIRECTIONS -----------------
+  nx = gp%xsz(1)
+  ny = gp%ysz(2)
+  nz = gp%zsz(3)
+  
+  if (xid(neighIdx) == 0      .and. size(datIn,1) == nx) xid(neighIdx) = nx
+  if (xid(neighIdx) == nx + 1 .and. size(datIn,1) == nx) xid(neighIdx) = 1
+  if (yid(neighIdx) == 0      .and. size(datIn,2) == ny) yid(neighIdx) = ny
+  if (yid(neighIdx) == ny + 1 .and. size(datIn,2) == ny) yid(neighIdx) = 1
+  if (zid(neighIdx) == 0      .and. size(datIn,3) == nz) zid(neighIdx) = nz
+  if (zid(neighIdx) == nz + 1 .and. size(datIn,3) == nz) zid(neighIdx) = 1
+! ----------------------------------------------------------------------------
 
   datOut = datIn(xid(neighIdx), yid(neighIdx), zid(neighIdx))
 end subroutine

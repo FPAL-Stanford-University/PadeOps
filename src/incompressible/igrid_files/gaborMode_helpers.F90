@@ -20,18 +20,29 @@ subroutine initLargeScales(this, tid, rid)
 end subroutine
 
 
-subroutine HaloUpdateVelocities(this, uh, vh, wh)
+subroutine HaloUpdateVelocities(this, uh, vh, wh, duidxj_h)
     use decomp_2d, only: update_halo
     class(igrid), intent(inout) :: this 
     real(rkind), dimension(:,:,:), allocatable, intent(out) :: uh, vh, wh
+    real(rkind), dimension(:,:,:,:), allocatable, intent(out) :: duidxj_h
+    real(rkind), dimension(:,:,:), allocatable :: buff
+    integer :: idx
 
     if (allocated(uh)) deallocate(uh) 
     if (allocated(vh)) deallocate(vh) 
     if (allocated(wh)) deallocate(wh) 
+    if (allocated(duidxj_h)) deallocate(duidxj_h)
 
     call update_halo(this%u, uh, 1, this%gpC)
     call update_halo(this%v, vh, 1, this%gpC)
     call update_halo(this%w, wh, 1, this%gpC)
+
+    allocate(duidxj_h(size(uh,1),size(uh,2),size(uh,3),9))
+    do idx = 1,9
+      call update_halo(this%duidxjC(:,:,:,idx), buff, 1, this%gpC)
+      duidxj_h(:,:,:,idx) = buff
+    end do
+    deallocate(buff)
 end subroutine
 
 

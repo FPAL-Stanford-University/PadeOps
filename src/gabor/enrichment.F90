@@ -14,7 +14,11 @@ module enrichmentMod
     real(rkind), dimension(:), allocatable :: kx, ky, kz
     real(rkind), dimension(:), allocatable :: x, y, z
     real(rkind), dimension(:), allocatable :: uhatR, uhatI, vhatR, vhatI, whatR, whatI
+
+    ! Halo-padded arrays
     real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh
+    real(rkind), dimension(:,:,:,:), allocatable :: duidxj_h
+
     integer :: nxsupp, nysupp, nzsupp
     type(igrid), pointer :: largeScales, smallScales
     type(QHmesh) :: QHgrid 
@@ -55,7 +59,8 @@ contains
     integer :: ierr, ioUnit
     integer :: nk, ntheta
     integer :: tidRender, tio, tidStop, tidInit = 0
-    real(rkind) :: scalefact, Anu, numolec, ctauGlobal
+    real(rkind) :: scalefact = 1.d0, Anu = 1.d-4, numolec = 0.d0
+    real(rkind) :: ctauGlobal = 1.d0
      
     namelist /GABOR/ nk, ntheta, scalefact, ctauGlobal, Anu, numolec
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit 
@@ -85,7 +90,12 @@ contains
     ! Use the same file-naming convention for PadeOps restart files: 
     ! RESTART_Run00_u.000000
     call this%largeScales%initLargeScales(tidInit,this%largeScales%runID)
-    this%duidxj_LS => largeScales%duidxjC     
+    this%duidxj_LS => largeScales%duidxjC
+    print*, "maxval(abs(largeScales%duidxjC)) = ", maxval(abs(largeScales%duidxjC))
+call assert(.false.)
+
+    ! Get halo-padded velocity arrays
+    call this%updateLargeScales() 
 
     ! Ryan 
     ! STEP 1: Finish the QH region code to fill Gabor Modes (kx, ky, kz, x, y, z, uhat, ...)
@@ -101,7 +111,8 @@ contains
     this%nzsupp = 2 * this%smallScales%nz/this%largeScales%nz * &
       nint(this%QHgrid%dz / this%largeScales%dz)
 
-    this%nmodes = this%nk*this%ntheta*this%QHgrid%nx*this%QHgrid%ny*this%QHgrid%nz
+    this%nmodes = this%nk*this%ntheta*&
+      this%QHgrid%gpC%xsz(1)*this%QHgrid%gpC%xsz(2)*this%QHgrid%gpC%xsz(3)
 
     ! Compute kmin and kmax based on LES and high-resolution grids 
     call computeKminKmax(Lx, Ly, Lz, &
@@ -122,18 +133,22 @@ contains
 
     if (associated(this%largeScales)) nullify(this%largeScales)
     if (associated(this%smallScales)) nullify(this%smallScales)
-    if (allocated(this%uhatR)) deallocate(this%uhatR)
-    if (allocated(this%uhatI)) deallocate(this%uhatI)
-    if (allocated(this%vhatR)) deallocate(this%vhatR)
-    if (allocated(this%vhatI)) deallocate(this%vhatI)
-    if (allocated(this%whatR)) deallocate(this%whatR)
-    if (allocated(this%whatI)) deallocate(this%whatI)
-    if (allocated(this%kx))    deallocate(this%kx)
-    if (allocated(this%ky))    deallocate(this%ky)
-    if (allocated(this%kz))    deallocate(this%kz)
-    if (allocated(this%x))     deallocate(this%x)
-    if (allocated(this%y))     deallocate(this%y)
-    if (allocated(this%z))     deallocate(this%z)
+    if (allocated(this%uhatR))    deallocate(this%uhatR)
+    if (allocated(this%uhatI))    deallocate(this%uhatI)
+    if (allocated(this%vhatR))    deallocate(this%vhatR)
+    if (allocated(this%vhatI))    deallocate(this%vhatI)
+    if (allocated(this%whatR))    deallocate(this%whatR)
+    if (allocated(this%whatI))    deallocate(this%whatI)
+    if (allocated(this%kx))       deallocate(this%kx)
+    if (allocated(this%ky))       deallocate(this%ky)
+    if (allocated(this%kz))       deallocate(this%kz)
+    if (allocated(this%x))        deallocate(this%x)
+    if (allocated(this%y))        deallocate(this%y)
+    if (allocated(this%z))        deallocate(this%z)
+    if (allocated(this%uh))       deallocate(this%uh)
+    if (allocated(this%vh))       deallocate(this%vh)
+    if (allocated(this%wh))       deallocate(this%wh)
+    if (allocated(this%duidxj_h)) deallocate(this%duidxj_h)
 
     call this%QHgrid%destroy()
   end subroutine 
@@ -149,7 +164,8 @@ contains
 
     ! Aditya: 
     ! STEP 2: Generate halo'd velocities
-    call this%largeScales%HaloUpdateVelocities(this%uh, this%vh, this%wh) 
+    call this%largeScales%HaloUpdateVelocities(this%uh, this%vh, this%wh, &
+      this%duidxj_h)
 
   end subroutine 
 
