@@ -1,0 +1,68 @@
+&INPUT
+
+inputdir  = "/home/nghaisas/runs/PadeOps_startup/compressible/shearlayer"
+outputdir = "/home/nghaisas/runs/PadeOps_startup/compressible/shearlayer"
+
+nx = 32             ! Number of points in X (256)
+ny = 32             ! Number of points in Y (192)
+nz = 32             ! Number of points in Z (128)
+
+dt = -1.0D-4              ! Fixed time step value (Set to negative to disable)
+tstop = 4D1              ! Physical time to stop the simulation
+CFL = 0.5D0               ! CFL criterion for time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 1D-0    ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "shearlayer1mat"  ! Prefix for the visualization files
+reduce_precision = .true. ! Reduce precision for I/O?
+
+periodicx = .true.        ! Periodic in X?
+periodicy = .false.       ! Periodic in Y?
+periodicz = .true.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+
+/
+
+&CINPUT
+gam   = 1.4D0          ! Ratio of specific heats
+Rgas  = 1.D0           ! Gas constant
+Cmu   = 0.D0              ! LAD coeff  
+Cbeta = 0.D0              ! LAD coeff 
+Ckap  = 0.D0              ! LAD coeff 
+Cdiff = 0.D0              ! LAD coeff 
+Cy    = 0.D0              ! LAD coeff 
+inviscid = .false.        ! Inviscid simulation?
+ns       = 1              ! Number of species + passive tracers
+nrestart = 5000          ! Number of steps between restart dumps
+compute_tke_budget = .false. ! Compute TKE budgets?
+y_bc1    = 1              ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
+y_bcn    = 1              ! Right Y BC (0 => general, 1 => symmetric). Not used if periodic
+/
+
+&PROBINPUT
+Lx      = 68.D0         ! Pantano 2002        
+Ly      = 59.D0         ! Pantano 2002
+Lz      = 68.D0         ! Pantano 2002
+Mc      = 0.6D0         ! Convective Mach number
+Re      = 5.0D1         ! Reynolds number rho_Ref*dU*L/mu_ref
+Pr      = 0.7D0         ! Prandtl number nu/kappa 0.7
+Sc      = 1.D0          ! Schmidt number nu/massDiffusivity
+T_ref = 1.D0            ! Reference temp 
+p_ref = 1.D0            ! Reference press 
+rho_ref = 1.D0          ! Reference density
+rho_ratio = 1.D0        ! Density ratio rho2/rho1
+noiseAmp = 0.D0         ! noise amplitude 
+fname_prefix = "/home/nghaisas/runs/PadeOps_startup/compressible/shearlayer"
+use_lstab    = .false.
+no_pert      = .true. 
+/
