@@ -9,6 +9,7 @@ module SolidMod
     use EOSMod,          only: eos
     use StiffGasEOS,     only: stiffgas
     use Sep1SolidEOS,    only: sep1solid
+    use operators,       only: filter3D
 
     implicit none
 
@@ -999,6 +1000,9 @@ contains
             penalty  = penalty  - src/this%VF
         endif
 
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
+
         !Transport terms
         tmp = -u*this%g11-v*this%g12-w*this%g13
         call gradient(this%decomp,this%der,tmp,rhsg(:,:,:,1),rhsg(:,:,:,2),rhsg(:,:,:,3),-x_bc, y_bc, z_bc)
@@ -1251,6 +1255,9 @@ contains
             ! add Fsource term to penalty 
             penalty  = penalty  - src/this%VF
         endif
+
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
 
 
         !Curl for diagnostic
@@ -1514,6 +1521,9 @@ contains
            penalty = penalty - src/this%VF
         endif
 
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
+
 
         !Transport terms
         tmp = -u*this%gt11-v*this%gt12-w*this%gt13
@@ -1759,6 +1769,9 @@ contains
            ! add Fsource term to penalty 
            penalty = penalty - src/this%VF
         endif
+
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
 
 
 
@@ -2019,6 +2032,9 @@ contains
 
         this%curl_p = 0 !free variable to track compatability condition -- not set up
              
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
+
 
         !Transport terms
         call gradient(this%decomp,this%der,this%gp11,LADg(:,:,:,1),LADg(:,:,:,2),LADg(:,:,:,3),x_bc, y_bc, z_bc)
@@ -2217,6 +2233,9 @@ contains
 
         this%curl_p = 0 !free variable to track compatability condition -- not set up
              
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
+
 
         !Transport terms
         call divergence(this%decomp,this%der,-u*this%rgp11,-v*this%rgp11,-w*this%rgp11,rhsgp(:,:,:,1),-x_bc, -y_bc, -z_bc)
@@ -2506,6 +2525,9 @@ contains
             penalty  = penalty  - src/this%VF
         endif
 
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
+
 
         !Curl can be used for diagnostic variable
         this%curl_e = zero
@@ -2705,6 +2727,9 @@ contains
             ! add Fsource term to penalty 
             penalty  = penalty  - src/this%VF
         endif
+
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
 
 
         !Curl can be used for diagnostic variable
@@ -2909,6 +2934,9 @@ contains
             penalty  = penalty  - src/this%VF
         endif
 
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
+
 
         !Curl can be used for diagnostic variable
         this%curl_t = zero
@@ -3098,6 +3126,9 @@ contains
             ! add Fsource term to penalty 
             penalty  = penalty  - src/this%VF
         endif
+
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
 
 
         !Curl can be used for diagnostic variable
@@ -3291,6 +3322,9 @@ contains
             penalty  = penalty  - src/this%VF
         endif
 
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
+
 
         !Curl can be used for diagnostic variable
         this%curl_p = zero
@@ -3467,6 +3501,9 @@ contains
             ! add Fsource term to penalty 
             penalty  = penalty  - src/this%VF
         endif
+
+        !Apply Gaussian filter to penalty coefficient to avoid feedback with LAD in kinematic equations
+        call filter3D(this%decomp, this%gfil, penalty, 1, 0*x_bc, 0*y_bc, 0*z_bc)  !TODO: think thru BCs
 
 
         !Curl can be used for diagnostic variable
