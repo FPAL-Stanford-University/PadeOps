@@ -246,6 +246,10 @@ contains
 
     end subroutine
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
     subroutine plastic_deformation(this, gfull, gpfull, pe, rho, Temp, sxx, sxy, sxz, syy, syz, szz,use_gTg,useOneG,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe, mumix, yieldmix, rho0mix)
         use kind_parameters, only: clen
         use constants,       only: eps, twothird
@@ -349,6 +353,10 @@ contains
                     if (mulocal(i,j,k)*Sabymu_sq*sqrt_om .LE. sqrt(two/three)*yieldlocal(i,j,k)) then
                        ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
                        cycle
+                       !TODO: move rotation from elastic to plastic
+                       ! only do it if ge-Gp formation, move rotation ge->Gp
+                       ! update G accordingly also
+                       ! if other formulation: put in an error message with the filename 
                     end if
 
                     !if( (yieldlocal(i,j,k).LE.eps) .OR. (mulocal(i,j,k).LE.eps) ) then !with condition: 4.48313318030560; without condition:8.00000000 why less?? 
@@ -479,20 +487,6 @@ contains
                     
                     
                     if(strainHard) then
-                       !update plastic g: delta g^p_{im} = - g^p_{ik}*(delta g^e_{kj})*(g^e_{jm})^(-1) 
-                       ! !using pre-updated values
-                       ! detg = -gfull(i,j,k,3)*gfull(i,j,k,5)*gfull(i,j,k,7) + gfull(i,j,k,2)*gfull(i,j,k,6)*gfull(i,j,k,7) + gfull(i,j,k,3)*gfull(i,j,k,4)*gfull(i,j,k,8) - gfull(i,j,k,1)*gfull(i,j,k,6)*gfull(i,j,k,8) - gfull(i,j,k,2)*gfull(i,j,k,4)*gfull(i,j,k,9) + gfull(i,j,k,1)*gfull(i,j,k,5)*gfull(i,j,k,9)
-
-                       ! geinv(1,1) = (gfull(i,j,k,5)*gfull(i,j,k,9) - gfull(i,j,k,6)*gfull(i,j,k,8))/detg
-                       ! geinv(1,2) = (gfull(i,j,k,3)*gfull(i,j,k,8) - gfull(i,j,k,2)*gfull(i,j,k,9))/detg
-                       ! geinv(1,3) = (gfull(i,j,k,2)*gfull(i,j,k,6) - gfull(i,j,k,3)*gfull(i,j,k,5))/detg
-                       ! geinv(2,1) = (gfull(i,j,k,6)*gfull(i,j,k,7) - gfull(i,j,k,4)*gfull(i,j,k,9))/detg
-                       ! geinv(2,2) = (gfull(i,j,k,1)*gfull(i,j,k,9) - gfull(i,j,k,3)*gfull(i,j,k,7))/detg
-                       ! geinv(2,3) = (gfull(i,j,k,3)*gfull(i,j,k,4) - gfull(i,j,k,1)*gfull(i,j,k,6))/detg
-                       ! geinv(3,1) = (gfull(i,j,k,4)*gfull(i,j,k,8) - gfull(i,j,k,5)*gfull(i,j,k,7))/detg
-                       ! geinv(3,2) = (gfull(i,j,k,2)*gfull(i,j,k,7) - gfull(i,j,k,1)*gfull(i,j,k,8))/detg
-                       ! geinv(3,3) = (gfull(i,j,k,1)*gfull(i,j,k,5) - gfull(i,j,k,2)*gfull(i,j,k,4))/detg
-
 
                        !using post-updated values
                        detg = -g(1,3)*g(2,2)*g(3,1) + g(1,2)*g(2,3)*g(3,1) + g(1,3)*g(2,1)*g(3,2) - g(1,1)*g(2,3)*g(3,2) - g(1,2)*g(2,1)*g(3,3) + g(1,1)*g(2,2)*g(3,3)
@@ -520,43 +514,6 @@ contains
 
 
                        if (use_gTg) then
-                          ! !old: close but needs improvment
-                          ! !(j,m) or (i,m)
-                          ! gpt1(1,1) = gpfull(i,j,k,1)*gedlt(1,1) + gpfull(i,j,k,4)*gedlt(2,1) + gpfull(i,j,k,7)*gedlt(3,1) 
-                          ! gpt1(1,2) = gpfull(i,j,k,1)*gedlt(1,2) + gpfull(i,j,k,4)*gedlt(2,2) + gpfull(i,j,k,7)*gedlt(3,2) 
-                          ! gpt1(1,3) = gpfull(i,j,k,1)*gedlt(1,3) + gpfull(i,j,k,4)*gedlt(2,3) + gpfull(i,j,k,7)*gedlt(3,3) 
-
-                          ! gpt1(2,1) = gpfull(i,j,k,2)*gedlt(1,1) + gpfull(i,j,k,5)*gedlt(2,1) + gpfull(i,j,k,8)*gedlt(3,1) 
-                          ! gpt1(2,2) = gpfull(i,j,k,2)*gedlt(1,2) + gpfull(i,j,k,5)*gedlt(2,2) + gpfull(i,j,k,8)*gedlt(3,2) 
-                          ! gpt1(2,3) = gpfull(i,j,k,2)*gedlt(1,3) + gpfull(i,j,k,5)*gedlt(2,3) + gpfull(i,j,k,8)*gedlt(3,3) 
-
-                          ! gpt1(3,1) = gpfull(i,j,k,3)*gedlt(1,1) + gpfull(i,j,k,6)*gedlt(2,1) + gpfull(i,j,k,9)*gedlt(3,1) 
-                          ! gpt1(3,2) = gpfull(i,j,k,3)*gedlt(1,2) + gpfull(i,j,k,6)*gedlt(2,2) + gpfull(i,j,k,9)*gedlt(3,2) 
-                          ! gpt1(3,3) = gpfull(i,j,k,3)*gedlt(1,3) + gpfull(i,j,k,6)*gedlt(2,3) + gpfull(i,j,k,9)*gedlt(3,3) 
-
-
-                          ! gpt2(1,1) =    2.0*(gpt1(1,1)*geinv(1,1) + gpt1(1,2)*geinv(2,1) + gpt1(1,3)*geinv(3,1))
-
-                          ! gpt2(1,2) =    (gpt1(1,1)*geinv(1,2) + gpt1(1,2)*geinv(2,2) + gpt1(1,3)*geinv(3,2)) &
-                          !              + (gpt1(2,1)*geinv(1,1) + gpt1(2,2)*geinv(2,1) + gpt1(2,3)*geinv(3,1))
-
-                          ! gpt2(1,3) =    (gpt1(1,1)*geinv(1,3) + gpt1(1,2)*geinv(2,3) + gpt1(1,3)*geinv(3,3)) &
-                          !              + (gpt1(3,1)*geinv(1,1) + gpt1(3,2)*geinv(2,1) + gpt1(3,3)*geinv(3,1))
-
-                          ! gpt2(2,1) =    gpt2(1,2)
-
-                          ! gpt2(2,2) =    2.0*(gpt1(2,1)*geinv(1,2) + gpt1(2,2)*geinv(2,2) + gpt1(2,3)*geinv(3,2))
-
-                          ! gpt2(2,3) =    (gpt1(2,1)*geinv(1,3) + gpt1(2,2)*geinv(2,3) + gpt1(2,3)*geinv(3,3)) &
-                          !              + (gpt1(3,1)*geinv(1,2) + gpt1(3,2)*geinv(2,2) + gpt1(3,3)*geinv(3,2))
-
-                          ! gpt2(3,1) =    gpt2(1,3)                               
-
-                          ! gpt2(3,2) =    gpt2(2,3)                               
-
-                          ! gpt2(3,3) =    2.0*(gpt1(3,1)*geinv(1,3) + gpt1(3,2)*geinv(2,3) + gpt1(3,3)*geinv(3,3))
-
-
 
                           !new
                           gpt1(1,1) = gpfull(i,j,k,1)*gfull(i,j,k,1) + gpfull(i,j,k,4)*gfull(i,j,k,4) + gpfull(i,j,k,7)*gfull(i,j,k,7) 
@@ -611,19 +568,6 @@ contains
                           gpt4(3,3) = gpt3(3,1)*geinv(1,3) + gpt3(3,2)*geinv(2,3) + gpt3(3,3)*geinv(3,3) 
 
 
-                          ! gpt4(1,1) = gpt3(1,1)*geinv(1,1) + gpt3(2,1)*geinv(2,1) + gpt3(3,1)*geinv(3,1) 
-                          ! gpt4(1,2) = gpt3(1,1)*geinv(1,2) + gpt3(2,1)*geinv(2,2) + gpt3(3,1)*geinv(3,2) 
-                          ! gpt4(1,3) = gpt3(1,1)*geinv(1,3) + gpt3(2,1)*geinv(2,3) + gpt3(3,1)*geinv(3,3)
- 
-                          ! gpt4(2,1) = gpt3(1,2)*geinv(1,1) + gpt3(2,2)*geinv(2,1) + gpt3(3,2)*geinv(3,1) 
-                          ! gpt4(2,2) = gpt3(1,2)*geinv(1,2) + gpt3(2,2)*geinv(2,2) + gpt3(3,2)*geinv(3,2) 
-                          ! gpt4(2,3) = gpt3(1,2)*geinv(1,3) + gpt3(2,2)*geinv(2,3) + gpt3(3,2)*geinv(3,3) 
-
-                          ! gpt4(3,1) = gpt3(1,3)*geinv(1,1) + gpt3(2,3)*geinv(2,1) + gpt3(3,3)*geinv(3,1) 
-                          ! gpt4(3,2) = gpt3(1,3)*geinv(1,2) + gpt3(2,3)*geinv(2,2) + gpt3(3,3)*geinv(3,2) 
-                          ! gpt4(3,3) = gpt3(1,3)*geinv(1,3) + gpt3(2,3)*geinv(2,3) + gpt3(3,3)*geinv(3,3) 
-
-
                           gpt2(1,1) = gpt4(1,1)
                           gpt2(1,2) = gpt4(1,2)
                           gpt2(1,3) = gpt4(1,3)
@@ -635,32 +579,6 @@ contains
                           gpt2(3,3) = gpt4(3,3)
 
                        else
-                          ! !old good
-                          ! gpt1(1,1) = gpfull(i,j,k,1)*gedlt(1,1) + gpfull(i,j,k,2)*gedlt(2,1) + gpfull(i,j,k,3)*gedlt(3,1) 
-                          ! gpt1(1,2) = gpfull(i,j,k,1)*gedlt(1,2) + gpfull(i,j,k,2)*gedlt(2,2) + gpfull(i,j,k,3)*gedlt(3,2) 
-                          ! gpt1(1,3) = gpfull(i,j,k,1)*gedlt(1,3) + gpfull(i,j,k,2)*gedlt(2,3) + gpfull(i,j,k,3)*gedlt(3,3) 
-
-                          ! gpt1(2,1) = gpfull(i,j,k,4)*gedlt(1,1) + gpfull(i,j,k,5)*gedlt(2,1) + gpfull(i,j,k,6)*gedlt(3,1) 
-                          ! gpt1(2,2) = gpfull(i,j,k,4)*gedlt(1,2) + gpfull(i,j,k,5)*gedlt(2,2) + gpfull(i,j,k,6)*gedlt(3,2) 
-                          ! gpt1(2,3) = gpfull(i,j,k,4)*gedlt(1,3) + gpfull(i,j,k,5)*gedlt(2,3) + gpfull(i,j,k,6)*gedlt(3,3) 
-
-                          ! gpt1(3,1) = gpfull(i,j,k,7)*gedlt(1,1) + gpfull(i,j,k,8)*gedlt(2,1) + gpfull(i,j,k,9)*gedlt(3,1) 
-                          ! gpt1(3,2) = gpfull(i,j,k,7)*gedlt(1,2) + gpfull(i,j,k,8)*gedlt(2,2) + gpfull(i,j,k,9)*gedlt(3,2) 
-                          ! gpt1(3,3) = gpfull(i,j,k,7)*gedlt(1,3) + gpfull(i,j,k,8)*gedlt(2,3) + gpfull(i,j,k,9)*gedlt(3,3) 
-
-
-                          ! gpt2(1,1) = gpt1(1,1)*geinv(1,1) + gpt1(1,2)*geinv(2,1) + gpt1(1,3)*geinv(3,1)
-                          ! gpt2(1,2) = gpt1(1,1)*geinv(1,2) + gpt1(1,2)*geinv(2,2) + gpt1(1,3)*geinv(3,2)
-                          ! gpt2(1,3) = gpt1(1,1)*geinv(1,3) + gpt1(1,2)*geinv(2,3) + gpt1(1,3)*geinv(3,3)
-
-                          ! gpt2(2,1) = gpt1(2,1)*geinv(1,1) + gpt1(2,2)*geinv(2,1) + gpt1(2,3)*geinv(3,1)
-                          ! gpt2(2,2) = gpt1(2,1)*geinv(1,2) + gpt1(2,2)*geinv(2,2) + gpt1(2,3)*geinv(3,2)
-                          ! gpt2(2,3) = gpt1(2,1)*geinv(1,3) + gpt1(2,2)*geinv(2,3) + gpt1(2,3)*geinv(3,3)
-
-                          ! gpt2(3,1) = gpt1(3,1)*geinv(1,1) + gpt1(3,2)*geinv(2,1) + gpt1(3,3)*geinv(3,1)
-                          ! gpt2(3,2) = gpt1(3,1)*geinv(1,2) + gpt1(3,2)*geinv(2,2) + gpt1(3,3)*geinv(3,2)
-                          ! gpt2(3,3) = gpt1(3,1)*geinv(1,3) + gpt1(3,2)*geinv(2,3) + gpt1(3,3)*geinv(3,3)
-
 
                           !new
                           gpt1(1,1) = gpfull(i,j,k,1)*gfull(i,j,k,1) + gpfull(i,j,k,2)*gfull(i,j,k,4) + gpfull(i,j,k,3)*gfull(i,j,k,7) 
@@ -703,17 +621,6 @@ contains
                        gp(3,2) = gpfull(i,j,k,8)
                        gp(3,3) = gpfull(i,j,k,9)
 
-                       ! !Almansi plastic strain -- before implicit update
-                       ! alms(1,1) = 0.5*(1.0 - (gp(1,1)*gp(1,1) + gp(2,1)*gp(2,1) + gp(3,1)*gp(3,1)) )
-                       ! alms(1,2) = 0.5*(0.0 - (gp(1,1)*gp(1,2) + gp(2,1)*gp(2,2) + gp(3,1)*gp(3,2)) )
-                       ! alms(1,3) = 0.5*(0.0 - (gp(1,1)*gp(1,3) + gp(2,1)*gp(2,3) + gp(3,1)*gp(3,3)) )
-                       ! alms(2,1) = 0.5*(0.0 - (gp(1,2)*gp(1,1) + gp(2,2)*gp(2,1) + gp(3,2)*gp(3,1)) )
-                       ! alms(2,2) = 0.5*(1.0 - (gp(1,2)*gp(1,2) + gp(2,2)*gp(2,2) + gp(3,2)*gp(3,2)) )
-                       ! alms(2,3) = 0.5*(0.0 - (gp(1,2)*gp(1,3) + gp(2,2)*gp(2,3) + gp(3,2)*gp(3,3)) )
-                       ! alms(3,1) = 0.5*(0.0 - (gp(1,3)*gp(1,1) + gp(2,3)*gp(2,1) + gp(3,3)*gp(3,1)) )
-                       ! alms(3,2) = 0.5*(0.0 - (gp(1,3)*gp(1,2) + gp(2,3)*gp(2,2) + gp(3,3)*gp(3,2)) )
-                       ! alms(3,3) = 0.5*(1.0 - (gp(1,3)*gp(1,3) + gp(2,3)*gp(2,3) + gp(3,3)*gp(3,3)) )
-
                        !Eulerian-Almansi strain tensor: ea = (I-(g_p)^T.g_p)/2 --- not explicitly calculated
                        !strain norm: e_p = sqrt(2/3*ea_ij*ea_ij)
                        if (use_gTg) then
@@ -721,18 +628,6 @@ contains
                        else
                           almsn0 = sqrt( ( (1.0 - gp(1,1)**2 - gp(2,1)**2 - gp(3,1)**2)**2 + (1.0 - gp(1,2)**2 - gp(2,2)**2 - gp(3,2)**2)**2 + (1.0 - gp(1,3)**2 - gp(2,3)**2 - gp(3,3)**2)**2 )/6.0d0 + ( (-gp(1,1)*gp(1,2) - gp(2,1)*gp(2,2) - gp(3,1)*gp(3,2))**2 + (-gp(1,1)*gp(1,3) - gp(2,1)*gp(2,3) - gp(3,1)*gp(3,3))**2 + (-gp(1,2)*gp(1,3) - gp(2,2)*gp(2,3) - gp(3,2)*gp(3,3))**2 )/3.0d0 ) !same as solidmod
                        endif
-
-                       !update plastic g
-                       ! !old
-                       ! gpfull(i,j,k,1) = gpfull(i,j,k,1) - gpt2(1,1)
-                       ! gpfull(i,j,k,2) = gpfull(i,j,k,2) - gpt2(1,2)
-                       ! gpfull(i,j,k,3) = gpfull(i,j,k,3) - gpt2(1,3)
-                       ! gpfull(i,j,k,4) = gpfull(i,j,k,4) - gpt2(2,1)
-                       ! gpfull(i,j,k,5) = gpfull(i,j,k,5) - gpt2(2,2)
-                       ! gpfull(i,j,k,6) = gpfull(i,j,k,6) - gpt2(2,3)
-                       ! gpfull(i,j,k,7) = gpfull(i,j,k,7) - gpt2(3,1)
-                       ! gpfull(i,j,k,8) = gpfull(i,j,k,8) - gpt2(3,2)
-                       ! gpfull(i,j,k,9) = gpfull(i,j,k,9) - gpt2(3,3)
 
                        !new
                        gpfull(i,j,k,1) = gpt2(1,1)
@@ -745,19 +640,6 @@ contains
                        gpfull(i,j,k,8) = gpt2(3,2)
                        gpfull(i,j,k,9) = gpt2(3,3)
 
-
-                       !for plastic entropy
-                       ! !delta gp
-                       ! gpdlt(1,1) = gpfull(i,j,k,1) - gp(1,1)
-                       ! gpdlt(1,2) = gpfull(i,j,k,2) - gp(1,2)
-                       ! gpdlt(1,3) = gpfull(i,j,k,3) - gp(1,3)
-                       ! gpdlt(2,1) = gpfull(i,j,k,4) - gp(2,1)
-                       ! gpdlt(2,2) = gpfull(i,j,k,5) - gp(2,2)
-                       ! gpdlt(2,3) = gpfull(i,j,k,6) - gp(2,3)
-                       ! gpdlt(3,1) = gpfull(i,j,k,7) - gp(3,1)
-                       ! gpdlt(3,2) = gpfull(i,j,k,8) - gp(3,2)
-                       ! gpdlt(3,3) = gpfull(i,j,k,9) - gp(3,3)
-
                        !gp -- after implicit update
                        gp(1,1) = gpfull(i,j,k,1)
                        gp(1,2) = gpfull(i,j,k,2)
@@ -769,31 +651,6 @@ contains
                        gp(3,2) = gpfull(i,j,k,8)
                        gp(3,3) = gpfull(i,j,k,9)
 
-                       ! !using post-updated values
-                       ! detgp = -gp(1,3)*gp(2,2)*gp(3,1) + gp(1,2)*gp(2,3)*gp(3,1) + gp(1,3)*gp(2,1)*gp(3,2) - gp(1,1)*gp(2,3)*gp(3,2) - gp(1,2)*gp(2,1)*gp(3,3) + gp(1,1)*gp(2,2)*gp(3,3)
-
-                       ! gpinv(1,1) = (gp(2,2)*gp(3,3) - gp(2,3)*gp(3,2))/detgp
-                       ! gpinv(1,2) = (gp(1,3)*gp(3,2) - gp(1,2)*gp(3,3))/detgp
-                       ! gpinv(1,3) = (gp(1,2)*gp(2,3) - gp(1,3)*gp(2,2))/detgp
-                       ! gpinv(2,1) = (gp(2,3)*gp(3,1) - gp(2,1)*gp(3,3))/detgp
-                       ! gpinv(2,2) = (gp(1,1)*gp(3,3) - gp(1,3)*gp(3,1))/detgp
-                       ! gpinv(2,3) = (gp(1,3)*gp(2,1) - gp(1,1)*gp(2,3))/detgp
-                       ! gpinv(3,1) = (gp(2,1)*gp(3,2) - gp(2,2)*gp(3,1))/detgp
-                       ! gpinv(3,2) = (gp(1,2)*gp(3,1) - gp(1,1)*gp(3,2))/detgp
-                       ! gpinv(3,3) = (gp(1,1)*gp(2,2) - gp(1,2)*gp(2,1))/detgp
-
-
-                       ! !Almansi plastic strain -- after implicit update
-                       ! alms(1,1) = 0.5*(1.0 - (gp(1,1)*gp(1,1) + gp(2,1)*gp(2,1) + gp(3,1)*gp(3,1)) )
-                       ! alms(1,2) = 0.5*(0.0 - (gp(1,1)*gp(1,2) + gp(2,1)*gp(2,2) + gp(3,1)*gp(3,2)) )
-                       ! alms(1,3) = 0.5*(0.0 - (gp(1,1)*gp(1,3) + gp(2,1)*gp(2,3) + gp(3,1)*gp(3,3)) )
-                       ! alms(2,1) = 0.5*(0.0 - (gp(1,2)*gp(1,1) + gp(2,2)*gp(2,1) + gp(3,2)*gp(3,1)) )
-                       ! alms(2,2) = 0.5*(1.0 - (gp(1,2)*gp(1,2) + gp(2,2)*gp(2,2) + gp(3,2)*gp(3,2)) )
-                       ! alms(2,3) = 0.5*(0.0 - (gp(1,2)*gp(1,3) + gp(2,2)*gp(2,3) + gp(3,2)*gp(3,3)) )
-                       ! alms(3,1) = 0.5*(0.0 - (gp(1,3)*gp(1,1) + gp(2,3)*gp(2,1) + gp(3,3)*gp(3,1)) )
-                       ! alms(3,2) = 0.5*(0.0 - (gp(1,3)*gp(1,2) + gp(2,3)*gp(2,2) + gp(3,3)*gp(3,2)) )
-                       ! alms(3,3) = 0.5*(1.0 - (gp(1,3)*gp(1,3) + gp(2,3)*gp(2,3) + gp(3,3)*gp(3,3)) )
-
                        !Eulerian-Almansi strain tensor: ea = (I-(g_p)^T.g_p)/2 --- not explicitly calculated
                        !strain norm: e_p = sqrt(2/3*ea_ij*ea_ij)
                        if (use_gTg) then 
@@ -802,10 +659,7 @@ contains
                           almsn = sqrt( ( (1.0 - gp(1,1)**2 - gp(2,1)**2 - gp(3,1)**2)**2 + (1.0 - gp(1,2)**2 - gp(2,2)**2 - gp(3,2)**2)**2 + (1.0 - gp(1,3)**2 - gp(2,3)**2 - gp(3,3)**2)**2 )/6.0d0 + ( (-gp(1,1)*gp(1,2) - gp(2,1)*gp(2,2) - gp(3,1)*gp(3,2))**2 + (-gp(1,1)*gp(1,3) - gp(2,1)*gp(2,3) - gp(3,1)*gp(3,3))**2 + (-gp(1,2)*gp(1,3) - gp(2,2)*gp(2,3) - gp(3,2)*gp(3,3))**2 )/3.0d0 ) !same as solidmod
                        endif
 
-                       !update pe -- note this is called after g and pe are converted back to primitive
-                       !pe(i,j,k) =  pe(i,j,k) + (almsn-almsn0) !correct dimensinos for strain - compare this with e_p and e_pp
                        pe(i,j,k) =  pe(i,j,k) + (almsn-almsn0)*yieldlocal(i,j,k) !correct dimensions for energy
-                       !pe(i,j,k) =  pe(i,j,k) + (almsn-almsn0)*yieldlocal(i,j,k)/Temp(i,j,k) !correct dimensions for entropy
 
                     endif
 
@@ -815,50 +669,20 @@ contains
                     gfull(i,j,k,4) = g(2,1); gfull(i,j,k,5) = g(2,2); gfull(i,j,k,6) = g(2,3)
                     gfull(i,j,k,7) = g(3,1); gfull(i,j,k,8) = g(3,2); gfull(i,j,k,9) = g(3,3)
 
-
-
-                    ! ! old
-                    ! !plastic entropy RHS
- 
-                    ! ! Get eigenvalues and eigenvectors of deviatoric stress
-                    ! sigma(1,1) = sxx(i,j,k); sigma(1,2) = sxy(i,j,k); sigma(1,3) = sxz(i,j,k)
-                    ! sigma(2,1) = sxy(i,j,k); sigma(2,2) = syy(i,j,k); sigma(2,3) = syz(i,j,k)
-                    ! sigma(3,1) = sxz(i,j,k); sigma(3,2) = syz(i,j,k); sigma(3,3) = szz(i,j,k)
-
-                    ! call dsyev('V', 'U', 3, sigma, 3, sval, this%svdwork, lwork, info)
-                    ! if(info .ne. 0) then
-                    !    print '(A,I6,A)', 'proc ', nrank, ': Problem with DSYEV. Please check.'
-                    !    call GracefulExit(charout,3475)
-                    ! end if
-
-                    ! asq = (sval(1)**2+sval(2)**2+sval(3)**2)*mulocal(i,j,k)**2
-                    ! xsq = 2.0d0/3.0d0*(yieldlocal(i,j,k)/mulocal(i,j,k))**2
-                    ! tot = tdel/this%tau0
-                    
-                    ! !if((asq.lt.1.e-10).or.(xsq.lt.1.e-10)) then
-                    ! !   print*,asq,xsq
-                    ! !endif
-
-                    ! adiv = (xsq-asq)*exp(-2.0d0*xsq*tot)+asq
-                    ! adiv = sign(max(abs(adiv),eps),adiv)
-
-                    ! !!!!!!pe = pe + max( (mulocal(i,j,k)*asq*(asq-xsq)) / (4.0d0*rho(i,j,k)**2/rho0local(i,j,k)*Temp(i,j,k)) * (1.0d0 - exp(-2.0d0*xsq*tot)) / (asq-(asq-xsq)*exp(-2.0d0*xsq*tot)) , 0.0d0)
-                    
-                    ! !!old
-                    ! !pe = pe + max( ( (mulocal(i,j,k)*asq*(asq-xsq)) / (4.0d0*rho(i,j,k)**2/rho0local(i,j,k)*Temp(i,j,k)) ) * ( (1.0d0 - exp(-2.0d0*xsq*tot)) /  adiv ) , 0.0d0)
-
-
-                    
-                    ! !!!tmp  = (rho*this%Ys + this%elastic%rho0*detg *epssmall)/(this%VF + epssmall)   
-                    ! !need to check correct rho below
-                    ! pe(i,j,k) = pe(i,j,k) + max( ( (mulocal(i,j,k)*asq*(asq-xsq)) / (4.0d0*rho(i,j,k)/rho0local(i,j,k)*Temp(i,j,k)) ) * ( (1.0d0 - exp(-2.0d0*xsq*tot)) /  adiv ) , 0.0d0)
-                    
+                    !TODO: move rotation from elastic to plastic
+                    ! only do it if ge-Gp formation, move rotation ge->Gp
+                    ! update G accordingly also
+                    ! if other formulation: put in an error message with the filename 
                     
 
                 end do
             end do
         end do
-    end subroutine
+    end subroutine plastic_deformation
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     subroutine make_tensor_SPD(this,gfull)
         use exits, only: GracefulExit
