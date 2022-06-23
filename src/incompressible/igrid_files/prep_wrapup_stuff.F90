@@ -338,6 +338,12 @@ subroutine interp_PrimitiveVars(this)
             end if 
         end if
 
+        if ((this%topBC_Temp == 0)) then
+            zbuffE(:,:,this%nz+1) = zero 
+            if (nrank == 0) then
+                zbuffE(1,1,this%nz+1) = this%TsurfTop*real(this%nx,rkind)*real(this%ny,rkind)
+            end if 
+        end if 
         ! Symmetric homogeneous dirichlet BC case
         if ((this%topBC_Temp == 3) .and. (this%botBC_Temp == 3)) then
             zbuffE(:,:,1) = zero
@@ -692,19 +698,27 @@ subroutine compute_dTdxi(this)
         end if 
         
     else
-        call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
-        call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
+        call transpose_y_to_z(this%TEhat, ctmpz2, this%sp_gpE)
+        call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,TBC_bottom,TBC_top)
+        call transpose_z_to_y(ctmpz1,this%dTdzHC,this%sp_gpC)
+        call this%Pade6opZ%interpz_C2E(ctmpz1,ctmpz2,dTdzBC_bottom,dTdzBC_top)
+        call transpose_z_to_y(ctmpz2,this%dTdzH,this%sp_gpE)
         if (.not. this%isInviscid) then
-            call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,TBC_bottom, TBC_top)    
+            call this%Pade6opZ%ddz_C2C(ctmpz1,ctmpz3,dTdzBC_bottom,dTdzBC_top)
             call transpose_z_to_y(ctmpz3,this%d2Tdz2hatC,this%sp_gpC)
         end if 
-        call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
-
-        call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
         call this%spectE%ifft(this%dTdzH,this%dTdzE)
-        
-        call transpose_z_to_y(ctmpz1,this%dTdzHC,this%sp_gpC)
         call this%spectC%ifft(this%dTdzHC,this%dTdzC)
+
+        !call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
+        !call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
+        !if (.not. this%isInviscid) then
+        !    call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,TBC_bottom, TBC_top)    
+        !    call transpose_z_to_y(ctmpz3,this%d2Tdz2hatC,this%sp_gpC)
+        !end if 
+        !call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
+
+    
     end if 
 
 end subroutine
