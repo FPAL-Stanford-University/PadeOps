@@ -32,8 +32,9 @@ module IncompressibleGrid
     external :: MPI_BCAST, MPI_RECV, MPI_SEND, MPI_REDUCE
 
     private
-    public :: igrid, wBC_bottom, wBC_top  
+    public :: igrid, wBC_bottom, wBC_top
 
+    logical, dimension(3) :: periodicBCs
     complex(rkind), parameter :: zeroC = zero + imi*zero 
 
     ! Allow non-zero value (isEven) 
@@ -380,11 +381,13 @@ module IncompressibleGrid
             procedure          :: advance_SSP_RK45_Stage_3 
             procedure          :: advance_SSP_RK45_Stage_4 
             procedure          :: advance_SSP_RK45_Stage_5
+            procedure          :: getPeriodicBCs
 
             ! Gabor mode specific procedures (ignored for normal igrid runs)
             procedure          :: initLargeScales 
             procedure          :: HaloUpdateVelocities
-            procedure          :: ProjectToFixBC 
+            procedure          :: ProjectToFixBC
+            procedure, private :: readLargeScales
    end type
 
 contains 
@@ -423,7 +426,7 @@ contains
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false., useControl = .false., useHITRealSpaceLinearForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
-        logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
+        logical :: assume_fplane = .true., useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
@@ -1656,6 +1659,15 @@ contains
        WdTdzBC_top = +1
 
        if (this%tsim > Tstop_InitSpinUp) this%initspinup = .false. 
+   end subroutine
+
+   subroutine getPeriodicBCs(this,BCs)
+     class(igrid), intent(inout) :: this
+     logical, dimension(3), intent(out) :: BCs
+
+     BCs(1) = periodicBCs(1)
+     BCs(2) = periodicBCs(2)
+     BCs(3) = periodicBCs(3)
    end subroutine 
 
 end module 

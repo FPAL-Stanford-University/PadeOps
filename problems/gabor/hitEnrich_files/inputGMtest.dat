@@ -1,6 +1,11 @@
+&IO
+  outputdir  = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V3/tests/gaborModes/3PE'
+  writeIsotropicModes = .false.
+/
+/
 &GABOR
-  nk         = 1                    ! Number of wavenumber shells spanned by Gabor modes
-  ntheta     = 1                    ! Number of modes per wavenumber shell
+  nk         = 2                    ! Number of wavenumber shells spanned by Gabor modes
+  ntheta     = 2                    ! Number of modes per wavenumber shell
 /
 /
 &CONTROL

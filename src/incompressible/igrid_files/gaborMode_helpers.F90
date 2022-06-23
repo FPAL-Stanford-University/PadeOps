@@ -3,7 +3,8 @@ subroutine initLargeScales(this, tid, rid)
     integer, intent(in) :: tid, rid
 
     ! Fill u, v and w 
-    call this%readRestartFile(tid, rid)
+    call this%readLargeScales(tid, rid)
+    !call this%readRestartFile(tid, rid)
 
     ! Compute uhat, vhat and what 
     call this%spectC%fft(this%u,this%uhat)   
@@ -56,15 +57,15 @@ subroutine ProjectToFixBC(this)
     call this%spectC%fft(this%v ,this%vhat )   
     call this%spectC%fft(this%wC,this%whatC)   
 
-    call transpose_y_to_z(this%whatC, this%cbuffzC(:,:,:,1),this%gpC)
+    call transpose_y_to_z(this%whatC, this%cbuffzC(:,:,:,1),this%sp_gpC)
     call this%Pade6opZ%interpz_C2E(this%cbuffzC(:,:,:,1),this%cbuffzE(:,:,:,1),0,0)
-    call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%what,this%gpE)
+    call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%what,this%sp_gpE)
 
     call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
 
-    call transpose_y_to_z(this%what, this%cbuffzE(:,:,:,1),this%gpE)
+    call transpose_y_to_z(this%what, this%cbuffzE(:,:,:,1),this%sp_gpE)
     call this%Pade6opZ%interpz_E2C(this%cbuffzE(:,:,:,1),this%cbuffzC(:,:,:,1),0,0)
-    call transpose_z_to_y(this%cbuffzC(:,:,:,1), this%whatC,this%gpC)
+    call transpose_z_to_y(this%cbuffzC(:,:,:,1), this%whatC,this%sp_gpC)
 
     call this%spectC%ifft(this%uhat ,this%u )   
     call this%spectC%ifft(this%vhat ,this%v )   
@@ -76,3 +77,21 @@ subroutine getPressure(this)
     class(igrid), intent(inout) :: this
 
 end subroutine 
+
+
+subroutine readLargeScales(this,tid, rid)
+    use decomp_2d_io
+    class(igrid), intent(inout) :: this
+    integer, intent(in) :: rid, tid
+    character(len=clen) :: tempname, fname
+    
+   call readField3D(rid, tid, this%inputDir, "uVel", this%u , this%gpC)
+   call readField3D(rid, tid, this%inputDir, "vVel", this%v , this%gpC)
+   call readField3D(rid, tid, this%inputDir, "wVel", this%wC, this%gpC)
+
+   call this%spectC%fft(this%wC,this%whatC)   
+   call transpose_y_to_z(this%whatC, this%cbuffzC(:,:,:,1),this%sp_gpC)
+   call this%Pade6opZ%interpz_C2E(this%cbuffzC(:,:,:,1),this%cbuffzE(:,:,:,1),0,0)
+   call transpose_z_to_y(this%cbuffzE(:,:,:,1),this%what,this%sp_gpE)
+   call this%spectE%ifft(this%what, this%w)
+end subroutine

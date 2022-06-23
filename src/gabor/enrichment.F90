@@ -24,13 +24,17 @@ module enrichmentMod
     type(QHmesh) :: QHgrid 
     real(rkind), dimension(:,:,:,:), pointer :: duidxj_LS
     real(rkind) :: kmin, kmax
-    logical :: imposeNoPenetrationBC = .false. 
+    logical :: imposeNoPenetrationBC = .false.
 
     ! Initialization parameters
-    integer     :: nk, ntheta, nmodes
+    integer     :: nk, ntheta, nmodes, nmodesGlobal
     real(rkind) :: scalefact, Anu, numolec, ctauGlobal
     logical     :: renderPressure = .false.
-    integer     :: tidRender, tio , tid, tidStop 
+    integer     :: tidRender, tio , tid, tidStop
+
+    ! Data IO
+    character(len=clen) :: outputdir
+    logical :: writeIsotropicModes 
 
     contains
       procedure          :: init
@@ -43,31 +47,41 @@ module enrichmentMod
       procedure, private :: renderLocalVelocity
       procedure          :: updateLargeScales
       procedure          :: wrapupTimeStep
-      procedure          :: continueSimulation 
+      procedure          :: continueSimulation
+      procedure          :: dumpData
   end type
 
 contains
   include 'enrichment_files/initializeGaborModes.F90'
   include 'enrichment_files/renderVelocity.F90'
+  include 'enrichment_files/gaborIO.F90'
 
   subroutine init(this,smallScales,largeScales,inputfile,Lx,Ly,Lz)
     use GaborModeRoutines, only: computeKminKmax
+    use mpi !DEBUG
+    use decomp_2d, only: nrank, nproc !DEBUG
+    
     class(enrichmentOperator), intent(inout) :: this 
     class(igrid), intent(inout), target :: smallScales, largeScales
     real(rkind), intent(in) :: Lx, Ly, Lz
-    character(len=*), intent(in) :: inputfile   
+    character(len=*), intent(in) :: inputfile
+    character(len=clen) :: outputdir
     integer :: ierr, ioUnit
     integer :: nk, ntheta
     integer :: tidRender, tio, tidStop, tidInit = 0
     real(rkind) :: scalefact = 1.d0, Anu = 1.d-4, numolec = 0.d0
     real(rkind) :: ctauGlobal = 1.d0
-     
-    namelist /GABOR/ nk, ntheta, scalefact, ctauGlobal, Anu, numolec
+    logical :: writeIsotropicModes = .false.
+    integer :: n !DEBUG
+    
+    namelist /IO/      outputdir, writeIsotropicModes
+    namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit 
 
     ! Read inputfile
     ioUnit = 1
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+    read(unit=ioUnit, NML=IO)
     read(unit=ioUnit, NML=GABOR)
     read(unit=ioUnit, NML=CONTROL)
     close(ioUnit)
@@ -75,24 +89,29 @@ contains
     this%largeScales => largeScales 
     this%smallScales => smallScales
 
+    ! Time control
     this%tidRender = tidRender 
     this%tio = tio
     this%tidStop = tidStop
     this%tid = -1 
 
+    ! Initialization
     this%nk = nk
     this%ntheta = ntheta
     this%scalefact = scalefact
     this%Anu = Anu 
-    this%ctauGlobal = ctauGlobal    
+    this%ctauGlobal = ctauGlobal
+
+    ! IO
+    this%outputdir = outputdir
+    this%writeIsotropicModes = writeIsotropicModes
+
 
     ! STEP  0: Get filenames for u, v and w from (input file?) for initialization
     ! Use the same file-naming convention for PadeOps restart files: 
     ! RESTART_Run00_u.000000
     call this%largeScales%initLargeScales(tidInit,this%largeScales%runID)
     this%duidxj_LS => largeScales%duidxjC
-    print*, "maxval(abs(largeScales%duidxjC)) = ", maxval(abs(largeScales%duidxjC))
-call assert(.false.)
 
     ! Get halo-padded velocity arrays
     call this%updateLargeScales() 
@@ -111,9 +130,21 @@ call assert(.false.)
     this%nzsupp = 2 * this%smallScales%nz/this%largeScales%nz * &
       nint(this%QHgrid%dz / this%largeScales%dz)
 
-    this%nmodes = this%nk*this%ntheta*&
+    this%nmodes = this%nk*this%ntheta * &
       this%QHgrid%gpC%xsz(1)*this%QHgrid%gpC%xsz(2)*this%QHgrid%gpC%xsz(3)
-
+    this%nmodesGlobal = this%nk*this%ntheta * &
+      this%QHgrid%nx*this%QHgrid%ny*this%QHgrid%nz
+!DEBUG----------------------------------------------------------------
+do n = 0,nproc-1
+  if (nrank == n) then
+    print*, "nrank:", nrank, "this%QHgrid%yE(1):", this%QHgrid%yE(1)
+    print*, "(jst-1)*dy:", &
+      real(this%largeScales%gpC%xst(2) - 1,rkind)*this%largeScales%dy
+  end if
+  call MPI_Barrier(MPI_COMM_WORLD,ierr)
+end do
+!END DEBUG------------------------------------------------------------
+    
     ! Compute kmin and kmax based on LES and high-resolution grids 
     call computeKminKmax(Lx, Ly, Lz, &
       this%largeScales%nx, this%largeScales%ny, this%largeScales%nz, &
@@ -122,6 +153,7 @@ call assert(.false.)
 
     ! Initialize the Gabor modes
     call this%generateIsotropicModes()
+    if (this%writeIsotropicModes) call this%dumpData()
     call this%strainModes()
 
     call this%wrapupTimeStep()

@@ -78,11 +78,11 @@ subroutine generateIsotropicModes(this)
   kmag = 0.5d0*(kedge(1:nk) + kedge(2:nk+1))
   dk = kedge(2:nk+1) - kedge(1:nk)
   
-  do k = 1,this%QHgrid%gpC%xsz(1)
+  do k = 1,this%QHgrid%gpC%xsz(3)
     zmin = this%QHgrid%zE(k)
     do j = 1,this%QHgrid%gpC%xsz(2)
       ymin = this%QHgrid%yE(j)
-      do i = 1,this%QHgrid%gpC%xsz(3)
+      do i = 1,this%QHgrid%gpC%xsz(1)
         xmin = this%QHgrid%xE(i)
 
         !TODO: Need better seed selection 
@@ -218,10 +218,6 @@ subroutine strainModes(this)
   kabs = sqrt(this%kx*this%kx + this%ky*this%ky + this%kz*this%kz)
   input = -(kabs)**(-2.0_rkind)
 
-  !!$OMP PARALLEL SHARED(input,kx,ky,kz,uhatR,uhatI,vhatR,vhatI,whatR,whatI) &
-  !!$OMP SHARED(this%Anu,this%numolec,S,this%ctauGlobal,kabs)
-  !!$OMP PRIVATE(output,n,k,uRtmp,uItmp,tid,tauEddy,dt,KE,L,dudx,S)
-  !!$OMP DO
   do n = 1,this%nmodes
     CALL PFQ(input(n),output)
     call this%getLargeScaleDataAtModeLocation(n,dudx,L,KE,U,V,W)
@@ -260,8 +256,8 @@ subroutine strainModes(this)
       print*, trim(mssg)
     end if
   end do
-  !!$OMP END DO
-  !!$OMP END PARALLEL
+
+  call message('Finished straining isotropic modes')
 end subroutine
 
 subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
@@ -271,16 +267,19 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   real(rkind), dimension(3,3), intent(out) :: dudx
   real(rkind), intent(out) :: L, KE, U, V, W
   integer :: i, j, idx, QHx, QHy, QHz
+  logical, dimension(3) :: periodicBCs
 
-  call interpToLocation(this%uh,U,this%largeScales%gpC,&
+  call this%largeScales%getPeriodicBCs(periodicBCs)
+
+  call interpToLocation(this%uh, U, this%largeScales%gpC,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
-    this%x(gmID), this%y(gmID), this%z(gmID))
-  call interpToLocation(this%vh,V,this%largeScales%gpC,&
+    this%x(gmID), this%y(gmID), this%z(gmID), periodicBCs)
+  call interpToLocation(this%vh, V, this%largeScales%gpC,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
-    this%x(gmID), this%y(gmID), this%z(gmID))
-  call interpToLocation(this%wh,W,this%largeScales%gpC,&
+    this%x(gmID), this%y(gmID), this%z(gmID), periodicBCs)
+  call interpToLocation(this%wh, W, this%largeScales%gpC,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
-    this%x(gmID), this%y(gmID), this%z(gmID))
+    this%x(gmID), this%y(gmID), this%z(gmID), periodicBCs)
   
   idx = 1
   do i = 1,3

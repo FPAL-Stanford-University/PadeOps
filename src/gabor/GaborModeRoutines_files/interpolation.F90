@@ -1,4 +1,4 @@
-subroutine interpToLocation(datIn,datOut,gp,dx,dy,dz,x,y,z)
+subroutine interpToLocation(datIn,datOut,gp,dx,dy,dz,x,y,z,periodicBCs)
   ! Tri-linear interpolation to a given location (x,y,z)
   ! Inputs:
   !     datIn    --> 3D array of input data
@@ -7,44 +7,63 @@ subroutine interpToLocation(datIn,datOut,gp,dx,dy,dz,x,y,z)
   !     x,y,z    --> Coordinates of interpolation location
   ! Output:
   !     datOut --> Scalar value of interpolated data at (x,y,z)
-  use decomp_2d, only: decomp_info
+  use decomp_2d, only: decomp_info, &
+    nrank, nproc !DEBUG
+  use mpi !DEBUG
   real(rkind), dimension(:,:,:), intent(in) :: datIn
   real(rkind), intent(out) :: datOut
   type(decomp_info), intent(in) :: gp
   real(rkind), intent(in) :: dx, dy, dz, x, y, z
+  logical, dimension(3), intent(in) :: periodicBCs
   integer :: xlo, xhi, ylo, yhi, zlo, zhi
   real(rkind), dimension(8) :: weights
   integer, dimension(8) :: xid, yid, zid
   integer :: ist, jst, kst
   real(rkind) :: xst, yst, zst
   integer :: nx, ny, nz
+  integer :: n, ierr !DEBUG
 
+  ! Global array indices
   ist = gp%xst(1)
   jst = gp%xst(2)
   kst = gp%xst(3)
 
-  xst = (real(ist,rkind)-1.d0)*dx
-  yst = (real(jst,rkind)-1.d0)*dy
-  zst = (real(kst,rkind)-1.d0)*dz
-
+  ! Global array sizes
   nx = gp%xsz(1)
   ny = gp%ysz(2)
   nz = gp%zsz(3)
 
   call getXYZneighbors(x,y,z,ist,jst,kst,dx,dy,dz,xlo,xhi,ylo,yhi,zlo,zhi)
-! DELETE IF INPUT ARRAY IS 0-INDEXED IN ALL THREE DIRECTIONS -----------------
-  if (xlo == 0      .and. size(datIn,1) == nx) xlo = nx
+
+  ! Adjust hi index if full dimension is available on the process and the
+  ! boundary conditions are periodic
+  call assert(periodicBCs(1),'Code assumes x-periodicity -- interpolation.F90')
+  call assert(periodicBCs(2),'Code assumes y-periodicity -- interpolation.F90')
+  call assert(periodicBCs(3),'Code assumes z-periodicity -- interpolation.F90')
   if (xhi == nx + 1 .and. size(datIn,1) == nx) xhi = 1
-  if (ylo == 0      .and. size(datIn,2) == ny) ylo = ny
   if (yhi == ny + 1 .and. size(datIn,2) == ny) yhi = 1
-  if (zlo == 0      .and. size(datIn,3) == nz) zlo = nz
   if (zhi == nz + 1 .and. size(datIn,3) == nz) zhi = 1
-! ----------------------------------------------------------------------------
+  
+  ! For the dimensions that are decomposed across MPI ranks, the computed lo and
+  ! hi indices need to be shifted up 1 since datIn is assumed to be 1-indexed.
+  ! In reality we are passing halo-padded arrays that are 0-indexed, but since
+  ! we don't know a priori whether decomp2d used a slab or pencil decomposition
+  ! we can't declare the appropriate indexing in the intent(in) variable datIn
+  if (gp%xsz(2) .ne. ny) ylo = ylo + 1; yhi = yhi + 1
+  if (gp%xsz(3) .ne. nz) zlo = zlo + 1; zhi = zhi + 1
+
+  xst = (real(ist,rkind)-1.d0)*dx
+  yst = (real(jst,rkind)-1.d0)*dy
+  zst = (real(kst,rkind)-1.d0)*dz
+
   call getWeightsForLinInterp(x,y,z,xlo,xhi,ylo,yhi,zlo,zhi,&
     xst,yst,zst,dx,dy,dz,weights,xid,yid,zid)
-  !call getWeightsForLinInterp(idx,xlo,xhi,ylo,yhi,zlo,zhi,&
-  !  x(xlo),y(ylo),z(zlo),dx,dy,dz,weights,xid,yid,zid)
 
+!DEBUG -----------------------------------------------------------
+if (ylo == 0) then
+  print*, "nrank: ", nrank, "y:", y, "ylo:", ylo, "jst:", jst
+end if
+!END DEBUG -------------------------------------------------------
   call interpDat(datOut,datIn,weights,xid,yid,zid)
 end subroutine
 
