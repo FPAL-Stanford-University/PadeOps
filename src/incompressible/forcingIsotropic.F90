@@ -28,7 +28,7 @@ module forcingmod
       real(rkind), dimension(:), allocatable :: tmpModes
       real(rkind) :: alpha_t = 1.d0 
       real(rkind) :: normfact = 1.d0, A_force = 1.d0 
-      integer     :: DomAspectRatioZ
+      integer, public     :: DomAspectRatioZ, DomAspectRatioX
       logical :: useLinearForcing, firstCall
     
       contains
@@ -51,20 +51,24 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    complex(rkind), dimension(:,:,:  ), intent(inout), target :: cbuffzE, cbuffyE, cbuffyC
    complex(rkind), dimension(:,:,:,:), intent(inout), target :: cbuffzC
    class(spectral), intent(in), target :: spectC
-   integer :: RandSeedToAdd = 0, ierr, DomAspectRatioZ = 1
+   integer :: RandSeedToAdd = 0, ierr, DomAspectRatioZ = 1, DomAspectRatioX = 1
    real(rkind) :: alpha_t = 1.d0 
    integer :: Nwaves = 20
    real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0, A_force = 1.d0 
    logical :: useLinearForcing = .false. 
    real(rkind) :: filtfact_linForcing = 0.5d0
-   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, DomAspectRatioZ, alpha_t, useLinearForcing, filtfact_linForcing  
+   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, &
+     DomAspectRatioZ, DomAspectRatioX, alpha_t, useLinearForcing, filtfact_linForcing  
 
    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
    read(unit=123, NML=HIT_Forcing)
    close(123)
 
-   if(DomAspectRatioZ < 1.0d0) then
-       call GracefulExit("Aspect ratio in z must be greater than 1", 111)
+   if(DomAspectRatioZ < 1) then
+       call GracefulExit("Aspect ratio in z must be greater than or equal to 1", 111)
+   endif
+   if(DomAspectRatioX < 1) then
+       call GracefulExit("Aspect ratio in x must be greater than or equal to 1", 111)
    endif
 
    this%A_force = A_force
@@ -73,6 +77,7 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    this%EpsAmplitude = EpsAmplitude
    this%Nwaves = Nwaves
    this%DomAspectRatioZ = DomAspectRatioZ
+   this%DomAspectRatioX = DomAspectRatioX
    this%sp_gpC => sp_gpC
    this%sp_gpE => sp_gpE
    this%spectC => spectC
@@ -224,7 +229,7 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
    integer :: lid_x, lid_y, lid_yC
 
    ! Get global ID of the mode and conjugate
-   gid_x  = kx + 1
+   gid_x  = this%DomAspectRatioX*kx + 1
    gid_y  = ky + 1
    gid_yC = this%sp_gpC%ysz(2) - ky + 1 
    gid_z  = this%DomAspectRatioZ*kz + 1
