@@ -9,6 +9,8 @@ subroutine destroy(this)
      call this%destroy_smagorinsky()
   case (1)
      call this%destroy_sigma()
+  case (2)
+     call this%destroy_amd()
   end select
   nullify(this%tau_11, this%tau_12, this%tau_22, this%tau_33)
   deallocate(this%tau_13, this%tau_23)

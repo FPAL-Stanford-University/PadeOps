@@ -58,8 +58,6 @@ contains
 
   subroutine init(this,smallScales,largeScales,inputfile,Lx,Ly,Lz)
     use GaborModeRoutines, only: computeKminKmax
-    use mpi !DEBUG
-    use decomp_2d, only: nrank, nproc !DEBUG
     
     class(enrichmentOperator), intent(inout) :: this 
     class(igrid), intent(inout), target :: smallScales, largeScales
@@ -72,7 +70,6 @@ contains
     real(rkind) :: scalefact = 1.d0, Anu = 1.d-4, numolec = 0.d0
     real(rkind) :: ctauGlobal = 1.d0
     logical :: writeIsotropicModes = .false.
-    integer :: n !DEBUG
     
     namelist /IO/      outputdir, writeIsotropicModes
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec
@@ -134,16 +131,6 @@ contains
       this%QHgrid%gpC%xsz(1)*this%QHgrid%gpC%xsz(2)*this%QHgrid%gpC%xsz(3)
     this%nmodesGlobal = this%nk*this%ntheta * &
       this%QHgrid%nx*this%QHgrid%ny*this%QHgrid%nz
-!DEBUG----------------------------------------------------------------
-do n = 0,nproc-1
-  if (nrank == n) then
-    print*, "nrank:", nrank, "this%QHgrid%yE(1):", this%QHgrid%yE(1)
-    print*, "(jst-1)*dy:", &
-      real(this%largeScales%gpC%xst(2) - 1,rkind)*this%largeScales%dy
-  end if
-  call MPI_Barrier(MPI_COMM_WORLD,ierr)
-end do
-!END DEBUG------------------------------------------------------------
     
     ! Compute kmin and kmax based on LES and high-resolution grids 
     call computeKminKmax(Lx, Ly, Lz, &

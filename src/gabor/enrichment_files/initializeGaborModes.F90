@@ -118,7 +118,7 @@ subroutine generateIsotropicModes(this)
         E = getModelSpectrum(kmag,this%QHgrid%KE(i,j,k),&
           this%QHgrid%L(i,j,k),nk)
 
-        ! Amplitude of each mode such that the sum of mode amplitudes gives
+        ! Amplitude of each mode such that the sum of mode energies gives
         ! the correct kinetic energy
         umag(i,j,k,:,1) = sqrt(2*E*dk/ntheta)
   

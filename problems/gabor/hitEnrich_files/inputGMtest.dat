@@ -1,6 +1,6 @@
 &IO
-  outputdir  = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V3/tests/gaborModes/3PE'
-  writeIsotropicModes = .false.
+  outputdir  = '/work2/06632/ryanhass/stampede2/Enrichment/GaborKS_V3/tests/gaborModes/1PE'
+  writeIsotropicModes = .true.
 /
 /
 &GABOR
