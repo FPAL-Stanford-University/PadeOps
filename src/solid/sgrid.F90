@@ -66,7 +66,7 @@ module SolidGrid
     type, extends(grid) :: sgrid
        
         type(filters),          allocatable :: gfil
-        type(derivatives),      allocatable :: derD02
+        type(derivatives),      allocatable :: derD02, derD06
         type(solid_mixture),    allocatable :: mix
         type(ladobject),        allocatable :: LAD
         type(derivativesStagg), allocatable :: derStagg
@@ -81,6 +81,7 @@ module SolidGrid
         logical     :: strainHard                  ! use strainHardening
         logical     :: updateEtot                  ! Update species etot (vs ehydro) with pRelax
         logical     :: useOneG                     ! Use formulation with a single g or gTg field
+        logical     :: useNC
         logical     :: intSharp                    ! Include interface sharpening terms
         logical     :: intSharp_cpl                ! Include coupling of sharpening with momentum and energy equations
         logical     :: intSharp_cpg                ! Include coupling of sharpening with kinematic equations
@@ -88,7 +89,8 @@ module SolidGrid
         logical     :: intSharp_spf                ! Use Shukla-Pantano-Freund method - not in divergence form
         logical     :: intSharp_ufv                ! Use finite volume discretization for sharpening term
         logical     :: intSharp_utw                ! Use Tiwari formulation
-
+        logical     :: usePhiForm
+  
         real(rkind) :: intSharp_gam                ! Interface sharpening Gamma parameter
         real(rkind) :: intSharp_eps                ! Interface sharpening epsilon parameter
         real(rkind) :: intSharp_cut                ! Interface sharpening cutoff parameter, for VF approaching 1 or 0
@@ -100,12 +102,14 @@ module SolidGrid
         logical :: intSharp_msk                    ! Mask FV diffusion
         logical :: intSharp_flt                    ! Use dealliasing filter for interface sharpening derivatives
         logical :: intSharp_flp                    ! Filter pressure
-	
+
+        logical     :: useAkshayForm	
         logical     :: weightedcurvature
 	logical     :: surface_mask
 	logical     :: use_FV               !flag to use FV in surface tension scheme
 	logical     :: use_gradphi          !flag to use phi formulation in surface tension calculation
 	logical     :: use_gradVF           !flag to use VF formulation in surface tension calculation		
+        logical     :: use_gradXi
         logical     :: use_surfaceTension   !flag to turn on/off surface tension (in momentum and energy equations)
         real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
         real(rkind) :: R, p_amb
@@ -153,6 +157,7 @@ module SolidGrid
             procedure          :: destroy
             procedure          :: laplacian
             procedure          :: gradient 
+            procedure          :: secondder
             procedure          :: advance_RK45
             procedure          :: simulate
             procedure, private :: get_dt
@@ -163,6 +168,7 @@ module SolidGrid
             procedure, private :: post_bc
             procedure, private :: post_bc_2
             procedure, private :: getRHS
+            procedure, private :: getRHS_NC
             procedure, private :: getRHS_x
             procedure, private :: getRHS_y
             procedure, private :: getRHS_z
@@ -225,10 +231,11 @@ contains
         real(rkind) :: Cdiff_gp = 0.003_rkind
         real(rkind) :: Cdiff_pe = 0.003_rkind
         real(rkind) :: Cdiff_pe_2 = 100._rkind
+        logical     :: useNC = .FALSE.
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
-        logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
+        logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., usePhiForm = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-        logical     :: use_surfaceTension = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_FV = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. 
+        logical     :: useAkshayForm = .FALSE.,use_surfaceTension = .FALSE., use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_FV = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. 
         real(rkind) :: surfaceTension_coeff = 0.0d0, R = 1d0, p_amb = 1d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0
@@ -237,7 +244,7 @@ contains
 
         real(rkind) :: intSharp_gam = 0.0d0, intSharp_eps = 0.0d0, intSharp_cut = 1.0d-2, intSharp_dif = 1.0d1, intSharp_tnh = 1.0D-2, intSharp_pfloor = 0.0D0, intSharp_tfloor = 0.0D0
 
-        real(rkind) :: filter_alpha = 0.475
+        real(rkind) :: filter_alpha = 0.45
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
@@ -251,10 +258,10 @@ contains
                                                      filter_alpha
 
         namelist /SINPUT/  gam, Rgas, PInf, shmod, &
-                           PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, &
+                           useAkshayForm, useNC, PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, usePhiForm,intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
-                           use_surfaceTension, use_gradphi, use_gradVF, use_FV, surface_mask, weightedcurvature, surfaceTension_coeff, R, p_amb
+                           use_surfaceTension, use_gradXi,use_gradphi, use_gradVF, use_FV, surface_mask, weightedcurvature, surfaceTension_coeff, R, p_amb
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -283,12 +290,14 @@ contains
         this%step = 0
         this%nsteps = nsteps
 
+        this%useAkshayForm = useAkshayForm
         this%PTeqb  = PTeqb
         this%pEqb   = pEqb
         this%pRelax = pRelax
         this%use_gTg = use_gTg
         this%updateEtot = updateEtot
         this%useOneG = useOneG
+        this%useNC = useNC
         this%intSharp = intSharp
         this%intSharp_cpl = intSharp_cpl
         this%intSharp_cpg      = intSharp_cpg
@@ -307,7 +316,7 @@ contains
         this%intSharp_msk = intSharp_msk
         this%intSharp_flt = intSharp_flt
         this%intSharp_flp = intSharp_flp
-
+        this%usePhiForm   = usePhiForm
         this%strainHard = strainHard
         this%cnsrv_g  = cnsrv_g
         this%cnsrv_gt = cnsrv_gt
@@ -318,6 +327,7 @@ contains
 	this%surface_mask 	  = surface_mask
 	this%use_FV  		  = use_FV
 	this%use_gradphi 	  = use_gradphi
+        this%use_gradXi           = use_gradXi
 	this%use_gradVF 	  = use_gradVF
         this%use_surfaceTension   = use_surfaceTension  
         this%surfaceTension_coeff = surfaceTension_coeff
@@ -427,6 +437,17 @@ contains
                                               "d02",  "d02",   "d02", &
                               .false.,       .false.,        .false., &
                               .false.)      
+        ! Allocate derD06
+        if ( allocated(this%derD06) ) deallocate(this%derD06)
+        allocate(this%derD06)
+
+ ! Initialize derivatives 
+        call this%derD06%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d04",  "d04",   "d04", &
+                              .false.,       .false.,        .false., &
+                              .false.)      
 
         ! Allocate derStagg
         if ( allocated(this%derStagg) ) deallocate(this%derStagg)
@@ -462,7 +483,7 @@ contains
         ! Initialize filters
         call this%fil%init(                           this%decomp, &
                          periodicx,     periodicy,      periodicz, &
-                          filter_x,      filter_y,       filter_z , filter_alpha )      
+                          filter_x,      filter_y,       filter_z ,filter_alpha )      
         call this%gfil%init(                          this%decomp, &
                          periodicx,     periodicy,      periodicz, &
                         "gaussian",    "gaussian",     "gaussian"  )      
@@ -470,13 +491,18 @@ contains
         ! Allocate LAD object
         if ( allocated(this%LAD) ) deallocate(this%LAD)
         allocate(this%LAD)
-        !call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,Cmu,Ckap,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
+        !call
+        !this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,Cmu,Ckap,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
         call this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
 
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
-        allocate(this%mix)
-        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%interpMid,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useOneG,this%intSharp,this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc)
+        allocate(this%mix)      
+
+
+
+  ! Initialize derivatives
+        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derD06,this%interpMid,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension, this%use_gradXi, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -596,7 +622,10 @@ contains
 
         call this%derD02%destroy()
         if (allocated(this%derD02)) deallocate(this%derD02) 
-        
+      
+        call this%derD06%destroy()
+        if (allocated(this%derD06)) deallocate(this%derD06)
+  
         call this%fil%destroy()
         if (allocated(this%fil)) deallocate(this%fil) 
         
@@ -703,6 +732,42 @@ contains
         call transpose_z_to_y(zdum,ytmp,this%decomp)
         
         lapf = lapf + ytmp
+
+    end subroutine
+
+    
+
+    subroutine secondder(this, f, d2fdx2, d2fdy2, d2fdz2, x_bc, y_bc, z_bc)
+        class(sgrid),target, intent(inout) :: this
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdx2
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdy2
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdz2
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
+
+        der => this%der
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+
+        ! Get Y derivative
+        call this%der%d2dy2(f,d2fdy2,y_bc(1),y_bc(2))
+
+        ! Get X derivative
+        call transpose_y_to_x(f,xtmp,decomp)
+        call this%der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xdum,d2fdx2,decomp)
+
+        ! Get Z derivative
+        call transpose_y_to_z(f,ztmp,decomp)
+        call this%der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
+        call transpose_z_to_y(zdum,d2fdz2,decomp)
 
     end subroutine
 
@@ -952,7 +1017,13 @@ contains
             endif
 
             ! Update total mixture conserved variables
-            call this%getRHS(rhs,divu,viscwork)
+
+            if (this%useNC) then
+              call this%getRHS_NC(rhs,divu, viscwork)
+            else
+              call this%getRHS(rhs,divu,viscwork)
+            endif
+
 
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
@@ -1527,7 +1598,7 @@ contains
            else
 
               !low order terms
-              call divergence(this%decomp,this%derD02,this%mix%intSharp_f(:,:,:,1)*this%u,this%mix%intSharp_f(:,:,:,2)*this%u,this%mix%intSharp_f(:,:,:,3)*this%u,tmp,this%x_bc,-this%y_bc,-this%z_bc)
+        call divergence(this%decomp,this%derD02,this%mix%intSharp_f(:,:,:,1)*this%u,this%mix%intSharp_f(:,:,:,2)*this%u,this%mix%intSharp_f(:,:,:,3)*this%u,tmp,this%x_bc,-this%y_bc,-this%z_bc)
               rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + tmp
 
               call divergence(this%decomp,this%derD02,this%mix%intSharp_f(:,:,:,1)*this%v,this%mix%intSharp_f(:,:,:,2)*this%v,this%mix%intSharp_f(:,:,:,3)*this%v,tmp,-this%x_bc,this%y_bc,-this%z_bc)
@@ -1589,14 +1660,563 @@ contains
  
     end subroutine
 
-    subroutine getRHS_x(       this,  rhs,&
-                        tauxx,tauxy,tauxz,&
-                            qx )
+
+
+subroutine getRHS_NC(this, rhs, divu, viscwork)
+        use operators, only: divergence,gradient
+        use exits, only: GracefulExit
+        class(sgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out):: rhs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj 
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,3*this%mix%ns),target :: gradYs
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: NCbuff
+! extra buffers for nonconservative
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: flux, tmp, ke
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:), pointer :: d2udx2,d2udy2,d2udz2,d2vdx2,d2vdy2,d2vdz2,d2wdx2,d2wdy2,d2wdz2
+        real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
+        real(rkind), dimension(:,:,:,:), pointer :: d2Ysdx2, d2Ysdy2, d2Ysdz2
+        real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
+        real(rkind), dimension(:,:,:), pointer :: dTdx,dTdy,dTdz,d2Tdx2,d2Tdy2,d2Tdz2
+        real(rkind), dimension(:,:,:), pointer :: drhou_dx, drhov_dy, drhow_dz
+        real(rkind), dimension(:,:,:), pointer :: dmudx,dmudy,dmudz
+        real(rkind), dimension(:,:,:), pointer :: totale,bambda,lambda
+        real(rkind), dimension(:,:,:), pointer :: dbulkdx,dbulkdy,dbulkdz
+        real(rkind), dimension(:,:,:), pointer :: dkapdx,dkapdy,dkapdz
+        real(rkind), dimension(:,:,:,:), pointer :: Jx,Jy,Jz
+        real(rkind), dimension(:,:,:), pointer :: dsumJxdx, dsumJydy, dsumJzdz
+        real(rkind), dimension(:,:,:), pointer :: dJxdx, dJydy, dJzdz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),target, intent(out) :: viscwork
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: divu
+        real(rkind), dimension(:,:,:), pointer :: ehmix
+        real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
+        integer :: i,k, imat
+        
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2,ztmp1,ztmp2
+
+        der => this%der
+        decomp => this%decomp
+        xtmp1 => this%xbuf(:,:,:,1)
+        xtmp2 => this%xbuf(:,:,:,2)
+        ztmp1 => this%zbuf(:,:,:,1)
+        ztmp2 => this%zbuf(:,:,:,2)
+
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+
+        call this%gradient(this%u,dudx,dudy,dudz, [0,0], this%y_bc, this%z_bc)
+        call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc, [0,0], this%z_bc)
+        call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc, [0,0])
+
+        divu = dudx + dvdy + dwdz
+
+
+
+
+        if (this%mix%ns .GT. 1) then
+          dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns);
+          dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
+            do i = 1,this%mix%ns
+                call this%gradient(this%mix%material(i)%Ys,dYsdx(:,:,:,i),dYsdy(:,:,:,i),dYsdz(:,:,:,i),this%x_bc, this%y_bc, this%z_bc)
+         end do
+       endif
+
+        call this%getPhysicalProperties()
+        !call
+        !this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor)
+
+        if (this%PTeqb) then
+            ! subtract elastic energies to determine mixture hydrostatic energy.
+            ! conductivity
+            ! is assumed a function of only hydrostatic energy
+            ehmix => viscwork ! use some storage space
+            ehmix = this%e
+            do imat = 1, this%mix%ns
+                ehmix = ehmix - this%mix%material(imat)%Ys *this%mix%material(imat)%eel
+            enddo
+            call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
+        end if
+
+       ! call this%get_tau( duidxj, viscwork )
+        ! Now, associate the pointers to understand what's going on better
+       ! tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
+       ! tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx); tauzz => duidxj(:,:,:,tauzzidx);
+!print '(a,9(e21.14,1x))', 'dudx ', duidxj(89,1,1,1:9)
+!print '(a,9(e21.14,1x))', 'tauxx', tauxx(89,1,1)
+        ! Add the deviatoric stress to the tau for use in fluxes
+        !tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz +this%sxz
+        !                          tauyy = tauyy + this%syy; tauyz = tauyz +this%syz
+        !                                                    tauzz = tauzz + this%szz
+!print '(a,9(e21.14,1x))', 'tauxx', tauxx(89,1,1)
+
+        ! store artificial stress tensor in devstress. this should not break
+        ! anything since devstress will be
+        ! overwritten in get_primitive and post_bc. used in update_eh -- NSG
+       ! this%sxx = tauxx - this%sxx; this%sxy = tauxy - this%sxy; this%sxz = tauxz - this%sxz
+       !                              this%syy = tauyy - this%syy; this%syz = tauyz - this%syz
+       !                                                           this%szz = tauzz - this%szz
+
+        ! Get heat conduction vector (q). Stored in remaining 3 components of
+        ! duidxj
+!        qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz =>duidxj(:,:,:,qzidx);
+!        call this%mix%get_qmix(qx, qy, qz)                     ! Get onlyspecies diffusion fluxes if PTeqb, else, everything
+!        if (this%PTeqb) call this%get_q(qx, qy, qz)            ! add artificial thermal conduction fluxes
+
+
+
+        rhs = zero
+
+        ! regular convection and pressure terms
+            ! x-derivatives, convective conservative form
+           ! select case(this%mix%ns)
+            !case(1)
+           !     flux = this%Wcnsrv(:,:,:,mom_index)   ! mass
+           !     call transpose_y_to_x(flux,xtmp1,this%decomp)
+           !     call this%der%ddx(xtmp1,xtmp2,0,0)
+           !     call transpose_x_to_y(xtmp2,flux,this%decomp)
+           !     rhs(:,:,:,1) = rhs(:,:,:,1) - flux
+           ! case default
+           !     do i = 1,this%mix%ns
+           !         flux = this%Wcnsrv(:,:,:,i)*this%u   ! mass
+           !         call transpose_y_to_x(flux,xtmp1,this%decomp)
+           !         call this%der%ddx(xtmp1,xtmp2,0,0)
+           !         call transpose_x_to_y(xtmp2,flux,this%decomp)
+           !         rhs(:,:,:,i) = rhs(:,:,:,i) - flux
+           !     end do
+           ! end select
+            flux = this%Wcnsrv(:,:,:,mom_index)*this%u + this%p
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - flux
+            flux = this%Wcnsrv(:,:,:,mom_index+1)*this%u
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
+            flux = this%Wcnsrv(:,:,:,mom_index+2)*this%u
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
+            flux = (this%Wcnsrv(:,:,:, TE_index) + this%p)*this%u
+            call transpose_y_to_x(flux,xtmp1,this%decomp)
+            call this%der%ddx(xtmp1,xtmp2,0,0)
+            call transpose_x_to_y(xtmp2,flux,this%decomp)
+            rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index) - flux
+
+            ! y-derivatives, convective conservative form
+           ! select case(this%mix%ns)
+           ! case(1)
+           !     flux = this%Wcnsrv(:,:,:,mom_index+1)   ! mass
+           !     call this%der%ddy(flux,tmp,0,0)
+           !     rhs(:,:,:,1) = rhs(:,:,:,1) - tmp
+           ! case default
+           !     do i = 1,this%mix%ns
+           !         flux = this%Wcnsrv(:,:,:,i)*this%v   ! mass
+           !         call this%der%ddy(flux,tmp,0,0)
+           !         rhs(:,:,:,i) = rhs(:,:,:,i) - tmp
+           !     end do
+           ! end select
+            flux = this%Wcnsrv(:,:,:,mom_index)*this%v     ! x-momentum
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - tmp
+            flux = this%Wcnsrv(:,:,:,mom_index+1)*this%v + this%p  ! y-momentum
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - tmp
+            flux = this%Wcnsrv(:,:,:,mom_index+2)*this%v    ! z-momentum
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - tmp
+            flux = (this%Wcnsrv(:,:,:, TE_index) + this%p)*this%v  ! TotalEnergy
+            call this%der%ddy(flux,tmp,0,0)
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - tmp
+
+            ! z-derivatives, convective conservative form
+            !select case(this%mix%ns)
+            !case(1)
+            !    flux = this%Wcnsrv(:,:,:,mom_index+2)   ! mass
+            !    call transpose_y_to_z(flux,ztmp1,this%decomp)
+            !    call this%der%ddz(ztmp1,ztmp2,0,0)
+            !    call transpose_z_to_y(ztmp2,flux,this%decomp)
+            !    rhs(:,:,:,1) = rhs(:,:,:,1) - flux
+            !case default
+            !    do i = 1,this%mix%ns
+            !        flux = this%Wcnsrv(:,:,:,i)*this%w   ! mass
+            !        call transpose_y_to_z(flux,ztmp1,this%decomp)
+            !        call this%der%ddz(ztmp1,ztmp2,0,0)
+            !        call transpose_z_to_y(ztmp2,flux,this%decomp)
+           !         rhs(:,:,:,i) = rhs(:,:,:,i) - flux
+           !     end do
+           ! end select
+            flux = this%Wcnsrv(:,:,:,mom_index)*this%w     ! x-momentum
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - flux
+            flux = this%Wcnsrv(:,:,:,mom_index+1)*this%w   ! y-momentum
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
+            flux = this%Wcnsrv(:,:,:,mom_index+2)*this%w + this%p  ! z-momentum
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
+            flux = (this%Wcnsrv(:,:,:, TE_index) + this%p)*this%w   ! Total
+            call transpose_y_to_z(flux,ztmp1,this%decomp)
+            call this%der%ddz(ztmp1,ztmp2,0,0)
+            call transpose_z_to_y(ztmp2,flux,this%decomp)
+            rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) - flux
+       
+
+        ! heat conduction (kap) terms, for energy equation
+        dTdx => this%ybuf(:,:,:,1)
+        dTdy => this%ybuf(:,:,:,2)
+        dTdz => this%ybuf(:,:,:,3)
+        d2Tdx2 => this%ybuf(:,:,:,4)
+        d2Tdy2 => this%ybuf(:,:,:,5)
+        d2Tdz2 => this%ybuf(:,:,:,6)
+        dkapdx => NCbuff(:,:,:,1)
+        dkapdy => NCbuff(:,:,:,2)
+        dkapdz => NCbuff(:,:,:,3)
+        call this%gradient(this%T,dTdx,dTdy,dTdz, this%x_bc, this%y_bc,this%z_bc)
+        call this%secondder(this%T,d2Tdx2,d2Tdy2,d2Tdz2,[0,0],[0,0],[0,0])
+        call this%gradient(this%kap,dkapdx,dkapdy,dkapdz, this%x_bc, this%y_bc,this%z_bc)
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + dkapdx*dTdx+dkapdy*dTdy+dkapdz*dTdz+this%kap*(d2Tdx2+d2Tdy2+d2Tdz2)
+
+        ! stress (mu/bulk) terms
+        bambda => NCbuff(:,:,:,8)             ! used for tauxx,tauyy,tauzz
+        lambda => NCbuff(:,:,:,9)
+        bambda = (four/three)*this%mu + this%bulk
+        lambda = this%bulk - (two/three)*this%mu
+        dmudx => this%ybuf(:,:,:,1)
+        dmudy => this%ybuf(:,:,:,2)
+        dmudz => this%ybuf(:,:,:,3)
+        dbulkdx => this%ybuf(:,:,:,4)
+        dbulkdy => this%ybuf(:,:,:,5)
+        dbulkdz => this%ybuf(:,:,:,6)
+        call this%gradient(this%mu,dmudx,dmudy,dmudz, this%x_bc, this%y_bc,this%z_bc)
+        call this%gradient(this%bulk,dbulkdx,dbulkdy,dbulkdz, this%x_bc,this%y_bc, this%z_bc)
+        !tau_xx,tau_xy,tau_xz setup
+        d2udx2 => NCbuff(:,:,:,1)
+        d2udy2 => NCbuff(:,:,:,2)
+        d2udz2 => NCbuff(:,:,:,3)
+        call this%secondder(this%u,d2udx2,d2udy2,d2udz2,[0,0],[0,0],[0,0])
+        !tau_xx in x-momentum and energy eq
+        flux =(four/three*dmudx+dbulkdx)*dudx+(dbulkdx-two/three*dmudx)*(dvdy+dwdz)+bambda*d2udx2
+        tmp = dvdy+dwdz
+        call transpose_y_to_x(tmp,xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,0,0)
+        call transpose_x_to_y(xtmp2,tmp,this%decomp)                   !tmp =
+        flux = flux+lambda*tmp
+        rhs(:,:,:, mom_index) = rhs(:,:,:, mom_index) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%u*flux
+        !tau_xy in x-momentum and energy eq
+        call this%der%ddy(dvdx,tmp,0,0)        !tmp = ddy(dvdx)
+        flux = dmudy*(dudy+dvdx)+this%mu*(d2udy2+tmp)
+        rhs(:,:,:, mom_index) = rhs(:,:,:, mom_index) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%u*flux
+        !tau_xz in x-momentum and energy eq
+        call transpose_y_to_z(dwdx,ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,0,0)
+        call transpose_z_to_y(ztmp2,tmp,this%decomp)                   !tmp =
+        flux = dmudz*(dudz+dwdx)+this%mu*(d2udz2+tmp)
+        rhs(:,:,:, mom_index) = rhs(:,:,:, mom_index) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%u*flux
+        !tau_yy,tau_yx,tau_yz setup
+        d2vdx2 => NCbuff(:,:,:,1)
+        d2vdy2 => NCbuff(:,:,:,2)
+        d2vdz2 => NCbuff(:,:,:,3)
+        call this%secondder(this%v,d2vdx2,d2vdy2,d2vdz2,[0,0],[0,0],[0,0])
+        !tau_yy in y-momentum and energy eq
+        flux =(four/three*dmudy+dbulkdy)*dvdy+(dbulkdy-two/three*dmudy)*(dudx+dwdz)+bambda*d2vdy2
+        call this%der%ddy(dudx+dwdz,tmp,0,0)     !tmp = ddy(dudx+dwdz)
+        flux = flux+lambda*tmp
+        rhs(:,:,:, mom_index+1) = rhs(:,:,:, mom_index+1) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%v*flux
+        !tau_yx in y-momentum and energy eq
+        call transpose_y_to_x(dudy,xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,0,0)
+        call transpose_x_to_y(xtmp2,tmp,this%decomp)                   !tmp =
+        flux = dmudx*(dvdx+dudy)+this%mu*(d2vdx2+tmp)
+        rhs(:,:,:, mom_index+1) = rhs(:,:,:, mom_index+1) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%v*flux
+        !tau_yz in y-momentum and energy eq
+        call transpose_y_to_z(dwdy,ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,0,0)
+        call transpose_z_to_y(ztmp2,tmp,this%decomp)                   !tmp =
+        flux = dmudz*(dvdz+dwdy)+this%mu*(d2vdz2+tmp)
+        rhs(:,:,:, mom_index+1) = rhs(:,:,:, mom_index+1) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%v*flux
+        !tau_zz,tau_zx,tau_zy setup
+        d2wdx2 => NCbuff(:,:,:,1)
+        d2wdy2 => NCbuff(:,:,:,2)
+        d2wdz2 => NCbuff(:,:,:,3)
+        call this%secondder(this%w,d2wdx2,d2wdy2,d2wdz2,[0,0],[0,0],[0,0])
+        !tau_zz in z-momentum and energy eq
+        flux = (four/three*dmudz+dbulkdz)*dwdz+(dbulkdz-two/three*dmudz)*(dudx+dvdy)+bambda*d2wdz2
+        tmp = dudx+dvdy
+        call transpose_y_to_z(tmp,ztmp1,this%decomp)
+        call this%der%ddz(ztmp1,ztmp2,0,0)
+        call transpose_z_to_y(ztmp2,tmp,this%decomp)                   !tmp =
+        flux = flux+lambda*tmp
+        rhs(:,:,:, mom_index+2) = rhs(:,:,:, mom_index+2) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%w*flux
+        !tau_zx in z-momentum and energy eq
+        call transpose_y_to_x(dudz,xtmp1,this%decomp)
+        call this%der%ddx(xtmp1,xtmp2,0,0)
+        call transpose_x_to_y(xtmp2,tmp,this%decomp)                   !tmp =
+        flux = dmudx*(dwdx+dudz)+this%mu*(d2wdx2+tmp)
+        rhs(:,:,:, mom_index+2) = rhs(:,:,:, mom_index+2) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%w*flux
+        !tau_zy in z-momentum and energy eq
+        call this%der%ddy(dvdz,tmp,0,0)        !tmp = ddy(dvdz)
+        flux = dmudy*(dwdy+dvdz)+this%mu*(d2wdy2+tmp)
+        rhs(:,:,:, mom_index+2) = rhs(:,:,:, mom_index+2) + flux
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + this%w*flux
+        !finish terms in energy eq
+        NCbuff = duidxj
+        dudx => NCbuff(:,:,:,1); dudy => NCbuff(:,:,:,2); dudz => NCbuff(:,:,:,3);
+        dvdx => NCbuff(:,:,:,4); dvdy => NCbuff(:,:,:,5); dvdz => NCbuff(:,:,:,6);
+        dwdx => NCbuff(:,:,:,7); dwdy => NCbuff(:,:,:,8); dwdz => NCbuff(:,:,:,9);
+        call this%get_tau( duidxj, viscwork )
+        tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx)
+        tauxz => duidxj(:,:,:,tauxzidx); tauyy => duidxj(:,:,:,tauyyidx) 
+        tauyz => duidxj(:,:,:,tauyzidx); tauzz => duidxj(:,:,:,tauzzidx)
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + dudx*tauxx+dudy*tauxy+dudz*tauxz
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + dvdx*tauxy+dvdy*tauyy+dvdz*tauyz
+        rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + dwdx*tauxz+dwdy*tauyz+dwdz*tauzz
+     
+
+         call this%mix%get_J(this%rho)
+
+        if (this%mix%ns .GT. 3) then
+            call GracefulExit("Only up to 3 species are currently supported",3214)
+        end if
+        ! calculating dJ/dx terms
+        if (this%mix%ns .GT. 1) then
+            d2Ysdx2 => NCbuff(:,:,:,1:this%mix%ns)
+            d2Ysdy2 => NCbuff(:,:,:,this%mix%ns+1:2*this%mix%ns)
+            d2Ysdz2 => NCbuff(:,:,:,2*this%mix%ns+1:3*this%mix%ns)
+            dsumJxdx => this%ybuf(:,:,:,1); dsumJydy => this%ybuf(:,:,:,2);dsumJzdz => this%ybuf(:,:,:,3); 
+            dJxdx => this%ybuf(:,:,:,4); dJydy => this%ybuf(:,:,:,5); dJzdz =>this%ybuf(:,:,:,6);
+            do i = 1,this%mix%ns
+                call this%secondder(this%mix%material(i)%Ys,d2Ysdx2(:,:,:,i),d2Ysdy2(:,:,:,i),d2Ysdz2(:,:,:,i),[0,0],[0,0],[0,0])
+            end do
+            !x-derivatives
+            do i = 1,this%mix%ns
+                dsumJxdx = zero
+                if (this%mix%ns .GT. 2) then
+                    do k = 1,this%mix%ns
+                    ! this calculates the molecular diffusion flux correction
+                        flux = this%Wcnsrv(:,:,:,i)*this%mix%material(k)%diff       
+                        call transpose_y_to_x(flux,xtmp1,this%decomp)
+                        call this%der%ddx(xtmp1,xtmp2,0,0)
+                        call transpose_x_to_y(xtmp2,tmp,this%decomp)
+                        dsumJxdx =dsumJxdx+tmp*dYsdx(:,:,:,k)+flux*d2Ysdx2(:,:,:,k)
+                    end do
+                end if
+                flux = this%rho*this%mix%material(i)%diff
+                call transpose_y_to_x(flux,xtmp1,this%decomp)
+                call this%der%ddx(xtmp1,xtmp2,0,0)
+                call transpose_x_to_y(xtmp2,tmp,this%decomp)
+                dJxdx = tmp*dYsdx(:,:,:,i) + flux*d2Ysdx2(:,:,:,i) - dsumJxdx
+                !species
+                rhs(:,:,:,i) = rhs(:,:,:,i) + dJxdx
+                !energy
+                call this%mix%material(i)%get_enthalpy(tmp)    ! tmp= h_i
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*dJxdx
+            end do
+            !y-derivatives
+            do i = 1,this%mix%ns
+                dsumJydy = zero
+                if (this%mix%ns .GT. 2) then
+                    do k = 1,this%mix%ns
+                    ! this calculates the molecular diffusion flux correction
+                        flux = this%Wcnsrv(:,:,:,i)*this%mix%material(k)%diff
+                        call this%der%ddy(flux,tmp,0,0)
+                        dsumJydy = dsumJydy+tmp*dYsdy(:,:,:,k)+flux*d2Ysdy2(:,:,:,k)
+                    end do
+                end if
+                flux = this%rho*this%mix%material(i)%diff
+                call this%der%ddy(flux,tmp,0,0)
+                dJydy = tmp*dYsdy(:,:,:,i) + flux*d2Ysdy2(:,:,:,i) - dsumJydy
+                !species
+                rhs(:,:,:,i) = rhs(:,:,:,i) + dJydy
+                !energy
+                call this%mix%material(i)%get_enthalpy(tmp)    ! tmp= h_i
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*dJydy
+            end do
+            !z-derivatives
+            do i = 1,this%mix%ns
+                dsumJzdz = zero
+                if (this%mix%ns .GT. 2) then
+                    do k = 1,this%mix%ns
+                    ! this calculates the molecular diffusion flux correction
+                        flux = this%Wcnsrv(:,:,:,i)*this%mix%material(k)%diff
+                        call transpose_y_to_z(flux,ztmp1,this%decomp)
+                        call this%der%ddz(ztmp1,ztmp2,0,0)
+                        call transpose_z_to_y(ztmp2,tmp,this%decomp)
+                        dsumJzdz = dsumJzdz+tmp*dYsdz(:,:,:,k)+flux*d2Ysdz2(:,:,:,k)
+                    end do
+                end if
+                flux = this%rho*this%mix%material(i)%diff
+                call transpose_y_to_z(flux,ztmp1,this%decomp)
+                call this%der%ddz(ztmp1,ztmp2,0,0)
+                call transpose_z_to_y(ztmp2,tmp,this%decomp)
+                dJzdz = tmp*dYsdz(:,:,:,i) + flux*d2Ysdz2(:,:,:,i) - dsumJzdz
+                !species
+                rhs(:,:,:,i) = rhs(:,:,:,i) + dJzdz
+                !energy
+                call this%mix%material(i)%get_enthalpy(tmp)    ! tmp= h_i
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*dJzdz
+            end do
+
+            !final J terms in energy equation:
+          ! call this%get_J(gradYs)
+          ! Jx => gradYs(:,:,:,1:this%mix%ns)
+          ! Jy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns)
+          ! Jz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns)
+            do i = 1,this%mix%ns
+                call this%mix%material(i)%get_enthalpy(flux)
+                call transpose_y_to_x(flux,xtmp1,this%decomp)
+                call this%der%ddx(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
+                call transpose_x_to_y(xtmp2,tmp,this%decomp)
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) +tmp*this%mix%material(i)%Ji(:,:,:,1)
+                call this%der%ddy(flux,tmp,this%y_bc(1),this%y_bc(2))
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*this%mix%material(i)%Ji(:,:,:,2)
+                call transpose_y_to_z(flux,ztmp1,this%decomp)
+                call this%der%ddz(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
+                call transpose_z_to_y(ztmp2,tmp,this%decomp)
+                rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + tmp*this%mix%material(i)%Ji(:,:,:,3)
+            end do
+        end if 
+
+
+       if(this%intSharp.AND.this%intSharp_cpl) then
+           !calculate kinetic energy for intSharp terms
+           ke = half*( this%u**2 + this%v**2 + this%w**2 ) !is this accesiblewithout recreating?
+
+           if(this%intSharp_spf) then
+              ! if(useNewSPF) then !this is unstable
+              !    !new -- for useNewSPF = .TRUE. in solidmix
+                 rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + this%mix%intSharp_f(:,:,:,1)
+                 rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + this%mix%intSharp_f(:,:,:,2)
+                 rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + this%mix%intSharp_f(:,:,:,3)
+                 rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%mix%intSharp_h(:,:,:,1)
+              ! else
+              !    !original
+              !    rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) +
+              !    this%mix%intSharp_f(:,:,:,1)*this%u
+              !    rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) +
+              !    this%mix%intSharp_f(:,:,:,1)*this%v
+              !    rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) +
+              !    this%mix%intSharp_f(:,:,:,1)*this%w
+              !    rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) +
+              !    this%mix%intSharp_f(:,:,:,1)*ke +
+              !    this%mix%intSharp_h(:,:,:,1)
+              ! endif
+
+              !high order VF bounds diffusion terms
+              call divergence(this%decomp,this%der,this%mix%intSharp_fDiff(:,:,:,1)*this%u,this%mix%intSharp_fDiff(:,:,:,2)*this%u,this%mix%intSharp_fDiff(:,:,:,3)*this%u,tmp,this%x_bc,-this%y_bc,-this%z_bc)
+              rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + tmp
+
+              call divergence(this%decomp,this%der,this%mix%intSharp_fDiff(:,:,:,1)*this%v,this%mix%intSharp_fDiff(:,:,:,2)*this%v,this%mix%intSharp_fDiff(:,:,:,3)*this%v,tmp,-this%x_bc,this%y_bc,-this%z_bc)
+              rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + tmp
+
+              call divergence(this%decomp,this%der,this%mix%intSharp_fDiff(:,:,:,1)*this%w,this%mix%intSharp_fDiff(:,:,:,2)*this%w,this%mix%intSharp_fDiff(:,:,:,3)*this%w,tmp,-this%x_bc,-this%y_bc,this%z_bc)
+              rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + tmp
+
+              call divergence(this%decomp,this%der,this%mix%intSharp_fDiff(:,:,:,1)*ke + this%mix%intSharp_hDiff(:,:,:,1),this%mix%intSharp_fDiff(:,:,:,2)*ke + this%mix%intSharp_hDiff(:,:,:,2),this%mix%intSharp_fDiff(:,:,:,3)*ke + this%mix%intSharp_hDiff(:,:,:,3),tmp,-this%x_bc,-this%y_bc,-this%z_bc)
+              rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + tmp
+
+           else
+
+              !low order terms
+              call divergence(this%decomp,this%derD02,this%mix%intSharp_f(:,:,:,1)*this%u,this%mix%intSharp_f(:,:,:,2)*this%u,this%mix%intSharp_f(:,:,:,3)*this%u,tmp,this%x_bc,-this%y_bc,-this%z_bc)
+              rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + tmp
+
+              call divergence(this%decomp,this%derD02,this%mix%intSharp_f(:,:,:,1)*this%v,this%mix%intSharp_f(:,:,:,2)*this%v,this%mix%intSharp_f(:,:,:,3)*this%v,tmp,-this%x_bc,this%y_bc,-this%z_bc)
+              rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + tmp
+
+              call divergence(this%decomp,this%derD02,this%mix%intSharp_f(:,:,:,1)*this%w,this%mix%intSharp_f(:,:,:,2)*this%w,this%mix%intSharp_f(:,:,:,3)*this%w,tmp,-this%x_bc,-this%y_bc,this%z_bc)
+              rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + tmp
+
+              call divergence(this%decomp,this%derD02,this%mix%intSharp_f(:,:,:,1)*ke + this%mix%intSharp_h(:,:,:,1),this%mix%intSharp_f(:,:,:,2)*ke + this%mix%intSharp_h(:,:,:,2),this%mix%intSharp_f(:,:,:,3)*ke + this%mix%intSharp_h(:,:,:,3),tmp,-this%x_bc,-this%y_bc,-this%z_bc)
+              rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + tmp
+
+
+              !high order terms
+              call divergence(this%decomp,this%der,this%mix%intSharp_fDiff(:,:,:,1)*this%u,this%mix%intSharp_fDiff(:,:,:,2)*this%u,this%mix%intSharp_fDiff(:,:,:,3)*this%u,tmp,this%x_bc,-this%y_bc,-this%z_bc)
+              rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + tmp
+
+              call divergence(this%decomp,this%der,this%mix%intSharp_fDiff(:,:,:,1)*this%v,this%mix%intSharp_fDiff(:,:,:,2)*this%v,this%mix%intSharp_fDiff(:,:,:,3)*this%v,tmp,-this%x_bc,this%y_bc,-this%z_bc)
+              rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + tmp
+
+              call divergence(this%decomp,this%der,this%mix%intSharp_fDiff(:,:,:,1)*this%w,this%mix%intSharp_fDiff(:,:,:,2)*this%w,this%mix%intSharp_fDiff(:,:,:,3)*this%w,tmp,-this%x_bc,-this%y_bc,this%z_bc)
+              rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + tmp
+
+              call divergence(this%decomp,this%der,this%mix%intSharp_fDiff(:,:,:,1)*ke + this%mix%intSharp_hDiff(:,:,:,1),this%mix%intSharp_fDiff(:,:,:,2)*ke + this%mix%intSharp_hDiff(:,:,:,2),this%mix%intSharp_fDiff(:,:,:,3)*ke + this%mix%intSharp_hDiff(:,:,:,3),tmp,-this%x_bc,-this%y_bc,-this%z_bc)
+              rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + tmp
+
+              !FV sharpening
+              rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + this%mix%intSharp_fFV(:,:,:,1)
+              rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + this%mix%intSharp_fFV(:,:,:,2)
+              rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + this%mix%intSharp_fFV(:,:,:,3)
+              rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%mix%intSharp_hFV
+
+           endif
+    endif
+        
+
+
+        !!Surface Tension
+                if (this%use_surfaceTension) then
+            rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + this%mix%surfaceTension_f(:,:,:,1)
+            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + this%mix%surfaceTension_f(:,:,:,2)
+            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + this%mix%surfaceTension_f(:,:,:,3)
+            rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%mix%surfaceTension_e
+        endif
+
+        ! Call problem source hook
+        
+       ! Call problem source hook
+       call hook_mixture_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
+
+
+
+
+        call this%get_tau( duidxj, viscwork )
+        ! Now, associate the pointers to understand what's going on better
+        tauxx => duidxj(:,:,:,tauxxidx); tauxy => duidxj(:,:,:,tauxyidx); tauxz => duidxj(:,:,:,tauxzidx);
+        tauyy => duidxj(:,:,:,tauyyidx); tauyz => duidxj(:,:,:,tauyzidx); tauzz => duidxj(:,:,:,tauzzidx);
+!print '(a,9(e21.14,1x))', 'dudx ', duidxj(89,1,1,1:9)
+!print '(a,9(e21.14,1x))', 'tauxx', tauxx(89,1,1)
+        ! Add the deviatoric stress to the tau for use in fluxes
+        tauxx = tauxx + this%sxx; tauxy = tauxy + this%sxy; tauxz = tauxz + this%sxz
+                                  tauyy = tauyy + this%syy; tauyz = tauyz + this%syz
+                                                            tauzz = tauzz + this%szz
+!print '(a,9(e21.14,1x))', 'tauxx', tauxx(89,1,1)
+
+        ! store artificial stress tensor in devstress. this should not break
+        ! anything since devstress will be
+        ! overwritten in get_primitive and post_bc. used in update_eh -- NSG
+        this%sxx = tauxx - this%sxx; this%sxy = tauxy - this%sxy; this%sxz =tauxz - this%sxz
+                                     this%syy = tauyy - this%syy; this%syz =tauyz - this%syz
+                                                                  this%szz =tauzz - this%szz
+
+    end subroutine
+
+    subroutine getRHS_x( this,  rhs, tauxx,tauxy,tauxz, qx)
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
-
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         integer :: i
@@ -1820,7 +2440,10 @@ contains
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), target, intent(inout) :: duidxj
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),           intent(out)   :: viscwork
-
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: NCbuff, Mubuff   
+        real(rkind), dimension(:,:,:), pointer :: d2udx2,d2udy2,d2udz2,d2vdx2,d2vdy2,d2vdz2,d2wdx2,d2wdy2,d2wdz2
+        real(rkind), dimension(:,:,:), pointer :: dmudx,dmudy,dmudz
+        real(rkind), dimension(:,:,:), pointer :: dbulkdx,dbulkdy,dbulkdz
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:), pointer :: lambda, bambda
 
@@ -1834,7 +2457,8 @@ contains
         ! Compute the multiplying factors (thermo-shit)
         bambda = (four/three)*this%mu + this%bulk
         lambda = this%bulk - (two/three)*this%mu
-
+    
+    
         ! Step 1: Get tau_12  (dudy is destroyed)
         dudy =  dudy + dvdx
         viscwork  = (this%mu*dudy) * (dudy)  ! tau_12 * (S_12+S_21) (Since symmetric)
@@ -1867,7 +2491,7 @@ contains
         dwdy = bambda*dwdz + lambda*(dudx + dvdy)
         viscwork  = viscwork + dwdy * dwdz  ! tau_33 * S_33
         !tauzzidx = 8
-
+    
         ! Done 
     end subroutine 
 
