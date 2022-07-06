@@ -351,127 +351,127 @@ contains
 
                     !if (ycrit .LE. zero) then !mca: old
                     if (mulocal(i,j,k)*Sabymu_sq*sqrt_om .LE. sqrt(two/three)*yieldlocal(i,j,k)) then
+                       ! i.e. no plastic yielding
                        ! print '(A)', 'Inconsistency in plastic algorithm, ycrit < 0!'
-                       cycle
-                       !TODO: move rotation from elastic to plastic
-                       ! only do it if ge-Gp formation, move rotation ge->Gp
-                       ! update G accordingly also
-                       ! if other formulation: put in an error message with the filename 
-                    end if
+                    else
+   
+                       !if( (yieldlocal(i,j,k).LE.eps) .OR. (mulocal(i,j,k).LE.eps) ) then !with condition: 4.48313318030560; without condition:8.00000000 why less?? 
+                       !   C0 = 1.0d0
+                       !else
+                          C0 = yieldlocal(i,j,k)/mulocal(i,j,k)
+                          !if(use_gTg) C0 = 2.0*C0
+                       !endif
+                       f = -C0*sqrt(two/three)/(sqrt_om*Sabymu_sq)*( beta*(beta-one) - betasum ); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
+   
+                       ! mca: old
+                       ! ! Now get new beta
+                       ! f = Sa / (mulocal(i,j,k)*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
+                       ! betasum = sum( beta*(beta-one) ) / three
+   
+                       f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value
+   
+                       ! Get newton step
+                       gradf(1,1) = -twothird*(two*beta(1)-one); gradf(1,2) =     third*(two*beta(2)-one); gradf(1,3) = third*(two*beta(3)-one)
+                       gradf(2,1) =     third*(two*beta(1)-one); gradf(2,2) = -twothird*(two*beta(2)-one); gradf(2,3) = third*(two*beta(3)-one)
+                       gradf(3,1) = beta(2)*beta(3);             gradf(3,2) = beta(3)*beta(1);             gradf(3,3) = beta(1)*beta(2)
+   
+                       dbeta = (f-f1)
+                       call dgesv(3, 1, gradf, 3, ipiv, dbeta, 3, info)
+                      
+                       ! Compute residual
+                       residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
+                       iters = 0
+                       t = 1._rkind
+                       do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
+                           ! Backtracking line search
+                           t = 1._rkind
+   
+                           beta_new = beta + t * dbeta
+   
+                           ! Get new residual
+                           gradf_new(1,1) = -twothird*(two*beta_new(1)-one);
+                           gradf_new(1,2) =     third*(two*beta_new(2)-one);
+                           gradf_new(1,3) = third*(two*beta_new(3)-one)
+   
+                           gradf_new(2,1) =     third*(two*beta_new(1)-one);
+                           gradf_new(2,2) = -twothird*(two*beta_new(2)-one);
+                           gradf_new(2,3) = third*(two*beta_new(3)-one)
+   
+                           gradf_new(3,1) = beta_new(2)*beta_new(3);
+                           gradf_new(3,2) = beta_new(3)*beta_new(1);
+                           gradf_new(3,3) = beta_new(1)*beta_new(2)
+   
+                           betasum = sum( beta_new*(beta_new-one) ) / three
+                           f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
+                           dbeta_new = (f-f2)
+                           call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
+                           residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+   
+                           do while ( (abs(residual_new) .GE. abs(residual)) .AND. (t > eps) )
+                               if (iters .GT. (niters - 10)) then
+                                   print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, ', residual_new = ', residual_new, ', residual = ', residual
+                               end if
+   
+                               t = half*t
+                               beta_new = beta + t * dbeta
+   
+                               gradf_new(1,1) = -twothird*(two*beta_new(1)-one);
+                               gradf_new(1,2) =     third*(two*beta_new(2)-one);
+                               gradf_new(1,3) = third*(two*beta_new(3)-one)
+   
+                               gradf_new(2,1) =     third*(two*beta_new(1)-one);
+                               gradf_new(2,2) = -twothird*(two*beta_new(2)-one);
+                               gradf_new(2,3) = third*(two*beta_new(3)-one)
+   
+                               gradf_new(3,1) = beta_new(2)*beta_new(3);
+                               gradf_new(3,2) = beta_new(3)*beta_new(1);
+                               gradf_new(3,3) = beta_new(1)*beta_new(2)
+   
+                               betasum = sum( beta_new*(beta_new-one) ) / three
+                               f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
+   
+                               dbeta_new = (f-f2)
+                               call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
+                               residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
+                           end do
+                           beta = beta_new
+                           f1 = f2
+                           dbeta = dbeta_new
+                           residual = residual_new
+   
+                           iters = iters + 1
+                           if (t <= eps) then
+                               print '(A)', 'Newton solve in plastic_deformation did not converge'
+                               exit
+                           end if
+   
+   
+                       end do
+   
+                       if ((iters >= niters) .OR. (t <= eps)) then
+                       !if ((iters >= niters) .OR. ((t <= eps).and.(iters.ge.50))) then !mca
+                           write(charout,'(4(A,I0))') 'Newton solve in plastic_deformation did not converge at index ',i,',',j,',',k,' of process ',nrank
+                           print '(A)', charout
+                           print '(A)', 'g = '
+                           print '(4X,3(ES15.5))', gfull(i,j,k,1), gfull(i,j,k,2), gfull(i,j,k,3)
+                           print '(4X,3(ES15.5))', gfull(i,j,k,4), gfull(i,j,k,5), gfull(i,j,k,6)
+                           print '(4X,3(ES15.5))', gfull(i,j,k,7), gfull(i,j,k,8), gfull(i,j,k,9)
+                           !print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
+   
+                           print '(A,ES15.5)', 'Relaxation, t = ', t
+                           print '(A,ES15.5)', 'Residual = ', residual
+                           print '(A,2(I6))', 'iters, niters = ', iters,niters
+                           call GracefulExit(charout,6382)
+                       end if
+   
+                       ! Then get new svals
+                       sval = sqrt(beta) * sqrt_om**(one/three)
 
-                    !if( (yieldlocal(i,j,k).LE.eps) .OR. (mulocal(i,j,k).LE.eps) ) then !with condition: 4.48313318030560; without condition:8.00000000 why less?? 
-                    !   C0 = 1.0d0
-                    !else
-                       C0 = yieldlocal(i,j,k)/mulocal(i,j,k)
-                       !if(use_gTg) C0 = 2.0*C0
-                    !endif
-                    f = -C0*sqrt(two/three)/(sqrt_om*Sabymu_sq)*( beta*(beta-one) - betasum ); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
+                    end if !yield condition: (mulocal(i,j,k)*Sabymu_sq*sqrt_om .LE. sqrt(two/three)*yieldlocal(i,j,k)) then
 
-                    ! mca: old
-                    ! ! Now get new beta
-                    ! f = Sa / (mulocal(i,j,k)*sqrt_om); f(3) = beta(1)*beta(2)*beta(3)     ! New function value (target to attain)
-                    ! betasum = sum( beta*(beta-one) ) / three
-
-                    f1 = -( beta*(beta-one) - betasum ); f1(3) = beta(1)*beta(2)*beta(3)   ! Original function value
-
-                    ! Get newton step
-                    gradf(1,1) = -twothird*(two*beta(1)-one); gradf(1,2) =     third*(two*beta(2)-one); gradf(1,3) = third*(two*beta(3)-one)
-                    gradf(2,1) =     third*(two*beta(1)-one); gradf(2,2) = -twothird*(two*beta(2)-one); gradf(2,3) = third*(two*beta(3)-one)
-                    gradf(3,1) = beta(2)*beta(3);             gradf(3,2) = beta(3)*beta(1);             gradf(3,3) = beta(1)*beta(2)
-
-                    dbeta = (f-f1)
-                    call dgesv(3, 1, gradf, 3, ipiv, dbeta, 3, info)
-                   
-                    ! Compute residual
-                    residual = -sum( (f1-f)*dbeta )                                    ! lambda**2
-                    iters = 0
-                    t = 1._rkind
-                    do while ( (iters < niters) .AND. (abs(residual) .GT. tol) )
-                        ! Backtracking line search
-                        t = 1._rkind
-
-                        beta_new = beta + t * dbeta
-
-                        ! Get new residual
-                        gradf_new(1,1) = -twothird*(two*beta_new(1)-one);
-                        gradf_new(1,2) =     third*(two*beta_new(2)-one);
-                        gradf_new(1,3) = third*(two*beta_new(3)-one)
-
-                        gradf_new(2,1) =     third*(two*beta_new(1)-one);
-                        gradf_new(2,2) = -twothird*(two*beta_new(2)-one);
-                        gradf_new(2,3) = third*(two*beta_new(3)-one)
-
-                        gradf_new(3,1) = beta_new(2)*beta_new(3);
-                        gradf_new(3,2) = beta_new(3)*beta_new(1);
-                        gradf_new(3,3) = beta_new(1)*beta_new(2)
-
-                        betasum = sum( beta_new*(beta_new-one) ) / three
-                        f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-                        dbeta_new = (f-f2)
-                        call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
-                        residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
-
-                        do while ( (abs(residual_new) .GE. abs(residual)) .AND. (t > eps) )
-                            if (iters .GT. (niters - 10)) then
-                                print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, ', residual_new = ', residual_new, ', residual = ', residual
-                            end if
-
-                            t = half*t
-                            beta_new = beta + t * dbeta
-
-                            gradf_new(1,1) = -twothird*(two*beta_new(1)-one);
-                            gradf_new(1,2) =     third*(two*beta_new(2)-one);
-                            gradf_new(1,3) = third*(two*beta_new(3)-one)
-
-                            gradf_new(2,1) =     third*(two*beta_new(1)-one);
-                            gradf_new(2,2) = -twothird*(two*beta_new(2)-one);
-                            gradf_new(2,3) = third*(two*beta_new(3)-one)
-
-                            gradf_new(3,1) = beta_new(2)*beta_new(3);
-                            gradf_new(3,2) = beta_new(3)*beta_new(1);
-                            gradf_new(3,3) = beta_new(1)*beta_new(2)
-
-                            betasum = sum( beta_new*(beta_new-one) ) / three
-                            f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-
-                            dbeta_new = (f-f2)
-                            call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
-                            residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
-                        end do
-                        beta = beta_new
-                        f1 = f2
-                        dbeta = dbeta_new
-                        residual = residual_new
-
-                        iters = iters + 1
-                        if (t <= eps) then
-                            print '(A)', 'Newton solve in plastic_deformation did not converge'
-                            exit
-                        end if
-
-
-                    end do
-
-                    if ((iters >= niters) .OR. (t <= eps)) then
-                    !if ((iters >= niters) .OR. ((t <= eps).and.(iters.ge.50))) then !mca
-                        write(charout,'(4(A,I0))') 'Newton solve in plastic_deformation did not converge at index ',i,',',j,',',k,' of process ',nrank
-                        print '(A)', charout
-                        print '(A)', 'g = '
-                        print '(4X,3(ES15.5))', gfull(i,j,k,1), gfull(i,j,k,2), gfull(i,j,k,3)
-                        print '(4X,3(ES15.5))', gfull(i,j,k,4), gfull(i,j,k,5), gfull(i,j,k,6)
-                        print '(4X,3(ES15.5))', gfull(i,j,k,7), gfull(i,j,k,8), gfull(i,j,k,9)
-                        !print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
-
-                        print '(A,ES15.5)', 'Relaxation, t = ', t
-                        print '(A,ES15.5)', 'Residual = ', residual
-                        print '(A,2(I6))', 'iters, niters = ', iters,niters
-                        call GracefulExit(charout,6382)
-                    end if
-
-                    ! Then get new svals
-                    sval = sqrt(beta) * sqrt_om**(one/three)
 
                     if (use_gTg.and.(.not.strainHard)) then
+                        !i.e. Ge formulation (is Ge is already symmetric and there is no gp or Gp))
                         sval = sval*sval ! New eigenvalues of G
                         
                         ! Get g = v*sval*vt
@@ -479,9 +479,11 @@ contains
                         vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! eigval*vt
                         G = MATMUL(u,vt) ! v*eigval*vt
                     else
-                        ! Get g = u*sval*vt
+                        !i.e. anything else (includes just ge without hardening, or g/ge/Gp formulations with strain hardening)   
+                        ! Get g = v*sval*vt (symmetrizing g at each dt)
+                        g = TRANSPOSE(vt)
                         vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
-                        g = MATMUL(u,vt) ! u*sval*vt
+                        g = MATMUL(g,vt)
                     end if
                     
                     
@@ -630,6 +632,7 @@ contains
                        endif
 
                        !new
+                       !jrwest: this is where gp or Gp is updated         
                        gpfull(i,j,k,1) = gpt2(1,1)
                        gpfull(i,j,k,2) = gpt2(1,2)
                        gpfull(i,j,k,3) = gpt2(1,3)
@@ -665,15 +668,10 @@ contains
 
 
                     !update elastic g
+                    !jrwest: this is where ge or Ge is updated         
                     gfull(i,j,k,1) = g(1,1); gfull(i,j,k,2) = g(1,2); gfull(i,j,k,3) = g(1,3)
                     gfull(i,j,k,4) = g(2,1); gfull(i,j,k,5) = g(2,2); gfull(i,j,k,6) = g(2,3)
                     gfull(i,j,k,7) = g(3,1); gfull(i,j,k,8) = g(3,2); gfull(i,j,k,9) = g(3,3)
-
-                    !TODO: move rotation from elastic to plastic
-                    ! only do it if ge-Gp formation, move rotation ge->Gp
-                    ! update G accordingly also
-                    ! if other formulation: put in an error message with the filename 
-                    
 
                 end do
             end do
