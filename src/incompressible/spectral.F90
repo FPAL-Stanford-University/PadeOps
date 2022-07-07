@@ -158,12 +158,14 @@ module spectralMod
 
 contains
 
-      subroutine bandpassFilter_and_PhaseShift(this, uhat, uFilt, xshift)
+      subroutine bandpassFilter_and_PhaseShift(this, uhat, uFilt, xshift, coord)
          use constants, only: imi
          class(spectral),  intent(inout)         :: this
          complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in) :: uhat 
          real(rkind)   , dimension(this%physdecomp%xsz(1),this%physdecomp%xsz(2), this%physdecomp%xsz(3)), intent(out) :: uFilt
          real(rkind), intent(in) :: xShift 
+         character(len=1), intent(in), optional :: coord
+         character(len=1) :: coordShift = 'x'
          integer :: k, j, i
 
          call transpose_y_to_z(uhat, this%cbuffz_bp, this%spectdecomp)
@@ -174,17 +176,48 @@ contains
          !   this%cbuffz_bp = zero
          !end where
       
+         if (present(coord)) coordShift = coord
+         select case (coordShift)
+           case ('x')
+             this%xshiftfact = exp(-imi*this%k1inZ*xshift)
+           case ('y')
+             this%xshiftfact = exp(-imi*this%k2inZ*xshift)
+           case ('z')
+             this%xshiftfact = exp(-imi*this%k3inZ*xshift)
+         end select
 
-         this%xshiftfact = exp(-imi*this%k1inZ*xshift)
-         do k = 1,size(this%cbuffz_bp,3)
-            do j = 1,size(this%cbuffz_bp,2)
-               !$omp simd 
-	    	      do i = 1,size(this%cbuffz_bp,1)
-                  !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
-                  this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
-	       	   end do 
-            end do 
-         end do 
+         select case (coordShift)
+           case ('x')
+             do k = 1,size(this%cbuffz_bp,3)
+                do j = 1,size(this%cbuffz_bp,2)
+                   !$omp simd 
+                   do i = 1,size(this%cbuffz_bp,1)
+                      !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
+                   end do 
+                end do 
+             end do 
+           case('y')
+             do k = 1,size(this%cbuffz_bp,3)
+                do j = 1,size(this%cbuffz_bp,2)
+                   !$omp simd 
+                   do i = 1,size(this%cbuffz_bp,1)
+                      !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(j)
+                   end do 
+                end do 
+             end do 
+           case ('z')
+             do k = 1,size(this%cbuffz_bp,3)
+                do j = 1,size(this%cbuffz_bp,2)
+                   !$omp simd 
+                   do i = 1,size(this%cbuffz_bp,1)
+                      !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(k)
+                   end do 
+                end do 
+             end do 
+         end select
 
          call this%take_ifft1d_z2z_ip(this%cbuffz_bp)
          call transpose_z_to_y(this%cbuffz_bp, this%cbuffy_bp, this%spectdecomp)
@@ -195,8 +228,10 @@ contains
       subroutine init_bandpass_filter(this, kleft, kright, cbuffz, cbuffy)
          class(spectral),  intent(inout)         :: this
          real(rkind), intent(in) :: kleft, kright
-         complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in), target :: cbuffy
-         complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(in), target :: cbuffz
+         complex(rkind), dimension(this%spectdecomp%ysz(1),&
+           this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in), target :: cbuffy
+         complex(rkind), dimension(this%spectdecomp%zsz(1),&
+           this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(in), target :: cbuffz
          real(rkind), dimension(:,:,:), allocatable :: rbuffz1, rbuffz2
         
          this%cbuffz_bp => cbuffz
