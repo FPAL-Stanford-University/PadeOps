@@ -1139,14 +1139,17 @@ contains
        allocate(this%fringe_x)
        if (this%usedoublefringex) then
            call this%fringe_x1%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                       this%dz, this%mesh(1,1,:,3), & 
                                        this%spectC, this%spectE, this%gpC, this%gpE, &
                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=1)   
            call this%fringe_x2%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                       this%dz, this%mesh(1,1,:,3), & 
                                        this%spectC, this%spectE, this%gpC, this%gpE, &
                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=2)   
        else
            if (this%useFringe) then
                call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                       this%dz, this%mesh(1,1,:,3), & 
                                        this%spectC, this%spectE, this%gpC, this%gpE, &
                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
            end if
