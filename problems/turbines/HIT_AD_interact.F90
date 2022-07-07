@@ -13,7 +13,8 @@ program HIT_AD_interact
     use fortran_assert,             only: assert
     use constants,                  only: one, zero
     use HIT_AD_interact_parameters, only: simulationID, InflowProfileType, &
-                                          InflowProfileAmplit, InflowProfileThick
+                                          InflowProfileAmplit, InflowProfileThick, &
+                                          streamWiseCoord
     use fof_mod,                    only: fof
     use budgets_time_avg_mod,       only: budgets_time_avg  
     use budgets_vol_avg_mod,        only: budgets_vol_avg  
@@ -36,14 +37,11 @@ program HIT_AD_interact
     logical :: applyFilters = .false. 
     logical, parameter :: synchronize_RK_substeps = .true.
 
-    ! Specify the coordinate of the inflow
-    character(len=1) :: streamWiseCoord = 'x'
-
     ! Start and end indices for the velocity arrays
     integer :: ist, ien, jst, jen, kst, ken
     integer :: ienE, jstE, jenE, kstE, kenE
 
-    namelist /concurrent/ HIT_InputFile, AD_InputFile, InflowSpeed, k_bandpass_left, k_bandpass_right, streamWiseCoord
+    namelist /concurrent/ HIT_InputFile, AD_InputFile, InflowSpeed, k_bandpass_left, k_bandpass_right
     namelist /FILTER_INFO/ applyfilters, nfilters, fof_dir, tid_FIL_FullField, tid_FIL_Planes, filoutdir
 
     call MPI_Init(ierr)                                                

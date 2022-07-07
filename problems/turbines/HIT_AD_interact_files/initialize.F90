@@ -8,6 +8,7 @@ module HIT_AD_interact_parameters
     integer :: nxSize = 256, nySize = 256, nzSize = 256
     integer :: InflowProfileType = 0
     real(rkind) :: InflowProfileAmplit = 0.5d0, InflowProfileThick = 0.01d0
+    character(len=1) :: streamWiseCoord = 'x'
 
 contains
 
@@ -42,7 +43,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: nxg, nyg, nzg
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one, uInflow = one
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, InflowProfileType, InflowProfileAmplit, InflowProfileThick
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, InflowProfileType, &
+            InflowProfileAmplit, InflowProfileThick, streamWiseCoord
     
     select case (simulationID) 
     case (1) 
@@ -100,6 +102,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use decomp_2d          
     use reductions,         only: p_maxval, p_minval
     use exits,              only: message_min_max, gracefulExit, message
+    use fortran_assert,     only: assert
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -111,7 +114,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind)  :: Lx = one, Ly = one, Lz = one, uInflow = one
     real(rkind)  :: zTop_cell, zBot_cell, zMid
     integer :: ioUnit
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, InflowProfileType, InflowProfileAmplit, InflowProfileThick
+    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, InflowProfileType, &
+            InflowProfileAmplit, InflowProfileThick, streamWiseCoord
     
     if (simulationID == 1) then
       
@@ -135,13 +139,30 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
  
       select case(InflowProfileType)
       case(0)
-          u = uInflow 
+          select case (streamWiseCoord)
+                case ('x')
+                        u = uInflow 
+                        v = zero
+                        wC= zero  
+                        w = zero
+                case ('y')
+                        u = zero
+                        v = uInflow
+                        wC= zero  
+                        w = zero
+                case ('z')
+                        u = zero
+                        v = zero
+                        w = uInflow
+                        wC= uInflow 
+          end select
       case(1)
+          call assert(streamWiseCoord == 'x','y or z inflow not supported')
           u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
+          v = zero
+          wC= zero  
+          w = zero
       end select
-      v = zero
-      wC= zero  
-      w = zero
 
       call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
       call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))

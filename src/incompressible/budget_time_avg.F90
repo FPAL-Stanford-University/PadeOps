@@ -203,8 +203,10 @@ contains
         this%HaveScalars = this%igrid_sim%useScalars
         
         if (.not. this%igrid_sim%fastCalcPressure) then
-            call GracefulExit("Cannot perform budget calculaitons if IGRID"//&
-              " is initialized with FASTCALCPRESSURE=.false.", ierr)
+            if (this%do_budgets) then
+              call GracefulExit("Cannot perform budget calculaitons if IGRID"//&
+                " is initialized with FASTCALCPRESSURE=.false.", ierr)
+            end if
         end if
 
 
