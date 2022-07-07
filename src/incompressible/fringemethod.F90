@@ -20,6 +20,7 @@ module fringeMethod
       real(rkind)                                   :: LambdaFact, LambdaFactPotTemp
       integer :: myFringeID = 1
       logical :: useTwoFringex = .false. 
+      logical :: useTwoFringez = .false. 
       logical, public :: useFringeAsSponge_Scalar = .true. 
       logical :: firstCallComplete = .false.
       logical :: firstCallCompleteScalar = .false.
@@ -171,7 +172,7 @@ contains
       call message(0, "Fringe targets successfully associated.")
    end subroutine
 
-   subroutine init(this, inputfile, dx, x, dy, y, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, fringeID)
+   subroutine init(this, inputfile, dx, x, dy, y, dz, z, spectC, spectE, gpC, gpE, rbuffxC, rbuffxE, cbuffyC, cbuffyE, fringeID)
       use reductions, only: p_minval, p_maxval
       use exits, only: message_min_max
        use decomp_2d_io
@@ -181,40 +182,57 @@ contains
       type(decomp_info), intent(in), target :: gpC, gpE
       real(rkind), dimension(gpC%xsz(1)), intent(in) :: x
       real(rkind), dimension(gpC%xsz(2)), intent(in) :: y
-      real(rkind), intent(in) :: dx, dy
+      real(rkind), dimension(gpC%xsz(3)), intent(in) :: z
+      real(rkind), intent(in) :: dx, dy, dz
       type(spectral), intent(in), target :: spectC, spectE
       real(rkind),    dimension(:,:,:,:), target, intent(in) :: rbuffxC, rbuffxE
       complex(rkind), dimension(:,:,:,:), target, intent(in) :: cbuffyC, cbuffyE
       integer, intent(in), optional :: fringeID
 
-      real(rkind) :: Lx, Ly, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0, LambdaFactPotTemp = 2.45d0
+      real(rkind) :: Lx, Ly, Lz, LambdaFact = 2.45d0, LambdaFact2 = 2.45d0, LambdaFactPotTemp = 2.45d0
       real(rkind) :: Fringe_yst = 1.d0, Fringe_yen = 1.d0
+      real(rkind) :: Fringe_zst = 1.d0, Fringe_zen = 1.d0
       real(rkind) :: Fringe_xst = 0.75d0, Fringe_xen = 1.d0
-      real(rkind) :: Fringe_delta_st_x = 1.d0, Fringe_delta_st_y = 1.d0, Fringe_delta_en_x = 1.d0, Fringe_delta_en_y = 1.d0
+      real(rkind) :: Fringe_delta_st_x = 1.d0, Fringe_delta_st_y = 1.d0, Fringe_delta_st_z = 1.0 
+      real(rkind) :: Fringe_delta_en_x = 1.d0, Fringe_delta_en_y = 1.d0, Fringe_delta_en_z = 1.d0
       
       real(rkind) :: Fringe1_delta_st_x = 1.d0, Fringe1_delta_en_x = 1.d0
       real(rkind) :: Fringe2_delta_st_x = 1.d0, Fringe2_delta_en_x = 1.d0
       real(rkind) :: Fringe1_xst = 0.75d0, Fringe1_xen = 1.d0
       real(rkind) :: Fringe2_xst = 0.75d0, Fringe2_xen = 1.d0
       
+      real(rkind) :: Fringe1_delta_st_z = 1.d0, Fringe1_delta_en_z = 1.d0
+      real(rkind) :: Fringe2_delta_st_z = 1.d0, Fringe2_delta_en_z = 1.d0
+      real(rkind) :: Fringe1_zst = 0.75d0, Fringe1_zen = 1.d0
+      real(rkind) :: Fringe2_zst = 0.75d0, Fringe2_zen = 1.d0
+      
       integer :: ioUnit = 10, i, j, k, nx, ierr
-      real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2
-      logical :: Apply_x_fringe = .true., Apply_y_fringe = .false.
-      namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe, Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
-                        Fringe_delta_st_y, Fringe_delta_en_y, LambdaFact, LambdaFactPotTemp, LambdaFact2, Fringe_yen, Fringe_yst, Fringe1_delta_st_x, &
-                        Fringe2_delta_st_x, Fringe1_delta_en_x, Fringe2_delta_en_x, Fringe1_xst, Fringe2_xst, Fringe1_xen, Fringe2_xen
+      real(rkind), dimension(:), allocatable :: x1, x2, Fringe_func, S1, S2, y1, y2, z1, z2
+      logical :: Apply_x_fringe = .true., Apply_y_fringe = .false., Apply_z_fringe = .false. 
+      namelist /FRINGE/ Apply_x_fringe, Apply_y_fringe,  Apply_z_fringe, & 
+                        Fringe_xst, Fringe_xen, Fringe_delta_st_x, Fringe_delta_en_x, &
+                        Fringe_yst, Fringe_yen, Fringe_delta_st_y, Fringe_delta_en_y, & 
+                        Fringe_zst, Fringe_zen, Fringe_delta_st_z, Fringe_delta_en_z, & 
+                        LambdaFact, LambdaFactPotTemp, LambdaFact2, &  
+                        Fringe1_delta_st_x, Fringe1_delta_en_x, Fringe1_xst, Fringe1_xen,  &
+                        Fringe2_delta_st_x, Fringe2_delta_en_x, Fringe2_xst, Fringe2_xen, & 
+                        Fringe1_delta_st_z, Fringe1_delta_en_z, Fringe1_zst, Fringe1_zen,  &
+                        Fringe2_delta_st_z, Fringe2_delta_en_z, Fringe2_zst, Fringe2_zen 
     
-      if (present(fringeID)) then
-         this%myFringeID = fringeID
-         this%useTwoFringex = .true. 
-      end if
-      nx = gpC%xsz(1)
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
       read(unit=ioUnit, NML=FRINGE)
       close(ioUnit)
 
+      if (present(fringeID)) then
+         this%myFringeID = fringeID
+         if (Apply_x_fringe) this%useTwoFringex = .true.
+         if (Apply_z_fringe) this%useTwoFringez = .true.
+      end if
+      
+      nx = gpC%xsz(1)
       Lx = maxval(x) + dx
       Ly = p_maxval(maxval(y)) + dy
+      Lz = p_maxval(maxval(z)) + dz
       this%gpC => gpC
       this%gpE => gpE
       this%spectC => spectC
@@ -332,6 +350,62 @@ contains
 
       end if 
       
+      if (this%usetwoFringez) then
+         select case (this%myFringeID)
+         case(1)
+            this%LambdaFact   = LambdaFact
+            Fringe_zst        = Fringe1_zst*Lz
+            Fringe_zen        = Fringe1_zen*Lz
+            Fringe_delta_st_z = Fringe1_delta_st_z*Lz
+            Fringe_delta_en_z = Fringe1_delta_en_z*Lz
+         case(2)
+            this%LambdaFact   = LambdaFact2
+            Fringe_zst        = Fringe2_zst*Lz
+            Fringe_zen        = Fringe2_zen*Lz
+            Fringe_delta_st_z = Fringe2_delta_st_z*Lz
+            Fringe_delta_en_z = Fringe2_delta_en_z*Lz
+         end select
+      else
+            this%LambdaFact    = LambdaFact
+            Fringe_zst        = Fringe_zst*Lz
+            Fringe_zen        = Fringe_zen*Lz
+            Fringe_delta_st_z = Fringe_delta_st_z*Lz
+            Fringe_delta_en_z = Fringe_delta_en_z*Lz
+      end if 
+     
+      if (Apply_z_fringe) then
+         ! z - direction fringe
+         allocate(z1         (this%gpC%xsz(3)))
+         allocate(z2         (this%gpC%xsz(3)))
+         allocate(S1         (this%gpC%xsz(3)))
+         allocate(S2         (this%gpC%xsz(3)))
+         allocate(Fringe_func(this%gpC%xsz(3)))
+     
+         z1 = ((z -  Fringe_zst)/Fringe_delta_st_z)
+         z2 = ((z -  Fringe_zen)/Fringe_delta_en_z) + 1.d0
+         call S_fringe(z1, S1)
+         call S_fringe(z2, S2)
+         Fringe_func = S1 - S2
+         
+         do k = 1,this%gpC%xsz(3)
+            do j = 1,this%gpC%xsz(2)
+               do i = 1,nx
+                  this%Fringe_kernel_cells(i,j,k) = this%Fringe_kernel_cells(i,j,k) + Fringe_func(k)
+               end do 
+            end do 
+         end do
+
+         do k = 1,this%gpE%xsz(3)
+            do j = 1,this%gpE%xsz(2)
+               do i = 1,nx
+                  this%Fringe_kernel_edges(i,j,k) = this%Fringe_kernel_edges(i,j,k) + Fringe_func(k)
+               end do 
+            end do 
+         end do
+         deallocate(z1, z2, S1, S2, Fringe_func)
+      end if 
+
+
       where (this%Fringe_kernel_cells > 1) this%Fringe_kernel_cells = 1.d0 
       where (this%Fringe_kernel_edges > 1) this%Fringe_kernel_edges = 1.d0 
 

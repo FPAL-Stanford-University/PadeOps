@@ -1031,8 +1031,8 @@ contains
             deallocate(this%runningSum_sc)
         end if
         if(this%useWindTurbines) then
-            deallocate(this%runningSum_sc_turb)
-            deallocate(this%runningSum_turb)
+            if (allocated(this%runningSum_sc_turb)) deallocate(this%runningSum_sc_turb)
+            if (allocated(this%runningSum_turb)) deallocate(this%runningSum_turb)
         endif
 
     end subroutine 
