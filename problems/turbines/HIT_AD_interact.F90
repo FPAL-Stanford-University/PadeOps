@@ -69,7 +69,7 @@ program HIT_AD_interact
     call hit%printDivergence()
 
     allocate(uhitFilt(hit%gpC%xsz(1),hit%gpC%xsz(2),hit%gpC%xsz(3)))
-    allocate(uhitFilt(hit%gpC%xsz(1),hit%gpC%xsz(2),hit%gpC%xsz(3)))
+    allocate(vhitFilt(hit%gpC%xsz(1),hit%gpC%xsz(2),hit%gpC%xsz(3)))
     allocate(whitFilt(hit%gpE%xsz(1),hit%gpE%xsz(2),hit%gpE%xsz(3)))
     
     call adsim%fringe_x1%allocateTargetArray_Cells(utarget0)                
