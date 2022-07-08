@@ -62,7 +62,7 @@ module spectralMod
         integer(kind=8) :: plan_c2c_bwd_z_oop
         integer(kind=8) :: plan_c2c_bwd_z_ip
         integer(kind=8) :: plan_r2c_z, plan_c2r_z 
-        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact
+        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact, yshiftfact, zshiftfact
         real(rkind), dimension(:), allocatable, public :: k1inZ, k2inZ, k3inZ
 
         real(rkind), dimension(:), allocatable :: mk3sq
@@ -181,9 +181,9 @@ contains
            case ('x')
              this%xshiftfact = exp(-imi*this%k1inZ*xshift)
            case ('y')
-             this%xshiftfact = exp(-imi*this%k2inZ*xshift)
+             this%yshiftfact = exp(-imi*this%k2inZ*xshift)
            case ('z')
-             this%xshiftfact = exp(-imi*this%k3inZ*xshift)
+             this%zshiftfact = exp(-imi*this%k3inZ*xshift)
          end select
 
          select case (coordShift)
@@ -192,7 +192,6 @@ contains
                 do j = 1,size(this%cbuffz_bp,2)
                    !$omp simd 
                    do i = 1,size(this%cbuffz_bp,1)
-                      !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
                       this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
                    end do 
                 end do 
@@ -202,8 +201,7 @@ contains
                 do j = 1,size(this%cbuffz_bp,2)
                    !$omp simd 
                    do i = 1,size(this%cbuffz_bp,1)
-                      !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
-                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(j)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%yshiftfact(j)
                    end do 
                 end do 
              end do 
@@ -212,8 +210,7 @@ contains
                 do j = 1,size(this%cbuffz_bp,2)
                    !$omp simd 
                    do i = 1,size(this%cbuffz_bp,1)
-                      !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
-                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(k)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%zshiftfact(k)
                    end do 
                 end do 
              end do 
@@ -1022,7 +1019,6 @@ contains
          end select 
      
          !allocate(this%k1inZ(size(this%k1,1)))
-         !allocate(this%xshiftfact(size(this%k1,1)))
          !this%k1inZ = this%k1(:,1,1)
 
          allocate(this%k1inZ(size(rbuffz,1)))
@@ -1043,6 +1039,7 @@ contains
          end select 
 
          allocate(this%k2inZ(size(rbuffz,2)))
+         allocate(this%yshiftfact(size(rbuffz,2)))
          this%k2inZ = rbuffz(1,:,1)
          
          
@@ -1059,6 +1056,7 @@ contains
             end where
          end select 
          allocate(this%k3inZ(size(rbuffz,3)))
+         allocate(this%zshiftfact(size(rbuffz,3)))
          this%k3inZ = rbuffz(1,1,:)
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &

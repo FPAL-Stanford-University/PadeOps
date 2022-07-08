@@ -2,13 +2,15 @@ module HIT_AD_interact_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
-    use constants, only: kappa 
+    use constants, only: kappa, zero
     implicit none
     integer :: simulationID = 0
     integer :: nxSize = 256, nySize = 256, nzSize = 256
     integer :: InflowProfileType = 0
     real(rkind) :: InflowProfileAmplit = 0.5d0, InflowProfileThick = 0.01d0
     character(len=1) :: streamWiseCoord = 'x'
+    integer :: nxADSIM = 0, nyADSIM = 0, nzADSIM = 0, &
+               nxHIT = 0,   nyHIT = 0,   nzHIT = 0
 
 contains
 
@@ -26,6 +28,77 @@ pure subroutine Sfunc(x, val)
    end where
 
 end subroutine
+
+subroutine copyHITfieldsToADSIM(uhit,vhit,whit,uAD,vAD,wAD,hit,adsim,coord)
+  use incompressibleGrid, only: igrid
+  use decomp_2d,          only: transpose_x_to_y, transpose_y_to_x,&
+                                transpose_y_to_z, transpose_z_to_y
+  real(rkind), dimension(:,:,:), intent(in) :: uhit, vhit, whit
+  real(rkind), dimension(:,:,:), intent(inout) :: uAD, vAD, wAD
+  character(len=1), intent(in) :: coord
+  type(igrid), intent(inout) :: hit, adsim
+  integer :: ist, ien, jst, jen, kst, ken
+  
+  select case (coord)
+    case ('x')
+      ist = nxADSIM-nxHIT+1
+      ien = nxADSIM
+     
+      ! Since everything is in x-decomposition anyway, we can just copy
+      uAD(ist:ien,:,:) = uhit  
+      vAD(ist:ien,:,:) = vhit  
+      wAD(ist:ien,:,:) = whit  
+
+    case ('y')
+      jst = nyADSIM-nyHIT+1
+      jen = nyADSIM
+
+      ! We need to transpose from x->y then copy 
+      call transpose_x_to_y(uhit, hit%rbuffyC(:,:,:,1), hit%gpC)
+      adsim%rbuffyC(:,:,:,1) = zero
+      adsim%rbuffyC(:,jst:jen,:,1) =  hit%rbuffyC(:,:,:,1)
+      call transpose_y_to_x(adsim%rbuffyC(:,:,:,1), uAD, adSim%gpC)
+
+      call transpose_x_to_y(vhit, hit%rbuffyC(:,:,:,1), hit%gpC)
+      adsim%rbuffyC(:,:,:,1) = zero
+      adsim%rbuffyC(:,jst:jen,:,1) =  hit%rbuffyC(:,:,:,1)
+      call transpose_y_to_x(adsim%rbuffyC(:,:,:,1), vAD, adSim%gpC)
+      
+      call transpose_x_to_y(whit, hit%rbuffyE(:,:,:,1), hit%gpE)
+      adsim%rbuffyE(:,:,:,1) = zero
+      adsim%rbuffyE(:,jst:jen,:,1) =  hit%rbuffyE(:,:,:,1)
+      call transpose_y_to_x(adsim%rbuffyE(:,:,:,1), wAD, adSim%gpE)
+
+    case ('z')
+      kst = nzADSIM-nzHIT+1
+      ken = nzADSIM
+
+      ! We need to transpose from x->y->z then copy 
+      call transpose_x_to_y(uhit, hit%rbuffyC(:,:,:,1), hit%gpC)
+      call transpose_y_to_z(hit%rbuffyC(:,:,:,1), hit%rbuffzC(:,:,:,1), hit%gpC)
+      adsim%rbuffzC(:,:,:,1) = zero 
+      adsim%rbuffzC(:,:,kst:ken,1) = hit%rbuffzC(:,:,:,1) 
+      call transpose_z_to_y(adsim%rbuffzC(:,:,:,1),adsim%rbuffyC(:,:,:,1),adSim%gpC)
+      call transpose_y_to_x(adsim%rbuffyC(:,:,:,1), uAD, adSim%gpC)
+
+      call transpose_x_to_y(vhit, hit%rbuffyC(:,:,:,1), hit%gpC)
+      call transpose_y_to_z(hit%rbuffyC(:,:,:,1), hit%rbuffzC(:,:,:,1), hit%gpC)
+      adsim%rbuffzC(:,:,:,1) = zero 
+      adsim%rbuffzC(:,:,kst:ken,1) = hit%rbuffzC(:,:,:,1) 
+      call transpose_z_to_y(adsim%rbuffzC(:,:,:,1),adsim%rbuffyC(:,:,:,1),adSim%gpC)
+      call transpose_y_to_x(adsim%rbuffyC(:,:,:,1), vAD, adSim%gpC)
+
+      call transpose_x_to_y(whit, hit%rbuffyE(:,:,:,1), hit%gpE)
+      call transpose_y_to_z(hit%rbuffyE(:,:,:,1), hit%rbuffzE(:,:,:,1), hit%gpE)
+      adsim%rbuffzE(:,:,:,1) = zero 
+      adsim%rbuffzE(:,:,kst:ken,1) = hit%rbuffzE(:,:,:,1) 
+      call transpose_z_to_y(adsim%rbuffzE(:,:,:,1),adsim%rbuffyE(:,:,:,1),adSim%gpE)
+      call transpose_y_to_x(adsim%rbuffyE(:,:,:,1), wAD, adSim%gpE)
+
+
+  end select
+end subroutine
+
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
@@ -45,7 +118,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind)  :: Lx = one, Ly = one, Lz = one, uInflow = one
     namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, InflowProfileType, &
             InflowProfileAmplit, InflowProfileThick, streamWiseCoord
-    
+    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz 
+
     select case (simulationID) 
     case (1) 
       ioUnit = 11
@@ -53,9 +127,10 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
       read(unit=ioUnit, NML=AD_CoriolisINPUT)
       close(ioUnit)    
     case (2)
-      Lx = two*pi
-      Ly = two*pi
-      Lz = two*pi
+      ioUnit = 11
+      open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+      read(unit=ioUnit, NML=HIT_PeriodicINPUT)
+      close(ioUnit)    
     end select
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)

@@ -14,7 +14,8 @@ program HIT_AD_interact
     use constants,                  only: one, zero
     use HIT_AD_interact_parameters, only: simulationID, InflowProfileType, &
                                           InflowProfileAmplit, InflowProfileThick, &
-                                          streamWiseCoord
+                                          streamWiseCoord, nxHIT, nyHIT, nzHIT, &
+                                          nxADSIM, nyADSIM, nzADSIM, copyHITfieldsToADSIM
     use fof_mod,                    only: fof
     use budgets_time_avg_mod,       only: budgets_time_avg  
     use budgets_vol_avg_mod,        only: budgets_vol_avg  
@@ -28,18 +29,15 @@ program HIT_AD_interact
     type(budgets_vol_avg)  :: budg_vavg
     real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0
     real(rkind), dimension(:,:,:), allocatable :: utarget1, vtarget1, wtarget1
+    real(rkind), dimension(:,:,:), allocatable :: uhitFilt, vhitFilt, whitFilt
+    
     real(rkind) :: dt1, dt2, dt, InflowSpeed = 1.d0
     real(rkind) :: k_bandpass_left = 10.d0, k_bandpass_right = 64.d0, x_shift
-    integer :: nxADSIM, nyADSIM, nzADSIM, nxHIT, nyHIT, nzHIT
     type(fof), dimension(:), allocatable :: filt
     integer, dimension(:), allocatable :: pid
     integer :: fid, nfilters = 2, tid_FIL_FullField = 75, tid_FIL_Planes = 4
     logical :: applyFilters = .false. 
     logical, parameter :: synchronize_RK_substeps = .true.
-
-    ! Start and end indices for the velocity arrays
-    integer :: ist, ien, jst, jen, kst, ken
-    integer :: ienE, jstE, jenE, kstE, kenE
 
     namelist /concurrent/ HIT_InputFile, AD_InputFile, InflowSpeed, k_bandpass_left, k_bandpass_right
     namelist /FILTER_INFO/ applyfilters, nfilters, fof_dir, tid_FIL_FullField, tid_FIL_Planes, filoutdir
@@ -69,6 +67,10 @@ program HIT_AD_interact
     hit%Am_I_Primary = .false. 
     call hit%start_io(.true.)                                           
     call hit%printDivergence()
+
+    allocate(uhitFilt(hit%gpC%xsz(1),hit%gpC%xsz(2),hit%gpC%xsz(3)))
+    allocate(uhitFilt(hit%gpC%xsz(1),hit%gpC%xsz(2),hit%gpC%xsz(3)))
+    allocate(whitFilt(hit%gpE%xsz(1),hit%gpE%xsz(2),hit%gpE%xsz(3)))
     
     call adsim%fringe_x1%allocateTargetArray_Cells(utarget0)                
     call adsim%fringe_x1%allocateTargetArray_Cells(vtarget0)                
@@ -113,66 +115,31 @@ program HIT_AD_interact
     call adsim%fringe_x2%associateFringeTargets(utarget1, vtarget1, wtarget1) 
 
     nxHIT = hit%gpC%xsz(1)
-    nyHIT = hit%gpC%xsz(2)
-    nzHIT = hit%gpC%xsz(3)
+    nyHIT = hit%gpC%ysz(2)
+    nzHIT = hit%gpC%zsz(3)
     nxADSIM  = adsim%gpC%xsz(1)
-    nyADSIM  = adsim%gpC%xsz(2)
-    nzADSIM  = adsim%gpC%xsz(3)
+    nyADSIM  = adsim%gpC%ysz(2)
+    nzADSIM  = adsim%gpC%zsz(3)
 
     call hit%spectC%init_bandpass_filter(k_bandpass_left, k_bandpass_right, hit%cbuffzC(:,:,:,1), hit%cbuffyC(:,:,:,1))
 
-    ! Set start and end indices of arrays
-    select case (streamWiseCoord)
-      case ('x')
-        ist = nxADSIM-nxHIT+1
-        ien = nxADSIM
-        ienE = ien
-        jst = 1
-        jen = adsim%gpC%xsz(2)
-        jstE = jst
-        jenE = adsim%gpE%xsz(2)
-        kst = 1
-        ken = adsim%gpC%xsz(3)
-        kstE = kst
-        kenE = adsim%gpE%xsz(3)
-      case ('y')
-        ist = 1
-        ien = adsim%gpC%xsz(1)
-        ienE = adsim%gpE%xsz(1)
-        jst = max(1,(nyADSIM-nyHIT+1)-adsim%gpC%xst(2)+1)
-        jen = adsim%gpC%xsz(2)
-        jstE = max(1,(nyADSIM-nyHIT+1)-adsim%gpE%xst(2)+1)
-        jenE = adsim%gpE%xsz(2)
-        kst = 1
-        ken = adsim%gpC%xsz(3)
-        kstE = kst
-        kenE = adsim%gpE%xsz(3)
-      case ('z')
-        ist = 1
-        ien = adsim%gpC%xsz(1)
-        ienE = adsim%gpE%xsz(1)
-        jst = 1
-        jen = adsim%gpC%xsz(2)
-        jstE = jst
-        jenE = adsim%gpE%xsz(2)
-        kst = max(1,(nzADSIM-nzHIT+1)-adsim%gpC%xst(3)+1)
-        ken = adsim%gpC%xsz(3)
-        kstE = max(1,(nzADSIM-nzHIT+1)-adsim%gpE%xst(3)+1)
-        kenE = adsim%gpE%xsz(3)
-    end select
+  
 
     ! Set the true target field for AD simulation
     x_shift = adsim%tsim*InflowSpeed 
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(ist:ien,jst:jen,kst:ken), x_shift, streamWiseCoord)
-    call hit%interpolate_cellField_to_edgeField(uTarget1(ist:ien,jst:jen,kst:ken), wTarget1(ist:ienE,jstE:jenE,kstE:kenE),0,0)
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(ist:ien,jst:jen,kst:ken), x_shift, streamWiseCoord)
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(ist:ien,jst:jen,kst:ken), x_shift, streamWiseCoord)
-    
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uhitFilt, x_shift, streamWiseCoord)
+    call hit%interpolate_cellField_to_edgeField(uhitFilt,whitFilt,0,0)
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uhitFilt, x_shift, streamWiseCoord)
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vhitFilt, x_shift, streamWiseCoord)
+
+    ! Go from hitFilt to uTargets  
+    call copyHITfieldsToADSIM(uhitFilt,vhitFilt,whitFilt,utarget1,vtarget1,wtarget1,hit,adsim,streamWiseCoord)
+
     ! Now scale rhw HIT field appropriately
     ! Note that the bandpass filtered velocity field has zero mean 
-    uTarget1(ist:ien,jst:jen,kst:ken) = uTarget1(ist:ien,jst:jen,kst:ken)  + uTarget0(ist:ien,jst:jen,kst:ken)
-    vTarget1(ist:ien,jst:jen,kst:ken) = vTarget1(ist:ien,jst:jen,kst:ken)  + vTarget0(ist:ien,jst:jen,kst:ken)
-    wTarget1(ist:ienE,jstE:jenE,kstE:kenE) = wTarget1(ist:ienE,jstE:jenE,kstE:kenE)  + wTarget0(ist:ienE,jstE:jenE,kstE:kenE)
+    uTarget1 = uTarget1  + uTarget0
+    vTarget1 = vTarget1  + vTarget0
+    wTarget1 = wTarget1  + wTarget0
    
 
     ! Graceful exit if apply filter is true and shear type is not 0
@@ -237,18 +204,23 @@ program HIT_AD_interact
 
        x_shift = adsim%tsim*InflowSpeed
        call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , &
-         uTarget1(ist:ien,jst:jen,kst:ken), x_shift, streamWiseCoord)
-       call hit%interpolate_cellField_to_edgeField(uTarget1(ist:ien,jst:jen,kst:ken), &
-         wTarget1(ist:ienE,jstE:jenE,kstE:kenE),0,0)
+        uhitFilt, x_shift, streamWiseCoord)
+       call hit%interpolate_cellField_to_edgeField(uhitFilt, &
+         whitFilt,0,0)
        call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , &
-         uTarget1(ist:ien,jst:jen,kst:ken), x_shift, streamWiseCoord)
+         uhitFilt, x_shift, streamWiseCoord)
        call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , &
-         vTarget1(ist:ien,jst:jen,kst:ken), x_shift, streamWiseCoord)
-      
+         vhitFilt, x_shift, streamWiseCoord)
+
+
+       ! Now copy hitFilt into Target1 
+       call copyHITfieldsToADSIM(uhitFilt,vhitFilt,whitFilt,utarget1,vtarget1,wtarget1,hit,adsim,streamWiseCoord)
+
        ! Now scale rhw HIT field appropriately
-       uTarget1(ist:ien,jst:jen,kst:ken) = uTarget1(ist:ien,jst:jen,kst:ken) + uTarget0(ist:ien,jst:jen,kst:ken)
-       vTarget1(ist:ien,jst:jen,kst:ken) = vTarget1(ist:ien,jst:jen,kst:ken) + vTarget0(ist:ien,jst:jen,kst:ken)
-       wTarget1(ist:ienE,jstE:jenE,kstE:kenE) = wTarget1(ist:ienE,jstE:jenE,kstE:kenE) + wTarget0(ist:ienE,jstE:jenE,kstE:kenE)
+       uTarget1 = uTarget1 + uTarget0 
+       vTarget1 = vTarget1 + vTarget0 
+       wTarget1 = wTarget1 + wTarget0 
+
      
 
        call doTemporalStuff(adsim, 1)                                        
@@ -296,6 +268,10 @@ program HIT_AD_interact
       deallocate(filt)
     end if
 
+    deallocate(uhitFilt, vhitFilt, whitFilt)
+    deallocate(utarget0, vtarget0, wtarget0)
+    deallocate(utarget1, vtarget1, wtarget1)
+    
     call hit%finalize_io()
     call adsim%finalize_io()
 
