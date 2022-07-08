@@ -1,9 +1,9 @@
 &INPUT
-inputdir              = "/nobackup/aghate/ad_channel/HIT/"   ! Directory for any input files
-outputdir             = "/nobackup/aghate/ad_channel/HIT/"   ! Directory for all output files
-nx                    = 256          ! Number of points in X
-ny                    = 256          ! Number of points in Y
-nz                    = 256          ! Number of points in Z
+inputdir              = "/anvil/scratch/x-ryanhass/LES/HITdecay/SpatialDecay40/output/HITdata"   ! Directory for any input files
+outputdir             = "/anvil/scratch/x-ryanhass/LES/HITdecay/SpatialDecay40/output/HITdata"   ! Directory for all output files
+nx                    = 64          ! Number of points in X
+ny                    = 64          ! Number of points in Y
+nz                    = 128          ! Number of points in Z
 tstop                 = 12800.D-2    ! Physical time to stop the simulation
 CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
@@ -11,8 +11,8 @@ nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.       ! Set to false if it's a fresh simulation 
-restartFile_TID       = 000         ! TimeID of the restart file being used
-restartFile_RID       = 10            ! RunID of the restart file being used
+restartFile_TID       = 00         ! TimeID of the restart file being used
+restartFile_RID       = 1            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
 /
@@ -31,9 +31,9 @@ donot_dealias         = .FALSE.
 /
 /
 &IO
-RunID                 = 10          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 50000       ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 50000       ! Data dumping frequency (# of timesteps)
+RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 100       ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 500       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.    ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 100        ! Plane dumping frequency (# of timesteps)
@@ -172,21 +172,17 @@ nKSvertFilt           = 1
 /
 &HIT_Forcing 
 Nwaves = 20
-kmin = 1.d0
-kmax = 2.d0
+kmin = 3.d0
+kmax = 5.d0
 EpsAmplitude = 0.00225d0
 RandSeedToAdd = 1234
+DomAspectRatioZ = 2
 /
 /
 &HIT_PeriodicINPUT
-TI                    = 1.0d0
-uadv                  = 10.d0
-ufname                = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1/u_HIT_init_256_kmin_3.dat"
-vfname                = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1/v_HIT_init_256_kmin_3.dat"
-wfname                = "/fastscratch/nghaisas/runs/PadeOps/budget_tavg_test/hit-ad/run1/w_HIT_init_256_kmin_3.dat"
-kleft                 = 10.d0
-kright                = 128.d0 
-BandpassFilterFields  = .FALSE. 
+Lx                    = 6.283185307179586d0
+Ly                    = 6.283185307179586d0
+Lz                    = 12.56637061435917d0 
 /
 /
 &SCALARS
@@ -203,4 +199,12 @@ MeanFilesDir     = "null"
 &MOISTURE
 moistureFactor    = 0.61D0
 moisture_info_dir = "null"
+/
+/
+&BUDGET_VOL_AVG
+do_budgets = .false.
+/
+/
+&BUDGET_TIME_AVG
+do_budgets = .false.
 /
