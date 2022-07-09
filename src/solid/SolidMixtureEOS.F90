@@ -25,7 +25,7 @@ module SolidMixtureMod
         type(solid), dimension(:), allocatable :: material
 
         type(decomp_info), pointer      :: decomp
-        type(derivatives), pointer      :: der,derD02
+        type(derivatives), pointer      :: der,derD02, derD06
         type(interpolators), pointer    :: interpMid
         type(derivativesStagg), pointer :: derStagg
         type(filters),     pointer      :: fil
@@ -34,10 +34,11 @@ module SolidMixtureMod
 
         real(rkind), allocatable, dimension(:,:,:) :: rho0mix, mumix, yieldmix, solidVF
 
-        logical :: SOSmodel = .FALSE.           ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
-        logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE.
+        logical :: SOSmodel = .FALSE., usePhiForm = .TRUE.       ! is sound speed given by `equilibrium' model? Alternative is `frozen' model. Check Saurel et al., JCP 2009.
+        logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .FALSE., useAkshayForm = .FALSE.
         logical :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
 
+        logical :: use_gradXi
 	logical :: surface_mask !flag to use masking on surface tension calculation
 	logical :: use_FV      !flag to use FV scheme when solving for kappa in surface tension	
 	logical :: use_gradphi !flag to use phi formulation of VF in calculating surface tension
@@ -54,7 +55,7 @@ module SolidMixtureMod
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa
         real(rkind), allocatable, dimension(:,:,:,:) :: norm
-	real(rkind), allocatable, dimension(:,:,:)   :: phi
+	real(rkind), allocatable, dimension(:,:,:)   :: phi, xi
         real(rkind), allocatable, dimension(:,:,:)   :: fmask
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_send_1, buffer_send_k_1
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_send_2, buffer_send_k_2
@@ -124,20 +125,20 @@ module SolidMixtureMod
 contains
 
     !function init(decomp,der,fil,LAD,ns) result(this)
-    subroutine init(this,decomp,der,derD02,derStagg,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,use_surfaceTension,use_gradphi, use_gradVF, surfaceTension_coeff, use_FV,surface_mask, weightedcurvature, strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
+    subroutine init(this,decomp,der,derD02,derStagg,derD06,interpMid,fil,gfil,LAD,ns,PTeqb,pEqb,pRelax,SOSmodel,use_gTg,updateEtot,useAkshayForm,useOneG,intSharp,usePhiForm,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,intSharp_gam,intSharp_eps,intSharp_cut,intSharp_dif,intSharp_tnh,intSharp_pfloor,use_surfaceTension,use_gradXi, use_gradphi, use_gradVF, surfaceTension_coeff, use_FV,surface_mask, weightedcurvature, strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,x_bc,y_bc,z_bc)
 
         class(solid_mixture), target,    intent(inout) :: this
         type(decomp_info), target,       intent(in)    :: decomp
         type(filters),     target,       intent(in)    :: fil, gfil
-        type(derivatives), target,       intent(in)    :: der,derD02
+        type(derivatives), target,       intent(in)    :: der,derD02, derD06
         type(derivativesStagg), target,  intent(in)    :: derStagg
         type(interpolators), target,     intent(in)    :: interpMid
         type(ladobject),   target,       intent(in)    :: LAD
         integer,                         intent(in)    :: ns
-        logical,                         intent(in)    :: PTeqb,pEqb,pRelax,updateEtot
+        logical,                         intent(in)    :: PTeqb,pEqb,pRelax,updateEtot,useAkshayForm
         logical,                         intent(in)    :: SOSmodel
-        logical,                         intent(in)    :: use_gTg,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
-        logical,                         intent(in)    :: use_surfaceTension, use_gradphi, use_gradVF, use_FV, surface_mask, weightedcurvature
+        logical,                         intent(in)    :: use_gTg,useOneG,intSharp,intSharp_cpl,intSharp_cpg,intSharp_cpg_west,intSharp_spf,intSharp_ufv,usePhiForm, intSharp_utw,intSharp_d02,intSharp_msk,intSharp_flt,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
+        logical,                         intent(in)    :: use_surfaceTension, use_gradphi, use_gradVF, use_FV, surface_mask, weightedcurvature, use_gradXi
         real(rkind),                     intent(in)    :: surfaceTension_coeff
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
@@ -157,6 +158,8 @@ contains
         this%useOneG    = useOneG
         this%intSharp   = intSharp
         this%intSharp_cpl   = intSharp_cpl
+        this%usePhiForm = usePhiForm
+        this%useAkshayForm = useAkshayForm
         this%intSharp_cpg      = intSharp_cpg
         this%intSharp_cpg_west = intSharp_cpg_west
         this%intSharp_spf   = intSharp_spf
@@ -183,6 +186,7 @@ contains
 	this%use_FV 		  = use_FV
         this%use_surfaceTension   = use_surfaceTension
 	this%use_gradphi 	  = use_gradphi
+        this%use_gradXi           = use_gradXi
 	this%use_gradVF 	  = use_gradVF  
         this%surfaceTension_coeff = surfaceTension_coeff
 
@@ -199,6 +203,7 @@ contains
 
         this%decomp => decomp
         this%der  => der
+        this%derD06 => derD06
         this%derD02  => derD02
         this%fil  => fil
         this%gfil => gfil
@@ -208,14 +213,23 @@ contains
 
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
         allocate(dummy)
-        call dummy%init(decomp,der,derD02,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns)
+        call dummy%init(decomp,der,derD02,derD06,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%useAkshayForm,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns, this%x_bc, this%y_bc, this%z_bc)
 
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns))!, source=dummy)
-        do i=1,this%ns
-            call this%material(i)%init(decomp,der,derD02,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns)
+   
+
+       print *, "called init mod"
+
+
+
+     do i=1,this%ns
+            call this%material(i)%init(decomp,der,derD02,derD06,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%useAkshayForm,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns, this%x_bc, this%y_bc, this%z_bc)
         end do
         deallocate(dummy)
+
+
+         print *, "finished call to init mod"
 
         this%material(1)%Ys = one
         this%material(1)%VF = one
@@ -306,6 +320,10 @@ contains
 	if(allocated(this%phi)) deallocate(this%phi)
         allocate(this%phi(this%nxp, this%nyp, this%nzp))
 
+
+        if(allocated(this%xi)) deallocate(this%xi)
+        allocate(this%xi(this%nxp, this%nyp, this%nzp))
+
 	if(allocated(this%fmask)) deallocate(this%fmask)
         allocate(this%fmask(this%nxp, this%nyp, this%nzp))
         
@@ -360,6 +378,7 @@ contains
         nullify(this%gfil)
         nullify(this%der)
         nullify(this%derD02)
+        nullify(this%derD06)
         nullify(this%decomp)
         nullify(this%derStagg)
         nullify(this%interpMid)
@@ -551,54 +570,66 @@ stop
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix,rhom, rhom2, rhom1,denom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix,rhom, e_species, delta_max, delta_min, del_e, delta_e1, delta_e2, rhom2, rhom1,denom
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rho1gambyone, rho2gambyone, diffPInf,  tmp
-
-        integer :: imat, i,j,k,a(3)
-        real(rkind) :: gamfac, eps = 1D-16, minVF = 1D-6
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: VF1, VF2
+        integer :: imat, i,j,k,a(3), s = 2
+        real(rkind) :: gamfac,eps2, eps1 = 1D-8, minVF = 1D-8
 
         ! print *, '---'
         ! subtract elastic energy to determine hydrostatic energy. Temperature
         ! is assumed a function of only hydrostatic energy. Not sure if this is
         ! correct.
         ehmix = mixE
-        !ehmix = ehmix*mixRho
-        !tmp = zero
-        !do imat = 1, this%ns
+       ! print *, "  read energy "
+        ehmix = ehmix*mixRho
+        tmp = zero
+        do imat = 1, this%ns
         
       
-         !   ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+        !ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
 
-          !  gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
-          !  call this%material(imat)%getSpeciesDensity(mixRho,rhom)
+        gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
+
+        ! call this%material(imat)%getSpeciesDensity(mixRho,rhom)
       
-          !  where( this%material(imat)%VF .gt. minVF)      
-          !       ehmix = ehmix - gamfac*this%material(imat)%VF
+        where( this%material(imat)%VF .lt. this%intSharp_cut)      
+           !  ehmix = ehmix - gamfac*this%material(imat)%VF
            !ehmix = ehmix - gamfac*this%material(imat)%VF/mixRho
            !  tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%Ys/rhom
-          !       tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
-          !  elsewhere
-          !       ehmix = ehmix - gamfac*eps
-          !       tmp = tmp + this%material(imat)%hydro%onebygam_m1*eps
-          !  endwhere
+            ehmix = ehmix - gamfac*(this%intSharp_cut)
+            tmp = tmp + this%material(imat)%hydro%onebygam_m1*(this%intSharp_cut)
+
+         elsewhere( this%material(imat)%VF .gt. 1-this%intSharp_cut)
+
+           ehmix = ehmix - gamfac*(1-this%intSharp_cut)
+           tmp = tmp + this%material(imat)%hydro%onebygam_m1*(1-this%intSharp_cut)
+
+         elsewhere
+
+            ehmix = ehmix - gamfac*this%material(imat)%VF
+            tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
+
+         endwhere
             
 
-!do k=1,this%nzp
-            !    do j = 1,this%nyp
-            !        do i = 1,this%nxp
-            !            if ( this%material(imat)%Ys(i,j,k) * this%material(imat)%VF(i,j,k) < zero ) then
-            !                print *, "Found negative Ys*VF in material ", imat, " at ", i, j, k
-            !                print *, "  Ys = ", this%material(imat)%Ys(i,j,k)
-            !                print *, "  VF = ", this%material(imat)%Vf(i,j,k)
-            !                ! exit
-            !            end if
-            !        end do
-            !    end do
-            !end do
 
-       ! enddo
+          !   do k=1,this%nzp
+          !      do j = 1,this%nyp
+          !          do i = 1,this%nxp
+          !              if ( this%material(imat)%Ys(i,j,k) * this%material(imat)%VF(i,j,k) < zero ) then
+          !                  print *, "Found negative Ys*VF in material ", imat, " at ", i, j, k
+          !                  print *, "  Ys = ", this%material(imat)%Ys(i,j,k)
+          !                  print *, "  VF = ", this%material(imat)%Vf(i,j,k)
+          !                  ! exit
+          !              end if
+          !          end do
+          !      end do
+          !  end do
 
-         mixP = ehmix/tmp
+       enddo
+
+        mixP = ehmix/tmp
 
          ! a = minloc(ehmix)
          ! print *, "  loc: ", minloc(ehmix)
@@ -627,41 +658,115 @@ stop
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
-         !! Retrieve material densities
-         call this%material(1)%getSpeciesDensity(mixRho,rhom1)
-         call this%material(2)%getSpeciesDensity(mixRho,rhom2)
+!         !! Retrieve material densities
+        ! call this%material(1)%getSpeciesDensity(mixRho,rhom1)
+        ! call this%material(2)%getSpeciesDensity(mixRho,rhom2)
     
-         rho2gambyone = rhom2*(this%material(2)%hydro%gam -1)
-         rho1gambyone = rhom1*(this%material(1)%hydro%gam -1)
- 
-         denom = this%material(1)%Ys*rho2gambyone + this%material(2)%Ys*rho1gambyone
-            
-         diffPInf = this%material(1)%hydro%gam*this%material(1)%hydro%PInf - this%material(2)%hydro%gam*this%material(2)%hydro%PInf
+        ! rho2gambyone = rhom2*(this%material(2)%hydro%gam -1)
+        ! rho1gambyone = rhom1*(this%material(1)%hydro%gam -1)
+
+        ! denom = 0
+         
+        ! eps1 = this%intSharp_cut
+          
+          ! where(this%material(1)%Ys .lt. eps1)
+           ! VF1 = 0
+        ! elsewhere(this%material(1)%Ys .gt. 1-eps1)
+        !   VF1 = 1
+        ! elsewhere
+        !   VF1 = this%material(1)%Ys
+        ! endwhere
+
+        ! eps2 = this%intSharp_cut
+        ! where(this%material(2)%Ys .lt. eps2)
+        !   VF2 = 0
+        ! elsewhere(this%material(2)%Ys .gt. 1-eps1)
+        !   VF2 = 1
+        ! elsewhere
+       !    VF2 = this%material(2)%Ys
+       !  endwhere
+        
+       !  denom = VF1*rho2gambyone + VF2*rho1gambyone
+
+       !  diffPInf = this%material(1)%hydro%gam*this%material(1)%hydro%PInf - this%material(2)%hydro%gam*this%material(2)%hydro%PInf
 
          !! Solve for species energys (these formulas are from Conservation of
          !Energy where emix = summation Yi*eh_i & from isobaric assumption p1 = p2 = ei*rho_i*(gam_i-1)
-         where(this%material(2)%Ys .gt. eps)
-         this%material(1)%eh = (rho2gambyone*ehmix +  diffPInf*this%material(2)%Ys)/denom
-         elsewhere
-         this%material(1)%eh =(rho2gambyone*ehmix)/denom
-         endwhere
-     
-         where(this%material(1)%Ys .gt. eps)
-         this%material(2)%eh = (rho1gambyone*ehmix -diffPInf*this%material(1)%Ys)/denom
-         elsewhere
-         this%material(2)%eh =(rho1gambyone*ehmix)/denom
-         endwhere
+        
+!         e_species = this%material(1)%eh
 
-      
-         mixP = this%material(2)%eh*rhom2*(this%material(2)%hydro%gam -1)-this%material(2)%hydro%gam*this%material(2)%hydro%PInf
+        ! where(this%material(2)%Ys .lt. eps)
+        !    this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*eps)/denom
+        ! elsewhere(this%material(2)%Ys .gt. (1))
+        !    this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*(1))/denom
+        ! elsewhere
+        !    this%material(1)%eh = (rho2gambyone*ehmix +  diffPInf*VF2)/denom
+        ! endwhere
+     
+         !del_e = this%material(1)%eh-e_species
+         !delta_max = (s - 1)*e_species
+         !delta_min = (1/s - 1)*e_species
+
+         ! Use limitors on species energy
+         !delta_e1 =  min( del_e, delta_max )
+         !delta_e2 = max( delta_e1, delta_min )
+
+         !this%material(1)%eh = e_species + delta_e2
+
+         !e_species = this%material(2)%eh
+
+         !where(this%material(1)%Ys .lt. eps)
+
+        !   this%material(2)%eh =(rho1gambyone*ehmix - diffPInf*eps)/denom
+  
+        ! elsewhere(this%material(1)%Ys .gt. (1))
+
+        !   this%material(2)%eh =(rho1gambyone*ehmix - diffPInf*(1))/denom
+
+        ! elsewhere
+
+        !   this%material(2)%eh = (rho1gambyone*ehmix -diffPInf*VF1)/denom
+
+       !  endwhere
+        ! del_e = this%material(2)%eh-e_species
+        ! delta_max = (s - 1)*e_species
+        ! delta_min = (1/s - 1)*e_species
+
+         ! Use limitors on species energy
+        ! delta_e1 =  min( del_e, delta_max )
+        ! delta_e2 = max( delta_e1, delta_min )
+
+        ! this%material(2)%eh = e_species + delta_e2
+
+              
+       !  mixP = this%material(1)%eh*rhom1*(this%material(1)%hydro%gam -1)-this%material(1)%hydro%gam*this%material(1)%hydro%PInf
+
          do imat = 1, this%ns
+
              this%material(imat)%p = mixP
-        !     call this%material(imat)%get_ehydroT_from_p(mixRho)
+            call this%material(imat)%get_ehydroT_from_p(mixRho)
+            ! call this%material(imat)%getSpeciesDensity(mixRho,rhom)
+
+            ! e_species = this%material(imat)%eh
+
+           ! this%material(imat)%eh = (this%material(imat)%p + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf) * this%material(imat)%hydro%onebygam_m1 / rhom
+
+           !  del_e = this%material(imat)%eh-e_species
+           !  delta_max = (s - 1)*e_species
+           !  delta_min = (1/s - 1)*e_species
+
+            ! Use limitors on species energy
+           !  delta_e1 =  min( del_e, delta_max )
+           !  delta_e2 = max( delta_e1, delta_min )
+
+           !  this%material(imat)%eh = e_species + delta_e2
+
+           !  call this%material(imat)%hydro%get_T(this%material(imat)%eh, this%material(imat)%T, rhom)
          end do
 
-         call this%material(1)%hydro%get_T(this%material(1)%eh,this%material(1)%T, rhom1)
-         call this%material(2)%hydro%get_T(this%material(2)%eh,this%material(2)%T, rhom2)
-
+        ! call this%material(1)%hydro%get_T(this%material(1)%eh,this%material(1)%T, rhom1)
+        ! call this%material(2)%hydro%get_T(this%material(2)%eh,this%material(2)%T, rhom2)
+!rint *, " call T "
     end subroutine
 
     subroutine equilibratePressureTemperature(this,mixRho,mixE,mixP,mixT,isub)
@@ -1588,16 +1693,34 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         integer :: imat
 
-        rho = zero
-        do imat = 1, this%ns
-          call this%material(imat)%getSpeciesDensity_from_g(rhom)
-          rho = rho + this%material(imat)%VF * rhom
-        end do
+        !f(this%pEqb) then
 
-        do imat = 1,this%ns
+         ! rho = zero
+          !do imat = 1, this%ns
+          !  call this%material(imat)%getSpeciesDensity(rhom)
+          !  rho = rho + this%material(imat)%VF * rhom
+         ! end do
+
+         ! do imat = 1,this%ns
+         !   call this%material(imat)%getSpeciesDensity(rhom)
+         !   this%material(imat)%Ys = this%material(imat)%VF * rhom / rho
+         ! end do
+
+       ! else
+
+          rho = zero
+          do imat = 1, this%ns
+            call this%material(imat)%getSpeciesDensity_from_g(rhom)
+            rho = rho + this%material(imat)%VF * rhom
+          end do
+
+          do imat = 1,this%ns
             call this%material(imat)%getSpeciesDensity_from_g(rhom)
             this%material(imat)%Ys = this%material(imat)%VF * rhom / rho
-        end do
+          end do
+
+      ! endif
+        
     end subroutine
 
     subroutine get_q(this,x_bc,y_bc,z_bc)
@@ -1665,19 +1788,19 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), intent(in) :: dx,dy,dz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradRhoYs,gradVF,gradVFdiff,fv_f,fv_h,tmp4
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradRhoYs,gradVF,gradVFdiff,fv_f,fv_h,tmp4, gradphi
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: rhoi,VFbound,hi,spf_a,spf_r
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VFint,uFVint,vFVint,wFVint,gFVint,gtFVint,gpFVint,rhoFVint
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint, VFint,uFVint,vFVint,wFVint,gFVint,gtFVint,gpFVint,rhoFVint, kernel
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,antiDiff,mask,RhoYsbound,filt,antiDiffFV,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i, VF_RHS_i, Kij_coeff_i
 
-        real(rkind) :: intSharp_alp = 0.1, intSharp_adm = 1.0D-1, intSharp_exp = -1.0D0,gradDiff,md1,md2 !, intSharp_tnh = 0.1 !1.0D-2
+        real(rkind) :: intSharp_alp = 0.1, intSharp_adm = 1.0D-1,e = 1d-100, intSharp_exp = -1.0D0,gradDiff,md1,md2 !, intSharp_tnh = 0.1 !1.0D-2
 
         integer :: i,j,ii,jj,kk,iflag = one,im,jm,km,k
-        !logical :: useTiwari = .FALSE., useRhoYsbound = .FALSE., useTotalRho = .FALSE.
+        logical :: useTiwari = .FALSE., useRhoYsbound = .FALSE., useTotalRho = .FALSE.
         logical :: periodicx,periodicy,periodicz, useGradPsi = .FALSE., useRhoLocal = .TRUE., useHighOrder = .TRUE.,useYSbound = .TRUE., useNewSPF = .TRUE., useNewSPFfull = .FALSE.!, useTiwari = .TRUE.
 
         !correct intSharp_tnh if negative
@@ -1723,10 +1846,35 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               gradVF(:,:,:,2) = gradVF(:,:,:,2) * tmp
               gradVF(:,:,:,3) = gradVF(:,:,:,3) * tmp
 
+           else if(this%usePhiForm) then
+
+
+             !! Construct xi and account for outbounds behaviour
+             where( this%material(i)%VF .GE. 1-this%intSharp_cut)
+                 this%xi = this%intSharp_eps*log( ( 1-2*this%intSharp_cut + e )/ (e))*(1/(1-2*this%intSharp_cut))
+
+             elsewhere( this%material(i)%VF .LE. this%intSharp_cut )
+                 this%xi = this%intSharp_eps*log( ( e )/ (1 -2*this%intSharp_cut+ e))*(1/(1-2*this%intSharp_cut))
+
+
+             elsewhere
+                 this%xi = this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( this%material(i)%VF - this%intSharp_cut + e )/ (1 - this%intSharp_cut - this%material(i)%VF + e) )
+
+             endwhere
+             
+
+           !  call filter3D(this%decomp, this%fil, this%xi, iflag, x_bc,y_bc,z_bc)
+
+       
+             call gradient(this%decomp,this%derD02,this%xi,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3)) !low order
+
+                           
+
+    
            else !use volume fraction
 
               call gradient(this%decomp,this%derD02,this%material(i)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !low order
-              call gradient(this%decomp,this%der,this%material(i)%VF,gradVFdiff(:,:,:,1),gradVFdiff(:,:,:,2),gradVFdiff(:,:,:,3)) !high order
+              call gradient(this%decomp,this%derD06,this%material(i)%VF,gradVFdiff(:,:,:,1),gradVFdiff(:,:,:,2),gradVFdiff(:,:,:,3)) 
 
            endif
 
@@ -1746,7 +1894,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  norm(:,:,:,3) = gradVFdiff(:,:,:,3) / GVFmag
               endwhere
 
-           else !high order FD -- high order norm with FV is stable
+          
+
+
+          else !high order FD -- high order norm with FV is stable
               !magnitude of surface vector
               GVFmag = sqrt( gradVF(:,:,:,1)**two + gradVF(:,:,:,2)**two + gradVF(:,:,:,3)**two )
 
@@ -1762,12 +1913,28 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               endwhere
 
            endif
+           
+         if (this%usePhiForm) then
+           !magnitude of surface vector
+           GVFmag = sqrt( gradphi(:,:,:,1)**two + gradphi(:,:,:,2)**two + gradphi(:,:,:,3)**two )
+      
+           !surface normal
+           where (GVFmag < eps)
+              norm(:,:,:,1) = zero
+              norm(:,:,:,2) = zero
+              norm(:,:,:,3) = zero
+           elsewhere
+              norm(:,:,:,1) = gradphi(:,:,:,1) / GVFmag
+              norm(:,:,:,2) = gradphi(:,:,:,2) / GVFmag
+              norm(:,:,:,3) = gradphi(:,:,:,3) / GVFmag
+           endwhere
+        endif
 
            ! !framework to filter surface normal if needed --- normal is not conservative so best not to?
            ! if(this%intSharp_flt) then
-           !    call filter3D(this%decomp, this%fil, norm(:,:,:,1), iflag, x_bc, y_bc,z_bc)
-           !    call filter3D(this%decomp, this%fil, norm(:,:,:,2), iflag, x_bc, y_bc,z_bc)
-           !    call filter3D(this%decomp, this%fil, norm(:,:,:,3), iflag, x_bc, y_bc,z_bc)
+               call filter3D(this%decomp, this%gfil, norm(:,:,:,1), iflag, x_bc, y_bc,z_bc)
+               call filter3D(this%decomp, this%gfil, norm(:,:,:,2), iflag, x_bc, y_bc,z_bc)
+               call filter3D(this%decomp, this%gfil, norm(:,:,:,3), iflag, x_bc, y_bc,z_bc)
            ! endif
 
 
@@ -1795,19 +1962,42 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  call interpolateFV(this,gradVF(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
                  call interpolateFV(this,gradVF(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc) 
                  call interpolateFV(this,gradVF(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc) 
-
+    
 	      else
                  !used in high order version
                  !TODO: make sure these BCS for gradVF are correct
-                 call interpolateFV(this,gradVFdiff(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
-                 call interpolateFV(this,gradVFdiff(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc) 
-                 call interpolateFV(this,gradVFdiff(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc) 
+                 
+
+                 !call interpolateFV(this,gradVFdiff(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
+                 !call interpolateFV(this,gradVFdiff(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc) 
+                 !call interpolateFV(this,gradVFdiff(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc) 
               endif
+
+              
+                          
 
               !calculate antiDiffFVint term
               antiDiffFVint(:,:,:,1,i) = -this%intSharp_gam * (VFint(:,:,:,1)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,1))*NMint(:,:,:,1,1)
               antiDiffFVint(:,:,:,2,i) = -this%intSharp_gam * (VFint(:,:,:,2)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,2))*NMint(:,:,:,2,2)
               antiDiffFVint(:,:,:,3,i) = -this%intSharp_gam * (VFint(:,:,:,3)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,3))*NMint(:,:,:,3,3)
+
+             
+
+!              call filter3D(this%decomp, this%fil, antiDiffFVint(:,:,:,1, i), iflag, x_bc,y_bc,z_bc)
+!              call filter3D(this%decomp, this%fil, antiDiffFVint(:,:,:,2, i), iflag, x_bc,y_bc,z_bc)
+!              call filter3D(this%decomp, this%fil, antiDiffFVint(:,:,:,3, i), iflag, x_bc,y_bc,z_bc)
+
+
+              if (this%usePhiForm) then
+                 call interpolateFV(this,this%xi,phiint,periodicx,periodicy,periodicz,this%x_bc, this%y_bc, this%z_bc)
+
+                 antiDiffFVint(:,:,:,1,i) = -this%intSharp_gam*(0.25*(1 - (tanh((1-2*this%intSharp_cut)* phiint(:,:,:,1)/(2 * this%intSharp_eps)))**2)-0.5*(1+tanh((1-2*this%intSharp)*phiint(:,:,:,1)/(2 * this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)*NMint(:,:,:,1,1)
+                 antiDiffFVint(:,:,:,2,i) = -this%intSharp_gam*(0.25*(1 - (tanh((1-2*this%intSharp_cut)* phiint(:,:,:,2)/(2 * this%intSharp_eps)))**2)-0.5*(1+tanh((1-2*this%intSharp)*phiint(:,:,:,2)/(2 * this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)*NMint(:,:,:,2,2)
+                 antiDiffFVint(:,:,:,3,i) = -this%intSharp_gam*(0.25*(1 - (tanh((1-2*this%intSharp_cut)* phiint(:,:,:,3)/(2 * this%intSharp_eps)))**2)-0.5*(1+tanh((1-2*this%intSharp)*phiint(:,:,:,3)/(2 * this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)*NMint(:,:,:,3,3)
+
+
+
+              endif
 
               if (.NOT.this%intSharp_msk) then
                  ! ! Do not do this for FV
@@ -1895,13 +2085,30 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            elsewhere(this%material(i)%VF.gt.one-this%intSharp_cut)
               mask = zero
            endwhere
+           
 
-           !VF out-of-bounds diffusion term
+        !   if(this%usePhiForm) then
+
+        !      mask = one
+        !      where(this%xi .le.  this%intSharp_eps*log( ( e )/ (1-2*this%intSharp_cut+e))*(1/(1-2*this%intSharp_cut)) )
+
+        !        mask = zero
+
+        !      elsewhere(this%xi .ge. this%intSharp_eps*log( (1-2*this%intSharp_cut + e )/ (e))*(1/(1-2*this%intSharp_cut)) )
+
+        !        mask = zero
+
+        !      endwhere
+                    
+        !    endif
+
+
+
            this%VFboundDiff(:,:,:,i) = zero
            maskDiff = zero
 
            ! if(this%intSharp_ufv) then
-           md1 = this%intSharp_cut**half !need to set a larger cutoff to effectively blend FV and FD
+           md1 = this%intSharp_cut**half !need to set a larger cutoff toeffectively blend FV and FD
            ! else
            !    md1 = this%intSharp_cut
            ! endif
@@ -1909,18 +2116,49 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            do ii=1,this%nxp
               do jj=1,this%nyp
                  do kk=1,this%nzp
-                    ! this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), (this%intSharp_cut-this%material(i)%VF(ii,jj,kk))/this%intSharp_cut) ! VF < cut
-                    ! this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), (this%material(i)%VF(ii,jj,kk)-(one-this%intSharp_cut))/this%intSharp_cut)  !VF > 1-cut
-                    this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), (md1-this%material(i)%VF(ii,jj,kk))/(md1)) ! VF < sqrt(cut)
-                    this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), (this%material(i)%VF(ii,jj,kk)-(one-md1))/(md1))  !VF > 1-sqrt(cut)
+                    ! this%VFboundDiff(ii,jj,kk,i) =
+                    ! max(this%VFboundDiff(ii,jj,kk,i),
+                    ! (this%intSharp_cut-this%material(i)%VF(ii,jj,kk))/this%intSharp_cut)
+                    ! ! VF < cut
+                    ! this%VFboundDiff(ii,jj,kk,i) =
+                    ! max(this%VFboundDiff(ii,jj,kk,i),
+                    ! (this%material(i)%VF(ii,jj,kk)-(one-this%intSharp_cut))/this%intSharp_cut)
+                    ! !VF > 1-cut
+                    this%VFboundDiff(ii,jj,kk,i) =max(this%VFboundDiff(ii,jj,kk,i), (md1-this%material(i)%VF(ii,jj,kk))/(md1)) !VF < sqrt(cut)
+                    this%VFboundDiff(ii,jj,kk,i) =max(this%VFboundDiff(ii,jj,kk,i),(this%material(i)%VF(ii,jj,kk)-(one-md1))/(md1))  !VF > 1-sqrt(cut)
                     useYSbound = .FALSE.
-                    if(useYSbound) then !possible useful for high density ratio -- how to get bounds?
-                       ! this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), (this%material(i)%intSharp_ysc(1)-this%material(i)%Ys(ii,jj,kk))/this%material(i)%intSharp_ysc(1)) ! Ys < YScut(i,1)
-                       ! this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), ((one-this%material(i)%intSharp_ysc(2))-(one-this%material(i)%Ys(ii,jj,kk)))/(one-this%material(i)%intSharp_ysc(2)))  !Ys > 1-Yscut(i,2)
-                       ! this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), (zero-this%material(i)%Ys(ii,jj,kk))/this%material(i)%intSharp_ysc(1)) ! Ys < YScut(i,1)
-                       ! this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), ((one-one)-(one-this%material(i)%Ys(ii,jj,kk)))/(one-this%material(i)%intSharp_ysc(2)))  !Ys > 1-Yscut(i,2)
-                       this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), (zero-this%material(i)%Ys(ii,jj,kk))/this%intSharp_cut) ! Ys < YScut(i,1)
-                       this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), ((one-one)-(one-this%material(i)%Ys(ii,jj,kk)))/this%intSharp_cut)  !Ys > 1-Yscut(i,2)
+
+
+
+         !          if(this%usePhiForm) then
+
+          !            this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i), (md1-0.5*(1-this%intSharp_cut)*(1+tanh( (1-2*this%intSharp_cut)*this%xi(ii,jj,kk) /this%intSharp_eps) ))/(md1))
+!VF < sqrt(cut)
+         !             this%VFboundDiff(ii,jj,kk,i) = max(this%VFboundDiff(ii,jj,kk,i),(0.5*(1-this%intSharp_cut)*(1+tanh( (1-2*this%intSharp_cut)*this%xi(ii,jj,kk) /this%intSharp_eps) )-(one-md1))/(md1))
+!VF > 1-sqrt(cut)
+
+          !         endif
+
+
+                    if(useYSbound) then !possible useful for high density ratioow to get bounds?
+                       ! this%VFboundDiff(ii,jj,kk,i) =
+                       ! max(this%VFboundDiff(ii,jj,kk,i),
+                       ! (this%material(i)%intSharp_ysc(1)-this%material(i)%Ys(ii,jj,kk))/this%material(i)%intSharp_ysc(1))
+                       ! ! Ys < YScut(i,1)
+                       ! this%VFboundDiff(ii,jj,kk,i) =
+                       ! max(this%VFboundDiff(ii,jj,kk,i),
+                       ! ((one-this%material(i)%intSharp_ysc(2))-(one-this%material(i)%Ys(ii,jj,kk)))/(one-this%material(i)%intSharp_ysc(2)))
+                       ! !Ys > 1-Yscut(i,2)
+                       ! this%VFboundDiff(ii,jj,kk,i) =
+                       ! max(this%VFboundDiff(ii,jj,kk,i),
+                       ! (zero-this%material(i)%Ys(ii,jj,kk))/this%material(i)%intSharp_ysc(1))
+                       ! ! Ys < YScut(i,1)
+                       ! this%VFboundDiff(ii,jj,kk,i) =
+                       ! max(this%VFboundDiff(ii,jj,kk,i),
+                       ! ((one-one)-(one-this%material(i)%Ys(ii,jj,kk)))/(one-this%material(i)%intSharp_ysc(2)))
+                       ! !Ys > 1-Yscut(i,2)
+                       this%VFboundDiff(ii,jj,kk,i) =max(this%VFboundDiff(ii,jj,kk,i),(zero-this%material(i)%Ys(ii,jj,kk))/this%intSharp_cut) ! Ys < YScut(i,1)
+                       this%VFboundDiff(ii,jj,kk,i) =max(this%VFboundDiff(ii,jj,kk,i),((one-one)-(one-this%material(i)%Ys(ii,jj,kk)))/this%intSharp_cut)  !Ys >1-Yscut(i,2)
 
                     endif
                  enddo
@@ -1928,9 +2166,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            enddo
 
 
-           !blending function between masked and unmasked -- matches version used on faces for FV -- tnh controls transition width
-           !tanhmask = tanh( ( ((this%material(i)%VF-this%intSharp_cut)*(one-this%material(i)%VF-this%intSharp_cut)) / (this%intSharp_cut/this%intSharp_tnh**two) )**two ) !old
-           tanhmask = tanh( ( ((this%material(i)%VF-this%intSharp_cut)*(one-this%material(i)%VF-this%intSharp_cut)) / this%intSharp_tnh )**two ) !new
+           !blending function between masked and unmasked -- matches version
+           !used on faces for FV -- tnh controls transition width
+           !tanhmask = tanh( (
+           !((this%material(i)%VF-this%intSharp_cut)*(one-this%material(i)%VF-this%intSharp_cut))
+           !/ (this%intSharp_cut/this%intSharp_tnh**two) )**two ) !old
+           tanhmask = tanh( (((this%material(i)%VF-this%intSharp_cut)*(one-this%material(i)%VF-this%intSharp_cut))/ this%intSharp_tnh )**two ) !new
 
            if(this%intSharp_spf) then 
               antiDiff = antiDiff * mask * tanhmask
@@ -1941,8 +2182,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
            !Shukla, Pantano, Freund JCP 2010 version -- not in divergence form
            if(this%intSharp_spf) then 
-              this%material(i)%intSharp_a = zero !components 2 and 3 are zero when not in divergence form -- they are not used in logic for RHS update
-              this%material(i)%intSharp_R = zero !components 2 and 3 are zero when not in divergence form -- they are not used in logic for RHS update
+              this%material(i)%intSharp_a = zero !components 2 and 3 are zerohen not in divergence form -- they are not used in logic for RHS update
+              this%material(i)%intSharp_R = zero !components 2 and 3 are zerowhen not in divergence form -- they are not used in logic for RHS update
               
               !if(.not.useTiwari) then
               if(.not.this%intSharp_utw) then
@@ -1951,25 +2192,33 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                     !original
                     spf_a(:,:,:,i) = this%intSharp_eps*GVFmag*mask*tanhmask-antiDiff !GVFmag is gradVF magnitude
                     
-                    !spf_a(:,:,:,i) = this%intSharp_eps*GVFmag*mask-antiDiff !GVFmag is gradVF magnitude
+                    !spf_a(:,:,:,i) = this%intSharp_eps*GVFmag*mask-antiDiff
+                    !!GVFmag is gradVF magnitude
                     
                     
-                    ! !spf_a(:,:,:,i) = this%intSharp_eps*GVFmag*mask-antiDiff !GVFmag is gradVF magnitude
+                    ! !spf_a(:,:,:,i) = this%intSharp_eps*GVFmag*mask-antiDiff
+                    ! !GVFmag is gradVF magnitude
                     
                     ! !new -- for VFboundDiff
-                    ! this%VFboundDiff(:,:,:,i) = this%intSharp_dif*this%VFboundDiff(:,:,:,i)
-                    ! call filter3D(this%decomp, this%gfil, this%VFboundDiff(:,:,:,i), iflag, x_bc, y_bc,z_bc) 
-                    ! !call gradient(this%decomp,this%der,this%material(i)%VF*this%VFboundDiff(:,:,:,i),gradVFdiff(:,:,:,1),gradVFdiff(:,:,:,2),gradVFdiff(:,:,:,3)) !high order
-                    ! !GVFmag = sqrt( gradVFdiff(:,:,:,1)**two + gradVFdiff(:,:,:,2)**two + gradVFdiff(:,:,:,3)**two )
+                    ! this%VFboundDiff(:,:,:,i) =
+                    ! this%intSharp_dif*this%VFboundDiff(:,:,:,i)
+                    ! call filter3D(this%decomp, this%gfil,
+                    ! this%VFboundDiff(:,:,:,i), iflag, x_bc, y_bc,z_bc) 
+                    ! !call
+                    ! gradient(this%decomp,this%der,this%material(i)%VF*this%VFboundDiff(:,:,:,i),gradVFdiff(:,:,:,1),gradVFdiff(:,:,:,2),gradVFdiff(:,:,:,3))
+                    ! !high order
+                    ! !GVFmag = sqrt( gradVFdiff(:,:,:,1)**two +
+                    ! gradVFdiff(:,:,:,2)**two + gradVFdiff(:,:,:,3)**two )
                     
-                    ! spf_a(:,:,:,i) = spf_a(:,:,:,i) + this%intSharp_eps*GVFmag*this%VFboundDiff(:,:,:,i)
+                    ! spf_a(:,:,:,i) = spf_a(:,:,:,i) +
+                    ! this%intSharp_eps*GVFmag*this%VFboundDiff(:,:,:,i)
                  else
                     spf_a(:,:,:,i) = this%intSharp_eps*GVFmag-antiDiff
                  endif
                  
                  !filter argument of RHS gradient
                  if(this%intSharp_flt) then
-                    call filter3D(this%decomp, this%fil, spf_a(:,:,:,i), iflag, x_bc, y_bc,z_bc)
+                    call filter3D(this%decomp, this%fil, spf_a(:,:,:,i), iflag,x_bc, y_bc,z_bc)
                  endif
                  
                  
@@ -1979,8 +2228,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  else
                     call gradient(this%decomp,this%der,spf_a(:,:,:,i),tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
                  endif
-                 !update VF term -- only a used for this update -- aDiff used for divergence form diffusion
-                 this%material(i)%intSharp_a(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+                 !update VF term -- only a used for this update -- aDiff used
+                 !for divergence form diffusion
+                 this%material(i)%intSharp_a(:,:,:,1) = this%intSharp_gam *(norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) +norm(:,:,:,3)*tmp4(:,:,:,3))
                  spf_r(:,:,:,i) = spf_a(:,:,:,i)*rhoi(:,:,:,i)
                  
                  !put rhoi in gradient instead of assuming constant
@@ -1991,7 +2241,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                     else
                        call gradient(this%decomp,this%der,spf_r(:,:,:,i),tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
                     endif
-                    this%material(i)%intSharp_R(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+                    this%material(i)%intSharp_R(:,:,:,1) = this%intSharp_gam *(norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) +norm(:,:,:,3)*tmp4(:,:,:,3))
 
                  endif
               endif
@@ -2000,7 +2250,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               !Use Tiwari Freund Pantano, JCP 2013 version
               !if(useTiwari.and.useNewSPF) then
               if(this%intSharp_utw.and.useNewSPF) then
-                 spf_r(:,:,:,i) = zero ! can't do full couple with Tiwari -- not actually in gradient form
+                 spf_r(:,:,:,i) = zero ! can't do full couple with Tiwari -- notactually in gradient form
                  
                  if (this%intSharp_d02) then
                     call gradient(this%decomp,this%derD02,rho*this%material(i)%Ys,gradRhoYs(:,:,:,1),gradRhoYs(:,:,:,2),gradRhoYs(:,:,:,3))
@@ -2018,18 +2268,18 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                  if(this%intSharp_msk) then
                     do j=1,3
-                       tmp4(:,:,:,j) = ( tmp4(:,:,:,j) - (one-two*this%material(i)%VF)*gradRhoYs(:,:,:,j) ) * mask*tanhmask
+                       tmp4(:,:,:,j) = ( tmp4(:,:,:,j) -(one-two*this%material(i)%VF)*gradRhoYs(:,:,:,j) ) * mask*tanhmask
                     enddo
                  else
                     do j=1,3
-                       tmp4(:,:,:,j) =   tmp4(:,:,:,j) - (one-two*this%material(i)%VF)*gradRhoYs(:,:,:,j)   * mask*tanhmask
+                       tmp4(:,:,:,j) =   tmp4(:,:,:,j) -(one-two*this%material(i)%VF)*gradRhoYs(:,:,:,j)   * mask*tanhmask
                     enddo
                  endif
 
-                 this%material(i)%intSharp_R(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3)) 
+                 this%material(i)%intSharp_R(:,:,:,1) = this%intSharp_gam *(norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) +norm(:,:,:,3)*tmp4(:,:,:,3)) 
                  
                  if(this%intSharp_flt) then
-                    call filter3D(this%decomp, this%fil, this%material(i)%intSharp_R(:,:,:,1), iflag, x_bc, y_bc,z_bc)
+                    call filter3D(this%decomp, this%fil,this%material(i)%intSharp_R(:,:,:,1), iflag, x_bc, y_bc,z_bc)
                  endif
                  
               endif
@@ -2037,15 +2287,21 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
               !out of bounds diffusion is divergence form always
               if(this%intSharp_msk) then
-                 !Divergence form -- high order --- high order --- FD diffusion away from interface
+                 !Divergence form -- high order --- high order --- FD diffusion
+                 !away from interface
                  do j=1,3
-                    !this%material(i)%intSharp_aDiff(:,:,:,j) = this%intSharp_gam*this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
+                    !this%material(i)%intSharp_aDiff(:,:,:,j) =
+                    !this%intSharp_gam*this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
 
 
-                    !this%material(i)%intSharp_aDiff(:,:,:,j) = this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i) !tested
-                    this%material(i)%intSharp_aDiff(:,:,:,j) = this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)*this%intSharp_dif !new -- same as divergence version
-                    !Gaussian filter to smooth out-of-bounds diffusion -- similar to LAD
-                    call filter3D(this%decomp, this%gfil, this%material(i)%intSharp_aDiff(:,:,:,j), iflag, x_bc, y_bc,z_bc)
+                    !this%material(i)%intSharp_aDiff(:,:,:,j) =
+                    !this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
+                    !!tested
+                    this%material(i)%intSharp_aDiff(:,:,:,j) =this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)*this%intSharp_dif
+!new -- same as divergence version
+                    !Gaussian filter to smooth out-of-bounds diffusion --
+                    !similar to LAD
+                    call filter3D(this%decomp, this%gfil,this%material(i)%intSharp_aDiff(:,:,:,j), iflag, x_bc, y_bc,z_bc)
                  enddo
               else
                  this%material(i)%intSharp_aDiff = zero
@@ -2055,13 +2311,19 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               
 
               ! old Tiwari
-              ! ! The basic framework is here, but it is now deprecated -- may have some advantages in not requiering VF field -- but if the pressure-temperature equilibration stability problems are fixed, the other version would be equivalent if not better since compoent rho is not assumed constant across interfaces in the other version
+              ! ! The basic framework is here, but it is now deprecated -- may
+              ! have some advantages in not requiering VF field -- but if the
+              ! pressure-temperature equilibration stability problems are fixed,
+              ! the other version would be equivalent if not better since
+              ! compoent rho is not assumed constant across interfaces in the
+              ! other version
 
               ! if(useTiwari) then
 
               !    if(useRhoYsbound) then                  
               !       !anti diffusion term and mask --- for intSharp_cut > 0
-              !       RhoYsbound = rho*this%material(i)%Ys ! = rhoi(:,:,:,i)*VFbound(:,:,:,i)
+              !       RhoYsbound = rho*this%material(i)%Ys ! =
+              !       rhoi(:,:,:,i)*VFbound(:,:,:,i)
               !       where (this%material(i)%VF .lt. this%intSharp_cut)
               !          RhoYsbound = rhoi(:,:,:,i) * this%intSharp_cut
               !       elsewhere (this%material(i)%VF .gt. one-this%intSharp_cut)
@@ -2074,32 +2336,49 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               !    endif
 
               !    if(this%intSharp_flt) then
-              !       call filter3D(this%decomp, this%fil, filt, iflag, x_bc, y_bc,z_bc)
+              !       call filter3D(this%decomp, this%fil, filt, iflag, x_bc,
+              !       y_bc,z_bc)
               !    endif
 
-              !    call gradient(this%decomp,this%der,filt,gradRhoYs(:,:,:,1),gradRhoYs(:,:,:,2),gradRhoYs(:,:,:,3))
+              !    call
+              !    gradient(this%decomp,this%der,filt,gradRhoYs(:,:,:,1),gradRhoYs(:,:,:,2),gradRhoYs(:,:,:,3))
 
-              !    filt = this%intSharp_eps * ( norm(:,:,:,1)*gradRhoYs(:,:,:,1) + norm(:,:,:,2)*gradRhoYs(:,:,:,2) + norm(:,:,:,3)*gradRhoYs(:,:,:,3) )
+              !    filt = this%intSharp_eps * ( norm(:,:,:,1)*gradRhoYs(:,:,:,1)
+              !    + norm(:,:,:,2)*gradRhoYs(:,:,:,2) +
+              !    norm(:,:,:,3)*gradRhoYs(:,:,:,3) )
 
               !    if(this%intSharp_flt) then
-              !       call filter3D(this%decomp, this%fil, filt, iflag, x_bc, y_bc,z_bc)
+              !       call filter3D(this%decomp, this%fil, filt, iflag, x_bc,
+              !       y_bc,z_bc)
               !    endif
 
-              !    call gradient(this%decomp,this%der,filt,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3))
+              !    call
+              !    gradient(this%decomp,this%der,filt,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3))
 
-              !    gradVF(:,:,:,1) = gradVF(:,:,:,1) - (one-two*VFbound(:,:,:,i))/(one-this%intSharp_eps) * gradRhoYs(:,:,:,1)
-              !    gradVF(:,:,:,2) = gradVF(:,:,:,2) - (one-two*VFbound(:,:,:,i))/(one-this%intSharp_eps) * gradRhoYs(:,:,:,2)
-              !    gradVF(:,:,:,3) = gradVF(:,:,:,3) - (one-two*VFbound(:,:,:,i))/(one-this%intSharp_eps) * gradRhoYs(:,:,:,3)
+              !    gradVF(:,:,:,1) = gradVF(:,:,:,1) -
+              !    (one-two*VFbound(:,:,:,i))/(one-this%intSharp_eps) *
+              !    gradRhoYs(:,:,:,1)
+              !    gradVF(:,:,:,2) = gradVF(:,:,:,2) -
+              !    (one-two*VFbound(:,:,:,i))/(one-this%intSharp_eps) *
+              !    gradRhoYs(:,:,:,2)
+              !    gradVF(:,:,:,3) = gradVF(:,:,:,3) -
+              !    (one-two*VFbound(:,:,:,i))/(one-this%intSharp_eps) *
+              !    gradRhoYs(:,:,:,3)
 
-              !    filt = this%intSharp_gam * (norm(:,:,:,1)*gradVF(:,:,:,1) + norm(:,:,:,2)*gradVF(:,:,:,2) + norm(:,:,:,3)*gradVF(:,:,:,3)) * mask * tanh((antiDiff/this%intSharp_tnh)**two)
+              !    filt = this%intSharp_gam * (norm(:,:,:,1)*gradVF(:,:,:,1) +
+              !    norm(:,:,:,2)*gradVF(:,:,:,2) +
+              !    norm(:,:,:,3)*gradVF(:,:,:,3)) * mask *
+              !    tanh((antiDiff/this%intSharp_tnh)**two)
 
               !    if(this%intSharp_flt) then
-              !       call filter3D(this%decomp, this%fil, filt, iflag, x_bc, y_bc,z_bc)
+              !       call filter3D(this%decomp, this%fil, filt, iflag, x_bc,
+              !       y_bc,z_bc)
               !    endif
 
               !    this%material(i)%intSharp_R(:,:,:,1) = filt
 
-              !    !set components 2 and 3 to zero when not in divergence form -- not used
+              !    !set components 2 and 3 to zero when not in divergence form
+              !    -- not used
               !    this%material(i)%intSharp_R(:,:,:,2) = zero
               !    this%material(i)%intSharp_R(:,:,:,3) = zero
 
@@ -2112,7 +2391,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               this%material(i)%intSharp_aDiff = zero
 
               if(this%intSharp_msk) then
-                 this%VFboundDiff(:,:,:,i) = this%intSharp_dif*this%VFboundDiff(:,:,:,i)  
+                 this%VFboundDiff(:,:,:,i) =this%intSharp_dif*this%VFboundDiff(:,:,:,i)  
                  mask2 = mask
                  !mask2 = mask*tanhmask      !original        
               else
@@ -2121,59 +2400,67 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  !mask2 = mask
               endif
 
-
-              !form low and high order FD diffusion terms for VF
+          !form low and high order FD diffusion terms for VF
               if(this%intSharp_ufv) then
 
                  !high order --- high order --- FD diffusion away from interface
                  this%material(i)%intSharp_a = zero
                  do j=1,3
-                    !this%material(i)%intSharp_aDiff(:,:,:,j) = this%intSharp_gam*this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
+                    !this%material(i)%intSharp_aDiff(:,:,:,j) =
+                    !this%intSharp_gam*this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
 
-                    this%material(i)%intSharp_aDiff(:,:,:,j) = this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
+                    this%material(i)%intSharp_aDiff(:,:,:,j) =this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
 
-                    !Gaussian filter to smooth out-of-bounds diffusion -- similar to LAD
-                    call filter3D(this%decomp, this%gfil, this%material(i)%intSharp_aDiff(:,:,:,j), iflag, x_bc, y_bc,z_bc)
+                    !Gaussian filter to smooth out-of-bounds diffusion --
+                    !similar to LAD
+                    call filter3D(this%decomp, this%gfil,this%material(i)%intSharp_aDiff(:,:,:,j), iflag, x_bc, y_bc,z_bc)
                  enddo
 
 
               else
 
                  if(.NOT.this%intSharp_d02) then !high order FD
-                    !high order --- high order --- FD diffusion away from interface
+                    !high order --- high order --- FD diffusion away from
+                    !interface
                     this%material(i)%intSharp_a = zero
                     do j=1,3
-                       !this%material(i)%intSharp_aDiff(:,:,:,j) = this%intSharp_gam*this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
-                       this%material(i)%intSharp_aDiff(:,:,:,j) = this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
-                       !Gaussian filter to smooth out-of-bounds diffusion -- similar to LAD
-                       call filter3D(this%decomp, this%gfil, this%material(i)%intSharp_aDiff(:,:,:,j), iflag, x_bc, y_bc,z_bc)
+                       !this%material(i)%intSharp_aDiff(:,:,:,j) =
+                       !this%intSharp_gam*this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
+                       this%material(i)%intSharp_aDiff(:,:,:,j) =this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
+                       !Gaussian filter to smooth out-of-bounds diffusion --
+                       !similar to LAD
+                       call filter3D(this%decomp, this%gfil,this%material(i)%intSharp_aDiff(:,:,:,j), iflag, x_bc, y_bc,z_bc)
                     enddo
 
 
                     if(.NOT.useHighOrder) then ! low order for interface terms
-                       !low order -- interface sharpening and coupled diffusion -- this is unstable -- high order gradVF and norm are the problem
+                       !low order -- interface sharpening and coupled diffusion
+                       !-- this is unstable -- high order gradVF and norm are
+                       !the problem
                        do j=1,3
-                          this%material(i)%intSharp_a(:,:,:,j) = this%material(i)%intSharp_a(:,:,:,j) + this%intSharp_gam*(this%intSharp_eps*gradVFdiff(:,:,:,j)*mask2 - antiDiff * norm(:,:,:,j))
+                          this%material(i)%intSharp_a(:,:,:,j) =this%material(i)%intSharp_a(:,:,:,j) + this%intSharp_gam*(this%intSharp_eps*gradVFdiff(:,:,:,j)*mask2 - antiDiff *norm(:,:,:,j))
                        enddo
                     else !high order for interface terms --- this is unstable
                        !high order -- interface sharpening and coupled diffusion
                        do j=1,3
-                          this%material(i)%intSharp_aDiff(:,:,:,j) = this%material(i)%intSharp_aDiff(:,:,:,j) + this%intSharp_gam*(this%intSharp_eps*gradVFdiff(:,:,:,j)*mask2 - antiDiff * norm(:,:,:,j))
+                          this%material(i)%intSharp_aDiff(:,:,:,j) =this%material(i)%intSharp_aDiff(:,:,:,j) +this%intSharp_gam*(this%intSharp_eps*gradVFdiff(:,:,:,j)*mask2 - antiDiff *norm(:,:,:,j))
                        enddo
                     endif
 
                  else !low order FD
                     !low order -- diffusion away from interface
                     do j=1,3
-                       !this%material(i)%intSharp_a(:,:,:,j) = this%intSharp_gam*this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
-                       this%material(i)%intSharp_a(:,:,:,j) = this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
-                       !Gaussian filter to smooth out-of-bounds diffusion -- similar to LAD
-                       call filter3D(this%decomp, this%gfil, this%material(i)%intSharp_a(:,:,:,j), iflag, x_bc, y_bc,z_bc)
+                       !this%material(i)%intSharp_a(:,:,:,j) =
+                       !this%intSharp_gam*this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
+                       this%material(i)%intSharp_a(:,:,:,j) =this%intSharp_eps*gradVFdiff(:,:,:,j)*this%VFboundDiff(:,:,:,i)
+                       !Gaussian filter to smooth out-of-bounds diffusion --
+                       !similar to LAD
+                       call filter3D(this%decomp, this%gfil,this%material(i)%intSharp_a(:,:,:,j), iflag, x_bc, y_bc,z_bc)
                     enddo
 
                     !low order -- interface sharpening and coupled diffusion
                     do j=1,3
-                       this%material(i)%intSharp_a(:,:,:,j) = this%material(i)%intSharp_a(:,:,:,j) + this%intSharp_gam*(this%intSharp_eps*gradVF(:,:,:,j)*mask2 - antiDiff * norm(:,:,:,j))
+                       this%material(i)%intSharp_a(:,:,:,j) =this%material(i)%intSharp_a(:,:,:,j) +this%intSharp_gam*(this%intSharp_eps*gradVF(:,:,:,j)*mask2 - antiDiff *norm(:,:,:,j))
                     enddo
                  endif
 
@@ -2183,46 +2470,56 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
            !filter conservative fluxes and updates
            if(this%intSharp_flt) then
-              call filter3D(this%decomp, this%fil, this%material(i)%intSharp_a(:,:,:,1), iflag, x_bc, y_bc,z_bc)
-              call filter3D(this%decomp, this%fil, this%material(i)%intSharp_a(:,:,:,2), iflag, x_bc, y_bc,z_bc)
-              call filter3D(this%decomp, this%fil, this%material(i)%intSharp_a(:,:,:,3), iflag, x_bc, y_bc,z_bc)
+              call filter3D(this%decomp, this%fil,this%material(i)%intSharp_a(:,:,:,1), iflag, x_bc, y_bc,z_bc)
+              call filter3D(this%decomp, this%fil,this%material(i)%intSharp_a(:,:,:,2), iflag, x_bc, y_bc,z_bc)
+              call filter3D(this%decomp, this%fil,this%material(i)%intSharp_a(:,:,:,3), iflag, x_bc, y_bc,z_bc)
 
-              call filter3D(this%decomp, this%fil, this%material(i)%intSharp_aDiff(:,:,:,1), iflag, x_bc, y_bc,z_bc)
-              call filter3D(this%decomp, this%fil, this%material(i)%intSharp_aDiff(:,:,:,2), iflag, x_bc, y_bc,z_bc)
-              call filter3D(this%decomp, this%fil, this%material(i)%intSharp_aDiff(:,:,:,3), iflag, x_bc, y_bc,z_bc)
+              call filter3D(this%decomp, this%fil,this%material(i)%intSharp_aDiff(:,:,:,1), iflag, x_bc, y_bc,z_bc)
+              call filter3D(this%decomp, this%fil,this%material(i)%intSharp_aDiff(:,:,:,2), iflag, x_bc, y_bc,z_bc)
+              call filter3D(this%decomp, this%fil,this%material(i)%intSharp_aDiff(:,:,:,3), iflag, x_bc, y_bc,z_bc)
 
-              call filter3D(this%decomp, this%fil, this%material(i)%intSharp_aFV, iflag, x_bc, y_bc,z_bc)
-              call filter3D(this%decomp, this%fil, this%material(i)%intSharp_RFV, iflag, x_bc, y_bc,z_bc)
+              call filter3D(this%decomp, this%fil,this%material(i)%intSharp_aFV, iflag, x_bc, y_bc,z_bc)
+              call filter3D(this%decomp, this%fil,this%material(i)%intSharp_RFV, iflag, x_bc, y_bc,z_bc)
            endif
 
         enddo
 
 
-        if(this%intSharp_spf.and.useNewSPF.and.useNewSPFfull) then !useNewSPFfull leads to interface instability in coupling terms
+        if(this%intSharp_spf.and.useNewSPF.and.useNewSPFfull) then
+!useNewSPFfull leads to interface instability in coupling terms
            !if(useTiwari) then
            if(this%intSharp_utw) then
               print*, "can't use Tiwari here"
               stop
            endif
-        !   !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
+        !   !enfoce surface normals sum to zero --- correct intSharp_a for
+        !   material ns --- this should be modifed for ns > 2
         !   !i.e. conserve intSharp_a intSharp__r
 
         !   ! do i = 1,this%ns
-        !   !    this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1) !this is still used in divergence form for OOB diffusion
-        !   !    this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
-        !   !    this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
+        !   !    this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) *
+        !   this%material(i)%intSharp_aDiff(:,:,:,1) !this is still used in
+        !   divergence form for OOB diffusion
+        !   !    this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) *
+        !   this%material(i)%intSharp_aDiff(:,:,:,2)
+        !   !    this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) *
+        !   this%material(i)%intSharp_aDiff(:,:,:,3)
         !   ! enddo
 
 
 
-        !   !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
+        !   !enfoce surface normals sum to zero --- correct intSharp_a for
+        !   material ns --- this should be modifed for ns > 2
 
         !   !out-of-bounds diffusion terms
         !   tmp4 = zero
         !   do j = 1,this%ns-1
-        !      tmp4(:,:,:,1) = tmp4(:,:,:,1) + this%material(j)%intSharp_aDiff(:,:,:,1)
-        !      tmp4(:,:,:,2) = tmp4(:,:,:,2) + this%material(j)%intSharp_aDiff(:,:,:,2)
-        !      tmp4(:,:,:,3) = tmp4(:,:,:,3) + this%material(j)%intSharp_aDiff(:,:,:,3)
+        !      tmp4(:,:,:,1) = tmp4(:,:,:,1) +
+        !      this%material(j)%intSharp_aDiff(:,:,:,1)
+        !      tmp4(:,:,:,2) = tmp4(:,:,:,2) +
+        !      this%material(j)%intSharp_aDiff(:,:,:,2)
+        !      tmp4(:,:,:,3) = tmp4(:,:,:,3) +
+        !      this%material(j)%intSharp_aDiff(:,:,:,3)
         !   enddo
         !   this%material(this%ns)%intSharp_aDiff(:,:,:,1) = -tmp4(:,:,:,1)
         !   this%material(this%ns)%intSharp_aDiff(:,:,:,2) = -tmp4(:,:,:,2)
@@ -2231,13 +2528,22 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !   !mass flux --  rho*Ys flux --  R_i
         !   do i = 1,this%ns
         !      if(useRhoLocal) then !use local component density --- recommended
-        !         this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1)
-        !         this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
-        !         this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
+        !         this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) *
+        !         this%material(i)%intSharp_aDiff(:,:,:,1)
+        !         this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) *
+        !         this%material(i)%intSharp_aDiff(:,:,:,2)
+        !         this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) *
+        !         this%material(i)%intSharp_aDiff(:,:,:,3)
         !      else
-        !         this%material(i)%intSharp_RDiff(:,:,:,1) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,1)
-        !         this%material(i)%intSharp_RDiff(:,:,:,2) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,2)
-        !         this%material(i)%intSharp_RDiff(:,:,:,3) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,3)
+        !         this%material(i)%intSharp_RDiff(:,:,:,1) =
+        !         this%material(i)%elastic%rho0 *
+        !         this%material(i)%intSharp_aDiff(:,:,:,1)
+        !         this%material(i)%intSharp_RDiff(:,:,:,2) =
+        !         this%material(i)%elastic%rho0 *
+        !         this%material(i)%intSharp_aDiff(:,:,:,2)
+        !         this%material(i)%intSharp_RDiff(:,:,:,3) =
+        !         this%material(i)%elastic%rho0 *
+        !         this%material(i)%intSharp_aDiff(:,:,:,3)
         !      endif
         !   enddo
 
@@ -2258,34 +2564,49 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         !      ! u
         !      if (this%intSharp_d02)  then
-        !         call gradient(this%decomp,this%derD02,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !         call
+        !         gradient(this%decomp,this%derD02,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
         !      else
-        !         call gradient(this%decomp,this%der,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !         call
+        !         gradient(this%decomp,this%der,spf_f*u,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
         !      endif
-        !      this%intSharp_f(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+        !      this%intSharp_f(:,:,:,1) = this%intSharp_gam *
+        !      (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) +
+        !      norm(:,:,:,3)*tmp4(:,:,:,3))
 
         !      ! v
         !      if (this%intSharp_d02)  then
-        !         call gradient(this%decomp,this%derD02,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !         call
+        !         gradient(this%decomp,this%derD02,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
         !      else
-        !         call gradient(this%decomp,this%der,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !         call
+        !         gradient(this%decomp,this%der,spf_f*v,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
         !      endif
-        !      this%intSharp_f(:,:,:,2) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+        !      this%intSharp_f(:,:,:,2) = this%intSharp_gam *
+        !      (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) +
+        !      norm(:,:,:,3)*tmp4(:,:,:,3))
 
         !      ! w
         !      if (this%intSharp_d02)  then
-        !         call gradient(this%decomp,this%derD02,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !         call
+        !         gradient(this%decomp,this%derD02,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
         !      else
-        !         call gradient(this%decomp,this%der,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !         call
+        !         gradient(this%decomp,this%der,spf_f*w,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
         !      endif
-        !      this%intSharp_f(:,:,:,3) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+        !      this%intSharp_f(:,:,:,3) = this%intSharp_gam *
+        !      (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) +
+        !      norm(:,:,:,3)*tmp4(:,:,:,3))
 
 
         !      do i = 1,this%ns
         !         !high order FD terms
-        !         this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,1)
-        !         this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,2)  
-        !         this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) + this%material(i)%intSharp_RDiff(:,:,:,3)
+        !         this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1) +
+        !         this%material(i)%intSharp_RDiff(:,:,:,1)
+        !         this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2) +
+        !         this%material(i)%intSharp_RDiff(:,:,:,2)  
+        !         this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) +
+        !         this%material(i)%intSharp_RDiff(:,:,:,3)
         !      enddo
         !   endif
 
@@ -2300,22 +2621,30 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !      spf_h = zero
         !      do i = 1,this%ns
         !         call this%material(i)%get_enthalpy(hi(:,:,:,i))
-        !         spf_h = spf_h + spf_r(:,:,:,i)*(hi(:,:,:,i) + half*(u**two + v**two + w**two) )
+        !         spf_h = spf_h + spf_r(:,:,:,i)*(hi(:,:,:,i) + half*(u**two +
+        !         v**two + w**two) )
         !      enddo
         !      if (this%intSharp_d02)  then
-        !         call gradient(this%decomp,this%derD02,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !         call
+        !         gradient(this%decomp,this%derD02,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
         !      else
-        !         call gradient(this%decomp,this%der,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
+        !         call
+        !         gradient(this%decomp,this%der,spf_h,tmp4(:,:,:,1),tmp4(:,:,:,2),tmp4(:,:,:,3))
         !      endif
-        !      this%intSharp_h(:,:,:,1) = this%intSharp_gam * (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) + norm(:,:,:,3)*tmp4(:,:,:,3))
+        !      this%intSharp_h(:,:,:,1) = this%intSharp_gam *
+        !      (norm(:,:,:,1)*tmp4(:,:,:,1) + norm(:,:,:,2)*tmp4(:,:,:,2) +
+        !      norm(:,:,:,3)*tmp4(:,:,:,3))
         !      this%intSharp_h(:,:,:,2) = zero
         !      this%intSharp_h(:,:,:,3) = zero
 
         !      do i = 1,this%ns
         !         !high order FD terms
-        !         this%intSharp_hDiff(:,:,:,1) = this%intSharp_hDiff(:,:,:,1) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,1)
-        !         this%intSharp_hDiff(:,:,:,2) = this%intSharp_hDiff(:,:,:,2) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,2)
-        !         this%intSharp_hDiff(:,:,:,3) = this%intSharp_hDiff(:,:,:,3) + hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,3)
+        !         this%intSharp_hDiff(:,:,:,1) = this%intSharp_hDiff(:,:,:,1) +
+        !         hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,1)
+        !         this%intSharp_hDiff(:,:,:,2) = this%intSharp_hDiff(:,:,:,2) +
+        !         hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,2)
+        !         this%intSharp_hDiff(:,:,:,3) = this%intSharp_hDiff(:,:,:,3) +
+        !         hi(:,:,:,i) * this%material(i)%intSharp_RDiff(:,:,:,3)
         !      enddo
 
         !   endif
@@ -2326,14 +2655,15 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         else ! i.e. NOT:  if(this%intSharp_spf.and.useNewSPF.and.useNewSPFfull)  
 
 
-           !enfoce surface normals sum to zero --- correct intSharp_a for material ns --- this should be modifed for ns > 2
+           !enfoce surface normals sum to zero --- correct intSharp_a for
+           !material ns --- this should be modifed for ns > 2
 
            !sharpening terms
            tmp4 = zero
            do j = 1,this%ns-1
-              tmp4(:,:,:,1) = tmp4(:,:,:,1) + this%material(j)%intSharp_a(:,:,:,1)
-              tmp4(:,:,:,2) = tmp4(:,:,:,2) + this%material(j)%intSharp_a(:,:,:,2)
-              tmp4(:,:,:,3) = tmp4(:,:,:,3) + this%material(j)%intSharp_a(:,:,:,3)
+              tmp4(:,:,:,1) = tmp4(:,:,:,1) +this%material(j)%intSharp_a(:,:,:,1)
+              tmp4(:,:,:,2) = tmp4(:,:,:,2) +this%material(j)%intSharp_a(:,:,:,2)
+              tmp4(:,:,:,3) = tmp4(:,:,:,3) +this%material(j)%intSharp_a(:,:,:,3)
            enddo
            this%material(this%ns)%intSharp_a(:,:,:,1) = -tmp4(:,:,:,1)
            this%material(this%ns)%intSharp_a(:,:,:,2) = -tmp4(:,:,:,2)
@@ -2342,9 +2672,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            !out-of-bounds diffusion terms
            tmp4 = zero
            do j = 1,this%ns-1
-              tmp4(:,:,:,1) = tmp4(:,:,:,1) + this%material(j)%intSharp_aDiff(:,:,:,1)
-              tmp4(:,:,:,2) = tmp4(:,:,:,2) + this%material(j)%intSharp_aDiff(:,:,:,2)
-              tmp4(:,:,:,3) = tmp4(:,:,:,3) + this%material(j)%intSharp_aDiff(:,:,:,3)
+              tmp4(:,:,:,1) = tmp4(:,:,:,1) +this%material(j)%intSharp_aDiff(:,:,:,1)
+              tmp4(:,:,:,2) = tmp4(:,:,:,2) +this%material(j)%intSharp_aDiff(:,:,:,2)
+              tmp4(:,:,:,3) = tmp4(:,:,:,3) +this%material(j)%intSharp_aDiff(:,:,:,3)
            enddo
            this%material(this%ns)%intSharp_aDiff(:,:,:,1) = -tmp4(:,:,:,1)
            this%material(this%ns)%intSharp_aDiff(:,:,:,2) = -tmp4(:,:,:,2)
@@ -2360,27 +2690,27 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  if(this%intSharp_spf.and.useNewSPF) then
                     !already calculated
                  else
-                    this%material(i)%intSharp_R(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_a(:,:,:,1)
-                    this%material(i)%intSharp_R(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_a(:,:,:,2)
-                    this%material(i)%intSharp_R(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_a(:,:,:,3)
+                    this%material(i)%intSharp_R(:,:,:,1) = rhoi(:,:,:,i) *this%material(i)%intSharp_a(:,:,:,1)
+                    this%material(i)%intSharp_R(:,:,:,2) = rhoi(:,:,:,i) *this%material(i)%intSharp_a(:,:,:,2)
+                    this%material(i)%intSharp_R(:,:,:,3) = rhoi(:,:,:,i) *this%material(i)%intSharp_a(:,:,:,3)
                  endif
 
-                 this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,1)
-                 this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,2)
-                 this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) * this%material(i)%intSharp_aDiff(:,:,:,3)
+                 this%material(i)%intSharp_RDiff(:,:,:,1) = rhoi(:,:,:,i) *this%material(i)%intSharp_aDiff(:,:,:,1)
+                 this%material(i)%intSharp_RDiff(:,:,:,2) = rhoi(:,:,:,i) *this%material(i)%intSharp_aDiff(:,:,:,2)
+                 this%material(i)%intSharp_RDiff(:,:,:,3) = rhoi(:,:,:,i) *this%material(i)%intSharp_aDiff(:,:,:,3)
 
               else
                  if(this%intSharp_spf.and.useNewSPF) then
                     !already calculated
                  else
-                    this%material(i)%intSharp_R(:,:,:,1) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_a(:,:,:,1)
-                    this%material(i)%intSharp_R(:,:,:,2) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_a(:,:,:,2)
-                    this%material(i)%intSharp_R(:,:,:,3) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_a(:,:,:,3)
+                    this%material(i)%intSharp_R(:,:,:,1) =this%material(i)%elastic%rho0 * this%material(i)%intSharp_a(:,:,:,1)
+                    this%material(i)%intSharp_R(:,:,:,2) =this%material(i)%elastic%rho0 * this%material(i)%intSharp_a(:,:,:,2)
+                    this%material(i)%intSharp_R(:,:,:,3) =this%material(i)%elastic%rho0 * this%material(i)%intSharp_a(:,:,:,3)
                  endif
 
-                 this%material(i)%intSharp_RDiff(:,:,:,1) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,1)
-                 this%material(i)%intSharp_RDiff(:,:,:,2) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,2)
-                 this%material(i)%intSharp_RDiff(:,:,:,3) = this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,3)
+                 this%material(i)%intSharp_RDiff(:,:,:,1) =this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,1)
+                 this%material(i)%intSharp_RDiff(:,:,:,2) =this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,2)
+                 this%material(i)%intSharp_RDiff(:,:,:,3) =this%material(i)%elastic%rho0 * this%material(i)%intSharp_aDiff(:,:,:,3)
 
               endif
 
@@ -2398,7 +2728,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  spf_f = zero
                  !spf update term
                  do i = 1,this%ns
-                    !this%intSharp_f(:,:,:,1) = this%intSharp_f(:,:,:,1) + this%material(i)%intSharp_R(:,:,:,1)
+                    !this%intSharp_f(:,:,:,1) = this%intSharp_f(:,:,:,1) +
+                    !this%material(i)%intSharp_R(:,:,:,1)
                     spf_f = spf_f + this%material(i)%intSharp_R(:,:,:,1)
                  enddo
                  this%intSharp_f(:,:,:,1) = spf_f * u 
@@ -2410,33 +2741,34 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                  do i = 1,this%ns
                     !high order FD terms
-                    this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,1)
-                    this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,2)  
-                    this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) + this%material(i)%intSharp_RDiff(:,:,:,3)
+                    this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1)+ this%material(i)%intSharp_RDiff(:,:,:,1)
+                    this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2)+ this%material(i)%intSharp_RDiff(:,:,:,2)  
+                    this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3)+ this%material(i)%intSharp_RDiff(:,:,:,3)
                  enddo
 
               else !i.e. if divergence method 
                  fv_f = zero
                  do i = 1,this%ns
                     !low order FD terms
-                    this%intSharp_f(:,:,:,1) = this%intSharp_f(:,:,:,1) + this%material(i)%intSharp_R(:,:,:,1)
-                    this%intSharp_f(:,:,:,2) = this%intSharp_f(:,:,:,2) + this%material(i)%intSharp_R(:,:,:,2)  
-                    this%intSharp_f(:,:,:,3) = this%intSharp_f(:,:,:,3) + this%material(i)%intSharp_R(:,:,:,3)
+                    this%intSharp_f(:,:,:,1) = this%intSharp_f(:,:,:,1) +this%material(i)%intSharp_R(:,:,:,1)
+                    this%intSharp_f(:,:,:,2) = this%intSharp_f(:,:,:,2) +this%material(i)%intSharp_R(:,:,:,2)  
+                    this%intSharp_f(:,:,:,3) = this%intSharp_f(:,:,:,3) +this%material(i)%intSharp_R(:,:,:,3)
 
                     !high order FD terms
-                    this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1) + this%material(i)%intSharp_RDiff(:,:,:,1)
-                    this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2) + this%material(i)%intSharp_RDiff(:,:,:,2)  
-                    this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3) + this%material(i)%intSharp_RDiff(:,:,:,3)
+                    this%intSharp_fDiff(:,:,:,1) = this%intSharp_fDiff(:,:,:,1)+ this%material(i)%intSharp_RDiff(:,:,:,1)
+                    this%intSharp_fDiff(:,:,:,2) = this%intSharp_fDiff(:,:,:,2)+ this%material(i)%intSharp_RDiff(:,:,:,2)  
+                    this%intSharp_fDiff(:,:,:,3) = this%intSharp_fDiff(:,:,:,3)+ this%material(i)%intSharp_RDiff(:,:,:,3)
 
 
                     !FV term
                     if(this%intSharp_ufv) then
-                       fv_f = fv_f + rhoiFVint(:,:,:,:,i)*antiDiffFVint(:,:,:,:,i) 
+                       fv_f = fv_f +rhoiFVint(:,:,:,:,i)*antiDiffFVint(:,:,:,:,i) 
                     endif
                  enddo
 
                  !FV terms
                  if(this%intSharp_ufv) then
+
                     call divergenceFV(this,fv_f*uFVint,this%intSharp_fFV(:,:,:,1),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
                     call divergenceFV(this,fv_f*vFVint,this%intSharp_fFV(:,:,:,2),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
                     call divergenceFV(this,fv_f*wFVint,this%intSharp_fFV(:,:,:,3),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -2678,7 +3010,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         endif
 
-    end subroutine get_intSharp
+ end subroutine get_intSharp
 
     subroutine get_surfaceTension(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
@@ -2691,11 +3023,11 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind),                                        intent(in) :: dx,dy,dz
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
         logical,                                            intent(in) :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: GVFmag, GPHImag, mask2, updatedKappa, weight, kappaSum
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: VFmag, GVFmag, GPHImag, mask2, updatedKappa, weight, kappaSum, phi, xi
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi, gradxi
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint
 	integer :: iflag = one
-	real(rkind) :: r = 0.5D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0 
+	real(rkind) :: r = 0.5D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0, e = 1D-100 
 	!TODO: add additional arrays to be used locally in calculation of surface tension force
         integer :: i,j,k,n
         integer, dimension(2) :: coords
@@ -2715,6 +3047,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         !TODO: Compute curvature (use gradient and divergence operators)
         !for example, to take the gradient of the volume fraction of species # 1
+
+
+        call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
         
 	if (this%use_gradVF) then
 
@@ -2758,7 +3093,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 	
 			 call divergenceFV(this,NMint, this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 	
-		else
+	       
+
+        	else
 
 		!kappa, divergence of surface normal	
         	!TODO: double check BCs for div(norm)... do they follow symmetry, or are they opposite?
@@ -2767,7 +3104,44 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 		endif
 	endif
 
-	if (this%use_gradphi) then
+	if (this%use_gradXi) then
+
+               
+          !! Construct xi and account for outbounds behaviour
+          where( this%material(1)%VF .GT. 1)
+             xi = this%intSharp_eps*log( ( 1 + e )/ ( e))
+
+          elsewhere( this%material(1)%VF .LT. 0)
+             xi = this%intSharp_eps*log( ( e )/ (1 + e) )
+
+          elsewhere
+             xi = this%intSharp_eps*log( ( this%material(1)%VF + e )/ (1-this%material(1)%VF + e) )
+
+          endwhere
+
+          call gradient(this%decomp,this%der,xi,gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3)) 
+
+          !calculate surface normal
+
+          !magnitude of surface vector
+          GVFmag = sqrt( gradxi(:,:,:,1)**two + gradxi(:,:,:,2)**two + gradxi(:,:,:,3)**two )
+
+          !surface normal
+          where (GVFmag < eps)
+            this%norm(:,:,:,1) = zero
+            this%norm(:,:,:,2) = zero
+            this%norm(:,:,:,3) = zero
+          elsewhere
+            this%norm(:,:,:,1) = gradxi(:,:,:,1) / GVFmag
+            this%norm(:,:,:,2) = gradxi(:,:,:,2) / GVFmag
+            this%norm(:,:,:,3) = gradxi(:,:,:,3) / GVFmag
+          endwhere
+           
+          call divergence(this%decomp,this%der,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
+
+        endif
+
+        if (this%use_gradphi) then
 
 
                 where( (this%material(1)%VF .GT. minVF) .AND. (this%material(1)%VF .LT. 1) )
@@ -3405,10 +3779,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !do imat = 1, this%ns
         !  call this%material(imat)%update_VF(this%material( 2-mod(imat+1,2) ),isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,x_bc,y_bc,z_bc)
         !end do
-        call this%material(1)%update_VF(this%material(2),isub,dt,rho,u,v,w,x,y,z,tsim,divu, src,x_bc,y_bc,z_bc)
+        call this%material(2)%update_VF(this%material(2),isub,dt,rho,u,v,w,x,y,z,tsim,divu, src,x_bc,y_bc,z_bc)
         !call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc)
 
-        this%material(2)%VF = one - this%material(1)%VF
+        this%material(1)%VF = one - this%material(2)%VF
 
     end subroutine
 
