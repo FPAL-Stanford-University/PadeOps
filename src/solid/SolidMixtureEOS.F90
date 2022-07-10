@@ -1865,9 +1865,11 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
            !  call filter3D(this%decomp, this%fil, this%xi, iflag, x_bc,y_bc,z_bc)
 
-       
-             call gradient(this%decomp,this%derD02,this%xi,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3)) !low order
-
+             if(this%intSharp_d02) then       
+               call gradient(this%decomp,this%derD02,this%xi,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3)) !low order
+             else
+               call gradient(this%decomp,this%derD06,this%xi,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3))
+             endif
                            
 
     
@@ -1875,6 +1877,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
               call gradient(this%decomp,this%derD02,this%material(i)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !low order
               call gradient(this%decomp,this%derD06,this%material(i)%VF,gradVFdiff(:,:,:,1),gradVFdiff(:,:,:,2),gradVFdiff(:,:,:,3)) 
+
+
+             ! call gradientFV(this,this%material(i)%VF,gradVFdiff,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+
 
            endif
 
@@ -1932,9 +1938,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
            ! !framework to filter surface normal if needed --- normal is not conservative so best not to?
            ! if(this%intSharp_flt) then
-               call filter3D(this%decomp, this%gfil, norm(:,:,:,1), iflag, x_bc, y_bc,z_bc)
-               call filter3D(this%decomp, this%gfil, norm(:,:,:,2), iflag, x_bc, y_bc,z_bc)
-               call filter3D(this%decomp, this%gfil, norm(:,:,:,3), iflag, x_bc, y_bc,z_bc)
+           !    call filter3D(this%decomp, this%gfil, norm(:,:,:,1), iflag, x_bc, y_bc,z_bc)
+           !    call filter3D(this%decomp, this%gfil, norm(:,:,:,2), iflag, x_bc, y_bc,z_bc)
+           !    call filter3D(this%decomp, this%gfil, norm(:,:,:,3), iflag, x_bc, y_bc,z_bc)
            ! endif
 
 
@@ -1944,9 +1950,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               !interpolate nodes to faces: ( i, j, k ) -> ( i+1/2, j+1/2, k+1/2 )
               call interpolateFV(this,this%material(i)%VF,VFint,periodicx,periodicy,periodicz,      this%x_bc, this%y_bc, this%z_bc)
               !TODO: make sure these BCS for surface normal are correct
+             
               call interpolateFV(this,norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
               call interpolateFV(this,norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
               call interpolateFV(this,norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
+             
+
               call interpolateFV(this,u,uFVint,periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
               call interpolateFV(this,v,vFVint,periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
               call interpolateFV(this,w,wFVint,periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
@@ -2106,7 +2115,6 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
            this%VFboundDiff(:,:,:,i) = zero
            maskDiff = zero
-
            ! if(this%intSharp_ufv) then
            md1 = this%intSharp_cut**half !need to set a larger cutoff toeffectively blend FV and FD
            ! else
