@@ -18,13 +18,13 @@ module SolidMod
         logical :: plast = .FALSE.
         logical :: explPlast = .FALSE.
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .TRUE., includeSources = .FALSE.
-        logical :: use_gTg = .FALSE.,useOneG = .FALSE.,intSharp = .FALSE.,intSharp_spf = .TRUE.,intSharp_ufv = .TRUE.,intSharp_d02 = .TRUE.,strainHard = .TRUE.,cnsrv_g = .FALSE.,cnsrv_gt = .FALSE.,cnsrv_gp = .FALSE.,cnsrv_pe = .FALSE., intSharp_cpg_west = .FALSE.
+        logical :: useAkshayForm = .FALSE.,use_gTg = .FALSE.,useOneG = .FALSE.,intSharp = .FALSE.,intSharp_spf = .TRUE.,intSharp_ufv = .TRUE.,intSharp_d02 = .TRUE.,strainHard = .TRUE.,cnsrv_g = .FALSE.,cnsrv_gt = .FALSE.,cnsrv_gp = .FALSE.,cnsrv_pe = .FALSE., intSharp_cpg_west = .FALSE.
 
         class(stiffgas ), allocatable :: hydro
         class(sep1solid), allocatable :: elastic
 
         type(decomp_info), pointer :: decomp
-        type(derivatives), pointer :: der,derD02
+        type(derivatives), pointer :: der,derD02, derD06
         type(filters),     pointer :: fil
         type(filters),     pointer :: gfil
 
@@ -97,6 +97,10 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: QtmpVF
         real(rkind), dimension(:,:,:),   allocatable :: Qtmppe
         real(rkind), dimension(:,:,:), allocatable :: modDevSigma
+
+        ! BC
+        integer, dimension(2) :: x_bc, y_bc, z_bc
+
     contains
 
         procedure :: init
@@ -121,6 +125,7 @@ module SolidMod
         procedure :: getRHS_Ys_intSharp
         procedure :: getRHS_eh
         procedure :: getRHS_VF
+        procedure :: getRHS_VF_intSharp
         procedure :: update_g
         !procedure :: update_gTg
         procedure :: update_Ys
@@ -221,19 +226,21 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,derD02,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns)
+    subroutine init(this,decomp,der,derD02,derD06,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,useAkshayForm, updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns, x_bc, y_bc, z_bc)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
-        type(derivatives), target, intent(in) :: der,derD02
+        type(derivatives), target, intent(in) :: der,derD02, derD06
         type(filters),     target, intent(in) :: fil, gfil
         logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot
-        logical, intent(in) :: use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cpg_west,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe
+        logical, intent(in) :: use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cpg_west,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe, useAkshayForm
         integer, intent(in) :: ns
         real(rkind), intent(in) :: intSharp_cut
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
         this%decomp => decomp
         this%der  => der
         this%derD02  => derD02
+        this%derD06  => derD06
         this%fil  => fil
         this%gfil => gfil
        
@@ -250,6 +257,7 @@ contains
         this%intSharp_cut = intSharp_cut
         this%intSharp_cpg_west = intSharp_cpg_west
         this%updateEtot  = updateEtot
+        this%useAkshayForm = useAkshayForm
 
         this%strainHard = strainHard
         this%cnsrv_g  = cnsrv_g
@@ -258,6 +266,9 @@ contains
         this%cnsrv_pe = cnsrv_pe
 
         this%ns = ns
+        this%x_bc = x_bc
+        this%y_bc = y_bc
+        this%z_bc = z_bc
 
         ! Assume everything is in Y decomposition
         this%nxp = decomp%ysz(1)
@@ -688,6 +699,7 @@ contains
         nullify( this%gfil   )
         nullify( this%der    )
         nullify( this%derD02    )
+        nullify( this%derD06    )
         nullify( this%decomp )
     end subroutine
 
@@ -4711,11 +4723,18 @@ contains
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
 
+        rhsVF = 0
+
         if(this%PTeqb) then
             call GracefulExit("update_VF shouldn't be called with PTeqb. Exiting.",4809)
         endif
 
-        call this%getRHS_VF(other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
+        if(this%intSharp) then        
+
+           call this%getRHS_VF_intSharp(other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
+        else
+           call this%getRHS_VF(other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
+        endif
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
 
         ! advance sub-step
@@ -4734,22 +4753,94 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3, rhocsq1, rhocsq2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3, tmp4, tmp5, rhocsq1, rhocsq2
 
         ! Add C/rhom to Fsource
         !--call this%getSpeciesDensity(rho,tmp1)  !-- use this%rhom
         call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
-        if(this%pEqb) then
-            rhsVF = src - rhsVF/this%rhom
-        else
-            rhsVF = -rhsVF/this%rhom
-        endif
-        if(.not. this%includeSources) rhsVF = zero
-
+          
         call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
 
-        rhsVF = rhsVF + u*tmp1 + v*tmp2 + w*tmp3
+        call divergence(this%decomp,this%der,-u*this%VF,-v*this%VF,-w*this%VF,tmp4,-x_bc,-y_bc,-z_bc) 
 
+        call divergence(this%decomp,this%der,u,v,w,tmp5,-x_bc,-y_bc,-z_bc)
+ 
+        if (this%useAkshayForm) then
+           
+
+           if(this%pEqb) then
+               rhsVF = src - rhsVF/this%rhom
+           else
+               rhsVF = -rhsVF/this%rhom
+           endif
+           
+           !if(.not. this%includeSources) rhsVF = zero
+
+           !Original terms
+           rhsVF = rhsVF + u*tmp1 + v*tmp2 + w*tmp3
+
+        else
+      
+           rhsVF = -rhsVF/this%rhom + u*tmp1 + v*tmp2 + w*tmp3
+       endif
+
+
+    end subroutine
+
+    subroutine getRHS_VF_intSharp(this,other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
+        use operators, only: gradient, divergence
+        use constants, only: one
+        class(solid),                                       intent(in)  :: this
+        class(solid),                                       intent(in)  :: other
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  ::rho,u,v,w,divu,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3,tmp4, tmp5,rhocsq1, rhocsq2
+
+        ! Add C/rhom to Fsource
+        !--call this%getSpeciesDensity(rho,tmp1)  !-- use this%rhom
+        call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)
+        
+
+        !if(.not. this%includeSources) rhsVF = zero
+        call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
+
+        call divergence(this%decomp,this%der,-u*this%VF,-v*this%VF,-w*this%VF,tmp4,-x_bc,-y_bc,-z_bc)
+
+        call divergence(this%decomp,this%der,u,v,w,tmp5,-x_bc,-y_bc,-z_bc)
+
+        if(this%useAkshayForm) then
+
+           if(this%pEqb) then
+               rhsVF = src - rhsVF/this%rhom
+           else
+               rhsVF = -rhsVF/this%rhom
+           endif
+
+           !if(.not. this%includeSources) rhsVF = zero
+           
+           rhsVF = -rhsVF/this%rhom + u*tmp1 + v*tmp2 + w*tmp3
+
+        else
+
+          rhsVF = -rhsVF/this%rhom + tmp4 +this%VF*tmp5
+
+        endif
+ 
+ 
+      
+
+        call divergence(this%decomp,this%derD02,this%intSharp_a(:,:,:,1),this%intSharp_a(:,:,:,2),this%intSharp_a(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)
+        ! mass fraction equation is anti-symmetric
+        rhsVF = rhsVF + tmp1
+           
+        !high order terms
+        call divergence(this%decomp,this%der,this%intSharp_aDiff(:,:,:,1),this%intSharp_aDiff(:,:,:,2),this%intSharp_aDiff(:,:,:,3),tmp1,-x_bc,-y_bc,-z_bc)
+        ! mass fraction equation is anti-symmetric
+        rhsVF = rhsVF + tmp1
+           
+        !FV terms
+        rhsVF = rhsVF + this%intSharp_aFV
     end subroutine
 
     subroutine filter(this, iflag, x_bc, y_bc, z_bc, fil)
@@ -4879,10 +4970,13 @@ contains
 
 
     subroutine getSpeciesDensity(this,rho,rhom)
+        use operators,       only: filter3D
         class(solid), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhom
-
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  ::rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: Ys_0, VF_0,Ys_fil,mask,VF_fil
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhom 
+        integer :: i, j ,k, iflag = one
+        real(rkind) :: eps1 = 1d-8, eps2 = 0.70,  minVF = 1d-6 , n = 1 
         ! Get detg in rhom
         rhom = this%g11*(this%g22*this%g33-this%g23*this%g32) &
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
@@ -4891,11 +4985,113 @@ contains
         if (this%use_gTg.and.(.not.this%strainHard)) then
             rhom = sqrt(rhom)
         end if
+  
+
+       !! Clipping Ys and VF !!
+
+       ! eps2 = eps1/this%elastic%rho0 
+    
+       ! where((this%Ys .LT. eps1))
+       !      Ys_0 = eps1
+       ! elsewhere(this%Ys .GT. 1-eps1)
+       !      Ys_0 = 1-eps1
+       ! elsewhere
+       !      Ys_0 = this%Ys
+       ! endwhere
+
+       !! clip negative and zero values !!
+      ! where(this%VF .LT. eps1)
+
+      !    VF_0 = eps1
+
+      ! elsewhere(this%VF .GT. 1-eps1)
+
+      !    VF_0 = 1-eps1
+
+      ! elsewhere
+
+      !    VF_0 = this%VF      
+
+       ! endwhere
+
+
+       !! clip negative and zero values !!
+      ! where(this%Ys .LT. eps1)
+
+      !   Ys_0 = eps1
+
+      ! elsewhere(this%Ys .GT. eps1)
+
+      !   Ys_0 = 1-eps1
+
+      ! elsewhere
+
+      !   Ys_0 = this%Ys
+
+      ! endwhere
+!print *, "before filter"
+
+      ! Ys_fil = Ys_0**(0.75) /( Ys_0**(0.75) + (1- Ys_0)**(0.75))
+      ! VF_fil = VF_0**(0.75) /(Ys_0**(0.75) + (1 - Ys_0)**(0.75))
+       !call filter3D(this%decomp, this%fil, Ys_fil, iflag, this%x_bc,this%y_bc,this%z_bc)
+       !call filter3D(this%decomp, this%fil, VF_fil, iflag, this%x_bc,this%y_bc,this%z_bc)
+!print *, "after filter"
+
+       
+      ! mask = (1 - 4*Ys_fil*(1-Ys_fil))**n
+
+      !  where(mask .GE. eps2)
+
+          rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)
+
+       ! elsewhere
+
+        !  rhom = (rho*Ys_0 + this%elastic%rho0*rhom*epssmall)/(VF_0 + epssmall)
+
+       ! endwhere
 
         ! Get rhom = rho*Ys/VF (Additional terms to give correct limiting behaviour when Ys and VF tend to 0)
-        rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)   
+        
+       
+
+!     !   where((this%Ys .LT. eps2))
+
+       !  rhom = ( this%elastic%rho0*rhom*epssmall)/(epssmall)
+        
+
+       ! elsewhere((this%Ys .LT. 0 ) .AND. (this%VF .LT. 0) )
+        
+       !   rhom = ( this%elastic%rho0*rhom*epssmall)/( epssmall)
+
+       ! elsewhere( (this%Ys .LT. 0) .AND. (this%VF .GT. 0))
+
+       !   rhom = (this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)
+       !elsewhere( this%Ys .GT. 1-eps2)
+
+        ! rhom = (rho*(1) + this%elastic%rho0*rhom*epssmall)/(1 + epssmall)
+
+      ! elsewhere
+
+      !    rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(VF_0 + epssmall)
+
+      ! endwhere   
 
         this%rhom = rhom
+
+
+!  do k=1,this%nzp
+!                do j = 1,this%nyp
+!                    do i = 1,this%nxp
+!                        if ( rhom(i,j,k) < zero ) then
+!                            print *, "Found negative species density in material"
+          !                  print *, "  Ys = ", this%material(imat)%Ys(i,j,k)
+          !                  print *, "  VF = ", this%material(imat)%Vf(i,j,k)
+          !                  ! exit
+!                        end if
+!                    end do
+!                end do
+!            end do
+
 
     end subroutine
 
