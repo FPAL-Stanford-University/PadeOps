@@ -19,7 +19,7 @@ module Multispecies_KH_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 10d-3, Lx = 10d-3, interface_init = 0.005d0, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 10d-3, Lx = 10d-3, interface_init = 0.01d0, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -272,8 +272,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         delta_rho = Nvel * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	tmp = (half - minVF) * ( one - erf( (x-(interface_init))/(2*delta_rho) ) )
-	
+	eta =(x-interface_init-eta0k*sin(2*pi*y/kwave))
+        tmp = (half - minVF) * ( one - erf( eta/(delta_rho) ) )
+
 	!set mixture Volume fraction
 	mix%material(1)%VF = tmp
 	mix%material(2)%VF = 1 - mix%material(1)%VF
@@ -287,7 +288,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
        ! eta0k = etasize*delta
        ! kwave = ksize*delta
-        eta =(x-interface_init-eta0k*sin(2*pi*y/kwave))
+        !eta =(x-interface_init-eta0k*sin(2*pi*y/kwave))
         m = p_mu2/p_mu
         U0 = delta_d*(p_mu2*v0_2 +p_mu*v0)/(delta*(p_mu+p_mu2))
 
@@ -591,7 +592,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         ! apply sponge at left and right boundaries to damp outgoing waves
         xspngL = 0.15d0*Lx
         xspngR = 0.85d0*Lx
-        tspng = 0.03d0
+        tspng = 0.0003d0
         dx = x(2,1,1) - x(1,1,1)
         dumL = half*(one - tanh( (x-xspngL)/(tspng) ))
         dumR = half*(one + tanh( (x-xspngR)/(tspng) ))
@@ -658,13 +659,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                 ! TODO: delete tmp = mix%material(2)%g_p(:,:,:,j)
                 ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
                 ! TODO: delete mix%material(2)%g_p(:,:,:,j) = mix%material(2)%g_p(:,:,:,j) + dum*(tmp - mix%material(2)%g_p(:,:,:,j))
-            end do
+           end do
 
             !mca add for stability
 
-            !tmp = T
-            !call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            !T = T + dum*(tmp - T)
+            tmp = T
+            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+            T = T + dum*(tmp - T)
 
             tmp = mix%material(1)%T
             call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
@@ -680,7 +681,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
             tmp = mix%material(2)%Ys
             call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
+           mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
 
         end do
 

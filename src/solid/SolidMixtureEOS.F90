@@ -2717,23 +2717,23 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !for example, to take the gradient of the volume fraction of species # 1
         
 
-        where ( this%material(1)%VF < eps)
+!        where ( this%material(1)%VF < eps)
 
-            phi_normal =this%intSharp_eps*log(2*eps ) 
+!            phi_normal =this%intSharp_eps*log(2*eps ) 
 
-        elsewhere
+ !       elsewhere
 
-            phi_normal = this%intSharp_eps*log( (this%material(1)%VF+eps)/(1-this%material(1)%VF+eps) ) 
+ !           phi_normal = this%intSharp_eps*log( (this%material(1)%VF+eps)/(1-this%material(1)%VF+eps) ) 
 
-        endwhere
+ !       endwhere
 
 	if (this%use_gradVF) then
 
-<<<<<<< HEAD
-		call gradient(this%decomp,this%der,phi_normal,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
-=======
+
+!		call gradient(this%decomp,this%der,phi_normal,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+
 		call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
->>>>>>> aa6e386a97a0c985e7576e2db8bb3eb47a4e6dfa
+
 	
 		 !calculate surface normal
            
