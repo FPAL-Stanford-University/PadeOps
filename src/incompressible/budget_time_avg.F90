@@ -1078,12 +1078,6 @@ contains
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(in) :: f
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdz
         
-        !call transpose_x_to_y(f,this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
-        !call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%gpC)
-        !call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,2),0,0)
-        !call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,2),this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
-        !call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,1),dfdz,this%igrid_sim%gpC)
-
         call this%igrid_sim%spectC%fft(f,this%igrid_sim%cbuffyC(:,:,:,2))
         call this%ddz_C2R(this%igrid_sim%cbuffyC(:,:,:,2), dfdz)
 
@@ -1095,7 +1089,7 @@ contains
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdz
         
         call transpose_y_to_z(fhat,this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%sp_gpC)
-        call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%cbuffzC(:,:,:,2),0,0)
+        call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%cbuffzC(:,:,:,2),0,0, postProcess=.True.)
         call transpose_z_to_y(this%igrid_sim%cbuffzC(:,:,:,2),this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%sp_gpC)
         call this%igrid_sim%spectC%dealias(this%igrid_sim%cbuffyC(:,:,:,1))
         call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdz)
