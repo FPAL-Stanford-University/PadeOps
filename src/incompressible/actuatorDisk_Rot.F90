@@ -258,6 +258,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
         allocate(this%force_x(1))
         allocate(this%force_y(1))
         allocate(this%force_z(1))
+        this%smearing_base = 0.d0
     endif
 
     ! correction factor :: required if this%smearing_base doesn't sum up to one 
