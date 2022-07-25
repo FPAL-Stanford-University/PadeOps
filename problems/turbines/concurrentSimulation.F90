@@ -142,7 +142,7 @@ program concurrentSimulation
        call prec%timeAdvance()                                           !<- Time stepping scheme + Pressure Proj. (see igrid.F90)
        call budg_xyavg1%doBudgets()       
 
-       prec%u=one;prec%v=zero;prec%w=zero; 
+       !prec%u=one;prec%v=zero;prec%w=zero; 
 
        if(useInterpolator) then
            call doTemporalStuff_prec(prec)                                   !<-- Go to the temporal hook (see temporalHook.F90)
@@ -200,8 +200,19 @@ program concurrentSimulation
 
     call prec%destroy()                                                  !<-- Destroy the IGRID derived type 
     call igp%destroy()                                                   !<-- Destroy the IGRID derived type 
-   
-    deallocate(utarget, vtarget, wtarget)
+  
+    if(allocated(utarget)) then
+        deallocate(utarget)
+    endif 
+  
+    if(allocated(vtarget)) then
+        deallocate(vtarget)
+    endif 
+  
+    if(allocated(wtarget)) then
+        deallocate(wtarget)
+    endif 
+
     if(allocated(Ttarget)) deallocate(Ttarget)
     call interpE%destroy()
     call interpC%destroy()
