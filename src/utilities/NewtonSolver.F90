@@ -71,7 +71,8 @@ contains
 
             do while ( (abs(residual_new) >= abs(residual)) .and. (t > eps) )
                 if (iters > (f%niters-10)) then
-                    print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, ', residual_new = ', residual_new, ', residual = ', residual
+                    print '(A,I0,3(A,ES15.5))', 'iters = ', iters, ', t = ', t, &
+                      ', residual_new = ', residual_new, ', residual = ', residual
                 end if
 
                 t = f%alpha*t
@@ -88,7 +89,7 @@ contains
             iters = iters + 1
 
             if ((iters >= f%niters) .or. (t <= eps)) then
-                write(charout,'(A,I0.0,A,I0.0,A,e19.12)'),'Newton solve did not converge. ', iters, ' of ', f%niters, ' t =', t
+                write(charout,'(A,I0.0,A,I0.0,A,e19.12)')'Newton solve did not converge. ', iters, ' of ', f%niters, ' t =', t
                 call GracefulExit(trim(charout),6382)
             end if
         end do

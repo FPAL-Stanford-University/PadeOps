@@ -78,7 +78,9 @@ module io_hdf5_stuff
 
 contains
 
-    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, write_xdmf, read_only, subdomain_lo, subdomain_hi, jump_to_last, wider_time_format)
+    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, &
+        reduce_precision, write_xdmf, read_only, subdomain_lo, subdomain_hi, &
+        jump_to_last, wider_time_format)
         class(io_hdf5),     intent(inout) :: this
         integer,            intent(in)    :: comm
         class(decomp_info), intent(in)    :: gp
@@ -313,9 +315,10 @@ contains
         if (this%reduce_precision) then
             field_single( this%myblock_st(1):this%myblock_en(1), &
                           this%myblock_st(2):this%myblock_en(2), &
-                          this%myblock_st(3):this%myblock_en(3) ) = real(field( this%myblock_st(1):this%myblock_en(1), &
-                                                                                this%myblock_st(2):this%myblock_en(2), &
-                                                                                this%myblock_st(3):this%myblock_en(3) ) , single_kind)
+                          this%myblock_st(3):this%myblock_en(3) ) = &
+                          real(field( this%myblock_st(1):this%myblock_en(1), &
+                          this%myblock_st(2):this%myblock_en(2), &
+                          this%myblock_st(3):this%myblock_en(3) ) , single_kind)
             call h5dwrite_f(this%dset_id, H5T_NATIVE_REAL, &
                             field_single( this%myblock_st(1):this%myblock_en(1), &
                                           this%myblock_st(2):this%myblock_en(2), &
@@ -385,9 +388,10 @@ contains
                            mem_space_id = this%memspace, xfer_prp = this%plist_id)
             field( this%myblock_st(1):this%myblock_en(1), &
                    this%myblock_st(2):this%myblock_en(2), &
-                   this%myblock_st(3):this%myblock_en(3) ) = real(field_single( this%myblock_st(1):this%myblock_en(1), &
-                                                                                this%myblock_st(2):this%myblock_en(2), &
-                                                                                this%myblock_st(3):this%myblock_en(3) ) , rkind)
+                   this%myblock_st(3):this%myblock_en(3) ) = &
+                   real(field_single( this%myblock_st(1):this%myblock_en(1), &
+                   this%myblock_st(2):this%myblock_en(2), &
+                   this%myblock_st(3):this%myblock_en(3) ) , rkind)
         else
             call h5dread_f(this%dset_id, H5T_NATIVE_DOUBLE, &
                            field( this%myblock_st(1):this%myblock_en(1), &
@@ -608,7 +612,8 @@ contains
 
         call this%read_attribute(3, grid_size, 'GridSize')
         do i = 1,3
-            if (grid_size(i) /= this%dimsf(i)) call GracefulExit("Grid size in file does not match that of the parallelization!",7476)
+            if (grid_size(i) /= this%dimsf(i)) call GracefulExit(&
+              "Grid size in file does not match that of the parallelization!",7476)
         end do
 
         call this%read_dataset(coords(:,:,:,1), '/X')
@@ -683,15 +688,19 @@ contains
                 write(this%xdmf_file_id,'(A)')           ' <Domain>'
                 write(this%xdmf_file_id,'(A)')           '   <Grid Name="mesh" GridType="Uniform">'
                 write(this%xdmf_file_id,'(A,ES26.16,A)') '     <Time Value="', time, '" />'
-                write(this%xdmf_file_id,'(A,3(I0,A))')   '     <Topology TopologyType="3DSMesh" NumberOfElements="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '"/>'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '     <Topology TopologyType="3DSMesh" NumberOfElements="', &
+                  this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '"/>'
                 write(this%xdmf_file_id,'(A)')           '     <Geometry GeometryType="X_Y_Z">'
-                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', &
+                  this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
                 write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/X'
                 write(this%xdmf_file_id,'(A)')           '       </DataItem>'
-                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', &
+                  this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
                 write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/Y'
                 write(this%xdmf_file_id,'(A)')           '       </DataItem>'
-                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', &
+                  this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
                 write(this%xdmf_file_id,'(3A)')          '        ', adjustl(trim(this%basename_prefix)) // '_coords.h5', ':/Z'
                 write(this%xdmf_file_id,'(A)')           '       </DataItem>'
                 write(this%xdmf_file_id,'(A)')           '     </Geometry>'
@@ -713,8 +722,10 @@ contains
 
         if (this%write_xdmf) then
             if (this%master) then
-                write(this%xdmf_file_id,'(3A)')          '     <Attribute Name="', adjustl(trim(varname)), '" AttributeType="Scalar" Center="Node">'
-                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
+                write(this%xdmf_file_id,'(3A)')          '     <Attribute Name="', &
+                  adjustl(trim(varname)), '" AttributeType="Scalar" Center="Node">'
+                write(this%xdmf_file_id,'(A,3(I0,A))')   '       <DataItem Dimensions="', &
+                  this%dimsf(3), ' ', this%dimsf(2),' ', this%dimsf(1), '" NumberType="Float" Precision="8" Format="HDF">'
                 write(this%xdmf_file_id,'(4A)')          '        ', adjustl(trim(this%basename)), ':/', adjustl(trim(dsetname))
                 write(this%xdmf_file_id,'(A)')           '       </DataItem>'
                 write(this%xdmf_file_id,'(A)')           '     </Attribute>'

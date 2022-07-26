@@ -58,6 +58,9 @@ subroutine compute_tauij_ballouz(this)
    call contract_Rik_Skl_invRlj(this%tau_23,RijE,invRijE,this%S_ij_E,2,3)
    call contract_Rik_Skl_invRlj(this%tau_33,RijC,invRijC,this%S_ij_C,3,3)
 
+   ! Remove trace
+   call removeTrace(this%tau_11,this%tau_22,this%tau_33)
+
    ! Multiply by model constant
    call assert(this%useCglobal,"Ballouz model only supports a global"//&
     " model constant -- ballouz.F90")
@@ -70,6 +73,17 @@ subroutine compute_tauij_ballouz(this)
 
 end subroutine
 
+subroutine removeTrace(tau11,tau22,tau33)
+  real(rkind), dimension(:,:,:), intent(inout) :: tau11, tau22, tau33
+  real(rkind), dimension(size(tau11,1),size(tau11,2),size(tau11,3)) :: taukk
+
+  taukk = tau11 + tau22 + tau33
+
+  tau11 = tau11 - taukk/3.d0
+  tau22 = tau22 - taukk/3.d0
+  tau33 = tau33 - taukk/3.d0
+end subroutine
+  
 subroutine contract_Rik_Skl_invRlj(tauij,Rij,invRij,Sij,i,j)
   ! This computes the following triple product:
   ! tau_ij = (R_ik)(S_kl)(invR_lj)

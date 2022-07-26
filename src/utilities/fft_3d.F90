@@ -110,7 +110,8 @@ end subroutine
 
 
 
-function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaustive, fixOddball_, allocK, dodealiasing) result(ierr)
+function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, &
+    exhaustive, fixOddball_, allocK, dodealiasing) result(ierr)
         class(fft_3d), intent(inout) :: this
         integer, intent(in) :: nx_global, ny_global, nz_global
         character(len=1), intent(in) :: base_pencil_
@@ -430,7 +431,9 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaus
                this%k3 = k3_in_z
 
                ! Get k1 from x -> y -> z
-               call transpose_x_to_y(k1_in_x(1:this%spectral%xsz(1),1:this%spectral%xsz(2),1:this%spectral%xsz(3)),temp,this%spectral)
+               call transpose_x_to_y(k1_in_x(1:this%spectral%xsz(1),&
+                 1:this%spectral%xsz(2),1:this%spectral%xsz(3)),temp,&
+                 this%spectral)
                call transpose_y_to_z(temp,this%k1,this%spectral)
 
                ! Get k2 from y -> z
@@ -619,7 +622,8 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaus
 
     subroutine ifft2_y2x(this,input,output,setOddBall)
         class(fft_3d), intent(inout) :: this
-        complex(rkind), dimension(size(this%f_xyhat_in_yD,1),size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(in) :: input
+        complex(rkind), dimension(size(this%f_xyhat_in_yD,1),&
+          size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(in) :: input
         real(rkind), dimension(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)), intent(out) :: output
         
         integer :: k 
@@ -649,7 +653,8 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, exhaus
     subroutine fft2_x2y(this,input,output)
         class(fft_3d), intent(inout) :: this
         real(rkind), dimension(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)), intent(in) :: input
-        complex(rkind), dimension(size(this%f_xyhat_in_yD,1),size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(out) :: output
+        complex(rkind), dimension(size(this%f_xyhat_in_yD,1),&
+          size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(out) :: output
        
         integer :: k
 

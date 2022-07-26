@@ -91,7 +91,7 @@ subroutine copyHITfieldsToADSIM(uhit,vhit,whit,uAD,vAD,wAD,hit,adsim,coord)
       call transpose_x_to_y(whit, hit%rbuffyE(:,:,:,1), hit%gpE)
       call transpose_y_to_z(hit%rbuffyE(:,:,:,1), hit%rbuffzE(:,:,:,1), hit%gpE)
       adsim%rbuffzE(:,:,:,1) = zero 
-      adsim%rbuffzE(:,:,kst:ken,1) = hit%rbuffzE(:,:,:,1) 
+      adsim%rbuffzE(:,:,kst:ken+1,1) = hit%rbuffzE(:,:,:,1) 
       call transpose_z_to_y(adsim%rbuffzE(:,:,:,1),adsim%rbuffyE(:,:,:,1),adSim%gpE)
       call transpose_y_to_x(adsim%rbuffyE(:,:,:,1), wAD, adSim%gpE)
 

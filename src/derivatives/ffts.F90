@@ -168,7 +168,7 @@ contains
 
             call dfftw_plan_many_dft_c2r(this%plan_bwd, 1, this%n, &
                 this%n2*this%n3, out_arr, this%split, this%n2*this%n3, &
-                1, out_arr, this%n, this%n2*this%n3, 1, &
+                1, in_arr, this%n, this%n2*this%n3, 1, &
                 this%fftw_plan)
              
             deallocate (in_arr, out_arr)
