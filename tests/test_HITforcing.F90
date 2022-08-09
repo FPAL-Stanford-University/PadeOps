@@ -1,5 +1,5 @@
 program test_HITforcing
-   use kind_parameters, only: rkind
+   use kind_parameters, only: rkind, clen
    use mpi
    use decomp_2d
    use decomp_2d_io
@@ -9,7 +9,7 @@ program test_HITforcing
    use PadePoissonMod, only: padepoisson
    use PadeDerOps, only: Pade6stagg
    use forcingMod, only: HIT_shell_forcing 
-   use reductions, only: p_maxval
+   use reductions, only: p_maxval, p_mean
 
    implicit none
    real   (rkind), dimension(:,:,:), allocatable :: Pressure, u, v, w, wC 
@@ -20,8 +20,8 @@ program test_HITforcing
    complex(rkind), dimension(:,:,:,:), allocatable :: cbuffzC
    complex(rkind), dimension(:,:,:), allocatable :: cbuffzE1, cbuffyE, cbuffyC
 
-   integer, parameter :: nx = 256, ny = 256, nz = 256
-   real(rkind), parameter :: dx = two*pi/real(nx,rkind), dy = two*pi/real(ny,rkind), dz = two*pi/real(nz,rkind) 
+   integer, parameter :: nx = 64, ny = 64, nz = 128
+   real(rkind), parameter :: dx = two*pi/real(nx,rkind), dy = two*pi/real(ny,rkind), dz = 4.d0*pi/real(nz,rkind) 
    type(decomp_info) :: gp, gpE
    integer :: ierr 
    type(spectral), allocatable :: spectC, spectE
@@ -29,9 +29,9 @@ program test_HITforcing
    type(Pade6stagg), allocatable :: der
    type(HIT_shell_forcing) :: HITForce
    integer :: tidStart = 0 ! Time index to initialize seeding in HITForce
+   character(len=clen) :: mssg
+   integer :: i, Nrealizations = 2000
    
-
-
    call mpi_init(ierr)
    call decomp_2d_init(nx,ny,nz,0,0)
    call get_decomp_info(gp)
@@ -47,9 +47,12 @@ program test_HITforcing
    divergence = 0.d0
 
    
-   call decomp_2d_read_one(1,u ,'/home/aditya90/Codes/PadeOps/data/HIT_testing/u_HIT_init_256.dat',gp )
-   call decomp_2d_read_one(1,v ,'/home/aditya90/Codes/PadeOps/data/HIT_testing/v_HIT_init_256.dat',gp )
-   call decomp_2d_read_one(1,wC,'/home/aditya90/Codes/PadeOps/data/HIT_testing/w_HIT_init_256.dat',gp )
+   call decomp_2d_read_one(1,u ,'/anvil/projects/x-atm170028/ryanhass/LES/'//&
+     'HITdecay/SpatialDecayHIT46/64/rawData/HITdata/Run46_uVel_t531000.out',gp )
+   call decomp_2d_read_one(1,v ,'/anvil/projects/x-atm170028/ryanhass/LES/'//&
+     'HITdecay/SpatialDecayHIT46/64/rawData/HITdata/Run46_vVel_t531000.out',gp )
+   call decomp_2d_read_one(1,wC,'/anvil/projects/x-atm170028/ryanhass/LES/'//&
+     'HITdecay/SpatialDecayHIT46/64/rawData/HITdata/Run46_wVel_t531000.out',gp )
    
    call message(0, "Completed data read")
 
@@ -80,7 +83,9 @@ program test_HITforcing
    allocate(cbuffyE(spectE%spectdecomp%ysz(1),spectE%spectdecomp%ysz(2), spectE%spectdecomp%ysz(3)  ))
    allocate(cbuffyC(spectC%spectdecomp%ysz(1),spectC%spectdecomp%ysz(2), spectC%spectdecomp%ysz(3)  ))
 
-   call HITForce%init("/home/aditya90/Codes/PadeOps/data/HIT_testing/HIT_forcing_input_test.dat", spectC%spectdecomp, spectE%spectdecomp, spectC, cbuffyE, cbuffyC, cbuffzE1, cbuffzC, tidStart)  
+   call HITForce%init("/anvil/projects/x-atm170028/ryanhass/LES/HITforced"//&
+     "/HITforcingDebug/HIT_forcing_input_test.dat", spectC%spectdecomp, &
+     spectE%spectdecomp, spectC, cbuffyE, cbuffyC, cbuffzE1, cbuffzC, tidStart)  
    call message(0, "Initialized HIT Forcing")
 
    urhs = im0; vrhs = im0; wrhs = im0
@@ -110,22 +115,39 @@ program test_HITforcing
    call poiss%DivergenceCheck(uhat, vhat, what, divergence)
  
    call message(0, "Finished Projection + Dealiasing")
-   call HITForce%getRHS_HITforcing(urhs, vrhs, wrhs, uhat, vhat, what, .true.) 
-   call message(0, "Finished computing HIT Force")
+   do i = 1,Nrealizations
+     urhs = im0; vrhs = im0; wrhs = im0
+     call HITForce%getRHS_HITforcing(urhs, vrhs, wrhs, uhat, vhat, what, .true.)
+     
+     write(mssg,'(A,I4,A,I4)')'Realization ',i,' of ',Nrealizations
+     call message(0, trim(mssg))
    
-   call poiss%DivergenceCheck(urhs, vrhs, wrhs, divergence)
-   print*, maxval(abs(divergence))
+     call poiss%DivergenceCheck(urhs, vrhs, wrhs, divergence)
+     write(mssg,'(A,F16.12)')'Max divergence: ', maxval(abs(divergence))
+     call message(0, "Max divergence: ", maxval(abs(divergence)))
+  
+     call transpose_y_to_z(wrhs, whatz, spectE%spectdecomp)
+     call der%interpz_E2C(whatz, wChatz, 0, 0)
+     call transpose_z_to_y(wChatz, wChat, spectC%spectdecomp)
+     call spectC%ifft(urhs, u)
+     call spectC%ifft(vrhs, v)
+     call spectC%ifft(wChat, wC)
+     
+     call message(0, "Max urhs: ",p_maxval(abs(u)))
+     call message(0, "Max vrhs: ",p_maxval(abs(v)))
+     call message(0, "Max wrhs: ",p_maxval(abs(wC)))
+     call message(0, "fxfy: ", p_mean(u*v))
+     call message(0, "fxfz: ", p_mean(u*wC))
+     call message(0, "fyfz: ", p_mean(v*wC))
 
-   call transpose_y_to_z(wrhs, whatz, spectE%spectdecomp)
-   call der%interpz_E2C(whatz, wChatz, 0, 0)
-   call transpose_z_to_y(wChatz, wChat, spectC%spectdecomp)
-   call spectC%ifft(urhs, u)
-   call spectC%ifft(vrhs, v)
-   call spectC%ifft(wChat, wC)
+     if (i < Nrealizations) then
+       u = 0.d0; v = 0.d0; wC = 0.d0
+     end if
+   end do
 
-   call decomp_2d_write_one(1,u ,"/home/aditya90/Codes/PadeOps/data/HIT_testing/u_HITforcing_256.dat", gp)
-   call decomp_2d_write_one(1,v ,"/home/aditya90/Codes/PadeOps/data/HIT_testing/v_HITforcing_256.dat", gp)
-   call decomp_2d_write_one(1,wC,"/home/aditya90/Codes/PadeOps/data/HIT_testing/w_HITforcing_256.dat", gp)
+   call decomp_2d_write_one(1,u ,"/anvil/projects/x-atm170028/ryanhass/LES/HITforced/HITforcingDebug/u_HITforcing_128.dat", gp)
+   call decomp_2d_write_one(1,v ,"/anvil/projects/x-atm170028/ryanhass/LES/HITforced/HITforcingDebug/v_HITforcing_128.dat", gp)
+   call decomp_2d_write_one(1,wC,"/anvil/projects/x-atm170028/ryanhass/LES/HITforced/HITforcingDebug/w_HITforcing_128.dat", gp)
 
    print*, "Max urhs:", p_maxval(abs(u))
    print*, "Max vrhs:", p_maxval(abs(v))

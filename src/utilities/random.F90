@@ -9,14 +9,17 @@ module random
    
     implicit none
     private 
-    public :: uniform_random, gaussian_random
+    public :: uniform_random, gaussian_random, randperm
 
     interface uniform_random
         module procedure unrand3R, unrand2R, unrand1R, unrand0R
     end interface 
     interface gaussian_random
         module procedure grand3R, grand2R, grand1R
-    end interface 
+    end interface
+    interface randperm
+      module procedure randpermInt, randpermReal
+    end interface
 contains
 
     subroutine grand3R(array,mu,sigma,seed)
@@ -174,19 +177,89 @@ contains
         array = array + left
     end subroutine
 
-    subroutine unrand0R(val,left, right)
+    subroutine unrand0R(val,left, right, seed)
         real(rkind), intent(inout) :: val
         real(rkind), intent(in) :: left, right
+        integer, intent(in), optional :: seed
+        integer, allocatable :: iseed(:)
         real(rkind) :: diff
+        integer :: n
 
         diff = right - left
+
+        if (present(seed)) then
+            call random_seed(size = n)
+            allocate(iseed(n))
+            iseed = seed
+            call random_seed(put=iseed)
+            deallocate(iseed)
+        else
+            call init_random_seed()
+        end if 
     
-        call init_random_seed()
         call random_number(val)
         val = diff*val
         val = val + left
     end subroutine
 
+    subroutine randpermInt(arr,seed)
+      use fortran_assert, only: assert
+      use sorting_mod,    only: binary_sort
+      ! Randomly permute (in-place) the elements in arr
+      integer, dimension(:), intent(inout) :: arr
+      integer, intent(in) :: seed
+      integer, dimension(size(arr)) :: arrcpy
+      integer :: i, N, big = 999999
+      integer :: seednew, a
+      real(rkind) :: val
+
+      arrcpy = arr
+      arr = 0
+      N = size(arr)
+
+      ! Make sure the array is not larger than "big" otherwise the sorting won't work
+      call assert(big > N)
+      
+      seednew = seed
+      do i = 1,N
+        call uniform_random(val,1.d0,real(N-i+1,rkind),seednew)
+        a = nint(val)
+        seednew = seednew + a
+        arr(i) = arrcpy(a)
+        arrcpy(a) = arrcpy(a) + big
+        call binary_sort(arrcpy)
+      end do
+    end subroutine
+
+    subroutine randpermReal(arr,seed)
+      use fortran_assert, only: assert
+      use sorting_mod,    only: binary_sort
+      ! Randomly permute (in-place) the elements in arr
+      real(rkind), dimension(:), intent(inout) :: arr
+      integer, intent(in) :: seed
+      real(rkind), dimension(size(arr)) :: arrcpy
+      integer :: i, N
+      integer :: seednew, a
+      real(rkind) :: big, val
+
+      arrcpy = arr
+      arr = 0
+      N = size(arr)
+      big = 999999.d0
+
+      ! Make sure the array is not larger than "big" otherwise the sorting won't work
+      call assert(big > maxval(arr))
+      
+      seednew = seed
+      do i = 1,N
+        call uniform_random(val,1.d0,real(N-i+1,rkind),seednew)
+        a = nint(val)
+        seednew = seednew + a
+        arr(i) = arrcpy(a)
+        arrcpy(a) = arrcpy(a) + big
+        call binary_sort(arrcpy)
+      end do
+    end subroutine
 
     subroutine init_random_seed()
         ! Taken from GNU 

@@ -42,13 +42,15 @@ contains
     function P_MEAN_arr3(x) result(mean)
         real(rkind), dimension(:,:,:), intent(in) :: x
         real(rkind) :: mean
-        real(rkind) :: mysum
+        real(rkind) :: mysum, mysize, allsize
         real(rkind) :: summation
         integer :: ierr
 
         mysum = sum(x)
+        mysize = real(size(x,1)*size(x,2)*size(x,3),rkind)
         call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
-        mean = summation/( real(size(x,1)*size(x,2)*size(x,3)*nproc,rkind))
+        call MPI_Allreduce(mysize, allsize, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        mean = summation/allsize
 
     end function
 

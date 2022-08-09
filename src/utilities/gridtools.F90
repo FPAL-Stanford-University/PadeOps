@@ -1,8 +1,9 @@
 module gridtools
     use kind_parameters, only: rkind
-    use constants, only: one, ten
-    use decomp_2d, only: decomp_info
-    use exits,     only: GracefulExit
+    use constants,       only: one, ten
+    use decomp_2d,       only: decomp_info
+    use exits,           only: GracefulExit
+    use fortran_assert,  only: assert
     implicit none
 
     interface destroy_buffs
@@ -14,7 +15,55 @@ module gridtools
     end interface
 
 contains
-    
+
+   subroutine loc2glob(i,j,k,gp,decomp)
+     integer, dimension(:), intent(inout) :: i, j, k
+     type(decomp_info), intent(in) :: gp
+     character(len=1), intent(in) :: decomp
+     integer, dimension(size(i)) :: il, jl, kl
+
+     il = i
+     jl = j
+     kl = k
+
+     select case(decomp)
+       case('x')
+         call assert(.false.,'Needs to be implemented')
+       case('y')
+         call assert(.false.,'Needs to be implemented')
+       case('z')
+         i = gp%zst(1) + il - 1
+         j = gp%zst(2) + jL - 1
+         k = gp%zst(3) + kL - 1
+       case default
+         call assert(.false.,'Must specify decomp direction -- gridtools.F90')
+     end select
+   end subroutine  
+
+   subroutine glob2loc(i,j,k,gp,decomp)
+     integer, dimension(:), intent(inout) :: i, j, k
+     type(decomp_info), intent(in) :: gp
+     character(len=1), intent(in) :: decomp
+     integer, dimension(size(i)) :: ig, jg, kg
+
+     ig = i
+     jg = j
+     kg = k
+
+     select case(decomp)
+       case('x')
+         call assert(.false.,'Needs to be implemented')
+       case('y')
+         call assert(.false.,'Needs to be implemented')
+       case('z')
+         i = ig - gp%zst(1) + 1
+         j = jg - gp%zst(2) + 1
+         k = kg - gp%zst(3) + 1
+       case default
+         call assert(.false.,'Must specify decomp direction -- gridtools.F90')
+     end select
+   end subroutine
+
    pure function mytrapz(x,f) result(intf)
         real(rkind), dimension(:), intent(in) :: x, f
         real(rkind) :: intf
