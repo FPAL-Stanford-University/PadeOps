@@ -46,14 +46,11 @@ module forcingmod
       procedure, private :: pick_random_wavenumbers
       procedure, private :: pick_random_wavenumbersV2
       procedure, private :: compute_forcing
-      procedure, private :: compute_forcingV2
       procedure, private :: embed_forcing_mode
-      procedure, private :: embed_forcing_modeV2
       procedure          :: getRHS_HITforcing
       procedure, private :: scrubConjPairs
       procedure, private :: scrubConjPairsV2
       procedure, private :: replaceConjPartners
-      procedure, private :: addConjMode
    end type 
 
 contains
@@ -177,10 +174,6 @@ subroutine pick_random_wavenumbers(this)
      this%kabs_sample, this%zeta_sample, this%theta_sample)
 
    call this%scrubConjPairs(this%wave_x, this%wave_y, this%wave_z)
-
-!   this%wave_x = [0,3,2,2]
-!   this%wave_y = [0,-2,4,1]
-!   this%wave_z = [4,1,1,3]
 
 end subroutine
 
@@ -385,102 +378,6 @@ subroutine destroy(this)
    if (allocated(this%k)) deallocate(this%k)
 end subroutine 
 
-
-!subroutine embed_forcing(this)
-!   class(HIT_shell_forcing), intent(inout) :: this
-!
-!!!!!NOTE:::::!!!! 
-!!   I am assuming wave_x, wave_y and wave_z are in z decomp, and are
-!!   integers from (1:N) irrespective of domain size.
-!
-!   integer :: ik, indx, indy, indz
-!   real(rkind) :: Nwaves_rkind, den, fac
-!
-!   Nwaves_rkind = real(this%Nwaves, rkind)
-!   this%fxhat = im0; this%fyhat = im0; this%fzhat = im0
-!   do ik = 1, size(this%wave_x)
-!       ! check if kx is on this processor
-!       indx = this%wave_x(ik) - this%sp_gpC%zst(1) + 1
-!       if(indx > this%sp_gpC%zsz(1)) then
-!         ! not on this processor
-!         cycle
-!       endif
-!
-!       ! check if ky is on this processor
-!       indy = this%wave_y(ik) - this%sp_gpC%zst(2) + 1
-!       if(indy > this%sp_gpC%zsz(2)) then
-!         ! not on this processor
-!         cycle
-!       endif
-!
-!       ! kz must be on this processor because we are in zdecomp
-!       indz = this%wave_z(ik) - this%sp_gpC%zst(3) + 1
-!
-!      ! now indx, indy, indz are indices for this wavenumber
-!      den = abs(this%uhat(indx, indy, indz))**2 + &
-!            abs(this%vhat(indx, indy, indz))**2 + &
-!            abs(this%what(indx, indy, indz))**2
-!      fac = this%EpsAmplitude/den/Nwaves_rkind
-!      this%fxhat(indx, indy, indz) = this%fxhat(indx, indy, indz) + fac*conjg(this%uhat(indx,indy,indz))
-!      this%fyhat(indx, indy, indz) = this%fyhat(indx, indy, indz) + fac*conjg(this%vhat(indx,indy,indz))
-!      this%fzhat(indx, indy, indz) = this%fzhat(indx, indy, indz) + fac*conjg(this%what(indx,indy,indz))
-!   enddo
-!
-!end subroutine 
-
-
-subroutine compute_forcingV2(this,i,j,k)
-  class(HIT_shell_forcing), intent(inout) :: this
-  integer, dimension(this%Nwaves), intent(in) :: i, j, k
-  integer :: n
-
-  this%fxhat = im0
-  this%fyhat = im0
-  this%fzhat = im0
-
-  call this%embed_forcing_modeV2(i,j,k)
-end subroutine
-
-subroutine embed_forcing_modeV2(this,i,j,k)
-  class(HIT_shell_forcing), intent(inout) :: this
-  integer, dimension(this%Nwaves), intent(in) :: i, j, k
-  real(rkind), dimension(this%sp_gpC%zsz(1),this%sp_gpC%zsz(2),this%sp_gpC%zsz(3)) :: ukuk
-  real(rkind) :: ampFact
-  integer :: n, ierr, counter
-  integer, dimension(nproc) :: countAll
-
-  ukuk = conjg(this%uhat)*this%uhat + conjg(this%vhat)*this%vhat + conjg(this%what)*this%what
-  ampFact = 0.5d0*this%normFact*(this%epsAmplitude/this%Nwaves_rkind)
-
-  counter = 0
-  do n = 1,this%Nwaves
-    if (i(n) >= 1 .and. i(n) <= this%sp_gpC%zsz(1) .and. &
-        j(n) >= 1 .and. j(n) <= this%sp_gpC%zsz(2)) then
-      
-      this%fxhat(i(n),j(n),k(n)) = ampFact*this%uhat(i(n),j(n),k(n))/ukuk(i(n),j(n),k(n))
-      this%fyhat(i(n),j(n),k(n)) = ampFact*this%vhat(i(n),j(n),k(n))/ukuk(i(n),j(n),k(n))
-      this%fzhat(i(n),j(n),k(n)) = ampFact*this%what(i(n),j(n),k(n))/ukuk(i(n),j(n),k(n))
-
-      if (this%k1(i(n),j(n),k(n)) < 1.d-12) then
-        counter = counter + 1
-      end if
-    end if
-  end do
-
-  call MPI_Allgather(counter,1,MPI_INTEGER,countAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
-  
-  if (sum(countAll) > 0) then
-    call this%addConjMode(countAll)
-  end if
-end subroutine
-
-subroutine addConjMode(this,countAll)
-  class(HIT_shell_forcing), intent(inout) :: this
-  integer, dimension(nproc), intent(in) :: countAll
-
-  call assert(.false., "Haven't implemented a way to treat kx==0 case yet")
-end subroutine
-
 subroutine compute_forcing(this)
    class(HIT_shell_forcing), intent(inout) :: this
    integer :: ik
@@ -602,7 +499,6 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
 
         ! STEP 3a: embed into fhat
         call this%compute_forcing()
-        !call this%compute_forcingV2(i,j,k)
         
         if (newTimeStep .and. this%firstCall) then
             this%fxhat_old = this%fxhat
