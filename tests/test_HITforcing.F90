@@ -118,6 +118,7 @@ program test_HITforcing
    do i = 1,Nrealizations
      urhs = im0; vrhs = im0; wrhs = im0
      call HITForce%getRHS_HITforcing(urhs, vrhs, wrhs, uhat, vhat, what, .true.)
+     call message(0, "seed3:", HITForce%seed3)
      
      write(mssg,'(A,I4,A,I4)')'Realization ',i,' of ',Nrealizations
      call message(0, trim(mssg))

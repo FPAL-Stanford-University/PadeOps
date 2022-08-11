@@ -1,4 +1,4 @@
-module findMod
+module arrayTools
   use kind_parameters, only: rkind
   implicit none
   
@@ -74,5 +74,17 @@ contains
         end do
       end do
     end if
+  end subroutine
+
+  subroutine swap(A,i,j)
+    ! Swap A(i) with A(j)
+    integer, dimension(:), intent(inout) :: A
+    integer, intent(in) :: i, j
+    integer, dimension(size(A)) :: B
+    
+    B = A
+    B(i) = A(j)
+    B(j) = A(i)
+    A = B
   end subroutine 
 end module

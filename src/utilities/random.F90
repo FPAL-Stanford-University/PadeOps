@@ -17,9 +17,6 @@ module random
     interface gaussian_random
         module procedure grand3R, grand2R, grand1R
     end interface
-    interface randperm
-      module procedure randpermInt, randpermReal
-    end interface
 contains
 
     subroutine grand3R(array,mu,sigma,seed)
@@ -202,63 +199,36 @@ contains
         val = val + left
     end subroutine
 
-    subroutine randpermInt(arr,seed)
+    subroutine randperm(N,seed,arrout)
       use fortran_assert, only: assert
-      use sorting_mod,    only: binary_sort
-      ! Randomly permute (in-place) the elements in arr
-      integer, dimension(:), intent(inout) :: arr
-      integer, intent(in) :: seed
-      integer, dimension(size(arr)) :: arrcpy
-      integer :: i, N, big = 999999
-      integer :: seednew, a
+      use arrayTools,     only: swap
+      ! Return an array of size N with elements ranging 1:N without
+      ! repitition and randomly ordered
+      integer, intent(in) :: N, seed
+      integer, dimension(N), intent(out) :: arrout
+      integer :: i, a, newseed
       real(rkind) :: val
 
-      arrcpy = arr
-      arr = 0
-      N = size(arr)
-
-      ! Make sure the array is not larger than "big" otherwise the sorting won't work
-      call assert(big > N)
-      
-      seednew = seed
       do i = 1,N
-        call uniform_random(val,1.d0,real(N-i+1,rkind),seednew)
-        a = nint(val)
-        seednew = seednew + a
-        arr(i) = arrcpy(a)
-        arrcpy(a) = arrcpy(a) + big
-        call binary_sort(arrcpy)
+        arrout(i) = i
       end do
-    end subroutine
-
-    subroutine randpermReal(arr,seed)
-      use fortran_assert, only: assert
-      use sorting_mod,    only: binary_sort
-      ! Randomly permute (in-place) the elements in arr
-      real(rkind), dimension(:), intent(inout) :: arr
-      integer, intent(in) :: seed
-      real(rkind), dimension(size(arr)) :: arrcpy
-      integer :: i, N
-      integer :: seednew, a
-      real(rkind) :: big, val
-
-      arrcpy = arr
-      arr = 0
-      N = size(arr)
-      big = 999999.d0
-
-      ! Make sure the array is not larger than "big" otherwise the sorting won't work
-      call assert(big > maxval(arr))
       
-      seednew = seed
-      do i = 1,N
-        call uniform_random(val,1.d0,real(N-i+1,rkind),seednew)
+      newseed = seed
+      do i = 1,N-1
+        ! Ensure seed isn't close to max possible integer value
+        call assert(abs(huge(0) - newseed) > 1000000,&
+          'Seed value exceeds maximum representable integer -- random.F90')
+        
+        call uniform_random(val,real(i,rkind),real(N,rkind),newseed)
         a = nint(val)
-        seednew = seednew + a
-        arr(i) = arrcpy(a)
-        arrcpy(a) = arrcpy(a) + big
-        call binary_sort(arrcpy)
+
+        ! Swap arrout(i) with arrout(a)
+        call swap(arrout,a,i)
+
+        ! Update seed
+        newseed = seed + 125932
       end do
+
     end subroutine
 
     subroutine init_random_seed()

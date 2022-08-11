@@ -7,7 +7,8 @@ module forcingmod
    use mpi
    use fortran_assert,  only: assert 
    use random,          only: uniform_random, randperm
-   use findMod,         only: findGL 
+   use arrayTools,         only: findGL 
+   use gridtools,       only: loc2glob, glob2loc
 
    implicit none
    private
@@ -23,17 +24,20 @@ module forcingmod
 
       integer, dimension(:), allocatable :: wave_x, wave_y, wave_z
       complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what, fxhat_old, fyhat_old, fzhat_old
-      real(rkind), dimension(:,:,:), allocatable :: k1, k2, k3, kmag
       complex(rkind), dimension(:,:,:), pointer :: fxhat, fyhat, fzhat, cbuffzE, cbuffyE, cbuffyC
 
       real(rkind), dimension(:), allocatable :: kabs_sample, zeta_sample, theta_sample
-      integer :: seed0, seed1, seed2, seed3
+      integer, public :: seed0, seed1, seed2, seed3
       real(rkind) :: Nwaves_rkind
       real(rkind), dimension(:), allocatable :: tmpModes
       real(rkind) :: alpha_t = 1.d0 
       real(rkind) :: normfact = 1.d0, A_force = 1.d0 
       integer     :: DomAspectRatioZ
       logical :: useLinearForcing, firstCall
+      
+      ! Ryan's additions/changes:
+      real(rkind), dimension(:,:,:), allocatable :: k1, k2, k3, kmag
+      integer, dimension(:), allocatable :: i, j, k
     
       contains
       procedure          :: init
@@ -50,7 +54,6 @@ module forcingmod
       procedure, private :: scrubConjPairsV2
       procedure, private :: replaceConjPartners
       procedure, private :: addConjMode
-      procedure, private :: exchangeEligibleModeInfo
    end type 
 
 contains
@@ -69,7 +72,7 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0, A_force = 1.d0 
    logical :: useLinearForcing = .false. 
    real(rkind) :: filtfact_linForcing = 0.5d0
-   integer :: i, j, k
+   integer :: nforce
    namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, DomAspectRatioZ, alpha_t, useLinearForcing, filtfact_linForcing  
 
    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -97,25 +100,23 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    allocate(this%fyhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%fzhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
   
-   ! Define the wave-vector grid 
-   allocate(this%k1   (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
-   allocate(this%k2   (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
-   allocate(this%k3   (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
-   allocate(this%kmag (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
+   ! Define the wave-vector grid
+   nforce = ceiling(this%kmax)*2
+   if (mod(ceiling(this%kmax),2) .ne. 0) nforce = ceiling(this%kmax + 1.d0)*2
 
-   do i = 1,this%sp_gpC%zsz(1)
-     this%k1(i,:,:) = this%spectC%k1inZ(i)
-   end do
-   
-   do j = 1,this%sp_gpC%zsz(2)
-     this%k2(:,j,:) = this%spectC%k2inZ(j)
-   end do
-   
-   do k = 1,this%sp_gpC%zsz(3)
-     this%k3(:,:,k) = this%spectC%k3inZ(k)
-   end do
-
+   allocate(this%k1  (nforce/2+1,nforce,nforce))
+   allocate(this%k2  (nforce/2+1,nforce,nforce))
+   allocate(this%k3  (nforce/2+1,nforce,nforce))
+   allocate(this%kmag(nforce/2+1,nforce,nforce))
+   call getIsotropicWaveVectorComponents(this%k1,this%k2,this%k3,nforce) 
    this%kmag = sqrt(this%k1*this%k1 + this%k2*this%k2 + this%k3*this%k3)
+
+   ! Find the indices of each mode that satisfies kmin <= k <= kmax
+   call findGL(this%kmag,this%kmin,this%kmax,this%i,this%j,this%k)
+  
+   ! Remove complex conjugate pairs
+   call this%scrubConjPairsV2(this%i,this%j,this%k,&
+     this%k1(:,1,1),this%k2(1,:,1),this%k3(1,1,:))
   
    this%firstCall = .true.
    this%fxhat    => cbuffzC(:,:,:,1)
@@ -148,6 +149,15 @@ end subroutine
 
 subroutine update_seeds(this)
    class(HIT_shell_forcing), intent(inout) :: this
+   integer :: big
+
+   big = huge(0)
+   if (big - this%seed0 < 10000000 .or. &
+       big - this%seed1 < 10000000 .or. &
+       big - this%seed2 < 10000000 .or. &
+       big - this%seed3 < 10000000 ) then
+     this%seed0 = 1
+   end if
    this%seed0 = abs(this%seed0 + 2223345) 
    this%seed1 = abs(this%seed0 + 1423246)
    this%seed2 = abs(this%seed0 + 8723446)
@@ -167,6 +177,10 @@ subroutine pick_random_wavenumbers(this)
      this%kabs_sample, this%zeta_sample, this%theta_sample)
 
    call this%scrubConjPairs(this%wave_x, this%wave_y, this%wave_z)
+
+!   this%wave_x = [0,3,2,2]
+!   this%wave_y = [0,-2,4,1]
+!   this%wave_z = [4,1,1,3]
 
 end subroutine
 
@@ -188,134 +202,38 @@ subroutine convertCylindricalToSphericalWaveVectors(kx, ky, kz, tmp, kabs, &
 
 end subroutine
 
-subroutine pick_random_wavenumbersV2(this,i,j,k)
-  use reductions, only: p_sum
-  use gridtools,  only: loc2glob, glob2loc
+subroutine pick_random_wavenumbersV2(this)
   class(HIT_shell_forcing), intent(inout) :: this
-  integer, dimension(:), allocatable :: iid, jid, kid, iidAll, jidAll, kidAll
   integer :: n, ierr
   integer, dimension(this%Nwaves) :: i, j, k
-  real(rkind), dimension(:), allocatable :: k1, k2, k3
-
-  ! Find the linear index of each mode that satisfies kmin <= k <= kmax
-  call findGL(this%kmag,this%kmin,this%kmax,iid,jid,kid)
-
-  call loc2glob(iid,jid,kid,this%sp_gpC,'z')
-  
-  ! Send these indices to all processes
-  call this%exchangeEligibleModeInfo(iid,jid,kid,iidAll,jidAll,kidAll,k1,k2,k3)
-  
-! BEGIN_DEBUG 
-  call message('DEBUGGING')
-  call assert(minval(iidAll) > 0,'minval(iidAll) > 0')
-  call assert(minval(jidAll) > 0,'minval(jidAll) > 0')
-  call assert(minval(kidAll) > 0,'minval(kidAll) > 0')
-! END_DEBUG
   
   ! Randomly sort the arrays
-  call randomize(iidAll,jidAll,kidAll,k1,k2,k3,this%seed3)
- 
-! BEGIN_DEBUG 
-  call message('DEBUGGING')
-  call assert(minval(iidAll) > 0,'minval(iidAll) > 0')
-  call assert(minval(jidAll) > 0,'minval(jidAll) > 0')
-  call assert(minval(kidAll) > 0,'minval(kidAll) > 0')
-! END_DEBUG
-
-  ! Remove complex conjugate pairs
-  call this%scrubConjPairsV2(iidAll,jidAll,kidAll,k1,k2,k3)
-  
-  print*, "3. minval(iidAll):", minval(iidAll)
-  print*, "3. maxval(iidAll):", maxval(iidAll)
-
-  call assert(maxval(iidAll) < this%sp_gpC%xsz(1)+1,'maxval(iidAll) < this%sp_gpC%xsz(1)+1')
-  call assert(minval(iidAll) > 0,'minval(iidAll) > 0')
-  call assert(maxval(jidAll) < this%sp_gpC%ysz(2)+1,'maxval(jidAll) < this%sp_gpC%ysz(2)+1')
-  call assert(minval(jidAll) > 0,'minval(jidAll) > 0')
-  call assert(maxval(kidAll) < this%sp_gpC%zsz(3)+1,'maxval(kidAll) < this%sp_gpC%zsz(3)+1')
-  call assert(minval(kidAll) > 0,'minval(kidAll) > 0')
+  call randomShuffle(this%i,this%j,this%k,this%seed3)
 
   ! Choose the first N modes
-  i = iidAll(1:this%Nwaves)
-  j = jidAll(1:this%Nwaves)
-  k = kidAll(1:this%Nwaves)
-do n = 1,nproc
-  if (nrank == n-1) then
-    print*, "maxval(i):", maxval(i)
-    print*, "minval(i):", minval(i)
-  end if
-  call MPI_Barrier(MPI_COMM_WORLD,ierr)
-end do
-  print*, "this%sp_gpC%zsz(1):", this%sp_gpC%zsz(1)
-  call glob2loc(i,j,k,this%sp_gpC,'z')
+  i = this%i(1:this%Nwaves)
+  j = this%j(1:this%Nwaves)
+  k = this%k(1:this%Nwaves)
 
-  print*, "maxval(i):", maxval(i)
-  print*, "this%sp_gpC%zsz(1):", this%sp_gpC%zsz(1)
-  call assert(maxval(i) < this%sp_gpC%zsz(1)+1,'maxval(i) < this%sp_gpC%zsz(1)+1')
-  call assert(minval(i) > 0,'minval(i) > 0')
-  call assert(maxval(j) < this%sp_gpC%zsz(2)+1,'maxval(j) < this%sp_gpC%zsz(2)+1')
-  call assert(minval(j) > 0,'minval(j) > 0')
-  call assert(maxval(k) < this%sp_gpC%zsz(3)+1,'maxval(k) < this%sp_gpC%zsz(3)+1')
-  call assert(minval(k) > 0,'minval(k) > 0')
+  do n = 1,this%Nwaves
+    this%wave_x(n) = this%k1(i(n),j(n),k(n)) 
+    this%wave_y(n) = this%k2(i(n),j(n),k(n)) 
+    this%wave_z(n) = this%k3(i(n),j(n),k(n)) 
+  end do
 
-  deallocate(iidAll,jidAll,kidAll)
-  deallocate(iid,jid,kid)
-  deallocate(k1,k2,k3)
 end subroutine
 
-subroutine randomize(i,j,k,k1,k2,k3,seed)
+subroutine randomShuffle(i,j,k,seed)
   integer, dimension(:), intent(inout) :: i, j, k
-  real(rkind), dimension(:), intent(inout) :: k1, k2, k3
   integer, intent(in) :: seed
+  integer, dimension(size(i)) :: idx
 
-  call randperm(i,seed)
-  call randperm(j,seed)
-  call randperm(k,seed)
+  call randperm(size(i),seed,idx)
+
+  i = i(idx)
+  j = j(idx)
+  k = k(idx)
   
-  call randperm(k1,seed)
-  call randperm(k2,seed)
-  call randperm(k3,seed)
-end subroutine
-
-subroutine exchangeEligibleModeInfo(this,i,j,k,ia,ja,ka,k1,k2,k3)
-  class(HIT_shell_forcing), intent(inout) :: this
-  integer, dimension(:), intent(in) :: i, j, k
-  integer, dimension(:), allocatable, intent(out) :: ia, ja, ka
-  real(rkind), dimension(:), allocatable, intent(out) :: k1, k2, k3
-  real(rkind), dimension(size(i)) :: myk1, myk2, myk3
-  integer :: mycount, sumcounts, n, ierr
-  integer, dimension(nproc) :: counts, disp
-
-  mycount = size(i)
-  call MPI_Allgather(mycount,1,MPI_INTEGER,counts,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
-  sumcounts = sum(counts)
-  allocate(ia(sumcounts), ja(sumcounts), ka(sumcounts))
-  allocate(k1(sumcounts), k2(sumcounts), k3(sumcounts))
-
-  do n = 1,size(i)
-    myk1(n) = this%k1(i(n),j(n),k(n))
-    myk2(n) = this%k2(i(n),j(n),k(n))
-    myk3(n) = this%k3(i(n),j(n),k(n))
-  end do
-
-  disp = 0
-  do n = 2,nproc
-    disp(n) = min(disp(n-1) + counts(n-1), sum(counts))
-  end do
-
-  call MPI_Allgatherv(i,mycount,MPI_INTEGER,ia,counts,disp,MPI_INTEGER,&
-    MPI_COMM_WORLD,ierr)
-  call MPI_Allgatherv(j,mycount,MPI_INTEGER,ja,counts,disp,MPI_INTEGER,&
-    MPI_COMM_WORLD,ierr)
-  call MPI_Allgatherv(k,mycount,MPI_INTEGER,ka,counts,disp,MPI_INTEGER,&
-    MPI_COMM_WORLD,ierr)
-  
-  call MPI_Allgatherv(myk1,mycount,mpirkind,k1,counts,disp,mpirkind,&
-    MPI_COMM_WORLD,ierr)
-  call MPI_Allgatherv(myk2,mycount,mpirkind,k2,counts,disp,mpirkind,&
-    MPI_COMM_WORLD,ierr)
-  call MPI_Allgatherv(myk3,mycount,mpirkind,k3,counts,disp,mpirkind,&
-    MPI_COMM_WORLD,ierr)
 end subroutine
 
 subroutine scrubConjPairsV2(this,i,j,k,k1,k2,k3)
@@ -331,12 +249,11 @@ subroutine scrubConjPairsV2(this,i,j,k,k1,k2,k3)
   integer, dimension(:), allocatable :: idCC
 
   counter = 0
-  id = 1
   Nmodes = size(i)
 
   do n = 1,Nmodes-1
     do m = n+1,Nmodes
-      if(k1(n) == 0 .and. k2(n) == -k2(m) .and. k3(n) == -k3(m)) then
+      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
         counter = counter + 1
       end if
     end do
@@ -345,10 +262,11 @@ subroutine scrubConjPairsV2(this,i,j,k,k1,k2,k3)
   if (counter > 0) then
     allocate(idCC(counter))
 
+    id = 1
     do n = 1,size(i)-1
       do m = n+1,size(i)
-        if(k1(n) == 0 .and. k2(n) == -k2(m) .and. k3(n) == -k3(m)) then
-          idCC = m
+      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
+          idCC(id) = m
           id = id + 1
         end if
       end do
@@ -359,24 +277,35 @@ subroutine scrubConjPairsV2(this,i,j,k,k1,k2,k3)
     jcpy = j
     kcpy = k
     deallocate(i,j,k)
-
-    big = this%sp_gpC%xsz(1)*this%sp_gpC%ysz(2)*this%sp_gpC%zsz(3) + 1
-    icpy(idCC) = icpy(idCC) + big
-    jcpy(idCC) = jcpy(idCC) + big
-    kcpy(idCC) = kcpy(idCC) + big
-
-    call binary_sort(icpy)
-    call binary_sort(jcpy)
-    call binary_sort(kcpy)
-
     allocate(i(Nmodes-counter),j(Nmodes-counter),k(Nmodes-counter))
-    i = icpy(1:Nmodes-counter)
-    j = jcpy(1:Nmodes-counter)
-    k = kcpy(1:Nmodes-counter)
+   
+    call binary_sort(idCC) 
+    call removeItems(icpy,jcpy,kcpy,idCC,i,j,k)
 
     deallocate(icpy,jcpy,kcpy)
     deallocate(idCC)
   end if
+end subroutine
+
+subroutine removeItems(ii,ji,ki,idrmv,io,jo,ko)
+  integer, dimension(:), intent(in) :: ii, ji, ki, idrmv
+  integer, dimension(:), intent(out) :: io, jo, ko
+  integer :: m, n, id
+
+  call assert(size(io) == size(ii) - size(idrmv))
+  
+  m = 1
+  id = 1
+  do n = 1,size(ii)
+    if (n == idrmv(id)) then
+      id = min(id + 1,size(idrmv))
+    else
+      io(m) = ii(n)
+      jo(m) = ji(n)
+      ko(m) = ki(n)
+      m = m + 1
+    end if
+  end do
 end subroutine
 
 subroutine scrubConjPairs(this,kx,ky,kz)
@@ -450,6 +379,10 @@ subroutine destroy(this)
    if (allocated(this%k2)) deallocate(this%k2)
    if (allocated(this%k3)) deallocate(this%k3)
    if (allocated(this%kmag)) deallocate(this%kmag)
+
+   if (allocated(this%i)) deallocate(this%i)
+   if (allocated(this%j)) deallocate(this%j)
+   if (allocated(this%k)) deallocate(this%k)
 end subroutine 
 
 
@@ -499,6 +432,7 @@ end subroutine
 subroutine compute_forcingV2(this,i,j,k)
   class(HIT_shell_forcing), intent(inout) :: this
   integer, dimension(this%Nwaves), intent(in) :: i, j, k
+  integer :: n
 
   this%fxhat = im0
   this%fyhat = im0
@@ -534,7 +468,7 @@ subroutine embed_forcing_modeV2(this,i,j,k)
   end do
 
   call MPI_Allgather(counter,1,MPI_INTEGER,countAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
-  print*, "countAll: ", countAll
+  
   if (sum(countAll) > 0) then
     call this%addConjMode(countAll)
   end if
@@ -648,7 +582,7 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
            this%fyhat_old = this%fyhat
            this%fzhat_old = this%fzhat
            !call this%pick_random_wavenumbers()
-           call this%pick_random_wavenumbersV2(i,j,k)
+           call this%pick_random_wavenumbersV2()
            call this%update_seeds()
         end if
 
@@ -667,8 +601,8 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
 
 
         ! STEP 3a: embed into fhat
-        !call this%compute_forcing()
-        call this%compute_forcingV2(i,j,k)
+        call this%compute_forcing()
+        !call this%compute_forcingV2(i,j,k)
         
         if (newTimeStep .and. this%firstCall) then
             this%fxhat_old = this%fxhat
@@ -701,7 +635,36 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
 
 end subroutine
 
+subroutine getIsotropicWaveVectorComponents(k1,k2,k3,n)
+  real(rkind), dimension(:,:,:), intent(inout) :: k1, k2, k3
+  integer, intent(in) :: n
+  integer :: i, j, k, id 
 
+  do i = 1,n/2
+    k1(i,:,:) = real(i - 1,rkind)
+  end do
+  k1(n/2+1,:,:) = real(-n/2,rkind)
 
+  do j = 1,n/2
+    k2(:,j,:) = real(j - 1,rkind)
+  end do
+
+  id = n/2
+  do j = n/2+1,n
+    k2(:,j,:) = -k2(:,id,:) - 1.d0
+    id = id - 1
+  end do
+
+  do k = 1,n/2
+    k3(:,:,k) = real(k - 1,rkind)
+  end do
+  
+  id = n/2
+  do k = n/2+1,n
+    k3(:,:,k) = -k3(:,:,id) - 1.d0
+    id = id - 1
+  end do
+
+end subroutine
 
 end module 
