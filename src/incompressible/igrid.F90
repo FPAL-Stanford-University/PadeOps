@@ -1200,17 +1200,23 @@ contains
        if (this%isStratified) then
            select case (this%BuoyancyTermType)
            case(1)
+              ! Parameter : Froude number 
+              ! RHS_3 = RHS_3 + one/(Fr^2*Theta_ref)*(T - T_ref) ! implemented with T_ref absorbed as hydrostatic pressure
               this%BuoyancyFact = one/(this%Fr*this%Fr*this%ThetaRef)
               call message(1,"Buoyancy term type 1 selected. Buoyancy term &
                                 & calculation term uses")
               call message(2,"Froude number:", this%Fr)
               call message(2,"Reference temperature:", this%thetaRef)
            case(2)
+                ! Parameter : Bulk Richardson number 
+                ! RHS_3 = RHS_3 + 
               this%BuoyancyFact = this%BulkRichardson
               call message(1,"Buoyancy term type 2 selected. Buoyancy term &
                                 & calculation term uses")
               call message(2,"Bulk Richardson number:", this%BulkRichardson)
            case (3) 
+              ! Parameter : Rayleigh number (avoid)  
+              ! RHS_3 = RHS_3 +  
               this%BuoyancyFact = this%Ra/(this%PrandtlFluid*this%Re*this%Re) 
               call message(1,"Buoyancy term type 3 selected. Buoyancy term &
                                 & calculation term uses")
