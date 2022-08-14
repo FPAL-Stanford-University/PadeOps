@@ -31,11 +31,11 @@ program test_HITforcing
    type(HIT_shell_forcing) :: HITForce
    integer :: tidStart = 0 ! Time index to initialize seeding in HITForce
    character(len=clen) :: mssg
-   integer :: i, Nrealizations = 200
+   integer :: i, Nrealizations = 1
    real(rkind) :: disp
-   integer :: dumpFreq = 1
+   integer :: dumpFreq = 1000000
    character(len=clen) :: fname, outputdir
-   
+
    call mpi_init(ierr)
    call decomp_2d_init(nx,ny,nz,0,0)
    call get_decomp_info(gp)
@@ -50,8 +50,7 @@ program test_HITforcing
 
    divergence = 0.d0
 
-   outputdir = '/anvil/scratch/x-ryanhass/LES/HITforced/HITforcingDebug/Version1/' 
-   
+   outputdir = '/anvil/scratch/x-ryanhass/LES/HITforced/HITforcingDebug/Version2/' 
    call decomp_2d_read_one(1,u ,'/anvil/projects/x-atm170028/ryanhass/LES/'//&
      'HITdecay/SpatialDecayHIT46/64/rawData/HITdata/Run46_uVel_t531000.out',gp )
    call decomp_2d_read_one(1,v ,'/anvil/projects/x-atm170028/ryanhass/LES/'//&

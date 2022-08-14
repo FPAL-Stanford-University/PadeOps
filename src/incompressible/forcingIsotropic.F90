@@ -7,7 +7,7 @@ module forcingmod
    use mpi
    use fortran_assert,  only: assert 
    use random,          only: uniform_random, randperm
-   use arrayTools,         only: findGL 
+   use arrayTools,      only: findGL 
    use gridtools,       only: loc2glob, glob2loc
 
    implicit none
@@ -18,8 +18,8 @@ module forcingmod
       private
       type(decomp_info), pointer :: sp_gpC, sp_gpE
       real(rkind) :: kmin, kmax
-      integer(rkind) :: Nwaves
-      real(rkind) :: EpsAmplitude
+      integer :: Nwaves
+      real(rkind), public :: EpsAmplitude
       class(spectral), pointer :: spectC
 
       integer, dimension(:), allocatable :: wave_x, wave_y, wave_z
@@ -37,7 +37,9 @@ module forcingmod
       
       ! Ryan's additions/changes:
       real(rkind), dimension(:,:,:), allocatable :: k1, k2, k3, kmag
+      integer, dimension(:), allocatable :: k1_1d, k2_1d, k3_1d
       integer, dimension(:), allocatable :: i, j, k
+      integer :: version
     
       contains
       procedure          :: init
@@ -49,7 +51,7 @@ module forcingmod
       procedure, private :: embed_forcing_mode
       procedure          :: getRHS_HITforcing
       procedure, private :: scrubConjPairs
-      procedure, private :: scrubConjPairsV2
+      !procedure, private :: scrubConjPairsV2
       procedure, private :: replaceConjPartners
    end type 
 
@@ -69,8 +71,11 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0, A_force = 1.d0 
    logical :: useLinearForcing = .false. 
    real(rkind) :: filtfact_linForcing = 0.5d0
-   integer :: nforce
-   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, DomAspectRatioZ, alpha_t, useLinearForcing, filtfact_linForcing  
+   integer :: nforce, version = 1
+
+   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, &
+     DomAspectRatioZ, alpha_t, useLinearForcing, filtfact_linForcing, &
+     version
 
    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
    read(unit=123, NML=HIT_Forcing)
@@ -90,31 +95,69 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    this%sp_gpE => sp_gpE
    this%spectC => spectC
    this%useLinearForcing = useLinearForcing
+   this%version = version
    allocate(this%uhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%vhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%what (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%fxhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%fyhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%fzhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
+   
+   this%seed0 = tidStart + RandSeedToAdd
+   call this%update_seeds()
   
    ! Define the wave-vector grid
    nforce = ceiling(this%kmax)*2
    if (mod(ceiling(this%kmax),2) .ne. 0) nforce = ceiling(this%kmax + 1.d0)*2
 
-   allocate(this%k1  (nforce/2+1,nforce,nforce))
-   allocate(this%k2  (nforce/2+1,nforce,nforce))
-   allocate(this%k3  (nforce/2+1,nforce,nforce))
-   allocate(this%kmag(nforce/2+1,nforce,nforce))
-   call getIsotropicWaveVectorComponents(this%k1,this%k2,this%k3,nforce) 
-   this%kmag = sqrt(this%k1*this%k1 + this%k2*this%k2 + this%k3*this%k3)
+   select case (this%version)
+     case (1)
+       allocate(this%kabs_sample(Nwaves))
+       allocate(this%theta_sample(Nwaves))
+       allocate(this%zeta_sample(Nwaves))
+       allocate(this%tmpModes(Nwaves))
 
-   ! Find the indices of each mode that satisfies kmin <= k <= kmax
-   call findGL(this%kmag,this%kmin,this%kmax,this%i,this%j,this%k)
+       allocate(this%wave_x(Nwaves))
+       allocate(this%wave_y(Nwaves))
+       allocate(this%wave_z(Nwaves))
+
+       call message("Initializating VERSION 1 of HIT_shell_forcing")
+     case (2)
+       call message("Initializating VERSION 2 of HIT_shell_forcing")
+       allocate(this%k1  (nforce/2+1,nforce,nforce))
+       allocate(this%k2  (nforce/2+1,nforce,nforce))
+       allocate(this%k3  (nforce/2+1,nforce,nforce))
+       allocate(this%kmag(nforce/2+1,nforce,nforce))
+       call getIsotropicWaveVectorComponents(this%k1,this%k2,this%k3,nforce) 
+       this%kmag = sqrt(this%k1*this%k1 + this%k2*this%k2 + this%k3*this%k3)
+
+       allocate(this%k1_1d(nforce/2+1), this%k2_1d(nforce), this%k3_1d(nforce))
+       this%k1_1d = nint(this%k1(:,1,1))
+       this%k2_1d = nint(this%k2(1,:,1))
+       this%k3_1d = nint(this%k3(1,1,:))
+
+       ! Find the indices of each mode that satisfies kmin <= k <= kmax
+       call findGL(this%kmag,this%kmin,this%kmax,this%i,this%j,this%k)
+
+       ! Shuffle the modes before scrubbing conjugate pairs so we don't get biased statistics
+       ! (do it a few times to make sure it is well shuffled)
+       !call randomShuffle(this%i, this%j, this%k, this%seed0)
+       !call randomShuffle(this%i, this%j, this%k, this%seed1)
+       !call randomShuffle(this%i, this%j, this%k, this%seed2)
+       !call randomShuffle(this%i, this%j, this%k, this%seed3)
   
-   ! Remove complex conjugate pairs
-   call this%scrubConjPairsV2(this%i,this%j,this%k,&
-     this%k1(:,1,1),this%k2(1,:,1),this%k3(1,1,:))
-  
+       ! Remove complex conjugate pairs
+       !call this%scrubConjPairsV2(this%i,this%j,this%k,&
+       !  nint(this%k1(:,1,1)),nint(this%k2(1,:,1)),nint(this%k3(1,1,:)))
+      
+       ! Allocate Nwaves + a buffer of Nwaves 
+       allocate(this%wave_x(Nwaves+50))
+       allocate(this%wave_y(Nwaves+50))
+       allocate(this%wave_z(Nwaves+50))
+     case default
+       call assert(.false.,'Invalid version number -- forcingIsotropic.F90')
+   end select
+
    this%firstCall = .true.
    this%fxhat    => cbuffzC(:,:,:,1)
    this%fyhat    => cbuffzC(:,:,:,2)
@@ -123,20 +166,8 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    this%cbuffyE  => cbuffyE
    this%cbuffyC  => cbuffyC
 
-   this%seed0 = tidStart + RandSeedToAdd
-   call this%update_seeds()
-  
    this%normfact = (real(spectC%physdecomp%xsz(1),rkind)*real(spectC%physdecomp%ysz(2),rkind)*real(spectC%physdecomp%zsz(3),rkind))**2
   
-   allocate(this%kabs_sample(Nwaves))
-   allocate(this%theta_sample(Nwaves))
-   allocate(this%zeta_sample(Nwaves))
-   allocate(this%tmpModes(Nwaves))
-
-   allocate(this%wave_x(Nwaves))
-   allocate(this%wave_y(Nwaves))
-   allocate(this%wave_z(Nwaves))
-
    this%Nwaves_rkind = real(this%Nwaves, rkind)
 
    if (this%useLinearForcing) then
@@ -197,24 +228,56 @@ end subroutine
 
 subroutine pick_random_wavenumbersV2(this)
   class(HIT_shell_forcing), intent(inout) :: this
-  integer :: n, ierr
-  integer, dimension(this%Nwaves) :: i, j, k
+  integer :: n, Nadd1, Nadd2, Nmodes
+  !integer, dimension(this%Nwaves) :: i, j, k
   
   ! Randomly sort the arrays
   call randomShuffle(this%i,this%j,this%k,this%seed3)
 
   ! Choose the first N modes
-  i = this%i(1:this%Nwaves)
-  j = this%j(1:this%Nwaves)
-  k = this%k(1:this%Nwaves)
+  Nmodes = this%Nwaves
+  Nadd1 = 1
+  Nadd2 = 0
+  do while ((Nadd1 - Nadd2) /= 0)
+    Nadd1 = NmodesToAdd(this%i, this%j, this%k, this%k1_1d, this%k2_1d, &
+     this%k3_1d, Nmodes + Nadd2)
+    Nadd2 = NmodesToAdd(this%i, this%j, this%k, this%k1_1d, this%k2_1d, &
+     this%k3_1d, Nmodes + Nadd1)
+  end do
+  Nmodes = Nmodes + Nadd2
+  !i = this%i(1:this%Nwaves)
+  !j = this%j(1:this%Nwaves)
+  !k = this%k(1:this%Nwaves)
+  
+  this%wave_x = 0
+  this%wave_y = 0
+  this%wave_z = 0
+  call assert(Nmodes <= this%Nwaves+50,&
+    'Did not allocated enough memory for wave_x, wave_y, and wave_z '//&
+    '-- forcingIsotropic.F90')
 
-  do n = 1,this%Nwaves
-    this%wave_x(n) = this%k1(i(n),j(n),k(n)) 
-    this%wave_y(n) = this%k2(i(n),j(n),k(n)) 
-    this%wave_z(n) = this%k3(i(n),j(n),k(n)) 
+  do n = 1,Nmodes
+    this%wave_x(n) = this%k1(this%i(n),this%j(n),this%k(n)) 
+    this%wave_y(n) = this%k2(this%i(n),this%j(n),this%k(n)) 
+    this%wave_z(n) = this%k3(this%i(n),this%j(n),this%k(n)) 
   end do
 
 end subroutine
+
+function NmodesToAdd(i,j,k,k1,k2,k3,Ninit) result(Nadd)
+  integer, dimension(:), intent(in) :: i, j, k, k1, k2, k3
+  integer, intent(in) :: Ninit
+  integer :: Nadd, n, m
+
+  Nadd = 0
+  do n = 1,Ninit-1
+    do m = n+1,Ninit
+      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
+        Nadd = Nadd + 1
+      end if
+    end do
+  end do
+end function
 
 subroutine randomShuffle(i,j,k,seed)
   integer, dimension(:), intent(inout) :: i, j, k
@@ -229,56 +292,57 @@ subroutine randomShuffle(i,j,k,seed)
   
 end subroutine
 
-subroutine scrubConjPairsV2(this,i,j,k,k1,k2,k3)
-  use sorting_mod, only: binary_sort
-  ! Ensure none of the wavevectors indexed by i, j, and k correspond to
-  ! complex conjugate (C.C.) modes
-
-  class(HIT_shell_forcing), intent(inout) :: this
-  integer, dimension(:), allocatable, intent(inout) :: i, j, k
-  real(rkind), dimension(:), intent(in) :: k1, k2, k3
-  integer, dimension(:), allocatable :: icpy, jcpy, kcpy
-  integer :: counter, m, n, id, Nmodes, big
-  integer, dimension(:), allocatable :: idCC
-
-  counter = 0
-  Nmodes = size(i)
-
-  do n = 1,Nmodes-1
-    do m = n+1,Nmodes
-      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
-        counter = counter + 1
-      end if
-    end do
-  end do
-
-  if (counter > 0) then
-    allocate(idCC(counter))
-
-    id = 1
-    do n = 1,size(i)-1
-      do m = n+1,size(i)
-      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
-          idCC(id) = m
-          id = id + 1
-        end if
-      end do
-    end do
-    
-    allocate(icpy(Nmodes),jcpy(Nmodes),kcpy(Nmodes))
-    icpy = i
-    jcpy = j
-    kcpy = k
-    deallocate(i,j,k)
-    allocate(i(Nmodes-counter),j(Nmodes-counter),k(Nmodes-counter))
-   
-    call binary_sort(idCC) 
-    call removeItems(icpy,jcpy,kcpy,idCC,i,j,k)
-
-    deallocate(icpy,jcpy,kcpy)
-    deallocate(idCC)
-  end if
-end subroutine
+!subroutine scrubConjPairsV2(this,i,j,k,k1,k2,k3)
+!  use sorting_mod, only: binary_sort
+!  ! Ensure none of the wavevectors indexed by i, j, and k correspond to
+!  ! complex conjugate (C.C.) modes
+!
+!  class(HIT_shell_forcing), intent(inout) :: this
+!  integer, dimension(:), allocatable, intent(inout) :: i, j, k
+!  integer, dimension(:), intent(in) :: k1, k2, k3
+!  integer, dimension(:), allocatable :: icpy, jcpy, kcpy
+!  integer :: counter, m, n, id, Nmodes, big
+!  integer, dimension(:), allocatable :: idCC
+!
+!  counter = 0
+!  Nmodes = size(i)
+!
+!  do n = 1,Nmodes-1
+!    do m = n+1,Nmodes
+!      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
+!        counter = counter + 1
+!      end if
+!    end do
+!  end do
+!
+!  if (counter > 0) then
+!    call assert(Nmodes - counter > this%Nwaves)
+!    allocate(idCC(counter))
+!
+!    id = 1
+!    do n = 1,size(i)-1
+!      do m = n+1,size(i)
+!      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
+!          idCC(id) = m
+!          id = id + 1
+!        end if
+!      end do
+!    end do
+!    
+!    allocate(icpy(Nmodes),jcpy(Nmodes),kcpy(Nmodes))
+!    icpy = i
+!    jcpy = j
+!    kcpy = k
+!    deallocate(i,j,k)
+!    allocate(i(Nmodes-counter),j(Nmodes-counter),k(Nmodes-counter))
+!   
+!    call binary_sort(idCC) 
+!    call removeItems(icpy,jcpy,kcpy,idCC,i,j,k)
+!
+!    deallocate(icpy,jcpy,kcpy)
+!    deallocate(idCC)
+!  end if
+!end subroutine
 
 subroutine removeItems(ii,ji,ki,idrmv,io,jo,ko)
   integer, dimension(:), intent(in) :: ii, ji, ki, idrmv
@@ -363,9 +427,9 @@ subroutine destroy(this)
 
    deallocate(this%uhat, this%vhat, this%what)
    nullify(this%fxhat, this%fyhat, this%fzhat, this%cbuffzE)
-   if (nrank == 0) then
-      deallocate(this%kabs_sample, this%theta_sample, this%zeta_sample)
-   end if
+   if (allocated(this%kabs_sample)) deallocate(this%kabs_sample)
+   if (allocated(this%theta_sample)) deallocate(this%theta_sample)
+   if (allocated(this%zeta_sample)) deallocate(this%zeta_sample)
    deallocate(this%wave_x, this%wave_y, this%wave_z)
    nullify(this%sp_gpC, this%spectC)
    if (allocated(this%k1)) deallocate(this%k1)
@@ -478,8 +542,12 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
            this%fxhat_old = this%fxhat
            this%fyhat_old = this%fyhat
            this%fzhat_old = this%fzhat
-           !call this%pick_random_wavenumbers()
-           call this%pick_random_wavenumbersV2()
+           select case (this%version)
+             case (1) 
+               call this%pick_random_wavenumbers()
+             case (2) 
+               call this%pick_random_wavenumbersV2()
+           end select
            call this%update_seeds()
         end if
 
