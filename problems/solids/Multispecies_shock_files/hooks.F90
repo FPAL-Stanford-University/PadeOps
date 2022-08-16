@@ -199,6 +199,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac
     integer, dimension(2) :: iparams
+    integer :: i
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 
@@ -207,7 +208,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
-                          plastic2, explPlast2, yield2, interface_init, kwave, a_ratio,&
+                          plastic2, explPlast2, yield2, interface_init, eta0k, kwave, a_ratio,&
                           melt_t, melt_c, melt_t2, melt_c2, &
                           kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e,kos_sh, &
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
@@ -435,6 +436,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(2)%gp11 = one;  mix%material(2)%gp12 = zero; mix%material(2)%gp13 = zero
         mix%material(2)%gp21 = zero; mix%material(2)%gp22 = one;  mix%material(2)%gp23 = zero
         mix%material(2)%gp31 = zero; mix%material(2)%gp32 = zero; mix%material(2)%gp33 = one
+
+        DO i=1,mix%ns
+            mix%material(i)%pe = 0.0d0
+        END DO
         
     end associate
 
@@ -935,8 +940,8 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
-    type(solid_mixture),             intent(in) :: mix
-    integer                                     :: imin, ind(1)
+    type(solid_mixture),             intent(inout) :: mix
+    integer                                     :: imin, ind(1), i
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -944,6 +949,20 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        !overwrite plastic entropy and gt
+        DO i=1,mix%ns
+            mix%material(i)%pe = 0.0d0
+            mix%material(i)%gt11 = 1.0d0
+            mix%material(i)%gt12 = 0.0d0
+            mix%material(i)%gt13 = 0.0d0
+            mix%material(i)%gt21 = 0.0d0
+            mix%material(i)%gt22 = 1.0d0
+            mix%material(i)%gt23 = 0.0d0
+            mix%material(i)%gt31 = 0.0d0
+            mix%material(i)%gt32 = 0.0d0
+            mix%material(i)%gt33 = 1.0d0
+        END DO
 
         ! ! determine interface velocity
         ! ind = minloc(abs(mix%material(1)%VF(:,1,1)-0.5d0))
