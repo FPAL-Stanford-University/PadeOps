@@ -380,7 +380,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             mix%material(1)%gp22 = mix%material(1)%gp22**2;  
             mix%material(1)%gp33 = mix%material(1)%gp33**2;  
         else
-            call GracefulExit("This test problems assume ge-Gp formulation, which required use_gTg=.TRUE. and kos_sh=2",928)
+            !call GracefulExit("This test problems assume ge-Gp formulation, which required use_gTg=.TRUE. and kos_sh=2",928)
         endif
 
         !set mixture Volume fraction and Mass Fraction
@@ -664,7 +664,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               w  ( 1,:,:) = zero
               mix%material(1)%p  (1,:,:) = p_L ! mix%material(1)%p(nx-1,:,:)
               
-              mix%material(1)%g11( 1,:,:)  = ge11_L; mix%material(1)%g12( 1,:,:) = zero;   mix%material(1)%g13( 1,:,:) = zero
+              mix%material(1)%g11( 1,:,:)  = ge11_L; mix%material(1)%g12( 1,:,:) = ge21_L;   mix%material(1)%g13( 1,:,:) = zero
               mix%material(1)%g21( 1,:,:)  = ge21_L; mix%material(1)%g22( 1,:,:) = ge22_L; mix%material(1)%g23( 1,:,:) = zero
               mix%material(1)%g31( 1,:,:)  = zero;   mix%material(1)%g32( 1,:,:) = zero;   mix%material(1)%g33( 1,:,:) = ge22_L
 
@@ -672,7 +672,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               mix%material(1)%gp21( 1,:,:)  = zero;      mix%material(1)%gp22( 1,:,:) = gp22_L**2; mix%material(1)%gp23( 1,:,:) = zero
               mix%material(1)%gp31( 1,:,:)  = zero;      mix%material(1)%gp32( 1,:,:) = zero;      mix%material(1)%gp33( 1,:,:) = gp22_L**2
 
-              mix%material(1)%gt11( 1,:,:) = ge11_L*gp11_L; mix%material(1)%gt12( 1,:,:) = zero;          mix%material(1)%gt13( 1,:,:) = zero
+              mix%material(1)%gt11( 1,:,:) = ge11_L*gp11_L; mix%material(1)%gt12( 1,:,:) = ge21_L*gp11_L; mix%material(1)%gt13( 1,:,:) = zero
               mix%material(1)%gt21( 1,:,:) = ge21_L*gp11_L; mix%material(1)%gt22( 1,:,:) = ge22_L*gp22_L; mix%material(1)%gt23( 1,:,:) = zero
               mix%material(1)%gt31( 1,:,:) = zero;          mix%material(1)%gt32( 1,:,:) = zero;          mix%material(1)%gt33( 1,:,:) = ge22_L*gp22_L
   
