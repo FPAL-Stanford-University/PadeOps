@@ -12,8 +12,7 @@ program shearlessMixing
     use exits,                               only: message, GracefulExit
     use fortran_assert,                      only: assert
     use constants,                           only: one, zero
-    use shearlessMixing_interact_parameters, only: simulationID, InflowProfileType, &
-                                             InflowProfileAmplit, InflowProfileThick, &
+    use shearlessMixing_interact_parameters, only: simulationID, &
                                              streamWiseCoord, nxHIT, nyHIT, nzHIT, &
                                              nxSM, nySM, nzSM, copyHITfieldsToSM
     use fof_mod,                             only: fof
@@ -21,14 +20,14 @@ program shearlessMixing
     implicit none
 
     type(igrid), allocatable, target :: hit, SM
-    character(len=clen) :: inputfile, HIT_InputFile, AD_InputFile, fof_dir, filoutdir
+    character(len=clen) :: inputfile, HIT_InputFile, SM_InputFile, fof_dir, filoutdir
     integer :: ierr, ioUnit
 
     real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0, Ttarget0
     real(rkind), dimension(:,:,:), allocatable :: uhitFilt, vhitFilt, whitFilt
     
-    real(rkind) :: dt1, dt2, dt, InflowSpeed = 1.d0
-    real(rkind) :: k_bandpass_left = 10.d0, k_bandpass_right = 64.d0, zero
+    real(rkind) :: dt1, dt2, dt
+    real(rkind) :: k_bandpass_left = 10.d0, k_bandpass_right = 64.d0
     type(fof), dimension(:), allocatable :: filt
     integer, dimension(:), allocatable :: pid
     integer :: fid, nfilters = 2, tid_FIL_FullField = 75, tid_FIL_Planes = 4
@@ -50,7 +49,7 @@ program shearlessMixing
     close(ioUnit)    
 
     simulationID = 1
-    call SM%init(AD_InputFile, .true.)                               
+    call SM%init(SM_InputFile, .true.)                               
     call SM%start_io(.true.)                                          
     call SM%printDivergence()
    

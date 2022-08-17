@@ -6,9 +6,9 @@ module shearlessMixing_interact_parameters
     implicit none
     integer :: simulationID = 0
     integer :: nxSize = 256, nySize = 256, nzSize = 256
-    character(len=1) :: streamWiseCoord = 'x'
-    integer :: nxADSIM = 0, nyADSIM = 0, nzADSIM = 0, &
+    integer :: nxSM = 0, nySM = 0, nzSM = 0, &
                nxHIT = 0,   nyHIT = 0,   nzHIT = 0
+    character(len=1) :: streamWiseCoord = 'z'
 
 contains
 
@@ -39,8 +39,8 @@ subroutine copyHITfieldsToSM(uhit,vhit,whit,uAD,vAD,wAD,hit,adsim,coord)
   
   select case (coord)
     case ('x')
-      ist = nxADSIM-nxHIT+1
-      ien = nxADSIM
+      ist = nxSM-nxHIT+1
+      ien = nxSM
      
       ! Since everything is in x-decomposition anyway, we can just copy
       uAD(ist:ien,:,:) = uhit  
@@ -48,8 +48,8 @@ subroutine copyHITfieldsToSM(uhit,vhit,whit,uAD,vAD,wAD,hit,adsim,coord)
       wAD(ist:ien,:,:) = whit  
 
     case ('y')
-      jst = nyADSIM-nyHIT+1
-      jen = nyADSIM
+      jst = nySM/2 - nyHIT/2 + 1
+      jen = nySM/2 + nyHIT/2
 
       ! We need to transpose from x->y then copy 
       call transpose_x_to_y(uhit, hit%rbuffyC(:,:,:,1), hit%gpC)
@@ -68,8 +68,8 @@ subroutine copyHITfieldsToSM(uhit,vhit,whit,uAD,vAD,wAD,hit,adsim,coord)
       call transpose_y_to_x(adsim%rbuffyE(:,:,:,1), wAD, adSim%gpE)
 
     case ('z')
-      kst = nzADSIM-nzHIT+1
-      ken = nzADSIM
+      kst = nzSM/2 - nzHIT/2 + 1
+      ken = nzSM/2 + nzHIT/2
 
       ! We need to transpose from x->y->z then copy 
       call transpose_x_to_y(uhit, hit%rbuffyC(:,:,:,1), hit%gpC)
@@ -113,16 +113,15 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: nxg, nyg, nzg
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, zero = one
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, zero, InflowProfileType, &
-            InflowProfileAmplit, InflowProfileThick, streamWiseCoord
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    namelist /SMinput/ Lx, Ly, Lz
     namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz 
 
     select case (simulationID) 
     case (1) 
       ioUnit = 11
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-      read(unit=ioUnit, NML=AD_CoriolisINPUT)
+      read(unit=ioUnit, NML=SMinput)
       close(ioUnit)    
     case (2)
       ioUnit = 11
@@ -149,7 +148,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
                     y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
-                    z(i,j,k) = real( -nzg/2, rkind ) * dz + real( ik1 + k - 1, rkind ) * dz + dz/two
+                    z(i,j,k) = real( -nzg/2, rkind ) * dz + &
+                      & real( iz1 + k - 1, rkind ) * dz + dz/two
                 end do
             end do
         end do
@@ -184,18 +184,17 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
-    real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
+    real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z, T
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     real(rkind)  :: zTop_cell, zBot_cell, zMid
     integer :: ioUnit
-    namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, InflowProfileType, &
-            InflowProfileAmplit, InflowProfileThick, streamWiseCoord
+    namelist /SMinput/ Lx, Ly, Lz
     
     if (simulationID == 1) then
       
       ioUnit = 11
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-      read(unit=ioUnit, NML=AD_CoriolisINPUT)
+      read(unit=ioUnit, NML=SMinput)
       close(ioUnit)    
 
       u  => fieldsC(:,:,:,1)
@@ -212,7 +211,6 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       zBot_cell = p_minval(mesh(:,:,:,3))
       zMid = half*(zTop_cell + zBot_cell)
  
-      select case(InflowProfileType)
       T = one ! Make this a function of Richardson number. 
       u = zero
       v = zero 
@@ -245,12 +243,12 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
          !allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
          allocate(yplanes(nyplanes))
          allocate(xplanes(nxplanes))
-         !allocate(zplanes(nzplanes))
+         allocate(zplanes(nzplanes))
          !xplanes = [300,400,500,600,700]
          yplanes = [nySize/2]
-         xPlanes = [5*nxSize/8] !800
+         xPlanes = [nxSize/2] !800
          !xPlanes = [1, ceiling(nxSize/6.0), ceiling(nxSize/4.85), ceiling(nxSize/4.0), ceiling(nxSize/3.0), ceiling(nxSize/2.0), ceiling(nxSize/1.6)]
-         !zplanes = [128]
+         zplanes = [nzSize/2]
     end if 
 end subroutine
 
@@ -271,16 +269,16 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, zero = 1.d0
+    real(rkind) :: ThetaRef, Lx, Ly, Lz
     integer :: iounit
-    namelist /shearlessMixing_interactINPUT/ Lx, Ly, Lz, zero 
+    namelist /SMinput/ Lx, Ly, Lz
     
     wTh_surf = zero
     
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=shearlessMixing_interactINPUT)
+    read(unit=ioUnit, NML=SMinput)
     close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
@@ -293,16 +291,16 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, zero = 1.d0
+    real(rkind) :: ThetaRef, Lx, Ly, Lz
     integer :: iounit
-    namelist /shearlessMixing_interactINPUT/ Lx, Ly, Lz, zero 
+    namelist /SMinput/ Lx, Ly, Lz
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=shearlessMixing_interactINPUT)
+    read(unit=ioUnit, NML=SMinput)
     close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
@@ -314,14 +312,14 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, zero = 1.d0
+    real(rkind) :: Lx, Ly, Lz
     integer :: iounit
     
-    namelist /shearlessMixing_interactINPUT/ Lx, Ly, Lz, zero
+    namelist /SMinput/ Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=shearlessMixing_interactINPUT)
+    read(unit=ioUnit, NML=SMinput)
     close(ioUnit)    
      
     Tref = 0.d0
@@ -397,7 +395,7 @@ end subroutine
 subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
     use kind_parameters, only: rkind
     use decomp_2d,        only: decomp_info
-    type(decomp_info),                                          intent(in)    :: decompC
+    type(decomp_info),               intent(in)    :: decompC
     character(len=*),                intent(in)    :: inpDirectory
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     integer, intent(in)                            :: scalar_id
@@ -414,7 +412,7 @@ subroutine setScalar_source(decompC, inputfile, mesh, scalar_id, scalarSource)
     use exits, only: message
     use reductions, only: p_sum
 
-    type(decomp_info),                                          intent(in)    :: decompC
+    type(decomp_info),               intent(in)    :: decompC
     character(len=*),                intent(in)    :: inputfile
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     integer, intent(in)                            :: scalar_id
