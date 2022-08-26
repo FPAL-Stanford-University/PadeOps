@@ -140,19 +140,35 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 
         dx = Lx/real(nxg,rkind)
         dy = Ly/real(nyg,rkind)
-        ! z goes from -Lz to Lz
-        dz = 2.d0*Lz/real(nzg,rkind)
-        
-        do k=1,size(mesh,3)
-            do j=1,size(mesh,2)
-                do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
-                    y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
-                    z(i,j,k) = real( -nzg/2, rkind ) * dz + &
-                      & real( iz1 + k - 1, rkind ) * dz + dz/two
-                end do
-            end do
-        end do
+        select case (simulationID)
+        case (1)
+          ! z goes from -Lz to Lz
+          dz = 2.d0*Lz/real(nzg,rkind)
+          
+          do k=1,size(mesh,3)
+              do j=1,size(mesh,2)
+                  do i=1,size(mesh,1)
+                      x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
+                      y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
+                      z(i,j,k) = real( -nzg/2, rkind ) * dz + &
+                        & real( iz1 + k - 1, rkind ) * dz + dz/two
+                  end do
+              end do
+          end do
+        case (2)
+          ! z goes from 0 to Lz
+          dz = Lz/real(nzg,rkind)
+          
+          do k=1,size(mesh,3)
+              do j=1,size(mesh,2)
+                  do i=1,size(mesh,1)
+                      x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
+                      y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
+                      z(i,j,k) = real( iz1 + k - 1, rkind ) * dz + dz/two
+                  end do
+              end do
+          end do
+        end select
 
         ! Shift everything to the origin 
         x = x - dx
