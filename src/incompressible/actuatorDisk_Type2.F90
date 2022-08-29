@@ -20,7 +20,7 @@ module actuatorDisk_T2mod
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
         integer, dimension(:,:), allocatable :: tag_face 
-        real(rkind) :: yaw, tilt, Cp=0.3
+        real(rkind) :: yaw, tilt, Cp=0.3, M=1.0d0
         real(rkind) :: xLoc, yLoc, zLoc
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
@@ -71,8 +71,9 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
     integer  :: ntry = 100
     real(rkind) :: time2initialize = 0, correction_factor = 1.0d0, normfact_p
+    integer :: shapiro_correction
 
-    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
+    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt!, shapiro_correction
     
     ! Read input file for this turbine    
     write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_", ActuatorDisk_T2ID, "_input.inp"
@@ -88,9 +89,16 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     dx=xG(2,1,1)-xG(1,1,1); dy=yG(1,2,1)-yG(1,1,1); dz=zG(1,1,2)-zG(1,1,1)
     this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
 
+    ! Standard
     this%delta = epsFact * (dx*dy*dz)**(1.d0/3.d0)
     this%OneByDelSq = 1.d0/(this%delta**2)
     this%tInd = 1
+    
+    !write(*,*) this%M
+    !if (shapiro_correction) then
+    !    this%M = (1.d0 + (cT/4.d0) * (1.d0/((3.d0*pi)**0.5d0)) * this%delta / (this%diam/2.d0) ) ** -1.d0
+    !endif
+    !write(*,*) this%M
 
     allocate(tmp(size(xG,2),size(xG,3)))
     allocate(tmp_tag(size(xG,2),size(xG,3)))
@@ -264,12 +272,20 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
     real(rkind), dimension(8),                                  intent(out)   :: inst_val
-    real(rkind) :: usp_sq, force
+    real(rkind) :: usp_sq, force, uR, vR
 
     call this%getMeanU(u,v,w)
-    usp_sq = this%uface**2 + this%vface**2 + this%wface**2
+    ! Original actuator disk model implemented by Aditya
+    !usp_sq = this%uface**2 + this%vface**2 + this%wface**2
+    ! Modification to only account for the streamwise velocity
+    usp_sq = this%uface**2
     force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
-   
+    !write(*,*) this%pfactor  
+    !write(*,*) this%normfactor  
+    !write(*,*) usp_sq 
+    uR = this%uface*cos(30.d0*pi/180.d0) - this%vface*sin(30.d0*pi/180.d0);
+    vR = this%uface*sin(30.d0*pi/180.d0) + this%vface*cos(30.d0*pi/180.d0);
+
     !do j = 1,size(this%xs)
     !        call this%smear_this_source(rhsxvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
     !                            this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
@@ -294,6 +310,8 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
                                  ! the power measurements!
             this%powerTime(this%tInd,1) = -force*sqrt(usp_sq)
             this%tInd = this%tInd + 1
+            write(*,*) this%uface
+            write(*,*) this%vface
         end if
       end if
     !end if 

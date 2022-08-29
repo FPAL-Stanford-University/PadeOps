@@ -27,13 +27,13 @@ subroutine init_fringe_targets(inputfile, mesh)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:), pointer :: z
-    real(rkind) :: Lx, Ly, Lz, uInflow, vInflow  
+    real(rkind) :: Lx, Ly, Lz, uInflow, vInflow, inflowAngle 
     real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
     integer :: i,j,k, ioUnit
     integer :: InflowProfileType
 
     namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
-                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType, inflowAngle
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -58,6 +58,9 @@ subroutine init_fringe_targets(inputfile, mesh)
       case(2)
           utarget = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
           vtarget = vInflow * tanh((z-zMid)/InflowProfileThick);
+      case(3)
+          utarget = uInflow*cos(inflowAngle*pi/180.d0) 
+          vtarget = zero !uInflow*sin(inflowAngle*pi/180.d0)
     end select
 
 
@@ -82,11 +85,11 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one, G_alpha
-    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: uInflow, vInflow, inflowAngle  
     real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
     integer :: InflowProfileType
     namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
-                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType, inflowAngle
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -147,12 +150,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
     real(rkind)  :: Lx = one, Ly = one, Lz = one, G_alpha
-    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: uInflow, vInflow, inflowAngle  
     real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
     integer :: InflowProfileType
     
     namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
-                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType, inflowAngle
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -188,6 +191,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       case(2)
           u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
           v = vInflow * tanh((z-zMid)/InflowProfileThick);
+      case(3)
+          utarget = uInflow*cos(inflowAngle*pi/180.d0) 
+          vtarget = zero !uInflow*sin(inflowAngle*pi/180.d0)
     end select
 
     !call get_u(uInflow, vInflow, InflowProfileAmplit, InflowProfileThick, z, zMid, InflowProfileType, u, v)    
@@ -272,7 +278,7 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     integer :: ioUnit 
     real(rkind) :: ThetaRef, Lx, Ly, Lz
     logical :: initPurturbations = .false. 
-    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: uInflow, vInflow, inflowAngle  
     real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
     integer :: InflowProfileType
     namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
@@ -295,11 +301,11 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     real(rkind) :: ThetaRef, Lx, Ly, Lz, G_alpha
     integer :: iounit
-    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: uInflow, vInflow, inflowAngle  
     real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
     integer :: InflowProfileType
     namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
-                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType, inflowAngle
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -320,12 +326,12 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     real(rkind), intent(out) :: Tref
     real(rkind) :: Lx, Ly, Lz, G_alpha
     integer :: iounit
-    real(rkind) :: uInflow, vInflow  
+    real(rkind) :: uInflow, vInflow, inflowAngle 
     real(rkind) :: InflowProfileAmplit, InflowProfileThick, zMid
     integer :: InflowProfileType
     
     namelist /AD_CoriolisINPUT/ Lx, Ly, Lz, uInflow, vInflow, & 
-                                InflowProfileAmplit, InflowProfileThick, InflowProfileType
+                                InflowProfileAmplit, InflowProfileThick, InflowProfileType, inflowAngle
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -386,13 +392,13 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
     scalarSource = 0.d0
 end subroutine 
 
-subroutine get_u(uInflow, vInflow, InflowProfileAmplit, InflowProfileThick, z, zMid, InflowProfileType, u, v)
+subroutine get_u(uInflow, vInflow, InflowProfileAmplit, InflowProfileThick, z, zMid, InflowProfileType, inflowAngle, u, v)
     use kind_parameters, only: rkind
     use constants,          only: zero, one, two, pi, half
     implicit none
     real(rkind), dimension(:,:,:), intent(inout) :: u, v
     real(rkind), dimension(:,:,:), intent(in) :: z
-    real(rkind), intent(in) :: InflowProfileAmplit, InflowProfileThick, zMid, uInflow, vInflow
+    real(rkind), intent(in) :: InflowProfileAmplit, InflowProfileThick, zMid, uInflow, vInflow, inflowAngle
     integer, intent(in) :: InflowProfileType
 
     select case(InflowProfileType)
@@ -405,6 +411,9 @@ subroutine get_u(uInflow, vInflow, InflowProfileAmplit, InflowProfileThick, z, z
       case(2)
           u = uInflow*(one  + InflowProfileAmplit*tanh((z-zMid)/InflowProfileThick))
           v = vInflow * tanh((z-zMid)/InflowProfileThick);
+      case(3)
+          u = uInflow*cos(inflowAngle*pi/180.d0) 
+          v = zero !uInflow*sin(inflowAngle*pi/180.d0)
     end select
 
 end subroutine
