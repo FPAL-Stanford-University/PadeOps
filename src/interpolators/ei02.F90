@@ -154,6 +154,10 @@ contains
                 !2nd order    
                 !no special boundary treatment needed because entire stencil is available
                 RHS(1:this%n-1,:,:) = a10 * ( f(1:this%n-1,:,:) + f(2:this%n,:,:) )  
+
+                !TODO: double check this...because this value should be ignored 
+                RHS(this%n,:,:) = a10 * ( f(this%n-1,:,:) + f(this%n,:,:) )  
+
             case("F2N")
                 !2nd order interior, 1st order at boundary
                 RHS(2:this%n-1,:,:) = a10 * ( f(1:this%n-2,:,:) + f(2:this%n-1,:,:) )  
@@ -179,7 +183,7 @@ contains
             end select
 
         end select
-    
+
     end subroutine
     
     pure subroutine ComputeYIRHS(this, f, RHS, dir, n1, n3, bc1, bcn) 
@@ -314,7 +318,7 @@ contains
             end select
             
         end select
-    
+
     end subroutine
     
     
@@ -327,7 +331,7 @@ contains
         real(rkind), dimension(this%n,na,nb), intent(out) :: fF !fFace
 
         if(this%n == 1) then
-            fF = zero
+            fF = fN
             return
         end if
         
@@ -362,7 +366,7 @@ contains
         real(rkind), dimension(na,this%n,nb), intent(out) :: fF  !fFace
 
         if(this%n == 1) then
-            fF = zero
+            fF = fN
             return
         end if
 
@@ -398,7 +402,7 @@ contains
         real(rkind), dimension(na,nb,this%n), intent(out) :: fF !fFace
 
         if(this%n == 1) then
-            fF = zero
+            fF = fN
             return
         end if
 
@@ -433,7 +437,7 @@ contains
         real(rkind), dimension(this%n,na,nb), intent(out)  :: fN !fNode
 
         if(this%n == 1) then
-            fN = zero
+            fN = fF
             return
         end if
         
@@ -468,7 +472,7 @@ contains
         real(rkind), dimension(this%n,na,nb), intent(out)  :: fN !fNode
 
         if(this%n == 1) then
-            fN = zero
+            fN = fF
             return
         end if
         
@@ -503,7 +507,7 @@ contains
         real(rkind), dimension(this%n,na,nb), intent(out)  :: fN !fNode
 
         if(this%n == 1) then
-            fN = zero
+            fN = fF
             return
         end if
         
