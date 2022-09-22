@@ -87,12 +87,18 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
-    real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
+    real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z!, JayCheck
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind) ::  z0init = 2.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init, zpeak
+    real(rkind)  :: z0init = 2.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0
+    ! real(rkind) :: JayCheck
+    ! JayCheck = zero;
+    ! real(rkind)  :: JayCheck=0.0
+    ! logical :: prbabl
+    ! real(rkind), intent(in) :: dz
+
+    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init, zpeak, prbabl
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -108,25 +114,57 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
+
+    ! JayCheck = 0;
+
+    ! prbabl = .true.
+    PRINT *, 'Jay It is Here Jay Check prbabl = ', prbabl ! J1
  
-    if(isPrecursor) then
-      if(prbabl)then
-          epsnd = 5.0_rkind 
-          u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-          v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-          wC= zero
-       else
+    if(isPrecursor) then ! velocity initialization for prec domain
+        if(prbabl)then ! for simple ABL problem
+            epsnd = 5.0_rkind 
+            where (z >= 0.06)
+                u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+                v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+                wC= zero
+            elsewhere
+                ! u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+                ! dz = (z(1,1,1)-z(1,1,2))
+                u = -((one/kappa)*log((0.06 - z)/z0init))
+                ! u = - one
+                ! JayCheck = JayCheck + u
+                v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+                wC= zero
+            end where
+            !   PRINT *, 'Jay It is Here JayCheck Variable = ', JayCheck ! J1
+       else ! for other problem
           u=one-(z-4.0d0)*(z-4.0d0)/16.0D0
           v=zero
           wC=zero
        endif  
-    else
-       if(prbabl)then
-          epsnd = zero
-          u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-          v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
-          wC= zero 
-       else
+    else ! velocity initialization for other domain, means main domain
+    !    if(prbabl)then ! for simple ABL problem
+    !       epsnd = zero
+    !       u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    !       v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+    !       wC= zero 
+        if(prbabl)then ! for simple ABL problem
+            epsnd = zero
+            where (z >= 0.06)
+                u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+                v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+                wC= zero
+            elsewhere
+                ! u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+                ! dz = (z(1,1,1)-z(1,1,2))
+                u = -((one/kappa)*log((0.06 - z)/z0init))
+                ! u = - one
+                ! JayCheck = JayCheck + u
+                v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+                wC= zero
+            end where
+            !   PRINT *, 'Jay It is Here JayCheck Variable = ', JayCheck ! J1
+       else ! for other problem
           u=one-(z-4.0d0)*(z-4.0d0)/16.0D0
           v=zero
           wC=zero

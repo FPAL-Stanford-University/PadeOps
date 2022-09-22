@@ -30,13 +30,25 @@ contains
             call message(1,"TIDX:",gp%step)
             call message(1,"MaxDiv:",DomMaxDiv)
             call message(1,"Prec u_star:",prec%sgsmodel%get_ustar())
-            call message_min_max(1,"Bounds for u:", p_minval(minval(prec%u)), p_maxval(maxval(prec%u)))
-            call message_min_max(1,"Bounds for v:", p_minval(minval(prec%v)), p_maxval(maxval(prec%v)))
-            call message_min_max(1,"Bounds for w:", p_minval(minval(prec%w)), p_maxval(maxval(prec%w)))
+            call message_min_max(1,"Prec Bounds u:", p_minval(minval(prec%u)), p_maxval(maxval(prec%u)))
+            call message_min_max(1,"Prec Bounds v:", p_minval(minval(prec%v)), p_maxval(maxval(prec%v)))
+            call message_min_max(1,"Prec Bounds w:", p_minval(minval(prec%w)), p_maxval(maxval(prec%w)))
+            if(prec%useIBM) then
+                call message(1, "Prec Average utauIB Gpts:", prec%ibm%get_ibwm_utau_avg())
+                call message_min_max(1, "Prec Bounds utauIB Gpts:", prec%ibm%get_ibwm_utau_min(), prec%ibm%get_ibwm_utau_max())
+                call message(1, "Prec Average utauIB Strs:", prec%ibm%get_ibwm_utaustrs_avg())
+                call message_min_max(1, "Prec Bounds utauIB Strs:", prec%ibm%get_ibwm_utaustrs_min(), prec%ibm%get_ibwm_utaustrs_max())
+            endif
             call message(1,"Main u_star upstream:",gp%sgsmodel%get_ustar_upstream())
-            call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
-            call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
-            call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
+            call message_min_max(1,"Main Bounds u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
+            call message_min_max(1,"Main Bounds v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
+            call message_min_max(1,"Main Bounds w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
+            if(gp%useIBM) then
+                call message(1, "Main Average utauIB Gpts:", gp%ibm%get_ibwm_utau_avg())
+                call message_min_max(1, "Main Bounds utauIB Gpts:", gp%ibm%get_ibwm_utau_min(), gp%ibm%get_ibwm_utau_max())
+                call message(1, "Main Average utauIB Strs:", gp%ibm%get_ibwm_utaustrs_avg())
+                call message_min_max(1, "Main Bounds utauIB Strs:", gp%ibm%get_ibwm_utaustrs_min(), gp%ibm%get_ibwm_utaustrs_max())
+            endif
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 
@@ -56,9 +68,15 @@ contains
             call message(1,"TIDX:",prec%step)
             call message(1,"MaxDiv:",DomMaxDiv)
             call message(1,"Prec u_star:",prec%sgsmodel%get_ustar())
-            call message_min_max(1,"Bounds for u:", p_minval(minval(prec%u)), p_maxval(maxval(prec%u)))
-            call message_min_max(1,"Bounds for v:", p_minval(minval(prec%v)), p_maxval(maxval(prec%v)))
-            call message_min_max(1,"Bounds for w:", p_minval(minval(prec%w)), p_maxval(maxval(prec%w)))
+            call message_min_max(1,"Prec Bounds u:", p_minval(minval(prec%u)), p_maxval(maxval(prec%u)))
+            call message_min_max(1,"Prec Bounds v:", p_minval(minval(prec%v)), p_maxval(maxval(prec%v)))
+            call message_min_max(1,"Prec Bounds w:", p_minval(minval(prec%w)), p_maxval(maxval(prec%w)))
+            if(prec%useIBM) then
+                call message(1, "Prec Average utauIB Gpts:", prec%ibm%get_ibwm_utau_avg())
+                call message_min_max(1, "Prec Bounds utauIB Gpts:", prec%ibm%get_ibwm_utau_min(), prec%ibm%get_ibwm_utau_max())
+                call message(1, "Prec Average utauIB Strs:", prec%ibm%get_ibwm_utaustrs_avg())
+                call message_min_max(1, "Prec Bounds utauIB Strs:", prec%ibm%get_ibwm_utaustrs_min(), prec%ibm%get_ibwm_utaustrs_max())
+            endif
             if (prec%useCFL) then
                 call message(1,"Current dt:",prec%dt)
             end if 
@@ -78,9 +96,15 @@ contains
             call message(2,"TIDX:",gp%step)
             call message(2,"MaxDiv:",DomMaxDiv)
             call message(2,"Main u_star:",gp%sgsmodel%get_ustar())
-            call message_min_max(2,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
-            call message_min_max(2,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
-            call message_min_max(2,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
+            call message_min_max(2,"Main Bounds u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
+            call message_min_max(2,"Main Bounds v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
+            call message_min_max(2,"Main Bounds w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
+            if(gp%useIBM) then
+                call message(2, "Main Average utauIB Gpts:", gp%ibm%get_ibwm_utau_avg())
+                call message_min_max(2, "Main Bounds utauIB Gpts:", gp%ibm%get_ibwm_utau_min(), gp%ibm%get_ibwm_utau_max())
+                call message(2, "Main Average utauIB Strs:", gp%ibm%get_ibwm_utaustrs_avg())
+                call message_min_max(2, "Main Bounds utauIB Strs:", gp%ibm%get_ibwm_utaustrs_min(), gp%ibm%get_ibwm_utaustrs_max())
+            endif
             call message(2,"Current dt:",gp%dt)
             call toc()
             call tic()

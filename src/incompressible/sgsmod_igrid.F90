@@ -12,6 +12,7 @@ module sgsmod_igrid
     use gaussianstuff, only: gaussian
     use lstsqstuff, only: lstsq
     use PadeDerOps, only: Pade6stagg
+    use ibmgpmod!, only: ibmgp
     implicit none
 
     private
@@ -91,6 +92,8 @@ module sgsmod_igrid
         real(rkind) :: camd_x, camd_y, camd_z
         logical :: useCglobal = .false. 
 
+        logical :: useibm = .false. 
+        class(ibmgp), pointer :: ibm
 
         integer :: BC_tau13_top = 0, BC_tau13_bot = 0, BC_tau23_top = 0, BC_tau23_bot = 0, BC_tau33_top = 0, BC_tau33_bot = 0
         ! Buoyancy factor (needed for AMD model, set using the procedure:  setBuoyancyFact)
@@ -288,6 +291,11 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
 
    if (this%useWallModel) call this%embed_WM_stress()
  
+   if(this%useibm) then
+       call this%ibm%add_ibm_wallstress(this%tau_ij, this%tau_13, this%tau_23)
+       !nullify(this%ibm)
+   endif
+
    if(newTimeStep) this%mstep = this%mstep + 1
    
 end subroutine

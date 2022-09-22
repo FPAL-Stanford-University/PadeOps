@@ -214,8 +214,11 @@ program concurrentSimulation
     endif 
 
     if(allocated(Ttarget)) deallocate(Ttarget)
-    call interpE%destroy()
-    call interpC%destroy()
+
+    if(useInterpolator) then
+        call interpE%destroy()
+        call interpC%destroy()
+    endif
 
     deallocate(prec)                                                     !<-- Deallocate all the memory associated with scalar defaults
     deallocate(igp)                                                      !<-- Deallocate all the memory associated with scalar defaults

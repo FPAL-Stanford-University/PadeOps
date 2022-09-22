@@ -863,7 +863,17 @@ contains
            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
        end if  
 
-        ! STEP 11: Initialize SGS model
+       ! STEP 11: Initialize Immersed Boundary Method (IBM)
+       if (this%useibm) then
+           allocate(this%ibm)
+           call this%ibm%init(this%InputDir, inputFile, this%outputDir, this%RunID, this%gpC, this%gpE, &
+                              this%spectC, this%spectE, this%mesh, &
+                              this%Lx, this%Ly, this%zBot, this%zTop, this%dz, &
+                              this%rbuffxC, this%rbuffyC, this%rbuffzC,        &
+                              this%rbuffxE, this%rbuffyE, this%rbuffzE, this%mask_solid_xC)
+       end if
+
+        ! STEP 12: Initialize SGS model
         allocate(this%SGSmodel)
         if (this%useSGS) then
             ! First get z at edges
@@ -887,14 +897,14 @@ contains
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
                                     this%ThetaRef, this%wTh_surf, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, &
-                                    this%botBC_Temp, this%initSpinUp)
+                                    this%botBC_Temp, this%useibm, this%ibm, this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
 
 
-        ! STEP 12: Set Sponge Layer
+        ! STEP 13: Set Sponge Layer
         if (this%useSponge) then
             allocate(this%RdampC(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)))
             allocate(this%RdampE(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)))
@@ -1025,16 +1035,6 @@ contains
        end if
        allocate(this%inst_horz_avg(5))
        this%inst_horz_avg = zero
-
-       ! STEP 13: Initialize Immersed Boundary Method (IBM)
-       if (this%useibm) then
-           allocate(this%ibm)
-           call this%ibm%init(this%InputDir, inputFile, this%outputDir, this%RunID, this%gpC, this%gpE, &
-                              this%spectC, this%spectE, this%mesh, &
-                              this%Lx, this%Ly, this%zBot, this%zTop, this%dz, &
-                              this%rbuffxC, this%rbuffyC, this%rbuffzC,        &
-                              this%rbuffxE, this%rbuffyE, this%rbuffzE, this%mask_solid_xC)
-       end if
 
        ! STEP 14: Set visualization planes for io
        call set_planes_io(this%xplanes, this%yplanes, this%zplanes)

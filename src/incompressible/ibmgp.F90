@@ -1,4 +1,4 @@
-module ibmgpmod
+ module ibmgpmod
     use kind_parameters, only: rkind, clen, mpiinteg, mpirkind
     use constants      , only: zero, one, third, half, two, kappa
     use exits          , only: GracefulExit, message
@@ -21,27 +21,39 @@ module ibmgpmod
 
         integer     :: num_surfelem, num_gptsC, num_gptsE, ibwm, runID
         integer     :: num_imptsC_glob, num_imptsE_glob
-        real(rkind) :: ibwm_ustar, ibwm_z0, ibwm_utau_avg, ibwm_utau_max, ibwm_utau_min
+        integer     :: num_strsC_glob, num_strsE_glob, num_strsC, num_strsE
+        real(rkind) :: ibwm_ustar, ibwm_z0, ibwm_utau_avg, ibwm_utau_max, ibwm_utau_min, phi_stressIm
+        real(rkind) :: ibwm_utaustrs_avg, ibwm_utaustrs_max, ibwm_utaustrs_min
         real(rkind), allocatable, dimension(:,:,:) :: surfelem
-        real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal
+        real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal ! SURFace CENTroid, SURFace NORMAL J1
         real(rkind), allocatable, dimension(:,:)   :: gptsC_xyz, gptsE_xyz, gptsC_bpt, gptsE_bpt
+        real(rkind), allocatable, dimension(:,:)   :: strsC_xyz, strsE_xyz, strsC_bpt, strsE_bpt ! J1
         real(rkind), allocatable, dimension(:,:)   :: gptsC_img, gptsE_img, gptsC_bnp, gptsE_bnp
         integer,     allocatable, dimension(:,:)   :: gptsC_ind, gptsE_ind
+        integer,     allocatable, dimension(:,:)   :: strsC_ind, strsE_ind ! J1
         integer,     allocatable, dimension(:)     :: gptsC_bpind, gptsE_bpind!, gptsC_ileft, gptsC_jleft, gptsC_kleft
-        integer,     allocatable, dimension(:)     :: num_imptsC_arr, imptsC_index_st
-        integer,     allocatable, dimension(:)     :: num_imptsE_arr, imptsE_index_st
+        integer,     allocatable, dimension(:)     :: strsC_bpind, strsE_bpind!, gptsC_ileft, gptsC_jleft, gptsC_kleft ! J1
+        integer,     allocatable, dimension(:)     :: num_imptsC_arr, imptsC_index_st, num_strsC_arr, strsC_index_st
+        integer,     allocatable, dimension(:)     :: num_imptsE_arr, imptsE_index_st, num_strsE_arr, strsE_index_st
         !integer,     allocatable, dimension(:)     :: gptsE_ileft, gptsE_jleft, gptsE_kleft
         !real(rkind), allocatable, dimension(:)     :: gptsC_ifacx, gptsC_jfacy, gptsC_kfacz
         !real(rkind), allocatable, dimension(:)     :: gptsE_ifacx, gptsE_jfacy, gptsE_kfacz
         !real(rkind), allocatable, dimension(:)     ::   gptsC_u,  gptsC_v,  gptsC_w,  gptsE_u,  gptsE_v,  gptsE_w
         integer,     allocatable, dimension(:)     ::  imptsC_numonproc, imptsE_numonproc
+        integer,     allocatable, dimension(:)     ::  strsC_numonproc, strsE_numonproc ! J1
         integer,     allocatable, dimension(:,:,:) ::  imptsC_indices,   imptsE_indices
+        integer,     allocatable, dimension(:,:,:) ::  strsC_indices,   strsE_indices ! J1
         real(rkind), allocatable, dimension(:,:)   ::  imptsC_multfac,   imptsE_multfac, imptsC_xyz, imptsE_xyz
+        real(rkind), allocatable, dimension(:,:)   ::  strsImC_multfac,   strsImE_multfac, strsC_img, strsE_img ! J1
+        real(rkind), allocatable, dimension(:,:)   ::  strsC_xyz_loc,   strsE_xyz_loc, strsImC_xyz, strsImE_xyz ! J1
+        real(rkind), allocatable, dimension(:,:)   ::  strsC_multfac,   strsE_multfac ! J1
         real(rkind), allocatable, dimension(:,:)   ::  imptsC_xyz_loc, imptsE_xyz_loc
         real(rkind), allocatable, dimension(:)     ::  imptsC_u, imptsC_v, imptsC_w, imptsE_u, imptsE_v, imptsE_w
         real(rkind), allocatable, dimension(:)     ::  imptsC_u_tmp, imptsC_v_tmp, imptsC_w_tmp
-        real(rkind), allocatable, dimension(:)     ::  imptsE_u_tmp, imptsE_v_tmp, imptsE_w_tmp, utauC_ib
+        real(rkind), allocatable, dimension(:)     ::  imptsE_u_tmp, imptsE_v_tmp, imptsE_w_tmp, utauC_ib, utaustrsC_ib
         real(rkind), allocatable, dimension(:,:)   ::  gptsC_dst, gptsE_dst
+        real(rkind), allocatable, dimension(:)     :: strsC_u_tmp, strsC_v_tmp, strsC_w_tmp, strsC_u, strsC_v, strsC_w
+        real(rkind), allocatable, dimension(:)     :: strsE_u_tmp, strsE_v_tmp, strsE_w_tmp, strsE_u, strsE_v, strsE_w
 
         real(rkind), dimension(:,:,:), pointer     :: rbuffxC1, rbuffxC2, rbuffyC1, rbuffyC2, rbuffzC1, rbuffzC2 
         real(rkind), dimension(:,:,:), pointer     :: rbuffxE1, rbuffxE2, rbuffyE1, rbuffyE2, rbuffzE1, rbuffzE2 
@@ -58,24 +70,37 @@ module ibmgpmod
             procedure          :: destroy
             procedure          :: update_ibmgp
             procedure          :: get_utauC_ib
+            procedure          :: get_utaustrsC_ib
             procedure          :: get_ibwm_utau_avg
             procedure          :: get_ibwm_utau_max
             procedure          :: get_ibwm_utau_min
+            procedure          :: get_ibwm_utaustrs_avg
+            procedure          :: get_ibwm_utaustrs_max
+            procedure          :: get_ibwm_utaustrs_min
             procedure          :: get_num_gptsC
+            procedure          :: add_ibm_wallstress
             procedure, private :: compute_levelset
             procedure, private :: mark_ghost_points
+            procedure, private :: mark_stress_points ! J1
             procedure, private :: save_ghost_points
             procedure, private :: setup_interpolation
+            procedure, private :: setup_stress_interpolation ! J1
             procedure, private :: mark_boundary_points
             procedure, private :: compute_image_points
             procedure, private :: interp_imptsC
             procedure, private :: interp_imptsE
+            procedure, private :: interp_strsImC
+            procedure, private :: interp_strsImE
             procedure, private :: update_ghostptsCE
             procedure, private :: smooth_solidptsCE
             procedure, private :: set_interpfac_imptsC
             procedure, private :: set_interpfac_imptsE
+            procedure, private :: set_interpfac_strsC ! J1
+            procedure, private :: set_interpfac_strsE ! J1
             procedure, private :: process_image_pointC
             procedure, private :: process_image_pointE
+            procedure, private :: process_stress_image_pointC ! J1
+            procedure, private :: process_stress_image_pointE ! J1
             procedure, private :: smooth_along_x
             procedure, private :: smooth_along_y
             procedure, private :: smooth_along_z
@@ -107,9 +132,10 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   real(rkind), dimension(3) :: vec1, vec2, xk
   real(rkind) :: ibwm_ustar = one, ibwm_z0 = 1.0d-4
   integer     :: predominant_direc = 3;
+  logical     :: prbabl=.false.
 
   namelist /IBMGP/ surfaceMeshFile, Lscale_x, Lscale_y, Lscale_z, translate_x, translate_y, translate_z, &
-                   solidpt_x, solidpt_y, solidpt_z, nlayers, ibwm, ibwm_ustar, ibwm_z0
+                   solidpt_x, solidpt_y, solidpt_z, nlayers, ibwm, ibwm_ustar, ibwm_z0, prbabl
 
   this%runID = runID
   this%outputDir = outputDir
@@ -150,9 +176,9 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   this%num_surfelem = nlines/7
   close(ioUnit)
 
-  allocate(this%surfelem(3, this%num_surfelem, 3))
-  allocate(this%surfcent(   this%num_surfelem, 3))
-  allocate(this%surfnormal( this%num_surfelem, 3))
+  allocate(this%surfelem(3, this%num_surfelem, 3)) ! SURFace ELEMent J1
+  allocate(this%surfcent(   this%num_surfelem, 3)) ! SURFace CENTroid
+  allocate(this%surfnormal( this%num_surfelem, 3)) ! SURFace NORMAL
 
   ! -- Now read in the vertex data ---
   ioUnit = 11
@@ -181,6 +207,8 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
       read(ioUnit, *);       read(ioUnit, *)
   enddo
   close(ioUnit)
+
+  ! PRINT *, 'Jay It is Here 1, inside init, line 199' ! J1
 
   !if(nrank==0) then
   !  print *, 'nlines = ', nlines
@@ -338,12 +366,6 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
   call decomp_2d_write_one(1, levelsetE, fname, this%gpE)
 
-
-  !!!print *, 'Out mapC  min = ', -p_maxval(maxval(-mapC))
-  !!!print *, 'Out mapC  max = ', p_maxval(maxval( mapC))
-  !!!!print '(a,5(i4,1x))', 'Decomp info C = ', nrank, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)
-  !!!!print '(a,5(i4,1x))', 'Decomp info E = ', nrank, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)
-
   call this%mark_ghost_points(gpC, nlayers, mapC, flagC, this%rbuffxC1, this%rbuffyC1, this%rbuffzC1);  this%num_gptsC = sum(flagC)
   write(dumstr,"(A3,I2.2,A9)") "Run",this%runID,"_mapC.dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
@@ -355,10 +377,6 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
   this%rbuffxE1 = mapE
   call decomp_2d_write_one(1, this%rbuffxE1, fname, this%gpE)
-  !!!print *, '   flagC  min = ', -p_maxval(maxval(-flagC))
-  !!!print *, '   flagC  max = ', p_maxval(maxval( flagC))
-
-! comehere
 
   allocate(this%num_imptsC_arr(nproc), this%num_imptsE_arr(nproc))
   allocate(this%imptsC_index_st(nproc), this%imptsE_index_st(nproc))
@@ -387,6 +405,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   print '(a,20(i5,1x))', 'num_gptsE       :=', nrank, this%num_gptsE, this%num_imptsE_glob
 
   allocate(this%imptsC_xyz(this%num_imptsC_glob,3), this%imptsE_xyz(this%num_imptsE_glob,3))
+  ! allocate(this%strsC_xyz(this%num_imptsC_glob,3), this%strsE_xyz(this%num_imptsE_glob,3))
   allocate(this%imptsC_xyz_loc(this%num_imptsC_glob,3), this%imptsE_xyz_loc(this%num_imptsE_glob,3))
   allocate(this%imptsC_u_tmp(this%num_imptsC_glob), this%imptsE_u_tmp(this%num_imptsE_glob))
   allocate(this%imptsC_v_tmp(this%num_imptsC_glob), this%imptsE_v_tmp(this%num_imptsE_glob))
@@ -397,6 +416,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   allocate(this%imptsC_multfac(  8,this%num_imptsC_glob), this%imptsE_multfac(  8,this%num_imptsE_glob))
 
   this%imptsC_xyz       = zero;      this%imptsE_xyz       = zero;
+  ! this%strsC_xyz       = zero;      this%strsE_xyz       = zero; ! J1
   this%imptsC_xyz_loc   = zero;      this%imptsE_xyz_loc   = zero;
   this%imptsC_u_tmp     = zero;      this%imptsE_u_tmp     = zero;
   this%imptsC_v_tmp     = zero;      this%imptsE_v_tmp     = zero;
@@ -407,6 +427,8 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
 
   allocate(this%gptsC_xyz(this%num_gptsC,3), this%gptsE_xyz(this%num_gptsE,3))
   allocate(this%gptsC_ind(this%num_gptsC,3), this%gptsE_ind(this%num_gptsE,3))
+  ! allocate(this%strsC_ind(this%num_strsC_glob,3), this%strsE_ind(this%num_strsE_glob,3)) ! J1
+  
   allocate(this%gptsC_bpt(this%num_gptsC,3), this%gptsE_bpt(this%num_gptsE,3))
   allocate(this%gptsC_bpind(this%num_gptsC), this%gptsE_bpind(this%num_gptsE))
   allocate(this%gptsC_img(this%num_gptsC,3), this%gptsE_img(this%num_gptsE,3))
@@ -416,6 +438,7 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
 
   this%gptsC_xyz   = zero;      this%gptsE_xyz   = zero;
   this%gptsC_ind   = 0;         this%gptsE_ind   = 0;   
+  ! this%strsC_ind   = 0;         this%strsE_ind   = 0;   
   this%gptsC_bpt   = zero;      this%gptsE_bpt   = zero;
   this%gptsC_bpind = 0;         this%gptsE_bpind = 0;   
   this%gptsC_img   = zero;      this%gptsE_img   = zero;
@@ -449,9 +472,184 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
 
   call this%setup_interpolation(dx,dy,dz, zBot, Lx, Ly, xlinepart, ylinepart, zlinepart, zlinepartE)
 
+  call this%mark_stress_points(levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE, dz)
+
+  allocate(this%strsC_numonproc(this%num_strsC_glob), this%strsE_numonproc(this%num_strsE_glob)) ! J1
+  allocate(this%strsC_indices(3,8,this%num_strsC_glob), this%strsE_indices(3,8,this%num_strsE_glob)) ! J1
+  allocate(this%strsC_multfac(  8,this%num_strsC_glob), this%strsE_multfac(  8,this%num_strsE_glob)) ! J1
+  this%strsC_numonproc = 0;         this%strsE_numonproc = 0; ! J1
+  this%strsC_indices   = 0;         this%strsE_indices   = 0; ! J1
+  this%strsC_multfac   = zero;      this%strsE_multfac   = zero; ! J1
+
+
+  call this%setup_stress_interpolation(dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinepart, zlinepart, zlinepartE)
+
+  allocate(this%strsC_u_tmp(this%num_strsC_glob), this%strsC_v_tmp(this%num_strsC_glob), this%strsC_w_tmp(this%num_strsC_glob))
+  allocate(this%strsC_u(this%num_strsC_glob), this%strsC_v(this%num_strsC_glob), this%strsC_w(this%num_strsC_glob))
+  allocate(this%strsE_u_tmp(this%num_strsE_glob), this%strsE_v_tmp(this%num_strsE_glob), this%strsE_w_tmp(this%num_strsE_glob))
+  allocate(this%strsE_u(this%num_strsE_glob), this%strsE_v(this%num_strsE_glob), this%strsE_w(this%num_strsE_glob))
+  allocate(this%utaustrsC_ib(this%num_strsC))
+  this%strsC_u = zero; this%strsC_u_tmp = zero
+  this%strsC_v = zero; this%strsC_v_tmp = zero
+  this%strsC_w = zero; this%strsC_w_tmp = zero
+  this%strsE_u = zero; this%strsE_u_tmp = zero
+  this%strsE_v = zero; this%strsE_v_tmp = zero
+  this%strsE_w = zero; this%strsE_w_tmp = zero
+  this%utaustrsC_ib    = zero;
+
   deallocate(flagE, flagC, mapC, mapE, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE)
 
   maskSolidXc_ptr => this%mask_solid_xC(:,:,:)
+
+end subroutine
+
+subroutine interp_strsImC(this, u, v, wC)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), dimension(:,:,:), intent(in) :: u, v, wC
+
+  integer :: ii, jj, i, j, k, ierr
+  real(rkind) :: fac, tmpval1, tmpval2, tmpval3
+
+  this%strsC_u_tmp = zero;  this%strsC_v_tmp = zero;  this%strsC_w_tmp = zero
+  do ii = 1, this%num_strsC_glob ! this%num_gptsC
+      ! how many of the 8 interpolation points are on this proc?
+      tmpval1 = zero; tmpval2 = zero; tmpval3 = zero
+      do jj = 1, this%strsC_numonproc(ii)
+          i   = this%strsC_indices(1,jj,ii)
+          j   = this%strsC_indices(2,jj,ii)
+          k   = this%strsC_indices(3,jj,ii)
+          fac = this%strsC_multfac(jj, ii)
+          tmpval1 = tmpval1 + fac* u(i,j,k)
+          tmpval2 = tmpval2 + fac* v(i,j,k)
+          tmpval3 = tmpval3 + fac*wC(i,j,k)
+      enddo
+      this%strsC_u_tmp(ii) = tmpval1
+      this%strsC_v_tmp(ii) = tmpval2
+      this%strsC_w_tmp(ii) = tmpval3
+  enddo
+
+  call MPI_AllReduce(this%strsC_u_tmp, this%strsC_u, this%num_strsC_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%strsC_v_tmp, this%strsC_v, this%num_strsC_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%strsC_w_tmp, this%strsC_w, this%num_strsC_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+end subroutine
+
+subroutine interp_strsImE(this, uE, vE, w)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), dimension(:,:,:), intent(in) :: uE, vE, w
+
+  integer :: ii, jj, i, j, k, ierr
+  real(rkind) :: fac, tmpval1, tmpval2, tmpval3
+
+  this%strsE_u_tmp = zero;  this%strsE_v_tmp = zero;  this%strsE_w_tmp = zero
+  do ii = 1, this%num_strsE_glob ! this%num_gptsC
+      ! how many of the 8 interpolation points are on this proc?
+      tmpval1 = zero; tmpval2 = zero; tmpval3 = zero
+      do jj = 1, this%strsE_numonproc(ii)
+          i   = this%strsE_indices(1,jj,ii)
+          j   = this%strsE_indices(2,jj,ii)
+          k   = this%strsE_indices(3,jj,ii)
+          fac = this%strsE_multfac(jj, ii)
+          tmpval1 = tmpval1 + fac*uE(i,j,k)
+          tmpval2 = tmpval2 + fac*vE(i,j,k)
+          tmpval3 = tmpval3 + fac* w(i,j,k)
+      enddo
+      this%strsE_u_tmp(ii) = tmpval1
+      this%strsE_v_tmp(ii) = tmpval2
+      this%strsE_w_tmp(ii) = tmpval3
+  enddo
+
+  call MPI_AllReduce(this%strsE_u_tmp, this%strsE_u, this%num_strsE_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%strsE_v_tmp, this%strsE_v, this%num_strsE_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%strsE_w_tmp, this%strsE_w, this%num_strsE_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+end subroutine
+
+subroutine add_ibm_wallstress(this, tau_ij, tau_13, tau_23)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), dimension(:,:,:,:), intent(inout) :: tau_ij
+  real(rkind), dimension(:,:,:),   intent(inout) :: tau_13, tau_23
+  real(rkind)  :: dcarr(3,3), utausq_local_ib, vec1mag, dotpr
+  integer :: ii, i, j, k, ind_glob
+  real(rkind), dimension(3) :: vec1, vec2, vec3, unrm, utan
+
+  ! print '(a,i4,1x,3(e12.5,1x))', 'Before: ', nrank, p_maxval(abs(maxval(tau_ij))), p_maxval(abs(maxval(tau_13))), p_maxval(abs(maxval(tau_23)))
+
+  if(this%ibwm==2) then
+    ! interpolate to strsImC and strsImE
+    !! -- already done at update_ibmgp--
+  
+    ! calculate tau_ij in the local coordinate system and rotate to the Cartesian
+    ! coordinate system
+    do ii = 1, this%num_strsC
+        ! surface normal of the closest boundary point
+        vec2 = this%surfnormal(this%strsC_bpind(ii),:)
+  
+        ! get the direction of the local velocity
+        ind_glob = this%strsC_index_st(nrank+1) + ii -1
+        vec1(1) = this%strsC_u(ind_glob); vec1(2) = this%strsC_v(ind_glob); vec1(3) = this%strsC_w(ind_glob)
+        dotpr = sum(vec1*vec2);   unrm = vec2*dotpr;   utan = vec1-unrm;   vec1 = utan
+        vec1mag = sqrt(sum(vec1*vec1))
+        if(vec1mag > 1.0d-12) then
+          vec1(:) = vec1(:)/vec1mag
+        endif
+  
+        ! cross prod of vec1 and vec2
+        vec3(1) = vec1(2)*vec2(3) - vec1(3)*vec2(2)
+        vec3(2) = vec1(3)*vec2(1) - vec1(1)*vec2(3)
+        vec3(3) = vec1(1)*vec2(2) - vec1(2)*vec2(1)
+  
+        utausq_local_ib = -(sum(utan*utan))*(kappa/log(this%phi_stressIm/this%ibwm_z0))**2
+        this%utaustrsC_ib(ii) = dsqrt(-utausq_local_ib)
+  
+        ! compute direction cosines
+        dcarr(1,1) = vec1(1); dcarr(1,2) = vec1(2); dcarr(1,3) = vec1(3); 
+        dcarr(2,1) = vec2(1); dcarr(2,2) = vec2(2); dcarr(2,3) = vec2(3); 
+        dcarr(3,1) = vec3(1); dcarr(3,2) = vec3(2); dcarr(3,3) = vec3(3); 
+        
+        i = this%strsC_ind(ii,1); j = this%strsC_ind(ii,2); k = this%strsC_ind(ii,3);
+        tau_ij(i,j,k,1) = tau_ij(i,j,k,1) + two*dcarr(1,1)*dcarr(1,3)*utausq_local_ib
+        tau_ij(i,j,k,2) = tau_ij(i,j,k,1) + (dcarr(1,1)*dcarr(2,3) + dcarr(1,3)*dcarr(2,1))*utausq_local_ib
+        tau_ij(i,j,k,4) = tau_ij(i,j,k,1) + two*dcarr(2,1)*dcarr(2,3)*utausq_local_ib
+        tau_ij(i,j,k,6) = tau_ij(i,j,k,1) + two*dcarr(3,3)*dcarr(3,1)*utausq_local_ib
+  
+    enddo
+    this%ibwm_utaustrs_avg = p_sum(sum(this%utaustrsC_ib))/(real(this%num_strsC_glob, rkind) + 1.0d-18)
+    this%ibwm_utaustrs_max = p_maxval(maxval(this%utaustrsC_ib));  this%ibwm_utaustrs_min = p_minval(minval(this%utaustrsC_ib))
+  
+    do ii = 1, this%num_strsE
+        ! surface normal of the closest boundary point
+        vec2 = this%surfnormal(this%strsE_bpind(ii),:)
+  
+        ! get the direction of the local velocity
+        ind_glob = this%strsE_index_st(nrank+1) + ii -1
+        vec1(1) = this%strsE_u(ind_glob); vec1(2) = this%strsE_v(ind_glob); vec1(3) = this%strsE_w(ind_glob)
+        dotpr = sum(vec1*vec2);   unrm = vec2*dotpr;   utan = vec1-unrm;   vec1 = utan
+        vec1mag = sqrt(sum(vec1*vec1))
+        if(vec1mag > 1.0d-12) then
+          vec1(:) = vec1(:)/vec1mag
+        endif
+  
+        ! cross prod of vec1 and vec2
+        vec3(1) = vec1(2)*vec2(3) - vec1(3)*vec2(2)
+        vec3(2) = vec1(3)*vec2(1) - vec1(1)*vec2(3)
+        vec3(3) = vec1(1)*vec2(2) - vec1(2)*vec2(1)
+  
+        utausq_local_ib = -(sum(utan*utan))*(kappa/log(this%phi_stressIm/this%ibwm_z0))**2
+  
+        ! compute direction cosines
+        dcarr(1,1) = vec1(1); dcarr(1,2) = vec1(2); dcarr(1,3) = vec1(3); 
+        dcarr(2,1) = vec2(1); dcarr(2,2) = vec2(2); dcarr(2,3) = vec2(3); 
+        dcarr(3,1) = vec3(1); dcarr(3,2) = vec3(2); dcarr(3,3) = vec3(3); 
+        
+        i = this%strsE_ind(ii,1); j = this%strsE_ind(ii,2); k = this%strsE_ind(ii,3);
+        tau_13(i,j,k) = tau_13(i,j,k) + (dcarr(1,1)*dcarr(3,3) + dcarr(1,3)*dcarr(3,1))*utausq_local_ib
+        tau_23(i,j,k) = tau_23(i,j,k) + (dcarr(2,1)*dcarr(3,3) + dcarr(2,3)*dcarr(3,1))*utausq_local_ib
+  
+    enddo
+  endif
+
+  ! print '(a,i4,1x,3(e12.5,1x))', 'After: ', nrank, p_maxval(abs(maxval(tau_ij))), p_maxval(abs(maxval(tau_13))), p_maxval(abs(maxval(tau_23)))
 
 end subroutine
 
@@ -508,6 +706,9 @@ subroutine update_ibmgp(this, u, v, w, uE, vE, wC, uhat, vhat, what)
   call this%spectC%fft(v, vhat)
   call this%spectE%fft(w, what)
 
+  ! Step 4: Interpolate u, v, w to stress-image points for wall stress claculation
+  call this%interp_strsImC(u, v, wC)
+  call this%interp_strsImE(uE, vE, w)
 end subroutine
 
 subroutine smooth_solidptsCE(this, u, v, w)
@@ -958,6 +1159,146 @@ subroutine interp_imptsC(this, u, v, wC)
 
 end subroutine
 
+subroutine setup_stress_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinepart, zlinepart, zlinepartE)
+  class(ibmgp),              intent(inout) :: this
+  real(rkind),               intent(in)    :: dx, dy, dz, zBot, Lx, Ly
+  real(rkind), dimension(:), intent(in)    :: xlinepart, ylinepart, zlinepart, zlinepartE
+
+  integer :: ii, itmp, jtmp, ktmp, nxloc, nyloc, nzloc, point_number, ierr
+  real(rkind) :: xdom_left, xdom_right, ydom_left, ydom_right, zdom_left, zdom_right, zdom_leftE, zdom_rightE
+  real(rkind) :: xloc, yloc, zloc, facx, facy, facz, onemfacx, onemfacy, onemfacz
+  character(len=clen) :: fname, dumstr
+  integer    , allocatable, dimension(:)    :: psum_numonproc
+  real(rkind), allocatable, dimension(:)    :: psum_multfac, lsum_multfac
+
+  nxloc = this%gpC%xsz(1);  nyloc = this%gpC%xsz(2);  nzloc = this%gpC%xsz(3)
+
+  ! note :: padded domain extents
+  xdom_left  = xlinepart(1)  - dx;   xdom_right  = xlinepart(nxloc)  + dx
+  ydom_left  = ylinepart(1)  - dy;   ydom_right  = ylinepart(nyloc)  + dy
+  zdom_left  = zlinepart(1)  - dz;   zdom_right  = zlinepart(nzloc)  + dz
+  zdom_leftE = zlinepartE(1) - dz;   zdom_rightE = zlinepartE(nzloc) + dz
+
+  ! PRINT *, 'Jay It is Here 1, inside setup_stress_interpolation, line 1036, nrank = ', nrank  ! J1
+
+  do ii = 1, this%num_strsC_glob ! J1 ! can't use glob ???
+    ! because ii value goes to global, and in sub-sub-subroutine variables are local index.
+
+      ! first check if this point is on this processor
+      !xloc = this%gptsC_img(ii,1);  yloc = this%gptsC_img(ii,2);  zloc = this%gptsC_img(ii,3);
+
+      ! first do (xl, yl, zl)
+      xloc = this%strsImC_xyz(ii,1);  yloc = this%strsImC_xyz(ii,2);  zloc = this%strsImC_xyz(ii,3);
+      
+      call this%process_stress_image_pointC(xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
+
+      ! (x-image) 
+      xloc = this%strsImC_xyz(ii,1) - Lx;  yloc = this%strsImC_xyz(ii,2);  zloc = this%strsImC_xyz(ii,3);
+      call this%process_stress_image_pointC(xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
+      
+      ! (y-image) 
+      xloc = this%strsImC_xyz(ii,1);  yloc = this%strsImC_xyz(ii,2) - Ly;  zloc = this%strsImC_xyz(ii,3);
+      call this%process_stress_image_pointC(xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
+
+      ! (x- and y-image) 
+      xloc = this%strsImC_xyz(ii,1) - Lx;  yloc = this%strsImC_xyz(ii,2) - Ly;  zloc = this%strsImC_xyz(ii,3);
+      call this%process_stress_image_pointC(xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
+
+  enddo
+
+  ! Check p_sum imptsC_numonproc. This should be either 0 or 8
+  allocate(psum_numonproc(this%num_strsC_glob), psum_multfac(this%num_strsC_glob), lsum_multfac(this%num_strsC_glob))
+  do ii = 1, this%num_strsC_glob
+    lsum_multfac(ii) = sum(this%strsC_multfac(:,ii))
+  enddo
+  call MPI_AllReduce(this%strsC_numonproc, psum_numonproc, this%num_strsC_glob, mpiinteg, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(lsum_multfac         , psum_multfac  , this%num_strsC_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  if(nrank==0) then
+    print *, 'psum_numonproc_strsC:=', maxval(psum_numonproc), minval(psum_numonproc)
+    print *, 'loc_numonproc_strsC :=', maxloc(psum_numonproc), minloc(psum_numonproc)
+    print *, 'psum_multfac_strsC  :=', maxval(psum_multfac  ), minval(psum_multfac  )
+    print *, 'loc_multfac_strsC   :=', maxloc(psum_multfac  ), minloc(psum_multfac  )
+
+    write(dumstr,"(A3,I2.2,A31,I4.4,A4)") "Run",this%runID,"_ibm_strsC_psum_numonproc_.dat"
+    fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+    open(11,file=fname,status='unknown',action='write')
+    do ii = 1, this%num_strsC_glob
+        !write(11, '(i4,1x,i4,1x,20(e19.12,1x))') ii, psum_numonproc(ii), psum_multfac(ii)
+        write(11, *) ii, psum_numonproc(ii), psum_multfac(ii)
+    enddo
+    close(11)
+  endif
+  if(abs(maxval(psum_multfac)-1.0d0) > 1.0d-12) then
+      call GracefulExit("IBM Stress Interpolation Factors at Cells do not add up to 1. Check details.", 111)
+  endif
+  deallocate(psum_numonproc, psum_multfac, lsum_multfac)
+
+  ! Print Stress imptsC_numonproc for each processor and check manually
+  write(dumstr,"(A3,I2.2,A22,I4.4,A4)") "Run",this%runID,"_ibm_strsC_numonproc_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_strsC_glob
+      write(11, '(i4,1x,8(e19.12,1x),24(i4,1x))') this%strsC_numonproc(ii), this%strsC_multfac(:,ii), this%strsC_indices(:,:,ii)
+  enddo
+  close(11)
+
+  do ii = 1, this%num_strsE_glob ! this%num_gptsE
+      ! first check if this point is on this processor
+      !xloc = this%gptsE_img(ii,1);  yloc = this%gptsE_img(ii,2);  zloc = this%gptsE_img(ii,3);
+      xloc = this%strsImE_xyz(ii,1);  yloc = this%strsImE_xyz(ii,2);  zloc = this%strsImE_xyz(ii,3);
+      call this%process_stress_image_pointE(xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii)
+
+      ! (x-image)
+      xloc = this%strsImE_xyz(ii,1) - Lx;  yloc = this%strsImE_xyz(ii,2);  zloc = this%strsImE_xyz(ii,3);
+      call this%process_stress_image_pointE(xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii)
+
+      ! (y-image)
+      xloc = this%strsImE_xyz(ii,1);  yloc = this%strsImE_xyz(ii,2) - Ly;  zloc = this%strsImE_xyz(ii,3);
+      call this%process_stress_image_pointE(xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii)
+
+      ! (x- and y-image)
+      xloc = this%strsImE_xyz(ii,1) - Lx;  yloc = this%strsImE_xyz(ii,2) - Ly;  zloc = this%strsImE_xyz(ii,3);
+      call this%process_stress_image_pointE(xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii)
+
+  enddo
+
+  ! Check p_sum strsE_numonproc. This should be either 0 or 8
+  allocate(psum_numonproc(this%num_strsE_glob), psum_multfac(this%num_strsE_glob), lsum_multfac(this%num_strsE_glob))
+  do ii = 1, this%num_strsE_glob
+    lsum_multfac(ii) = sum(this%strsE_multfac(:,ii))
+  enddo
+  call MPI_AllReduce(this%strsE_numonproc, psum_numonproc, this%num_strsE_glob, mpiinteg, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(lsum_multfac         , psum_multfac  , this%num_strsE_glob, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  if(nrank==0) then
+    print *, 'psum_numonproc_strsE:=', maxval(psum_numonproc), minval(psum_numonproc)
+    print *, 'loc_numonproc_strsE :=', maxloc(psum_numonproc), minloc(psum_numonproc)
+    print *, 'psum_multfac_strsE  :=', maxval(psum_multfac  ), minval(psum_multfac  )
+    print *, 'loc_multfac_strsE   :=', maxloc(psum_multfac  ), minloc(psum_multfac  )
+
+    write(dumstr,"(A3,I2.2,A31,I4.4,A4)") "Run",this%runID,"_ibm_strsE_psum_numonproc_.dat"
+    fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+    open(11,file=fname,status='unknown',action='write')
+    do ii = 1, this%num_strsE_glob
+        !write(11, '(i4,1x,i4,1x,40(e19.12,1x))') ii, psum_numonproc(ii), psum_multfac(ii)
+        write(11, *) ii, psum_numonproc(ii), psum_multfac(ii)
+    enddo
+    close(11)
+  endif
+  if(abs(maxval(psum_multfac)-1.0d0) > 1.0d-12) then
+      call GracefulExit("IBM Stress Interpolation Factors at Edges do not add up to 1. Check details.", 111)
+  endif
+  deallocate(psum_numonproc, psum_multfac, lsum_multfac)
+
+  write(dumstr,"(A3,I2.2,A22,I4.4,A4)") "Run",this%runID,"_ibm_strsE_numonproc_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_strsE_glob
+      write(11, '(i4,1x,8(e19.12,1x),24(i4,1x))') this%strsE_numonproc(ii), this%strsE_multfac(:,ii), this%strsE_indices(:,:,ii)
+  enddo
+  close(11)
+
+end subroutine
+
 subroutine setup_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinepart, zlinepart, zlinepartE)
   class(ibmgp),              intent(inout) :: this
   real(rkind),               intent(in)    :: dx, dy, dz, zBot, Lx, Ly
@@ -985,7 +1326,6 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinep
   do ii = 1, this%num_imptsC_glob  !this%num_gptsC
       ! first check if this point is on this processor
       !xloc = this%gptsC_img(ii,1);  yloc = this%gptsC_img(ii,2);  zloc = this%gptsC_img(ii,3);
-
 
       ! first do (xl, yl, zl)
       xloc = this%imptsC_xyz(ii,1);  yloc = this%imptsC_xyz(ii,2);  zloc = this%imptsC_xyz(ii,3);
@@ -1214,6 +1554,115 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinep
 
 end subroutine
 
+subroutine process_stress_image_pointC(this, xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), intent(in)     :: xloc, yloc, zloc, xdom_left, xdom_right, ydom_left, ydom_right, zdom_left, zdom_right, dx, dy, dz
+  real(rkind), dimension(:), intent(in)   :: xlinepart, ylinepart, zlinepart
+  integer,     intent(in)     :: ii, nxloc, nyloc, nzloc
+
+  integer :: itmp, jtmp, ktmp, point_number
+  real(rkind) :: facx, facy, facz, onemfacx, onemfacy, onemfacz
+
+  if( (xloc>=xdom_left) .and. (xloc<=xdom_right) .and. &
+      (yloc>=ydom_left) .and. (yloc<=ydom_right) .and. &
+      (zloc>=zdom_left) .and. (zloc<=zdom_right) ) then
+
+    itmp = floor((xloc-xdom_left)/dx); if(itmp==nxloc+1) itmp = itmp-1 
+    jtmp = floor((yloc-ydom_left)/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
+    ktmp = floor((zloc-zdom_left)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
+
+    ! determine facx, facy, facz
+    if(itmp==0) then
+        !facx = one - (xlinepart(1)-xloc)/dx
+        facx = (xlinepart(1)-xloc)/dx                ! note :: 1 - (.. ) has been changed
+    else
+        facx = one - (xloc-xlinepart(itmp))/dx
+    endif
+
+    if(jtmp==0) then
+        !facy = one - (ylinepart(1)-yloc)/dy
+        facy = (ylinepart(1)-yloc)/dy
+    else
+        facy = one - (yloc-ylinepart(jtmp))/dy
+    endif
+
+    if(ktmp==0) then
+        !facz = one - (zlinepart(1)-zloc)/dz
+        facz = (zlinepart(1)-zloc)/dz
+    else
+        facz = one - (zloc-zlinepart(ktmp))/dz
+    endif
+
+    onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
+
+    ! now consider 8 points separately
+    call this%set_interpfac_strsC(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
+    call this%set_interpfac_strsC(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
+    call this%set_interpfac_strsC(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
+    call this%set_interpfac_strsC(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
+    call this%set_interpfac_strsC(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
+    call this%set_interpfac_strsC(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
+    call this%set_interpfac_strsC(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
+    call this%set_interpfac_strsC(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
+
+  endif
+
+end subroutine 
+
+subroutine process_stress_image_pointE(this, xloc, yloc, zloc, xdom_left, ydom_left, zdom_leftE, xdom_right, ydom_right, zdom_rightE, dx, dy, dz, xlinepart, ylinepart, zlinepartE, nxloc, nyloc, nzloc, ii) ! Also need to pass zlinepartE ?? Added J1, actually changed zlinepart to zlinepartE
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), intent(in)     :: xloc, yloc, zloc, xdom_left, xdom_right, ydom_left, ydom_right, zdom_leftE, zdom_rightE, dx, dy, dz
+  real(rkind), dimension(:), intent(in)   :: xlinepart, ylinepart, zlinepartE !, zlinepart ! adding zlinepartE, removed zlinepart J1
+  integer,     intent(in)     :: ii, nxloc, nyloc, nzloc
+
+  integer :: itmp, jtmp, ktmp, point_number
+  real(rkind) :: facx, facy, facz, onemfacx, onemfacy, onemfacz
+
+  if( (xloc>=xdom_left ) .and. (xloc<=xdom_right ) .and. &
+      (yloc>=ydom_left ) .and. (yloc<=ydom_right ) .and. &
+      (zloc>=zdom_leftE) .and. (zloc<=zdom_rightE) ) then
+
+    itmp = floor((xloc-xdom_left)/dx); if(itmp==nxloc+1) itmp = itmp-1 
+    jtmp = floor((yloc-ydom_left)/dy); if(jtmp==nyloc+1) jtmp = jtmp-1 
+    ktmp = floor((zloc-zdom_leftE)/dz); if(ktmp==nzloc+1) ktmp = ktmp-1 
+
+    ! determine facx, facy, facz
+    if(itmp==0) then
+        !facx = one - (xlinepart(1)-xloc)/dx
+        facx = (xlinepart(1)-xloc)/dx                ! note :: 1 - (.. ) has been changed
+    else
+        facx = one - (xloc-xlinepart(itmp))/dx
+    endif
+
+    if(jtmp==0) then
+        !facy = one - (ylinepart(1)-yloc)/dy
+        facy = (ylinepart(1)-yloc)/dy
+    else
+        facy = one - (yloc-ylinepart(jtmp))/dy
+    endif
+
+    if(ktmp==0) then
+        !facz = one - (zlinepart(1)-zloc)/dz
+        facz = (zlinepartE(1)-zloc)/dz
+    else
+        facz = one - (zloc-zlinepartE(ktmp))/dz
+    endif
+
+    onemfacx = one-facx;   onemfacy = one-facy;   onemfacz = one-facz
+
+    ! now consider 8 points separately
+    call this%set_interpfac_strsE(itmp  , jtmp  , ktmp  , ii, point_number,     facx*    facy*    facz)
+    call this%set_interpfac_strsE(itmp+1, jtmp  , ktmp  , ii, point_number, onemfacx*    facy*    facz)
+    call this%set_interpfac_strsE(itmp  , jtmp+1, ktmp  , ii, point_number,     facx*onemfacy*    facz)
+    call this%set_interpfac_strsE(itmp+1, jtmp+1, ktmp  , ii, point_number, onemfacx*onemfacy*    facz)
+    call this%set_interpfac_strsE(itmp  , jtmp  , ktmp+1, ii, point_number,     facx*    facy*onemfacz)
+    call this%set_interpfac_strsE(itmp+1, jtmp  , ktmp+1, ii, point_number, onemfacx*    facy*onemfacz)
+    call this%set_interpfac_strsE(itmp  , jtmp+1, ktmp+1, ii, point_number,     facx*onemfacy*onemfacz)
+    call this%set_interpfac_strsE(itmp+1, jtmp+1, ktmp+1, ii, point_number, onemfacx*onemfacy*onemfacz)
+  endif
+
+end subroutine 
+
 subroutine process_image_pointC(this, xloc, yloc, zloc, xdom_left, ydom_left, zdom_left, xdom_right, ydom_right, zdom_right, dx, dy, dz, xlinepart, ylinepart, zlinepart, nxloc, nyloc, nzloc, ii)
   class(ibmgp),     intent(inout) :: this
   real(rkind), intent(in)     :: xloc, yloc, zloc, xdom_left, xdom_right, ydom_left, ydom_right, zdom_left, zdom_right, dx, dy, dz
@@ -1381,6 +1830,53 @@ subroutine process_image_pointE(this, xloc, yloc, zloc, xdom_left, ydom_left, zd
 
 end subroutine 
 
+subroutine set_interpfac_strsC(this, ip, jp, kp, ii, point_numberdum, multfac)
+  class(ibmgp),     intent(inout) :: this
+  integer,     intent(in)     :: ip, jp, kp, ii
+  integer,     intent(inout)  :: point_numberdum
+  real(rkind), intent(in)     :: multfac
+
+  integer :: nxloc, nyloc, nzloc, point_number
+
+  nxloc = this%gpC%xsz(1);  nyloc = this%gpC%xsz(2);  nzloc = this%gpC%xsz(3) ! J1 commented
+  if( (ip .ge. 1) .and. (ip .le. nxloc) .and. &
+      (jp .ge. 1) .and. (jp .le. nyloc) .and. &
+      (kp .ge. 1) .and. (kp .le. nzloc) ) then
+          !point_number = point_number + 1
+          this%strsC_numonproc(ii) = this%strsC_numonproc(ii) + 1
+          point_number = this%strsC_numonproc(ii)
+          this%strsC_indices(1,point_number,ii) = ip
+          this%strsC_indices(2,point_number,ii) = jp
+          this%strsC_indices(3,point_number,ii) = kp
+          this%strsC_multfac(  point_number,ii) = multfac
+  endif
+
+end subroutine
+
+subroutine set_interpfac_strsE(this, ip, jp, kp, ii, point_numberdum, multfac)
+  class(ibmgp),     intent(inout) :: this
+  integer,     intent(in)     :: ip, jp, kp, ii
+  integer,     intent(inout)  :: point_numberdum
+  real(rkind), intent(in)     :: multfac
+
+  integer :: nxloc, nyloc, nzloc, point_number
+
+  nxloc = this%gpC%xsz(1);  nyloc = this%gpC%xsz(2);  nzloc = this%gpC%xsz(3)
+
+  if( (ip .ge. 1) .and. (ip .le. nxloc) .and. &
+      (jp .ge. 1) .and. (jp .le. nyloc) .and. &
+      (kp .ge. 1) .and. (kp .le. nzloc) ) then
+          !point_number = point_number + 1
+          this%strsE_numonproc(ii) = this%strsE_numonproc(ii) + 1
+          point_number = this%strsE_numonproc(ii)
+          this%strsE_indices(1,point_number,ii) = ip
+          this%strsE_indices(2,point_number,ii) = jp
+          this%strsE_indices(3,point_number,ii) = kp
+          this%strsE_multfac(  point_number,ii) = multfac
+  endif
+
+end subroutine
+
 subroutine set_interpfac_imptsC(this, ip, jp, kp, ii, point_numberdum, multfac)
   class(ibmgp),     intent(inout) :: this
   integer,     intent(in)     :: ip, jp, kp, ii
@@ -1419,7 +1915,6 @@ subroutine set_interpfac_imptsE(this, ip, jp, kp, ii, point_numberdum, multfac)
       (jp .ge. 1) .and. (jp .le. nyloc) .and. &
       (kp .ge. 1) .and. (kp .le. nzloc) ) then
           !point_number = point_number + 1
-          !this%imptsE_numonproc(ii) = point_number
           this%imptsE_numonproc(ii) = this%imptsE_numonproc(ii) + 1
           point_number = this%imptsE_numonproc(ii)
           this%imptsE_indices(1,point_number,ii) = ip
@@ -1617,6 +2112,8 @@ subroutine save_ghost_points(this, flagC, flagE, mapC, mapE,  xlinepart, ylinepa
   integer :: i, j, k, ii
   character(len=clen)    :: fname, dumstr
 
+!  PRINT *, 'Jay It is Here 1, inside save_ghost_points' ! J1 ! working
+
   ii = 0
   do k = 1, this%gpC%xsz(3)
     do j = 1, this%gpC%xsz(2)
@@ -1714,6 +2211,235 @@ subroutine save_ghost_points(this, flagC, flagE, mapC, mapE,  xlinepart, ylinepa
   call decomp_2d_write_one(3, this%mask_solid_zC, fname, this%gpC)
 
 
+end subroutine
+
+
+!subroutine mark_stressIm_points(this, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE, dz)
+!  class(ibmgp),     intent(in) :: this
+!  real(rkind), dimension(:,:,:), intent(in) :: levelsetC, levelsetE
+!  real(rkind), dimension(:),     intent(in) :: xlinepart, ylinepart, zlinepart, zlinepartE
+!  real(rkind), intent(in) :: dz
+!
+!  integer :: i, j, k, ii
+!  real(rkind) :: phi_stressIm!, two_phib
+!
+!  phi_stressIm = 0.75_rkind*dz
+!
+!  ! store the closest boundary point and its index
+!  do ii = 1, this%num_strsC ! num_strsC_glob ?? No use local, J1
+!      ind_bp = this%strsC_bpind(ii)
+!      this%strsImC_xyz(ii,:) = this%strsC_bpt(ii,:) + phic * this%surfnorm(ind_bp,:)
+!  end do
+!
+!end subroutine
+
+subroutine mark_stress_points(this, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE, dz)
+  class(ibmgp),     intent(inout) :: this
+  real(rkind), dimension(:,:,:), intent(in) :: levelsetC, levelsetE
+  real(rkind), dimension(:),     intent(in) :: xlinepart, ylinepart, zlinepart, zlinepartE
+  real(rkind), intent(in) :: dz
+
+  integer :: i, j, k, kk, ierr, ii, imin
+  real(rkind), allocatable, dimension(:) :: distfn
+  real(rkind) :: phib, two_phib
+  character(len=clen) :: fname, dumstr
+  real(rkind) :: xmax_img, xmin_img, ymax_img, ymin_img, zmax_img, zmin_img
+
+  phib = 0.75_rkind*dz; two_phib = two*phib
+  this%phi_stressIm = 0.75_rkind*dz
+  
+  allocate(distfn(this%num_surfelem))
+
+!-----------this whole block is for strsC points--------------------------
+  ! first calculate the number of points
+  ii = 0
+  do k = 1, this%gpC%xsz(3)
+    do j = 1, this%gpC%xsz(2)
+      do i = 1, this%gpC%xsz(1)
+          if( (levelsetC(i,j,k) .le. two_phib) .and. (levelsetC(i,j,k) .ge. zero) ) then
+             ii = ii+1
+          endif
+      enddo
+    enddo
+  enddo
+  this%num_strsC = ii
+          
+  ! allocate memory
+  allocate(this%strsC_xyz(this%num_strsC,3),   this%strsC_ind(this%num_strsC,3))
+  allocate(this%strsC_bpt(this%num_strsC,3),   this%strsC_bpind(this%num_strsC))
+  allocate(this%strsC_img(this%num_strsC,3))
+  this%strsC_xyz   = zero;  this%strsC_ind   = 0;
+  this%strsC_bpt   = zero;  this%strsC_bpind = 0;
+  this%strsC_img = zero;
+
+  ! store the xyz and indices of the stress points
+  ii = 0
+  do k = 1, this%gpC%xsz(3)
+    do j = 1, this%gpC%xsz(2)
+      do i = 1, this%gpC%xsz(1)
+          if( (levelsetC(i,j,k) .le. two_phib) .and. (levelsetC(i,j,k) .ge. zero) ) then
+             ii = ii+1
+
+             this%strsC_xyz(ii,1) = xlinepart(i)
+             this%strsC_xyz(ii,2) = ylinepart(j)
+             this%strsC_xyz(ii,3) = zlinepart(k)
+
+             this%strsC_ind(ii,1) = i
+             this%strsC_ind(ii,2) = j
+             this%strsC_ind(ii,3) = k
+          endif
+      enddo
+    enddo
+  enddo
+
+  allocate(this%num_strsC_arr(nproc), this%num_strsE_arr(nproc))
+  allocate(this%strsC_index_st(nproc), this%strsE_index_st(nproc))
+
+  ! find global number of stress points and store them
+  this%num_strsC_arr = 0
+  call MPI_AllGather(this%num_strsC, 1, mpiinteg, this%num_strsC_arr, 1, mpiinteg, MPI_COMM_WORLD, ierr)
+  this%num_strsC_glob = sum(this%num_strsC_arr)
+  this%strsC_index_st(1) = 1
+  do ii = 2, nproc
+    this%strsC_index_st(ii) = this%strsC_index_st(ii-1) + this%num_strsC_arr(ii-1)
+  enddo
+  print '(a,20(i5,1x))', 'strsC_index_st :=', nrank, this%strsC_index_st
+  print '(a,20(i5,1x))', 'num_strsC_arr  :=', nrank, this%num_strsC_arr
+  print '(a,20(i5,1x))', 'num_strsC      :=', nrank, this%num_strsC, this%num_strsC_glob
+  allocate(this%strsC_xyz_loc(this%num_strsC_glob,3));  this%strsC_xyz_loc = zero;
+  allocate(this%strsImC_xyz(this%num_strsC_glob,3));    this%strsImC_xyz = zero;
+
+  ! store the closest boundary point and its index;
+  ! and the image of the stress point
+  kk = this%strsC_index_st(nrank+1)-1
+  do ii = 1, this%num_strsC
+      ! find the distance between this ghost point and all surface centroids
+      distfn(:) = (this%strsC_xyz(ii,1) - this%surfcent(:,1))**2 + &
+                  (this%strsC_xyz(ii,2) - this%surfcent(:,2))**2 + &
+                  (this%strsC_xyz(ii,3) - this%surfcent(:,3))**2
+      imin = minloc(distfn,1)
+      this%strsC_bpt(ii,1) = this%surfcent(imin,1)
+      this%strsC_bpt(ii,2) = this%surfcent(imin,2)
+      this%strsC_bpt(ii,3) = this%surfcent(imin,3)
+      this%strsC_bpind(ii) = imin
+      
+      this%strsC_img(ii,:) = this%strsC_bpt(ii,:) + this%phi_stressIm * this%surfnormal(imin,:)
+      !! -- min_accept_dist = 0.1d0*min(min(dx, dy), dz) -- replace phi_stressIm with min_accept_dist??
+
+      ! prepare to store in the global array
+      kk = kk+1
+      this%strsC_xyz_loc(kk,:) = this%strsC_img(ii,:)
+  enddo
+!!!!!-----------this whole block is for strsC points END --------------------------
+
+!!!!!-----------this whole block is for strsE points--------------------------
+  ! first calculate the number of points
+  ii = 0
+  do k = 1, this%gpE%xsz(3)
+    do j = 1, this%gpE%xsz(2)
+      do i = 1, this%gpE%xsz(1)
+          if( (levelsetE(i,j,k) .le. phib) .and. (levelsetE(i,j,k) .ge. -phib) ) then
+             ii = ii+1
+          endif
+      enddo
+    enddo
+  enddo
+  this%num_strsE = ii
+  
+  ! allocate memory
+  allocate(this%strsE_xyz(this%num_strsE,3),   this%strsE_ind(this%num_strsE,3))
+  allocate(this%strsE_bpt(this%num_strsE,3),   this%strsE_bpind(this%num_strsE))
+  allocate(this%strsE_img(this%num_strsE,3))
+  this%strsE_xyz   = zero;  this%strsE_ind     = 0;
+  this%strsE_bpt   = zero;  this%strsE_bpind   = 0;
+  this%strsE_img = zero;
+
+  ! store the xyz and indices of the stress points
+  ii = 0
+  do k = 1, this%gpE%xsz(3)
+    do j = 1, this%gpE%xsz(2)
+      do i = 1, this%gpE%xsz(1)
+          if( (levelsetE(i,j,k) .le. phib) .and. (levelsetE(i,j,k) .ge. -phib) ) then
+             ii = ii+1
+             this%strsE_xyz(ii,1) = xlinepart(i)
+             this%strsE_xyz(ii,2) = ylinepart(j)
+             this%strsE_xyz(ii,3) = zlinepartE(k)
+
+             this%strsE_ind(ii,1) = i
+             this%strsE_ind(ii,2) = j
+             this%strsE_ind(ii,3) = k
+          endif
+      enddo
+    enddo
+  enddo
+
+  ! allocate(this%num_strsE_arr(nproc), this%num_strsE_arr(nproc))
+  ! allocate(this%strsC_index_st(nproc), this%strsE_index_st(nproc))
+
+  ! find global number of stress points and store them
+  this%num_strsE_arr = 0
+  call MPI_AllGather(this%num_strsE, 1, mpiinteg, this%num_strsE_arr, 1, mpiinteg, MPI_COMM_WORLD, ierr)
+  this%num_strsE_glob = sum(this%num_strsE_arr)
+  this%strsE_index_st(1) = 1
+  do ii = 2, nproc
+    this%strsE_index_st(ii) = this%strsE_index_st(ii-1) + this%num_strsE_arr(ii-1)
+  enddo
+  print '(a,20(i5,1x))', 'strsE_index_st :=', nrank, this%strsE_index_st
+  print '(a,20(i5,1x))', 'num_strsE_arr  :=', nrank, this%num_strsE_arr
+  print '(a,20(i5,1x))', 'num_strsE      :=', nrank, this%num_strsE, this%num_strsE_glob
+  allocate(this%strsE_xyz_loc(this%num_strsE_glob,3));  this%strsE_xyz_loc = zero;
+  allocate(this%strsImE_xyz(this%num_strsE_glob,3));    this%strsImE_xyz = zero;
+
+  ! store the closest boundary point and its index
+  ! and the image of the stress point
+  kk = this%strsE_index_st(nrank+1)-1
+  do ii = 1, this%num_strsE
+      ! find the distance between this ghost point and all surface centroids
+      distfn(:) = (this%strsE_xyz(ii,1) - this%surfcent(:,1))**2 + &
+                  (this%strsE_xyz(ii,2) - this%surfcent(:,2))**2 + &
+                  (this%strsE_xyz(ii,3) - this%surfcent(:,3))**2 
+      imin = minloc(distfn,1)
+      this%strsE_bpt(ii,1) = this%surfcent(imin,1)
+      this%strsE_bpt(ii,2) = this%surfcent(imin,2)
+      this%strsE_bpt(ii,3) = this%surfcent(imin,3)
+      this%strsE_bpind(ii) = imin
+
+      this%strsE_img(ii,:) = this%strsE_bpt(ii,:) + this%phi_stressIm * this%surfnormal(imin,:)
+
+      ! prepare to store in the global array
+      kk = kk+1
+      this%strsE_xyz_loc(kk,:) = this%strsE_img(ii,:)
+  enddo
+!!!!!-----------this whole block is for strsE points END --------------------------
+
+  call MPI_AllReduce(this%strsC_xyz_loc, this%strsImC_xyz, this%num_strsC_glob*3, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_AllReduce(this%strsE_xyz_loc, this%strsImE_xyz, this%num_strsE_glob*3, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+  write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_strsC_img_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  print *, fname
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_strsC
+      write(11, '(10(e19.12,1x))') this%strsC_xyz(ii,:), this%strsC_img(ii,:), this%strsC_bpt(ii,:), this%phi_stressIm
+  enddo
+  close(11)
+
+  write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_strsE_img_",nrank,".dat"
+  fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
+  open(11,file=fname,status='unknown',action='write')
+  do ii = 1, this%num_strsE
+      write(11, '(10(e19.12,1x))') this%strsE_xyz(ii,:), this%strsE_img(ii,:), this%strsE_bpt(ii,:), this%phi_stressIm
+  enddo
+  close(11)
+
+  ! check min/max of stress image points
+  xmax_img = p_maxval(maxval(this%strsC_img(:,1)));   xmin_img = p_minval(minval(this%strsC_img(:,1)))
+  ymax_img = p_maxval(maxval(this%strsC_img(:,2)));   ymin_img = p_minval(minval(this%strsC_img(:,2)))
+  zmax_img = p_maxval(maxval(this%strsC_img(:,3)));   zmin_img = p_minval(minval(this%strsC_img(:,3)))
+
+  xmax_img = p_maxval(maxval(this%strsE_img(:,1)));   xmin_img = p_minval(minval(this%strsE_img(:,1)))
+  ymax_img = p_maxval(maxval(this%strsE_img(:,2)));   ymin_img = p_minval(minval(this%strsE_img(:,2)))
+  zmax_img = p_maxval(maxval(this%strsE_img(:,3)));   zmin_img = p_minval(minval(this%strsE_img(:,3)))
 end subroutine
 
 subroutine mark_ghost_points(this, gp, nlayers, map, flag, rbuffx1, rbuffy1, rbuffz1)
@@ -1918,11 +2644,48 @@ subroutine get_utauC_ib(this, fout)
 
     fout(:) = this%utauC_ib
 
-end subroutine 
+end subroutine
+
+pure function get_ibwm_utaustrs_max(this) result(val)
+   class(ibmgp), intent(in) :: this
+   real(rkind)             :: val
+   
+   val = this%ibwm_utaustrs_max
+end function
+
+pure function get_ibwm_utaustrs_min(this) result(val)
+   class(ibmgp), intent(in) :: this
+   real(rkind)             :: val
+   
+   val = this%ibwm_utaustrs_min
+end function
+
+pure function get_ibwm_utaustrs_avg(this) result(val)
+   class(ibmgp), intent(in) :: this
+   real(rkind)             :: val
+   
+   val = this%ibwm_utaustrs_avg
+end function
+
+subroutine get_utaustrsC_ib(this, fout)
+    use mpi
+    use kind_parameters, only: mpirkind
+    class(ibmgp), intent(in) :: this
+    real(rkind), dimension(this%num_gptsC) :: fout
+
+    fout(:) = this%utaustrsC_ib
+
+end subroutine
 
 subroutine destroy(this)
   class(ibmgp), intent(inout) :: this
 
+  deallocate(this%utaustrsC_ib)
+  deallocate(this%strsC_u_tmp, this%strsC_v_tmp, this%strsC_w_tmp, this%strsC_u, this%strsC_v, this%strsC_w)
+  deallocate(this%strsE_u_tmp, this%strsE_v_tmp, this%strsE_w_tmp, this%strsE_u, this%strsE_v, this%strsE_w)
+  deallocate(this%strsC_numonproc, this%strsE_numonproc)
+  deallocate(this%num_strsC_arr, this%num_strsE_arr)
+  deallocate(this%strsC_index_st, this%strsE_index_st)
   deallocate(this%mask_solid_xC, this%mask_solid_yC, this%mask_solid_zC)
   deallocate(this%mask_solid_xE, this%mask_solid_yE, this%mask_solid_zE)
   nullify(this%rbuffxC1, this%rbuffxC2)
@@ -1940,6 +2703,7 @@ subroutine destroy(this)
   !deallocate(this%gptsC_u,  this%gptsE_u)
   !deallocate(this%gptsC_v,  this%gptsE_v)
   !deallocate(this%gptsC_w,  this%gptsE_w)
+  deallocate(this%strsImC_xyz, this%strsImE_xyz)
   deallocate(this%num_imptsC_arr, this%num_imptsE_arr)
   deallocate(this%imptsC_index_st, this%imptsE_index_st)
   deallocate(this%imptsC_xyz, this%imptsE_xyz)
