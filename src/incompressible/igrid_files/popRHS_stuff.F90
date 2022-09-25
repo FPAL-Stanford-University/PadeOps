@@ -72,7 +72,6 @@
            end if
        end if
 
-
        call this%populate_RHS_extraTerms(copyFringeRHS, .false.)
 
    end subroutine
@@ -218,7 +217,9 @@
                this%v_rhs = this%v_rhs + this%HITforcing_y
                this%w_rhs = this%w_rhs + this%HITforcing_z
            else
-               call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
+               call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, &
+                 this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep, &
+                 this%step)
            end if
        end if
 

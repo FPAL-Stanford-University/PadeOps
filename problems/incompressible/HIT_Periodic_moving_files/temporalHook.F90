@@ -6,7 +6,10 @@ module temporalHook
     use constants,          only: half
     use timer,              only: tic, toc 
     use mpi
-    use HIT_Periodic_parameters, only: uTarget, vTarget, wTarget, x_shift, uadvect, useBandpassFilter
+    use decomp_2d
+    use HIT_Periodic_parameters, only: uTarget, vTarget, wTarget, x_shift, &
+      uadvect, useBandpassFilter
+    use fortran_assert,     only: assert
 
     implicit none 
 
@@ -19,6 +22,28 @@ contains
     subroutine doTemporalStuff(gp)
         class(igrid), intent(inout), target :: gp 
         real(rkind), dimension(:,:,:), pointer ::x, y, z
+        real(rkind) :: Einjection
+        complex(rkind), dimension(gp%sp_gpC%ysz(1), gp%sp_gpC%ysz(2), &
+          gp%sp_gpC%ysz(3)) :: uhat_xy, vhat_xy, whatC_xy
+        complex(rkind), dimension(gp%sp_gpE%ysz(1), gp%sp_gpE%ysz(2), &
+          gp%sp_gpE%ysz(3)) :: what_xy
+        complex(rkind), dimension(gp%sp_gpC%zsz(1), gp%sp_gpC%zsz(2), &
+          gp%sp_gpC%zsz(3)) :: uhat, vhat, whatC_z
+        complex(rkind), dimension(gp%sp_gpE%zsz(1), gp%sp_gpE%zsz(2), &
+          gp%sp_gpE%zsz(3)) :: what_z
+        !complex(rkind), dimension(:,:,:), pointer :: uhat_xy, vhat_xy, &
+        !  whatC_xy, what_xy!, uhat, vhat, whatC_z, what_z
+        real(rkind) :: uXoddMaxI, uYoddMaxI, &
+                       uXoddMaxR, uYoddMaxR, &
+                       vXoddMaxI, vYoddMaxI, &
+                       vXoddMaxR, vYoddMaxR, &
+                       wXoddMaxI, wYoddMaxI, &
+                       wXoddMaxR, wYoddMaxR
+
+        !uhat_xy => gp%cbuffyC(:,:,:,1)
+        !vhat_xy => gp%cbuffyC(:,:,:,2)
+        !whatC_xy => gp%cbuffyC(:,:,:,3)
+        !what_xy => gp%cbuffyE(:,:,:,1)
          
          z => gp%mesh(:,:,:,3)
          y => gp%mesh(:,:,:,2)
@@ -55,6 +80,148 @@ contains
             call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
             call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
             call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
+            call message(1,"Forcing seed3:",gp%HITForce%seed3)
+
+            call transpose_y_to_z(gp%uhat,uhat,gp%sp_gpC)
+            call gp%spectC%take_fft1d_z2z_ip(uhat)
+
+            call transpose_y_to_z(gp%vhat,vhat,gp%sp_gpC)
+            call gp%spectC%take_fft1d_z2z_ip(vhat)
+
+            call transpose_y_to_z(gp%whatC,whatC_z,gp%sp_gpC)
+            call gp%spectC%take_fft1d_z2z_ip(whatC_z)
+            
+            call gp%hitforce%computeEnergyInjectionRate(uhat, vhat, whatC_z, &
+              gp%hitforce%fxhatwrite, gp%hitforce%fyhatwrite, gp%hitforce%fzhatwrite,&
+              Einjection)
+            call message(1,"HIT energy injection rate from spectral velocity:", Einjection)
+            if (abs(gp%hitforce%EpsAmplitude - Einjection) > 1.e-11) then
+              call message(0,'Energy injection rate does not match input file. Difference:',&
+                abs(gp%hitforce%EpsAmplitude - Einjection))
+            end if
+
+            call gp%spectC%fft(gp%u, uhat_xy)
+            call gp%spectC%fft(gp%v, vhat_xy)
+            call gp%spectC%fft(gp%wC, whatC_xy)
+            call gp%spectE%fft(gp%w, what_xy)
+
+            call message(1,"max real(uhat) difference:",p_maxval(maxval(real(uhat_xy - gp%uhat,rkind))))
+            call message(1,"max dimag(uhat) difference:",p_maxval(maxval(dimag(uhat_xy - gp%uhat))))
+            call message(1,"max real(vhat) difference:",p_maxval(maxval(real(vhat_xy - gp%vhat,rkind))))
+            call message(1,"max dimag(vhat) difference:",p_maxval(maxval(dimag(vhat_xy - gp%vhat))))
+            call message(1,"max real(what) difference:",p_maxval(maxval(real(what_xy - gp%what,rkind))))
+            call message(1,"max dimag(what) difference:",p_maxval(maxval(dimag(what_xy - gp%what))))
+            call message(1,"max real(whatC) difference:",p_maxval(maxval(real(whatC_xy - gp%whatC,rkind))))
+            call message(1,"max dimag(whatC) difference:",p_maxval(maxval(dimag(whatC_xy - gp%whatC))))
+  
+            call transpose_y_to_z(uhat_xy, uhat, gp%sp_gpC)
+            call gp%spectC%take_fft1d_z2z_ip(uhat)
+
+            call transpose_y_to_z(vhat_xy, vhat, gp%sp_gpC)
+            call gp%spectC%take_fft1d_z2z_ip(vhat)
+
+            call transpose_y_to_z(whatC_xy, whatC_z, gp%sp_gpC)
+            call gp%Pade6opZ%interpz_C2E(whatC_z, what_z, 0, 0)
+            !call transpose_z_to_y(what_z,what_xy,gp%sp_gpE)
+            whatC_z = what_z(:,:,1:gp%sp_gpC%zsz(3))
+            call gp%spectC%take_fft1d_z2z_ip(whatC_z)
+            call gp%spectC%shiftz_E2C(whatC_z)
+            
+            call gp%hitforce%computeEnergyInjectionRate(uhat, vhat, whatC_z, &
+              gp%hitforce%fxhatwrite, gp%hitforce%fyhatwrite, gp%hitforce%fzhatwrite,&
+              Einjection)
+            call message(1,"HIT energy injection rate from physical velocity:", Einjection)
+
+            !call gp%getMaxOddballModes(uXoddMaxI, uYoddMaxI, &
+            !                           uXoddMaxR, uYoddMaxR, &
+            !                           vXoddMaxI, vYoddMaxI, &
+            !                           vXoddMaxR, vYoddMaxR, &
+            !                           wXoddMaxI, wYoddMaxI, &
+            !                           wXoddMaxR, wYoddMaxR, 'C')
+            !call message(1,"Maximum oddball modes:")
+            !call message(2,"Cell-based arrays:")
+            !call message(3,"maxval(aimag(uhat(nx/2+1,:,:))) ", uxoddMaxI)
+            !call message(3,"maxval(aimag(uhat(:,ny/2+1,:))) ", uyoddMaxI)
+            !call message(3," ")
+            !call message(3,"maxval(aimag(vhat(nx/2+1,:,:))) ", vxoddMaxI)
+            !call message(3,"maxval(aimag(vhat(:,ny/2+1,:))) ", vyoddMaxI)
+            !call message(3," ")
+            !call message(3,"maxval(aimag(whatC(nx/2+1,:,:))) ", wxoddMaxI)
+            !call message(3,"maxval(aimag(whatC(:,ny/2+1,:))) ", wyoddMaxI)
+            !call message(3," ")
+            !!call gp%getMaxOddballModes(uXoddMaxI, uYoddMaxI, &
+            !!                           uXoddMaxR, uYoddMaxR, &
+            !!                           vXoddMaxI, vYoddMaxI, &
+            !!                           vXoddMaxR, vYoddMaxR, &
+            !!                           wXoddMaxI, wYoddMaxI, &
+            !!                           wXoddMaxR, wYoddMaxR, 'E')
+            !!call message(2,"Edged-based arrays:")
+            !!call message(3,"maxval(aimag(uEhat(nx/2+1,:,:))) = ", uxoddMaxI)
+            !!call message(3,"maxval(aimag(uEhat(:,ny/2+1,:))) = ", uyoddMaxI)
+            !!call message(3," ")
+            !!call message(3,"maxval(aimag(vEhat(nx/2+1,:,:))) = ", vxoddMaxI)
+            !!call message(3,"maxval(aimag(vEhat(:,ny/2+1,:))) = ", vyoddMaxI)
+            !!call message(3," ")
+            !!call message(3,"maxval(aimag(what(nx/2+1,:,:))) = ", wxoddMaxI)
+            !!call message(3,"maxval(aimag(what(:,ny/2+1,:))) = ", wyoddMaxI)
+            !!call message(3," ")
+
+            if (gp%step == 1913) then
+              call gp%dumpFullField(gp%u,'uphC')
+              call gp%dumpFullField(gp%v,'vphC')
+              call gp%dumpFullField(gp%wC,'wphC')
+
+              call gp%dumpFullField(gp%uE,'uphE',gp%gpE)
+              call gp%dumpFullField(gp%vE,'vphE',gp%gpE)
+              call gp%dumpFullField(gp%w,'wphE',gp%gpE)
+
+              call gp%dumpSpectralField(aimag(gp%uhat),'uI_C',gp%sp_gpC)
+              call gp%dumpSpectralField(aimag(gp%vhat),'vI_C',gp%sp_gpC)
+              call gp%dumpSpectralField(aimag(gp%whatC),'wI_C',gp%sp_gpC)
+              call gp%dumpSpectralField(real(gp%uhat,rkind),'uR_C',gp%sp_gpC)
+              call gp%dumpSpectralField(real(gp%vhat,rkind),'vR_C',gp%sp_gpC)
+              call gp%dumpSpectralField(real(gp%whatC,rkind),'wR_C',gp%sp_gpC)
+              
+              call gp%dumpSpectralField(aimag(gp%uEhat),'uI_E',gp%sp_gpE)
+              call gp%dumpSpectralField(aimag(gp%vEhat),'vI_E',gp%sp_gpE)
+              call gp%dumpSpectralField(aimag(gp%what),'wI_E',gp%sp_gpE)
+              call gp%dumpSpectralField(real(gp%uEhat,rkind),'uR_E',gp%sp_gpE)
+              call gp%dumpSpectralField(real(gp%vEhat,rkind),'vR_E',gp%sp_gpE)
+              call gp%dumpSpectralField(real(gp%what,rkind),'wR_E',gp%sp_gpE)
+
+              call gp%hitforce%dumpForcing(gp%outputdir,gp%RunID,gp%step,dumpSpec=.true.)
+            end if
+
+            !if (abs(gp%hitforce%EpsAmplitude - Einjection) > 1.e-10) then
+            !  call message(0,'Energy injection rate does not match input file. Difference:',&
+            !    abs(gp%hitforce%EpsAmplitude - Einjection))
+            !  call gp%dumpFullField(gp%u,'uphC')
+            !  call gp%dumpFullField(gp%v,'vphC')
+            !  call gp%dumpFullField(gp%wC,'wphC')
+
+            !  call gp%dumpFullField(gp%uE,'uphE',gp%gpE)
+            !  call gp%dumpFullField(gp%vE,'vphE',gp%gpE)
+            !  call gp%dumpFullField(gp%w,'wphE',gp%gpE)
+
+            !  call gp%dumpSpectralField(dimag(gp%uhat),'uI_C',gp%sp_gpC)
+            !  call gp%dumpSpectralField(dimag(gp%vhat),'vI_C',gp%sp_gpC)
+            !  call gp%dumpSpectralField(dimag(gp%whatC),'wI_C',gp%sp_gpC)
+            !  call gp%dumpSpectralField(real(gp%uhat,rkind),'uR_C',gp%sp_gpC)
+            !  call gp%dumpSpectralField(real(gp%vhat,rkind),'vR_C',gp%sp_gpC)
+            !  call gp%dumpSpectralField(real(gp%whatC,rkind),'wR_C',gp%sp_gpC)
+            !  
+            !  call gp%dumpSpectralField(dimag(gp%uEhat),'uI_E',gp%sp_gpE)
+            !  call gp%dumpSpectralField(dimag(gp%vEhat),'vI_E',gp%sp_gpE)
+            !  call gp%dumpSpectralField(dimag(gp%what),'wI_E',gp%sp_gpE)
+            !  call gp%dumpSpectralField(real(gp%uEhat,rkind),'uR_E',gp%sp_gpE)
+            !  call gp%dumpSpectralField(real(gp%vEhat,rkind),'vR_E',gp%sp_gpE)
+            !  call gp%dumpSpectralField(real(gp%what,rkind),'wR_E',gp%sp_gpE)
+
+            !  call gp%hitforce%dumpForcing(gp%outputdir,gp%RunID,gp%step,dumpSpec=.true.)
+            !  
+            !  !call assert(abs(gp%hitforce%EpsAmplitude - Einjection) < 1.e-10)
+            !end if
+
             if (allocated(gp%pressure)) then
                call message_min_max(1,"Bounds for P:", p_minval(minval(gp%pressure)), p_maxval(maxval(gp%pressure)))
             end if

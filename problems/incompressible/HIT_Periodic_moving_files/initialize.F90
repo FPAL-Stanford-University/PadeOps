@@ -343,4 +343,4 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
     real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
 
     scalarSource = 0.d0
-end subroutine 
+end subroutine

@@ -153,6 +153,7 @@ module spectralMod
             procedure, private :: modify_my_xy_wavenumbers            
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
+            procedure          :: fix_kx0
 
     end type
 
@@ -1775,6 +1776,14 @@ contains
                call this%FT%ifft2_y2x(arr_in,arr_out,.false.)
             end if
         end if 
+    end subroutine
+
+    subroutine fix_kx0(this,arr)
+        class(spectral), intent(inout) :: this
+        complex(rkind), dimension(this%nx_c,this%ny_c,this%nz_c), intent(inout) :: arr
+
+        call this%FT%fix_kx0(arr)
+
     end subroutine
    
     subroutine fft_y2z(this, arr_in, arr_out)

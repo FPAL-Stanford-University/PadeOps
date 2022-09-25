@@ -29,29 +29,29 @@ program HIT_Periodic
 
     call igp%init(inputfile)          !<-- Properly initialize the hit_grid solver (see hit_grid.F90)
   
-    call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
+!    call igp%start_io(.true.)                !<-- Start I/O by creating a header file (see io.F90)
 
-    call igp%printDivergence()
+!    call igp%printDivergence()
 
     ! Initialize bandpass filtering 
-    if (useBandpassFilter) then
-         call igp%spectC%init_bandpass_filter(k_bp_left, k_bp_right, igp%cbuffzC(:,:,:,1), igp%cbuffyC(:,:,:,1))
-    end if 
+!    if (useBandpassFilter) then
+!         call igp%spectC%init_bandpass_filter(k_bp_left, k_bp_right, igp%cbuffzC(:,:,:,1), igp%cbuffyC(:,:,:,1))
+!    end if 
 
-    call budg_volavg%init(inputfile, igp)   !<-- Budget class initialization 
+!    call budg_volavg%init(inputfile, igp)   !<-- Budget class initialization 
   
     call tic() 
     do while (igp%tsim < igp%tstop) 
-       
+      
        call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
-       call budg_volavg%doBudgets()       
+ !      call budg_volavg%doBudgets()       
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
        
     end do 
  
-    call budg_volavg%doBudgets(.true.)      !<-- Force dump budget information if active
+!    call budg_volavg%doBudgets(.true.)      !<-- Force dump budget information if active
 
-    call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
+!    call igp%finalize_io()                  !<-- Close the header file (wrap up i/o)
 
     call budg_volavg%destroy()          !<-- release memory taken by the budget class 
 

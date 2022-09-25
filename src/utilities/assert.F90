@@ -7,7 +7,7 @@ contains
   subroutine assert(expression, description)
     logical, intent(in) :: expression
     character(len=*), intent(in), optional :: description
-    integer :: err_code
+    integer :: err_code = 1
     character(len=clen) :: root_stmt
 
     root_stmt = 'assert statement failed:'

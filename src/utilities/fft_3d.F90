@@ -2,7 +2,7 @@ module fft_3d_stuff
 
     use kind_parameters, only : rkind
     use decomp_2d
-    use constants, only: zero  
+    use constants, only: zero, im0 
     implicit none 
     private
     public :: fft_3d
@@ -19,7 +19,7 @@ module fft_3d_stuff
         type(decomp_info),public    :: spectral
         
         character(len=1)  :: base_pencil
-        real (rkind) :: normfactor, normfactor2d
+        real (rkind) :: normfactor, normfactor2d, normfactorY
 
         complex(rkind), dimension(:,:,:), allocatable :: f_yhat_in_yD
         complex(rkind), dimension(:,:,:), allocatable :: f_xyhat_in_xD
@@ -93,6 +93,7 @@ module fft_3d_stuff
             procedure, private :: alloc_4d
             procedure, private :: init_dealiasing_stuff 
             generic   :: alloc_output => alloc_3d_real, alloc_3d_cmplx, alloc_4d
+            procedure :: fix_kx0
     end type 
 
 
@@ -364,6 +365,7 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, &
          this%base_pencil = base_pencil_
          this%normfactor   = 1._rkind/(real(nx_global*ny_global*nz_global,rkind))
          this%normfactor2d = 1._rkind/(real(nx_global*ny_global,rkind))
+         this%normfactorY  = 1._rkind/(real(ny_global,rkind))
 
          if (this%dodealiasing) then
             call this%init_dealiasing_stuff(nx_global, ny_global, nz_global)
@@ -649,6 +651,33 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, &
         output = output*this%normfactor2d
 
     end subroutine        
+
+    subroutine fix_kx0(this,arr)
+
+        class(fft_3d), intent(inout) :: this
+        complex(rkind), dimension(size(this%f_xyhat_in_yD,1),&
+          size(this%f_xyhat_in_yD,2),size(this%f_xyhat_in_yD,3)), intent(inout) :: arr
+        integer :: k
+
+        ! Then transform in y (c2c, out of place)
+        do k = 1,this%spectral%ysz(3)
+            call dfftw_execute_dft(this%plan_c2c_bwd_y_oop, arr(:,:,k), this%f_xyhat_in_yD(:,:,k))  
+        end do 
+        this%f_xyhat_in_yD = this%f_xyhat_in_yD*this%normfactorY
+
+        ! Then transpose from y-> x
+        call transpose_y_to_x(this%f_xyhat_in_yD,this%f_xhat_in_xD,this%spectral)
+    
+        ! Ensure that kx = 0 wavenumber has a purely real FFT
+        this%f_xhat_in_xD(1,:,:) = real(this%f_xhat_in_xD(1,:,:),rkind) + im0
+        call transpose_x_to_y(this%f_xhat_in_xD,arr,this%spectral)
+
+        ! The take fwd transform in y (c2c, inplace)
+        do k = 1,this%spectral%ysz(3)
+            call dfftw_execute_dft(this%plan_c2c_fwd_y, arr(:,:,k), arr(:,:,k))  
+        end do 
+
+    end subroutine
    
     subroutine fft2_x2y(this,input,output)
         class(fft_3d), intent(inout) :: this

@@ -1,6 +1,7 @@
 #!/bin/bash
 
 CWD=`pwd`
+export FC="mpif90 -L/home/x-ryanhass/OpenBLAS/build/lib"
 export COMPILER_ID=GNU
 export FFTW_PATH=/home/x-ryanhass/codes/PadeOps/dependencies/GNUcompiled/fftw-3.3.10
 export DECOMP_PATH=/home/x-ryanhass/codes/PadeOps/dependencies/GNUcompiled/2decomp_fft

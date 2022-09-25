@@ -45,6 +45,8 @@ program createHITrestart
    call message(0,"MATLAB file read")
    ! u fields 
    fC = reshape(data2read(:,1),[nx,ny,nz])
+
+   print*, "mean u:", sum(fC)/4096.d0
    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
    fname1 = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
    call decomp_2d_write_one(1,fC, fname1, gpC)
@@ -67,7 +69,7 @@ program createHITrestart
    call der%interpz_C2E(fC, fE, 0, 0)
    call decomp_2d_write_one(1,fE, fname1, gpE)
    call message(0,"RESTART file for w generated")
-    
+
    if (nrank == 0) then
         write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
         fname1 = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
