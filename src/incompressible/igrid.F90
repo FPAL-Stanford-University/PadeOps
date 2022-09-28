@@ -67,6 +67,7 @@ module IncompressibleGrid
         
         character(clen) :: inputDir
         integer :: headerfid = 12345   
+        integer :: clearRoundOffFreq
 
         ! Variables common to grid
         integer :: nx, ny, nz, t_datadump, t_restartdump
@@ -436,6 +437,7 @@ contains
         character(len=clen) :: MeanFilesDir, powerDumpDir 
         logical :: WriteTurbineForce = .false., useforcedStratification = .false., useDynamicYaw = .FALSE. 
         integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0
+        integer :: clearRoundOffFreq = 1000
 
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -455,7 +457,8 @@ contains
                                 yawUpdateInterval, inputDirDyaw 
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
-                            useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias, dealiasType 
+                            useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias, dealiasType, &
+                            clearRoundOffFreq
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, &
                                  KSdoZfilter, nKSvertFilt
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure, ComputeRapidSlowPressure            
@@ -528,6 +531,7 @@ contains
         this%computeTurbinePressure = computeTurbinePressure; this%turbPr = Pr
         this%restartPhi = 0.d0
         this%Ra = Ra
+        this%clearRoundOffFreq = clearRoundOffFreq
         if (useWindturbines) this%WriteTurbineForce = WriteTurbineForce
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS

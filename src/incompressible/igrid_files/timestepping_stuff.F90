@@ -373,6 +373,14 @@
            this%frameAngle = this%frameAngle + this%deltaGalpha 
        end if
        
+       ! STEP 1B: Clear IFFT round-off inconsistency
+       if (mod(this%step,this%clearRoundOffFreq) == 0) then
+           call this%spectC%fft(this%u,this%uhat)
+           call this%spectC%fft(this%v,this%vhat)
+           call this%spectE%fft(this%w,this%what)
+
+       end if
+
        !if (this%isStratified) then
        !    if (this%botBC_Temp == 0) then
        !        this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
