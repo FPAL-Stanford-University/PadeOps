@@ -22,7 +22,7 @@ module forcingmod
       private
       type(decomp_info), pointer :: sp_gpC, sp_gpE, gpC
       real(rkind) :: kmin, kmax
-      integer :: Nwaves
+      integer :: Nwaves, Nmodes
       real(rkind), public :: EpsAmplitude
       class(spectral), pointer :: spectC, spectE
 
@@ -628,9 +628,9 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy,&
            select case (this%version)
              case (1) 
                call this%pick_random_wavenumbers()
-               Nmodes = this%Nwaves
+               this%Nmodes = this%Nwaves
              case (2) 
-               call this%pick_random_wavenumbersV2(Nmodes)
+               call this%pick_random_wavenumbersV2(this%Nmodes)
            end select
            call this%update_seeds()
         end if
@@ -640,7 +640,7 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy,&
 
 
         ! STEP 3a: embed into fhat
-        call this%compute_forcing(Nmodes)
+        call this%compute_forcing(this%Nmodes)
         
         if (newTimeStep .and. this%firstCall) then
             this%fxhat_old = this%fxhat
