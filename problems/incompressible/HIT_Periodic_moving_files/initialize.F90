@@ -15,6 +15,11 @@ module HIT_Periodic_parameters
     real(rkind), dimension(:,:,:), allocatable :: uTarget, vTarget, wTarget
 
     logical :: useRealSpaceLinearForcing = .false.
+    logical :: confirmFFTresult = .false.
+    logical :: checkEnergyInjectionRate = .false.
+    integer :: checkEnergyInjectionRateFreq = 100
+    logical :: dumpFieldsForDebugging = .false.
+
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
@@ -37,7 +42,10 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: init_type = 0
     logical :: BandpassFilterFields = .false. 
     integer :: initType = 0
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, &
+      kright, BandpassFilterFields, Lx, Ly, Lz, initType, &
+      useRealSpaceLinearForcing, confirmFFTresult, checkEnergyInjectionRate, &
+      checkEnergyInjectionRateFreq, dumpFieldsForDebugging
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11

@@ -49,7 +49,7 @@ module forcingmod
       complex(rkind), dimension(:,:,:), allocatable :: cbuffzC
       logical :: storeForce = .false.
       type(padePoisson), pointer :: poiss
-      logical :: checkInputDivergence, confirmEnergyInjectionRate
+      logical :: confirmEnergyInjectionRate
 
       ! Domain info
       real(rkind), pointer :: dx, dy, dz, Lx, Ly, Lz
@@ -94,12 +94,11 @@ subroutine init(this, inputfile, gpC, sp_gpC, sp_gpE, spectC, spectE, cbuffyE, c
    real(rkind) :: filtfact_linForcing = 0.5d0
    integer :: nforce, version = 1
    logical :: storeForce = .false.
-   logical :: checkInputDivergence = .false.
    logical :: confirmEnergyInjectionRate = .false.
 
    namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, &
      DomAspectRatioZ, alpha_t, useLinearForcing, filtfact_linForcing, &
-     version, storeForce, checkInputDivergence, confirmEnergyInjectionRate, A_force
+     version, storeForce, confirmEnergyInjectionRate, A_force
 
    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
    read(unit=123, NML=HIT_Forcing)
@@ -124,8 +123,6 @@ subroutine init(this, inputfile, gpC, sp_gpC, sp_gpE, spectC, spectE, cbuffyE, c
    this%version = version
    this%storeForce = storeForce
    this%poiss => poiss
-   this%checkInputDivergence = checkInputDivergence
-   this%confirmEnergyInjectionRate = confirmEnergyInjectionRate
 
    allocate(this%uhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%vhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
@@ -177,6 +174,8 @@ subroutine init(this, inputfile, gpC, sp_gpC, sp_gpE, spectC, spectE, cbuffyE, c
 
        ! Find the indices of each mode that satisfies kmin <= k <= kmax
        call findGL(this%kmag,this%kmin,this%kmax,this%i,this%j,this%k)
+       call assert(size(this%i) >= this%Nwaves,"There are fewer than Nwaves modes "//&
+         "between kmin and kmax -- forcingIsotropic.F90")
 
        ! Shuffle the modes before scrubbing conjugate pairs so we don't get biased statistics
        ! (do it a few times to make sure it is well shuffled)
@@ -316,7 +315,9 @@ function NmodesToAdd(i,j,k,k1,k2,k3,Ninit) result(Nadd)
   do n = 1,Ninit-1
     if (k1(i(n)) == 0) then
       do m = n+1,Ninit
-        if(k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
+        if(k1(i(m)) == 0         .and. &
+           k2(j(n)) == -k2(j(m)) .and. &
+           k3(k(n)) == -k3(k(m))) then
           Nadd = Nadd + 1
         end if
       end do
@@ -599,8 +600,6 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy,&
 
    ! Run-time checks
    real(rkind) :: EnergyInjection
-   !real(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)) :: divergence
-   !real(rkind) :: divMax
 
    if (this%useLinearForcing) then
         this%cbuffyC = uhat_xy
@@ -659,18 +658,11 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy,&
         this%fzhatwrite = this%fzhat
 
         ! On-the-fly checks
-        if (this%checkInputDivergence .or. this%confirmEnergyInjectionRate) then
+        if (this%confirmEnergyInjectionRate) then
           call message(0,'===================================')
           call message(0,'HIT forcing routine checks')
           call message(0,'-----------------------------------')
         end if
-        !if (this%checkInputDivergence) then
-        !  call this%poiss%divergenceCheck(uhat_xy,vhat_xy,what_xy,&
-        !    divergence)
-        !  divMax = p_maxval(maxval(abs(divergence)))
-        !  call message(1,'Maximum divergence for forcing input: ', divMax)
-        !  call assert(divMax < 1.d-13,'Input velocity is not divergence free')
-        !end if
 
         if (this%confirmEnergyInjectionRate) then
           call this%computeEnergyInjectionRate(this%uhat,this%vhat,this%what,&
