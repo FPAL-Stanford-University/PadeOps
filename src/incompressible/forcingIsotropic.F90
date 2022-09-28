@@ -517,6 +517,7 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
    real(rkind) :: den, fac
    integer :: gid_x, gid_y, gid_z
    integer :: lid_x, lid_y
+   integer :: ierr
 
    ! Get global ID of the mode and conjugate
    if (kx >=0 ) then
@@ -538,24 +539,40 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
    ! Get local ID of the mode and conjugate
    lid_x  = gid_x  - this%sp_gpC%zst(1) + 1
    lid_y  = gid_y  - this%sp_gpC%zst(2) + 1
-   
-   if ((lid_x >= 1).and.(lid_x <= this%sp_gpC%zsz(1))) then
-      if ((lid_y >= 1).and.(lid_y <= this%sp_gpC%zsz(2))) then
-         den = abs(this%uhat(lid_x,lid_y,gid_z))**2.d0 + &
-               abs(this%vhat(lid_x,lid_y,gid_z))**2.d0 + &
-               abs(this%what(lid_x,lid_y,gid_z))**2.d0 + 1.d-14 
-         
-         fac = 0.5d0*this%normfact*this%EpsAmplitude/den/this%Nwaves_rkind
-         
-         this%fxhat(lid_x, lid_y, gid_z ) = this%fxhat(lid_x, lid_y, gid_z )&
-           + fac*(this%uhat(lid_x, lid_y, gid_z ))
-         this%fyhat(lid_x, lid_y, gid_z ) = this%fyhat(lid_x, lid_y, gid_z )&
-           + fac*(this%vhat(lid_x, lid_y, gid_z ))
-         this%fzhat(lid_x, lid_y, gid_z ) = this%fzhat(lid_x, lid_y, gid_z )&
-           + fac*(this%what(lid_x, lid_y, gid_z ))
-
-      end if 
-   end if 
+  
+   select case (this%version)
+   case (1) 
+     if ((lid_x >= 1).and.(lid_x <= this%sp_gpC%zsz(1))) then
+        if ((lid_y >= 1).and.(lid_y <= this%sp_gpC%zsz(2))) then
+           den = abs(this%uhat(lid_x,lid_y,gid_z))**2.d0 + &
+                 abs(this%vhat(lid_x,lid_y,gid_z))**2.d0 + &
+                 abs(this%what(lid_x,lid_y,gid_z))**2.d0 + 1.d-14 
+           
+           fac = 0.5d0*this%normfact*this%EpsAmplitude/den/this%Nwaves_rkind
+           this%fxhat(lid_x, lid_y, gid_z ) = this%fxhat(lid_x, lid_y, gid_z )&
+             + fac*(this%uhat(lid_x, lid_y, gid_z ))
+           this%fyhat(lid_x, lid_y, gid_z ) = this%fyhat(lid_x, lid_y, gid_z )&
+             + fac*(this%vhat(lid_x, lid_y, gid_z ))
+           this%fzhat(lid_x, lid_y, gid_z ) = this%fzhat(lid_x, lid_y, gid_z )&
+             + fac*(this%what(lid_x, lid_y, gid_z ))
+        end if 
+     end if 
+   case (2)
+     if ((lid_x >= 1).and.(lid_x <= this%sp_gpC%zsz(1))) then
+        if ((lid_y >= 1).and.(lid_y <= this%sp_gpC%zsz(2))) then
+           den = abs(this%uhat(lid_x,lid_y,gid_z))**2.d0 + &
+                 abs(this%vhat(lid_x,lid_y,gid_z))**2.d0 + &
+                 abs(this%what(lid_x,lid_y,gid_z))**2.d0 + 1.d-14 
+           
+           fac = 0.5d0*this%normfact*this%EpsAmplitude/den/this%Nwaves_rkind
+           this%fxhat(lid_x, lid_y, gid_z ) = fac*(this%uhat(lid_x, lid_y, gid_z ))
+           this%fyhat(lid_x, lid_y, gid_z ) = fac*(this%vhat(lid_x, lid_y, gid_z ))
+           this%fzhat(lid_x, lid_y, gid_z ) = fac*(this%what(lid_x, lid_y, gid_z ))
+        end if 
+     end if 
+   case default
+     call gracefulExit('Must select version 1 or 2 -- forcingIsotropic.F90',ierr)
+   end select
 
 end subroutine 
 
