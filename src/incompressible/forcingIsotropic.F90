@@ -48,7 +48,6 @@ module forcingmod
       real(rkind), dimension(:,:,:), pointer :: rbuffxC
       complex(rkind), dimension(:,:,:), allocatable :: cbuffzC
       logical :: storeForce = .false.
-      type(padePoisson), pointer :: poiss
       logical :: confirmEnergyInjectionRate
 
       ! Domain info
@@ -76,7 +75,7 @@ module forcingmod
 contains
 
 subroutine init(this, inputfile, gpC, sp_gpC, sp_gpE, spectC, spectE, cbuffyE, cbuffyC, &
-    cbuffzE, cbuffzC, rbuffxC, tidStart, poiss)
+    cbuffzE, cbuffzC, rbuffxC, tidStart)
    class(HIT_shell_forcing), intent(inout) :: this
    character(len=*), intent(in) :: inputfile
    type(decomp_info), intent(in), target :: sp_gpC, sp_gpE, gpC
@@ -85,7 +84,6 @@ subroutine init(this, inputfile, gpC, sp_gpC, sp_gpE, spectC, spectE, cbuffyE, c
    complex(rkind), dimension(:,:,:,:), intent(inout), target :: cbuffzC
    real(rkind), dimension(:,:,:), intent(inout), target :: rbuffxC
    class(spectral), intent(in), target :: spectC, spectE
-   class(padePoisson), intent(in), target :: poiss
    integer :: RandSeedToAdd = 0, DomAspectRatioZ = 1
    real(rkind) :: alpha_t = 1.d0 
    integer :: Nwaves = 20
@@ -122,7 +120,7 @@ subroutine init(this, inputfile, gpC, sp_gpC, sp_gpE, spectC, spectE, cbuffyE, c
    this%useLinearForcing = useLinearForcing
    this%version = version
    this%storeForce = storeForce
-   this%poiss => poiss
+   this%confirmEnergyInjectionRate = confirmEnergyInjectionRate
 
    allocate(this%uhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%vhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
@@ -656,20 +654,16 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy,&
         this%fxhatwrite = this%fxhat
         this%fyhatwrite = this%fyhat
         this%fzhatwrite = this%fzhat
-
+        
         ! On-the-fly checks
-        if (this%confirmEnergyInjectionRate) then
-          call message(0,'===================================')
-          call message(0,'HIT forcing routine checks')
-          call message(0,'-----------------------------------')
-        end if
-
         if (this%confirmEnergyInjectionRate) then
           call this%computeEnergyInjectionRate(this%uhat,this%vhat,this%what,&
             this%fxhat, this%fyhat, this%fzhat, EnergyInjection)
-          call message(1,'Energy injection in forcing routine: ', EnergyInjection)
-          call assert(abs(this%EpsAmplitude - EnergyInjection) < 1.d-10,&
-            'Energy injection rate is not consistent with input file')
+          if (abs(this%EpsAmplitude - EnergyInjection) > 1.d-11) then
+            call message(1,'Energy injection in forcing routine: ', EnergyInjection)
+            call assert(abs(this%EpsAmplitude - EnergyInjection) < 1.d-11,&
+              'Energy injection rate is not consistent with input file')
+          end if
         end if
 
         ! STEP 4: Take ifft of fx, fy, fz and add to RHS

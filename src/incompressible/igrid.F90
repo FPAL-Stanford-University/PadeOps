@@ -1175,8 +1175,7 @@ contains
            allocate(this%hitforce)
            call this%hitforce%init(inputfile, this%gpC, this%sp_gpC, this%sp_gpE, &
              this%spectC, this%spectE, this%cbuffyE(:,:,:,1), this%cbuffyC(:,:,:,1), &
-             this%cbuffzE(:,:,:,1), this%cbuffzC, this%rbuffxC(:,:,:,1), this%step, &
-             this%padepoiss)
+             this%cbuffzE(:,:,:,1), this%cbuffzC, this%rbuffxC(:,:,:,1), this%step)
        end if
        
        ! STEP 19: Set up storage for Pressure
