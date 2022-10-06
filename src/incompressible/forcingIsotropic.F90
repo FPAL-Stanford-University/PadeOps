@@ -47,7 +47,7 @@ module forcingmod
       integer :: version
       real(rkind), dimension(:,:,:), pointer :: rbuffxC
       complex(rkind), dimension(:,:,:), allocatable :: cbuffzC
-      logical :: storeForce = .false.
+      logical :: storeForce
       logical :: confirmEnergyInjectionRate
 
       ! Domain info

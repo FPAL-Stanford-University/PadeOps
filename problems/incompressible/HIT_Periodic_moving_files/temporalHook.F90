@@ -1,7 +1,7 @@
 module temporalHook
     use kind_parameters,    only: rkind
     use IncompressibleGrid, only: igrid
-    use reductions,         only: P_MAXVAL, p_minval
+    use reductions,         only: P_MAXVAL, p_minval, p_sum
     use exits,              only: message, message_min_max
     use constants,          only: half
     use timer,              only: tic, toc 
@@ -69,19 +69,23 @@ contains
          if (mod(gp%step,nt_print2screen) == 0) then
             DomMaxDiv = p_maxval(gp%divergence)
             call message(0,"Time",gp%tsim)
-            call message(1,"TIDX:",gp%step)
-            call message(1,"MaxDiv:",DomMaxDiv)
-            call message(1,"Mean TKE:",gp%getMeanKE())
-            call message(1,"Mean  uu:",gp%getMeanuu())
-            call message(1,"Mean  uv:",gp%getMeanuv())
-            call message(1,"Mean  uw:",gp%getMeanuw())
-            call message(1,"Mean  vv:",gp%getMeanvv())
-            call message(1,"Mean  vw:",gp%getMeanvw())
-            call message(1,"Mean  ww:",gp%getMeanww())
-            call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
-            call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
-            call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
-            call message(1,"Forcing seed3:",gp%HITForce%seed3)
+            call message(1,"TIDX",gp%step)
+            call message(1,"MaxDiv",DomMaxDiv)
+            call message(1,"Mean TKE",gp%getMeanKE())
+            call message(1,"Mean  uu",gp%getMeanuu())
+            call message(1,"Mean  uv",gp%getMeanuv())
+            call message(1,"Mean  uw",gp%getMeanuw())
+            call message(1,"Mean  vv",gp%getMeanvv())
+            call message(1,"Mean  vw",gp%getMeanvw())
+            call message(1,"Mean  ww",gp%getMeanww())
+
+            call message(1,"Mean  u", p_sum(sum(gp%u) )/real(gp%nx*gp%ny*gp%nz,rkind))
+            call message(1,"Mean  v", p_sum(sum(gp%v) )/real(gp%nx*gp%ny*gp%nz,rkind))
+            call message(1,"Mean  w", p_sum(sum(gp%wC))/real(gp%nx*gp%ny*gp%nz,rkind))
+            
+            call message_min_max(1,"Bounds for u", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
+            call message_min_max(1,"Bounds for v", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
+            call message_min_max(1,"Bounds for w", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
            
             if (confirmFFTresult)  then
               call gp%spectC%fft(gp%u, uhat_xy)
@@ -89,17 +93,17 @@ contains
               call gp%spectC%fft(gp%wC, whatC_xy)
               call gp%spectE%fft(gp%w, what_xy)
 
-              call message(1,"max real(uhat) difference:",p_maxval(maxval(real(uhat_xy - gp%uhat,rkind))))
-              call message(1,"max dimag(uhat) difference:",p_maxval(maxval(dimag(uhat_xy - gp%uhat))))
-              call message(1,"max real(vhat) difference:",p_maxval(maxval(real(vhat_xy - gp%vhat,rkind))))
-              call message(1,"max dimag(vhat) difference:",p_maxval(maxval(dimag(vhat_xy - gp%vhat))))
-              call message(1,"max real(what) difference:",p_maxval(maxval(real(what_xy - gp%what,rkind))))
-              call message(1,"max dimag(what) difference:",p_maxval(maxval(dimag(what_xy - gp%what))))
-              call message(1,"max real(whatC) difference:",p_maxval(maxval(real(whatC_xy - gp%whatC,rkind))))
-              call message(1,"max dimag(whatC) difference:",p_maxval(maxval(dimag(whatC_xy - gp%whatC))))
+              call message(1,"max real(uhat) difference",p_maxval(maxval(real(uhat_xy - gp%uhat,rkind))))
+              call message(1,"max dimag(uhat) difference",p_maxval(maxval(dimag(uhat_xy - gp%uhat))))
+              call message(1,"max real(vhat) difference",p_maxval(maxval(real(vhat_xy - gp%vhat,rkind))))
+              call message(1,"max dimag(vhat) difference",p_maxval(maxval(dimag(vhat_xy - gp%vhat))))
+              call message(1,"max real(what) difference",p_maxval(maxval(real(what_xy - gp%what,rkind))))
+              call message(1,"max dimag(what) difference",p_maxval(maxval(dimag(what_xy - gp%what))))
+              call message(1,"max real(whatC) difference",p_maxval(maxval(real(whatC_xy - gp%whatC,rkind))))
+              call message(1,"max dimag(whatC) difference",p_maxval(maxval(dimag(whatC_xy - gp%whatC))))
             end if
 
-            if (checkEnergyInjectionRate) then
+            if (checkEnergyInjectionRate .and. allocated(gp%hitforce)) then
               if (mod(gp%step,checkEnergyInjectionRateFreq) == 0) then
                 call transpose_y_to_z(gp%uhat,uhat,gp%sp_gpC)
                 call gp%spectC%take_fft1d_z2z_ip(uhat)
