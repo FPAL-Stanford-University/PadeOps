@@ -313,3 +313,15 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
 
     scalarSource = 0.d0
 end subroutine 
+
+subroutine hook_source(gp,tsim,mesh,Re,urhs,vrhs,wrhs)
+  use kind_parameters, only: rkind
+  use decomp_2d,       only: decomp_info
+  use constants,       only: zero
+  type(decomp_info),               intent(in)         :: gp
+  real(rkind), intent(in)                             :: tsim, Re
+  real(rkind), dimension(:,:,:,:), intent(in), target :: mesh
+  real(rkind), dimension(:,:,:),   intent(inout)      :: urhs, vrhs, wrhs
+  real(rkind), dimension(:,:,:), pointer              :: x, y, z
+
+end subroutine

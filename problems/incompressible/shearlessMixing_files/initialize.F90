@@ -114,7 +114,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: nxg, nyg, nzg
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /SMinput/ Lx, Ly, Lz
+    namelist /SMinput/ Lx, Ly, Lz 
     namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz 
 
     select case (simulationID) 
@@ -471,3 +471,28 @@ subroutine setScalar_source(decompC, inputfile, mesh, scalar_id, scalarSource)
     deallocate(r, lambda, tmp)
 
 end subroutine 
+
+subroutine hook_source(gp,tsim,mesh,Re,urhs,vrhs,wrhs)
+  use kind_parameters, only: rkind
+  use decomp_2d,       only: decomp_info
+  use constants,       only: zero
+  type(decomp_info),               intent(in)         :: gp
+  real(rkind), intent(in)                             :: tsim, Re
+  real(rkind), dimension(:,:,:,:), intent(in), target :: mesh
+  real(rkind), dimension(:,:,:),   intent(inout)      :: urhs, vrhs, wrhs
+  real(rkind), dimension(:,:,:), pointer              :: x, y, z
+
+  x => mesh(:,:,:,1)
+  y => mesh(:,:,:,2)
+  z => mesh(:,:,:,3)
+
+  !urhs = urhs + (2.d0*(2.d0*cos(tsim)*cos(x)*cos(y)*cos(z) - &
+  !  cos(tsim)*sin(x)*sin(y)*sin(z)))/Re + &
+  !  F*lambda*(cos(tsim)*cos(x)*cos(y)*cos(z) - &
+  !  cos(tsim)*cos(y)*cos(z)*sin(x)) - &
+  !  cos(tsim)**2*cos(x)*cos(y)**2*cos(z)**2*sin(x) - &
+  !  2.d0*cos(tsim)**2*cos(x)**2*cos(y)*cos(z)*sin(y)*sin(z)
+  urhs = urhs + zero
+  vrhs = vrhs + zero
+  wrhs = wrhs + zero
+end subroutine

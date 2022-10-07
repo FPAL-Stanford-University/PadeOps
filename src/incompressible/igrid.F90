@@ -152,7 +152,8 @@ module IncompressibleGrid
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false., useMoisture = .false.
-        logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
+        logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false. 
+        logical :: addExtraSourceTerm = .false. 
         logical :: useSGS = .false., computeTurbinePressure = .false.  
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
@@ -410,6 +411,7 @@ contains
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
+        logical :: addExtraSourceTerm = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
@@ -451,7 +453,7 @@ contains
           BuoyancyTermType,useforcedStratification, useGeostrophicForcing, &
           G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,&
           useHITForcing, useScalars, frameAngle, buoyancyDirection, &
-          useHITRealSpaceLinearForcing, HITForceTimeScale
+          useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
@@ -515,7 +517,8 @@ contains
         end if 
         this%t_restartDump = t_restartDump; this%tid_statsDump = tid_statsDump; this%useCoriolis = useCoriolis; 
         this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
-        this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
+        this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS
+        this%addExtraSourceTerm = addExtraSourceTerm 
         this%UseDealiasFilterVert = UseDealiasFilterVert
         this%G_geostrophic = G_geostrophic; this%G_alpha = G_alpha; this%Fr = Fr; 
         this%fastCalcPressure = fastCalcPressure 
