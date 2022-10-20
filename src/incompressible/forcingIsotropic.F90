@@ -49,9 +49,6 @@ module forcingmod
       complex(rkind), dimension(:,:,:), allocatable :: cbuffzC
       logical :: storeForce
       logical :: confirmEnergyInjectionRate
-
-      ! Domain info
-      real(rkind), pointer :: dx, dy, dz, Lx, Ly, Lz
     
       contains
       procedure          :: init
@@ -164,7 +161,7 @@ subroutine init(this, inputfile, gpC, sp_gpC, sp_gpE, spectC, spectE, cbuffyE, c
        this%kmag = sqrt(this%k1*this%k1 + this%k2*this%k2 + this%k3*this%k3)
 
        call assert(nforce/2 < gpC%xsz(1)/2,&
-         'Need to allocated nforce/2+1 -- forcingIsotropic.F90')
+         'Need to allocate nforce/2+1 -- forcingIsotropic.F90')
        allocate(this%k1_1d(nforce/2), this%k2_1d(nforce), this%k3_1d(nforce))
        this%k1_1d = nint(this%k1(:,1,1))
        this%k2_1d = nint(this%k2(1,:,1))

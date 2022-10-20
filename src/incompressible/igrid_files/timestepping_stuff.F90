@@ -590,6 +590,52 @@
    end subroutine
    
    subroutine AdamsBashforth(this)
+       class(igrid), intent(inout) :: this
+       real(rkind) :: abf1, abf2
+
+       ! Step 0: Compute TimeStep 
+       call this%compute_deltaT
+       this%dtRat = this%dt/this%dtOld
+
+       ! Step 1: Get the RHS
+       if (this%AlreadyHaveRHS) then
+           this%AlreadyHaveRHS = .false.
+       else
+           call this%populate_rhs()
+       end if 
+
+       ! Step 2: Time Advance
+       if (this%step == 0) then
+           this%uhat = this%uhat + this%dt*this%u_rhs 
+           this%vhat = this%vhat + this%dt*this%v_rhs 
+           this%what = this%what + this%dt*this%w_rhs 
+           if (this%isStratified .or. this%initspinup) then
+               this%That = this%That + this%dt*this%T_rhs
+           end if
+       else
+           abf1 = (one + half*this%dtRat)*this%dt
+           abf2 = -half*this%dtRat*this%dt
+           this%uhat = this%uhat + abf1*this%u_rhs + abf2*this%u_Orhs
+           this%vhat = this%vhat + abf1*this%v_rhs + abf2*this%v_Orhs
+           this%what = this%what + abf1*this%w_rhs + abf2*this%w_Orhs
+           if (this%isStratified .or. this%initspinup) then
+               this%That = this%That + abf1*this%T_rhs + abf2*this%T_Orhs
+           end if 
+       end if 
+
+       ! Step 3: Pressure Project and prep for the next step
+       call this%project_and_prep(.false.)
+
+       ! Step 4: Store the RHS values for the next use
+       this%u_Orhs = this%u_rhs; this%v_Orhs = this%v_rhs; this%w_Orhs = this%w_rhs
+       if (this%isStratified .or. this%initspinup) this%T_Orhs = this%T_rhs
+       this%dtOld = this%dt
+
+       ! Step 5: Do end of time step operations (I/O, stats, etc.)
+       call this%wrapup_timestep()
+   end subroutine
+   
+   subroutine FwdEuler(this)
      use constants, only: imi
        class(igrid), intent(inout) :: this
        real(rkind) :: abf1, abf2
@@ -602,9 +648,9 @@
        call this%dealias_rhs(this%u_rhs,this%v_rhs,this%w_rhs)
 
        ! Step 2: Time Advance
-       this%uhat = this%uhat + this%dt*(this%u_rhs + 0.d0*this%uhat) 
-       this%vhat = this%vhat + this%dt*(this%v_rhs + 0.d0*this%vhat) 
-       this%what = this%what + this%dt*(this%w_rhs + 0.d0*this%what) 
+       this%uhat = this%uhat + this%dt*this%u_rhs 
+       this%vhat = this%vhat + this%dt*this%v_rhs 
+       this%what = this%what + this%dt*this%w_rhs 
 
        ! Step 3: Pressure Project and prep for the next step
        !call this%dealiasFields()
@@ -616,10 +662,6 @@
        call this%spectC%ifft(this%uhat,this%u,.true.)
        call this%spectC%ifft(this%vhat,this%v,.true.)
        call this%spectE%ifft(this%what,this%w,.true.)
- 
-       !call this%spectC%fft(this%u,this%uhat)
-       !call this%spectC%fft(this%v,this%vhat)
-       !call this%spectE%fft(this%w,this%what)
  
        ! STEP 4: Interpolate the cell center values of w
        call this%interp_PrimitiveVars()

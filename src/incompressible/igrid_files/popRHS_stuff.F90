@@ -315,7 +315,7 @@
         call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%rbuffxC(:,:,:,3),this%gpC)
 
         ! Add the source term
-        call hook_source(this%gpC,this%tsim,this%mesh,this%Re,&
+        call hook_source(this%tsim,this%mesh,this%Re,&
           this%rbuffxC(:,:,:,1),this%rbuffxC(:,:,:,2),this%rbuffxC(:,:,:,3))
 
         ! Interpolate cell to edge for w_rhs

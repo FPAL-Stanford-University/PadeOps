@@ -1,9 +1,9 @@
 module shearlessMixing_interact_parameters
 
-    use exits, only: message
+    use exits,            only: message, gracefulExit
     use kind_parameters,  only: rkind
-    use constants, only: kappa, zero
-    use fortran_assert,     only: assert
+    use constants,        only: kappa, zero, one
+    use fortran_assert,   only: assert
     implicit none
     integer :: simulationID = 0
     integer :: nxSize = 256, nySize = 256, nzSize = 256
@@ -12,6 +12,8 @@ module shearlessMixing_interact_parameters
     character(len=1) :: streamWiseCoord = 'z'
     logical :: MMS = .false.
     real(rkind), dimension(:,:,:), allocatable :: xE, yE, zE, uMMS, vMMS, wMMS
+    real(rkind), dimension(:),     allocatable :: x1D, y1D, z1D
+    real(rkind) :: Fringe_zst = zero, LzSM = one
 
 contains
 
@@ -33,15 +35,20 @@ contains
   subroutine copyHITfieldsToSM(uhit,vhit,whit,uAD,vAD,wAD,hit,adsim,coord)
     use incompressibleGrid, only: igrid
     use decomp_2d,          only: transpose_x_to_y, transpose_y_to_x,&
-                                  transpose_y_to_z, transpose_z_to_y
+                                  transpose_y_to_z, transpose_z_to_y, &
+                                  nrank
+    use arrayTools,         only: findGE
+    
     real(rkind), dimension(:,:,:), intent(in) :: uhit, vhit, whit
     real(rkind), dimension(:,:,:), intent(inout) :: uAD, vAD, wAD
     character(len=1), intent(in) :: coord
     type(igrid), intent(inout) :: hit, adsim
     integer :: ist, ien, jst, jen, kst, ken
-    
+    integer :: ierr
+        
     select case (coord)
       case ('x')
+        call gracefulExit('This has not be implemented yet. See "z" case for model',ierr)
         ist = nxSM/2 - nxHIT/2 + 1
         ien = nxSM/2 + nxHIT/2
        
@@ -51,6 +58,7 @@ contains
         wAD(ist:ien,:,:) = whit  
   
       case ('y')
+        call gracefulExit('This has not be implemented yet. See "z" case for model',ierr)
         jst = nySM/2 - nyHIT/2 + 1
         jen = nySM/2 + nyHIT/2
   
@@ -71,8 +79,10 @@ contains
         call transpose_y_to_x(adsim%rbuffyE(:,:,:,1), wAD, adSim%gpE)
   
       case ('z')
-        kst = nzSM/2 - nzHIT/2 + 1
-        ken = nzSM/2 + nzHIT/2
+        !kst = nzSM/2 - nzHIT/2 + 1
+        call findGE(z1D,Fringe_zst*LzSM,kst)
+        kst = kst - 1
+        ken = kst + nzHIT - 1
   
         ! We need to transpose from x->y->z then copy 
         call transpose_x_to_y(uhit, hit%rbuffyC(:,:,:,1), hit%gpC)
@@ -98,6 +108,7 @@ contains
   
   
     end select
+
   end subroutine
   
   subroutine checkMMS(u,v,w,mesh,tsim)
@@ -150,6 +161,9 @@ contains
       deallocate(xE, yE, zE)
       deallocate(uMMS,vMMS,wMMS)
     end if
+    if (allocated(x1D)) deallocate(x1D)
+    if (allocated(y1D)) deallocate(y1D)
+    if (allocated(z1D)) deallocate(z1D)
   end subroutine
 
 end module     
@@ -161,28 +175,44 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use decomp_2d,        only: decomp_info
     implicit none
 
-    type(decomp_info),                                          intent(in)    :: decomp
-    real(rkind),                                                intent(inout) :: dx,dy,dz
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
+    integer :: i,j,k, ioUnit
     integer :: nxg, nyg, nzg
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
+    real(rkind) :: zstSponge = one, Fringe_zen = zero
+    real(rkind) :: zmin = -pi
+    logical :: PeriodicInZ, useSpongeLayer, useTopAndBottomSymmetricSponge, &
+      useFringe, usedoubleFringex, usecontrol, Apply_x_fringe, Apply_z_fringe
+    integer :: botWall, topWall, sponge_type, botBC_Temp, topBC_temp
+    real(rkind) :: SpongeTscale, Fringe_delta_st_z, &
+      Fringe_delta_en_z, LambdaFact, LambdaFactPotTemp
+    
     namelist /SMinput/ Lx, Ly, Lz 
-    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz 
+    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
+    namelist /BCs/ PeriodicInZ, botWall, topWall, useSpongeLayer, zstSponge, &
+      SpongeTscale, sponge_type, botBC_Temp, topBC_temp, useTopAndBottomSymmetricSponge, &
+      useFringe, usedoubleFringex, usecontrol
+    namelist /FRINGE/ Fringe_zst, Fringe_zen, Fringe_delta_st_z, Fringe_delta_en_z, &
+      LambdaFact, LambdaFactPotTemp, Apply_x_fringe, Apply_z_fringe
 
     select case (simulationID) 
     case (1) 
       ioUnit = 11
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+      read(unit=ioUnit, NML=BCs)
+      read(unit=ioUnit, NML=FRINGE)
       read(unit=ioUnit, NML=SMinput)
       close(ioUnit)    
     case (2)
       ioUnit = 11
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
       read(unit=ioUnit, NML=HIT_PeriodicINPUT)
-      close(ioUnit)    
+      close(ioUnit)   
+      LzSM = Lz 
     end select
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
@@ -197,18 +227,31 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
         dy = Ly/real(nyg,rkind)
         select case (simulationID)
         case (1)
-          ! z goes from -Lz to Lz
-          dz = 2.d0*Lz/real(nzg,rkind)
+          ! z goes from zmin to Lz where zmin = 0 - (size of forcing region) - (size of sponge)
+          !zmin = Lz*(zstSponge - Fringe_zen - 1.d0)/zstSponge
+          dz = (Lz - zmin)/real(nzg,rkind)
           
           do k=1,size(mesh,3)
               do j=1,size(mesh,2)
                   do i=1,size(mesh,1)
                       x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
                       y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
-                      z(i,j,k) = real( -nzg/2, rkind ) * dz + &
-                        & real( iz1 + k - 1, rkind ) * dz + dz/two
+                      !z(i,j,k) = real( -nzg/2, rkind ) * dz + &
+                      !  & real( iz1 + k - 1, rkind ) * dz + dz/two
+                      z(i,j,k) = zmin + real( iz1 + k - 1, rkind ) * dz + dz/two
                   end do
               end do
+          end do
+
+          allocate(x1D(nxg), y1D(nyg), z1D(nzg))
+          do i = 1,nxg
+            x1D(i) = real(i-1,rkind)*dx
+          end do
+          do j = 1,nyg
+            y1D(j) = real(j-1,rkind)*dy
+          end do
+          do k = 1,nzg
+            z1D(k) = zmin + real(k-1,rkind)*dz + dz/two
           end do
         case (2)
           ! z goes from 0 to Lz

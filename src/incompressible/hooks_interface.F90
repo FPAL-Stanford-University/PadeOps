@@ -200,10 +200,8 @@ module igrid_hooks
 !    end interface
 
     interface hook_source
-        subroutine hook_source(decomp,tsim,mesh,Re,urhs,vrhs,wrhs)
+        subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
             import :: rkind
-            import :: decomp_info
-            type(decomp_info),               intent(in)    :: decomp
             real(rkind),                     intent(in)    :: tsim, Re
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:),   intent(inout) :: urhs, vrhs, wrhs

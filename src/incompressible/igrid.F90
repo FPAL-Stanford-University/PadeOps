@@ -320,6 +320,7 @@ module IncompressibleGrid
             !procedure, private :: init_stats
             procedure, private :: init_stats3D
             procedure, private :: AdamsBashforth
+            procedure, private :: FwdEuler
             procedure, private :: TVD_RK3
             procedure, private :: SSP_RK45
             procedure, private :: ComputePressure
@@ -888,6 +889,7 @@ contains
         if (this%useSponge) then
             allocate(this%RdampC(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)))
             allocate(this%RdampE(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)))
+            zinY => this%rbuffyC(:,:,:,1)
             zinZ => this%rbuffzC(:,:,:,1)
             zEinZ => this%rbuffzE(:,:,:,1); 
             call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
@@ -1403,6 +1405,8 @@ contains
            else
              call this%advance_SSP_RK45_all_stages()
            end if
+        case(4)
+            call this%FwdEuler()
         end select
 
    end subroutine
