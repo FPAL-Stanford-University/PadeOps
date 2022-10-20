@@ -3,6 +3,7 @@ module QHmeshMod
   use decomp_2d
   use incompressibleGrid, only: igrid
   use exits,              only: message
+  use reductions,         only: p_minval
   implicit none
 
   type QHmesh
@@ -75,9 +76,9 @@ module QHmeshMod
       allocate(this%KE(isz,jsz,ksz), this%L(isz,jsz,ksz))
 
       ! Define the mesh           
-      this%xE = getMeshEdgeValues(ist,ien+1,this%dx)
-      this%yE = getMeshEdgeValues(jst,jen+1,this%dy)
-      this%zE = getMeshEdgeValues(kst,ken+1,this%dz)
+      this%xE = getMeshEdgeValues(ist,isz+1,this%dx,p_minval(this%LES%mesh(1,1,1,1)))
+      this%yE = getMeshEdgeValues(jst,jsz+1,this%dy,p_minval(this%LES%mesh(1,1,1,2)))
+      this%zE = getMeshEdgeValues(kst,ksz+1,this%dz,p_minval(this%LES%mesh(1,1,1,3)))
       
       this%xC = 0.5d0*(this%xE(2:isz+1)+this%xE(1:isz))
       this%yC = 0.5d0*(this%yE(2:jsz+1)+this%yE(1:jsz))

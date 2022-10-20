@@ -6,6 +6,7 @@ module enrichmentMod
   use constants,          only: pi
   use fortran_assert,     only: assert
   use omp_lib
+  use gaborHooks
   implicit none
 
   integer :: nthreads
@@ -14,6 +15,7 @@ module enrichmentMod
     real(rkind), dimension(:), allocatable :: kx, ky, kz
     real(rkind), dimension(:), allocatable :: x, y, z
     real(rkind), dimension(:), allocatable :: uhatR, uhatI, vhatR, vhatI, whatR, whatI
+    real(rkind) :: dt
 
     ! Halo-padded arrays
     real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh
@@ -30,11 +32,14 @@ module enrichmentMod
     integer     :: nk, ntheta, nmodes, nmodesGlobal
     real(rkind) :: scalefact, Anu, numolec, ctauGlobal
     logical     :: renderPressure = .false.
-    integer     :: tidRender, tio , tid, tidStop
+    integer     :: tidRender, tio , tid, tidStop, tidsim
 
     ! Data IO
     character(len=clen) :: outputdir
     logical :: writeIsotropicModes 
+    
+    ! Extra memory for velocity rendering
+    real(rkind), dimension(:,:,:,:), allocatable :: utmp,vtmp,wtmp
 
     contains
       procedure          :: init
@@ -70,14 +75,18 @@ contains
     real(rkind) :: scalefact = 1.d0, Anu = 1.d-4, numolec = 0.d0
     real(rkind) :: ctauGlobal = 1.d0
     logical :: writeIsotropicModes = .false.
+    integer :: ist, ien, jst, jen, kst, ken
+    real(rkind) :: dt
     
     namelist /IO/      outputdir, writeIsotropicModes
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec
-    namelist /CONTROL/ tidRender, tio, tidStop, tidInit 
+    namelist /CONTROL/ tidRender, tio, tidStop, tidInit
+    namelist /INPUT/ dt
 
     ! Read inputfile
     ioUnit = 1
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+    read(unit=ioUnit, NML=INPUT)
     read(unit=ioUnit, NML=IO)
     read(unit=ioUnit, NML=GABOR)
     read(unit=ioUnit, NML=CONTROL)
@@ -90,7 +99,8 @@ contains
     this%tidRender = tidRender 
     this%tio = tio
     this%tidStop = tidStop
-    this%tid = -1 
+    this%tid = tidInit
+    this%dt = dt 
 
     ! Initialization
     this%nk = nk
@@ -102,7 +112,6 @@ contains
     ! IO
     this%outputdir = outputdir
     this%writeIsotropicModes = writeIsotropicModes
-
 
     ! STEP  0: Get filenames for u, v and w from (input file?) for initialization
     ! Use the same file-naming convention for PadeOps restart files: 
@@ -116,9 +125,7 @@ contains
     ! Ryan 
     ! STEP 1: Finish the QH region code to fill Gabor Modes (kx, ky, kz, x, y, z, uhat, ...)
     call this%QHgrid%init(inputfile,this%largeScales)
-    ! TODO: Use largeScales velocity data to compute KE and L for QHmesh
-    this%QHgrid%KE = 1.d0
-    this%QHgrid%L  = 1.d0
+    call getLargeScaleParams(this%QHgrid%KE,this%QHgrid%L,this%largeScales)
 
     this%nxsupp = 2 * this%smallScales%nx/this%largeScales%nx * &
       nint(this%QHgrid%dx / this%largeScales%dx)
@@ -138,6 +145,19 @@ contains
       this%smallScales%nx, this%smallScales%ny, this%smallScales%nz, &
       this%kmin, this%kmax)
 
+    ! Allocate extra memory for velocity rendering
+    ist = this%smallScales%gpC%xst(1) 
+    ien = this%smallScales%gpC%xen(1) 
+    jst = this%smallScales%gpC%xst(2) 
+    jen = this%smallScales%gpC%xen(2) 
+    kst = this%smallScales%gpC%xst(3) 
+    ken = this%smallScales%gpC%xen(3)
+   
+    nthreads = omp_get_num_threads() 
+    allocate(this%utmp(ist:ien,jst:jen,kst:ken,nthreads))
+    allocate(this%vtmp(ist:ien,jst:jen,kst:ken,nthreads))
+    allocate(this%wtmp(ist:ien,jst:jen,kst:ken,nthreads))
+    
     ! Initialize the Gabor modes
     call this%generateIsotropicModes()
     if (this%writeIsotropicModes) call this%dumpData()
@@ -168,6 +188,9 @@ contains
     if (allocated(this%vh))       deallocate(this%vh)
     if (allocated(this%wh))       deallocate(this%wh)
     if (allocated(this%duidxj_h)) deallocate(this%duidxj_h)
+    if (allocated(this%utmp))     deallocate(this%utmp)
+    if (allocated(this%vtmp))     deallocate(this%vtmp)
+    if (allocated(this%wtmp))     deallocate(this%wtmp)
 
     call this%QHgrid%destroy()
   end subroutine 
@@ -180,6 +203,7 @@ contains
     ! Either run a PadeOps time-step or, read in from a file 
     ! If you read in from a file, you would want to avoid doing this repeatedly. 
     ! Perhaps read in 20 snapshots at a time and so on..
+    call this%largeScales%timeAdvance(this%dt)
 
     ! Aditya: 
     ! STEP 2: Generate halo'd velocities
@@ -202,7 +226,7 @@ contains
 
     ! Ryan
     ! STEP 2: Render local velocity
-    call this%renderLocalVelocity() 
+    call this%renderLocalVelocity(this%utmp,this%vtmp,this%wtmp) 
 
     ! Aditya
     ! STEP 3: Impose boundary condition (no-penetration BC)

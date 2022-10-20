@@ -4,19 +4,22 @@ module QHmeshRoutines
 
 contains
     
-    pure function getMeshEdgeValues(st,en,h) result(x)
+    pure function getMeshEdgeValues(st,sz,h,xst) result(x)
       ! Define a 1D vector based on global indices and uniform grid spacing
       ! The global mesh begins at the domain boundary
       ! Inputs:
-      !   st, en --> start and ending indices of vector
+      !   st --> global start indicex of vector
+      !   sz --> size of the vector
       !   h --> grid spacing
-      integer, intent(in) :: st, en
+      !   xst --> domain boundary, i.e. x(1) = xst
+      integer, intent(in) :: st, sz
       real(rkind), intent(in) :: h
-      real(rkind), dimension(st:en) :: x
+      real(rkind), intent(in) :: xst
+      real(rkind), dimension(sz) :: x
       integer :: i
          
-      do i = st,en
-        x(i) = (i - 1)*h
+      do i = 1,sz
+        x(i) = xst + real(st + i - 2,rkind)*h
       end do
     end function
 
