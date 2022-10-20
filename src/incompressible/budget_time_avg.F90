@@ -201,6 +201,14 @@ contains
         this%splitPressureDNS = this%igrid_sim%computeDNSPressure
 
         this%HaveScalars = this%igrid_sim%useScalars
+        
+        if (.not. this%igrid_sim%fastCalcPressure) then
+            if (this%do_budgets) then
+              call GracefulExit("Cannot perform budget calculaitons if IGRID"//&
+                " is initialized with FASTCALCPRESSURE=.false.", ierr)
+            end if
+        end if
+
 
         if((this%tidx_budget_start > 0) .and. (this%time_budget_start > 0.0d0)) then
             call GracefulExit("Both tidx_budget_start and time_budget_start in budget_time_avg are positive. Turn one negative", 100)
@@ -283,6 +291,7 @@ contains
             endif
 
         end if
+        call message("Budget_time_avg initialized successfully!")
 
     end subroutine 
 
@@ -878,7 +887,7 @@ contains
         this%budget_3(:,:,:,1) = -this%budget_2(:,:,:,1)
 
         ! 2. convective transport        (B)
-        buff2 = half*(R11*R11 + R22*R22 + R33*R33)
+        buff2 = half*(R11 + R22 + R33)
         call this%ddx_R2R(buff2,buff); this%budget_3(:,:,:,2) = -Umn*buff
         call this%ddy_R2R(buff2,buff); this%budget_3(:,:,:,2) = this%budget_3(:,:,:,2) - Vmn*buff
         call this%ddz_R2R(buff2,buff); this%budget_3(:,:,:,2) = this%budget_3(:,:,:,2) - Wmn*buff
@@ -1024,8 +1033,8 @@ contains
             deallocate(this%runningSum_sc)
         end if
         if(this%useWindTurbines) then
-            deallocate(this%runningSum_sc_turb)
-            deallocate(this%runningSum_turb)
+            if (allocated(this%runningSum_sc_turb)) deallocate(this%runningSum_sc_turb)
+            if (allocated(this%runningSum_turb)) deallocate(this%runningSum_turb)
         endif
 
     end subroutine 
@@ -1078,12 +1087,6 @@ contains
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(in) :: f
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdz
         
-        !call transpose_x_to_y(f,this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
-        !call transpose_y_to_z(this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%gpC)
-        !call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%rbuffzC(:,:,:,1),this%igrid_sim%rbuffzC(:,:,:,2),0,0)
-        !call transpose_z_to_y(this%igrid_sim%rbuffzC(:,:,:,2),this%igrid_sim%rbuffyC(:,:,:,1),this%igrid_sim%gpC)
-        !call transpose_y_to_x(this%igrid_sim%rbuffyC(:,:,:,1),dfdz,this%igrid_sim%gpC)
-
         call this%igrid_sim%spectC%fft(f,this%igrid_sim%cbuffyC(:,:,:,2))
         call this%ddz_C2R(this%igrid_sim%cbuffyC(:,:,:,2), dfdz)
 
@@ -1095,7 +1098,7 @@ contains
         real(rkind), dimension(this%igrid_sim%gpC%xsz(1),this%igrid_sim%gpC%xsz(2),this%igrid_sim%gpC%xsz(3)), intent(out) :: dfdz
         
         call transpose_y_to_z(fhat,this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%sp_gpC)
-        call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%cbuffzC(:,:,:,2),0,0)
+        call this%igrid_sim%Pade6opZ%ddz_C2C(this%igrid_sim%cbuffzC(:,:,:,1),this%igrid_sim%cbuffzC(:,:,:,2),0,0, postProcess=.True.)
         call transpose_z_to_y(this%igrid_sim%cbuffzC(:,:,:,2),this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%sp_gpC)
         call this%igrid_sim%spectC%dealias(this%igrid_sim%cbuffyC(:,:,:,1))
         call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1), dfdz)

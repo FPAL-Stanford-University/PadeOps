@@ -16,6 +16,7 @@ contains
     else
       root_stmt = 'Assert statement FAILED:'
     end if
+    
     if (.not. expression) then
       if (present(description)) then
         call gracefulExit(trim(root_stmt)//" "//description, err_code)

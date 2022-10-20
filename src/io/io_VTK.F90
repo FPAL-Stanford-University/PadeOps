@@ -93,7 +93,8 @@ contains
 
         call system('mkdir -p ' // adjustl(trim(this%vizdir)//'/'//trim(strz(4,this%vizcount))))
         write(dummy,'(I4)') this%vizcount
-        call message("Writing viz dump "//trim(dummy)//" to " //trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts')
+        call message("Writing viz dump "//trim(dummy)//" to " //&
+          trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts')
 
         if (present(secondary)) then
             if (.not. present(secondary_names)) then
@@ -125,8 +126,11 @@ contains
         nn = (nx2-nx1+1)*(ny2-ny1+1)*(nz2-nz1+1)
     
         E_IO = VTK_INI_XML_WRITE(fformat='binary', &
-                           filename=trim(this%vizdir)//'/'//trim(strz(4,this%vizcount))//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'_'//trim(strz(6,nrank))//'.vts', &
-                           mesh_topology='StructuredGrid', nx1=nx1, nx2=nx2, ny1=ny1, ny2=ny2, nz1=nz1, nz2=nz2)
+                           filename=trim(this%vizdir)//'/'//trim(strz(4,this%vizcount))&
+                             //'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))&
+                             //'_'//trim(strz(6,nrank))//'.vts', &
+                             mesh_topology='StructuredGrid', nx1=nx1, nx2=nx2, ny1=ny1, &
+                             ny2=ny2, nz1=nz1, nz2=nz2)
         
         E_IO = VTK_FLD_XML(fld_action='open')
         if (present(tsim)) then
@@ -174,8 +178,9 @@ contains
 
         if (nrank == 0) then
             ! First process saves also the composite .pvts file
-            E_IO = PVTK_INI_XML(filename = trim(this%vizdir)//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'.pvts', mesh_topology = 'PStructuredGrid',&
-                                nx1=1, nx2=nx, ny1=1, ny2=ny, nz1=1, nz2=nz, tp='Float64')
+            E_IO = PVTK_INI_XML(filename = trim(this%vizdir)//'/'//trim(this%file_prefix)&
+              //trim(strz(4,this%vizcount))//'.pvts', mesh_topology = 'PStructuredGrid',&
+              nx1=1, nx2=nx, ny1=1, ny2=ny, nz1=1, nz2=nz, tp='Float64')
             do i=0,nproc-1
                 if (i .NE. 0) then
                     call MPI_RECV(nx1,1,MPI_INTEGER,i,i        ,MPI_COMM_WORLD,mpistatus,ierr)
@@ -186,7 +191,8 @@ contains
                     call MPI_RECV(nz2,1,MPI_INTEGER,i,i+5*nproc,MPI_COMM_WORLD,mpistatus,ierr)
                 end if
                 E_IO = PVTK_GEO_XML(nx1=nx1,nx2=nx2,ny1=ny1,ny2=ny2,nz1=nz1,nz2=nz2,&
-                                    source=trim(strz(4,this%vizcount))//'/'//trim(this%file_prefix)//trim(strz(4,this%vizcount))//'_'//trim(strz(6,i))//'.vts')
+                                    source=trim(strz(4,this%vizcount))//'/'//trim(this%file_prefix)&
+                                    //trim(strz(4,this%vizcount))//'_'//trim(strz(6,i))//'.vts')
             end do
 
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='open')

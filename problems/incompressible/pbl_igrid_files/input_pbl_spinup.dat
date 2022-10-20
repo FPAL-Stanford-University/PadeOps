@@ -1,17 +1,17 @@
 &INPUT
-inputdir                      = "/home/aditya90/Codes/PadeOps/data/pbl_igrid/data"   ! Directory for any input files
-outputdir                     = "/home/aditya90/Codes/PadeOps/data/pbl_igrid/data"   ! Directory for all output files
-nx                            = 256         ! Number of points in X
-ny                            = 128         ! Number of points in Y
-nz                            = 128         ! Number of points in Z
+inputdir                      = "/scratch/06632/ryanhass/LEScases/Chan64_1/Output_Chan64_1_Csgs1"   ! Directory for any input files
+outputdir                     = "/scratch/06632/ryanhass/LEScases/Chan64_1/Output_Chan64_1_Csgs1"   ! Directory for all output files
+nx                            = 192         ! Number of points in X
+ny                            = 192         ! Number of points in Y
+nz                            = 64         ! Number of points in Z
 tstop                         = 100.D0      ! Physical time to stop the simulation
-CFL                           = 1.5D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL                           = 1.0D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 1000        ! TimeID of the restart file being used
-restartFile_RID               = 20          ! RunID of the restart file being used
+useRestartFile                = .TRUE.     ! Set to false if it's a fresh simulation 
+restartFile_TID               = 64000        ! TimeID of the restart file being used
+restartFile_RID               = 1          ! RunID of the restart file being used
 /
 /
 &NUMERICS
@@ -25,23 +25,14 @@ InitSpinUp                    = .TRUE.      ! Perform initialization spinup?
 /
 /
 &IO
-RunID                         = 11          ! Run Label (All output files will be tagged with this nubber)
+RunID                         = 1          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump                    = 100         ! Data dumping frequency (# of timesteps)
-ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
+ioType                        = 1           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
 t_start_planeDump             = 1           ! When do you want to start dumping planes?
 t_stop_planeDump              = 5000        ! When do you want to stop dumping planes?
-/
-/
-&STATS
-tid_StatsDump                 = 20000       ! Dumping Frequency for Statistics file (# of time steps)
-tid_compStats                 = 10          ! Frequency of Computing Statistics
-tSimStartStats                = 20.d0       ! Simulation time for starting stats calculations 
-normStatsByUstar              = .TRUE.      ! Normalize Statistics by ustar at each instant
-computeSpectra                = .FALSE.     ! Compute and time average x - spectra on the run
-timeAvgFullFields             = .FALSE.     ! Time average and store fields on the run
 /
 /
 &OS_INTERACTIONS
@@ -69,7 +60,7 @@ useSGS                        = .true.      ! Do you want to use the SGS model?
 /
 /
 &PRESSURE_CALC
-fastCalcPressure              = .FALSE.      ! Compute and store pressure at every time step using the faster algorithm?
+fastCalcPressure              = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
 storePressure                 = .TRUE.      ! Would you like to compute and store pressure?
 P_dumpFreq                    = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq                    = 10          ! How often (timesteps) do you want to compute pressure? 
@@ -85,12 +76,12 @@ useFringe                     = .false.     ! This is false if simulation is per
 /
 /
 &SGS_MODEL
-SGSModelID                    = 1            ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
+SGSModelID                    = 2            ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
 DynamicProcedureType          = 0            ! 0: no dynamic proc, 1: standard dynamic proc, 2: global dynamic proc
 z0                            = 1.0d-4
 useWallDamping                = .FALSE.      ! Use the Wall Damping Function 
 ncWall                        = 3.d0         ! Wall Damping Function Exponent
-Csgs                          = 1.3d0        ! Asymptotic model constant (wall damping function)
+Csgs                          = 1.0d0        ! Asymptotic model constant (wall damping function)
 WallModelType                 = 1
 explicitCalcEdgeEddyViscosity = .true.
 useVerticalTfilter            = .false.
@@ -121,9 +112,31 @@ t_dumpKSprep                  = 10             ! Dumping Frequency for KS files
 /
 /
 &PBLINPUT
-Lx                            = 6.28318530717959d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 3.14159265358979d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
+Lx                            = 18.849555921538759d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 9.424777960769379d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
 Lz                            = 1.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
 z0init                        = 1.d-4               ! Roughness scale used to initialize the profile
 initPurturbations             = .false.              ! Do you want to regular perturbations to initial condition? 
+/
+/
+&BUDGET_XY_AVG
+budgetType                    = 0
+budgets_dir                   = "/scratch/06632/ryanhass/LEScases/Chan64_1/Output_Chan64_1_Csgs1"
+restart_budgets               = .false.
+tidx_dump                     = 100
+tidx_compute                  = 10
+do_budgets                    = .true. ! If true, make sure fastCalcPressure=.true. above
+tidx_budget_start             = 64000
+do_spectra                    = .true.
+do_autocorrel                 = .true.
+/
+/
+&BUDGET_TIME_AVG
+budgetType                    = 0
+budgets_dir                   = "/scratch/06632/ryanhass/LEScases/Chan64_1/Output_Chan64_1_Csgs1"
+restart_budgets               = .false.
+do_budgets                    = .true. ! If true, make sure fastCalcPressure=.true. above
+tidx_dump                     = 100
+tidx_compute                  = 10
+tidx_budget_start             = 64000
 /

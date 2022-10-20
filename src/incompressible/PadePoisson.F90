@@ -1298,6 +1298,7 @@ contains
         ! Step 3: Take inverse Fourier Transform
         call this%sp%ifft(this%f2dy,divergence)
         !divergence = abs(divergence)
+        call message(0,"Maximum Divergence:", maxval(divergence))
 
         if (fixDivergence) then
             myMaxDiv = maxval(divergence)

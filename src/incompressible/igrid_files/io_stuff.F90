@@ -765,6 +765,7 @@
                call message(0,"Done with the initialization data dump.")
            end if
        end if
+       call message(0,"Done with io_startup stuff")
    end subroutine
    
    subroutine readField3D(RunID, TIDX, inputDir, label, field, gpC)

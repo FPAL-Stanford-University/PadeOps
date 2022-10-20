@@ -1,0 +1,26 @@
+&INPUT
+inputdir  = "/scratch/06632/ryanhass/LEScases/HIT256_forced16/Output_HIT256_16"        ! Directory for input files
+outputdir = "/work2/06632/ryanhass/stampede2/test_KS_pre_process/PadeOps_implementation"        ! Directory for output files
+RunID  = 16
+
+nx     = 256
+ny     = 256
+nz     = 256
+nxLES  = 32
+nyLES  = 32
+nzLES  = 32
+nxQH   = 16 
+nyQH   = 16 
+nzQH   = 16
+
+tid_st = 9510
+tid_en = 9510
+
+isZperiodic = .true.
+
+Lx = 6.283185307179586d0 
+Ly = 6.283185307179586d0 
+Lz = 6.283185307179586d0 
+ 
+NumericalSchemeVert = 1
+/

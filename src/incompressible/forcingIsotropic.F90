@@ -63,8 +63,8 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    read(unit=123, NML=HIT_Forcing)
    close(123)
 
-   if(DomAspectRatioZ < 1.0d0) then
-       call GracefulExit("Aspect ratio in z must be greater than 1", 111)
+   if(DomAspectRatioZ < 1) then
+       call GracefulExit("Aspect ratio in z must be greater than or equal to 1", 111)
    endif
 
    this%A_force = A_force

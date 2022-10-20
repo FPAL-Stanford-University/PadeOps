@@ -5,16 +5,21 @@
 
 program HIT_AD_interact
     use mpi
-    use kind_parameters,  only: clen, rkind
-    use IncompressibleGrid, only: igrid
-    use temporalhook, only: doTemporalStuff
-    use timer, only: tic, toc
-    use exits, only: message, GracefulExit
-    use constants, only: one, zero
-    use HIT_AD_interact_parameters, only: simulationID, InflowProfileType, InflowProfileAmplit, InflowProfileThick
-    use fof_mod, only: fof
-    use budgets_time_avg_mod, only: budgets_time_avg  
-    use budgets_vol_avg_mod, only: budgets_vol_avg  
+    use kind_parameters,            only: clen, rkind
+    use IncompressibleGrid,         only: igrid
+    use temporalhook,               only: doTemporalStuff
+    use timer,                      only: tic, toc
+    use exits,                      only: message, GracefulExit
+    use fortran_assert,             only: assert
+    use constants,                  only: one, zero
+    use HIT_AD_interact_parameters, only: simulationID, InflowProfileType, &
+                                          InflowProfileAmplit, InflowProfileThick, &
+                                          streamWiseCoord, nxHIT, nyHIT, nzHIT, &
+                                          nxADSIM, nyADSIM, nzADSIM, copyHITfieldsToADSIM
+    use fof_mod,                    only: fof
+    use budgets_time_avg_mod,       only: budgets_time_avg  
+    use budgets_vol_avg_mod,        only: budgets_vol_avg  
+    use budgets_xy_avg_mod,         only: budgets_xy_avg  
     !use decomp_2d,                only: nrank
     implicit none
 
@@ -23,11 +28,13 @@ program HIT_AD_interact
     integer :: ierr, ioUnit
     type(budgets_time_avg) :: budg_tavg
     type(budgets_vol_avg)  :: budg_vavg
+    type(budgets_xy_avg)  :: budg_xyavg
     real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0
     real(rkind), dimension(:,:,:), allocatable :: utarget1, vtarget1, wtarget1
+    real(rkind), dimension(:,:,:), allocatable :: uhitFilt, vhitFilt, whitFilt
+    
     real(rkind) :: dt1, dt2, dt, InflowSpeed = 1.d0
     real(rkind) :: k_bandpass_left = 10.d0, k_bandpass_right = 64.d0, x_shift
-    integer :: nxADSIM, nxHIT
     type(fof), dimension(:), allocatable :: filt
     integer, dimension(:), allocatable :: pid
     integer :: fid, nfilters = 2, tid_FIL_FullField = 75, tid_FIL_Planes = 4
@@ -62,19 +69,43 @@ program HIT_AD_interact
     hit%Am_I_Primary = .false. 
     call hit%start_io(.true.)                                           
     call hit%printDivergence()
+
+    allocate(uhitFilt(hit%gpC%xsz(1),hit%gpC%xsz(2),hit%gpC%xsz(3)))
+    allocate(vhitFilt(hit%gpC%xsz(1),hit%gpC%xsz(2),hit%gpC%xsz(3)))
+    allocate(whitFilt(hit%gpE%xsz(1),hit%gpE%xsz(2),hit%gpE%xsz(3)))
     
     call adsim%fringe_x1%allocateTargetArray_Cells(utarget0)                
     call adsim%fringe_x1%allocateTargetArray_Cells(vtarget0)                
     call adsim%fringe_x1%allocateTargetArray_Edges(wtarget0)                
     select case(InflowProfileType)
     case(0)
-        utarget0 = InflowSpeed
+      select case (streamWiseCoord)
+        case ('x')
+          utarget0 = InflowSpeed
+          vtarget0 = 0.d0                                                      
+          wtarget0 = 0.d0                                                      
+        case ('y')
+          utarget0 = 0.d0                                                      
+          vtarget0 = InflowSpeed
+          wtarget0 = 0.d0                                                      
+        case ('z')
+          utarget0 = 0.d0                                                      
+          vtarget0 = 0.d0                                                      
+          wtarget0 = InflowSpeed
+      end select
     case(1)
-        !zinY => adsim%mesh(:,:,:,3)
-        utarget0 = InflowSpeed*(one + InflowProfileAmplit*tanh((adsim%mesh(:,:,:,3)-adsim%zMid)/InflowProfileThick))
+      select case (streamWiseCoord)
+        case ('x')
+          !zinY => adsim%mesh(:,:,:,3)
+          utarget0 = InflowSpeed*(one + InflowProfileAmplit*tanh((adsim%mesh(:,:,:,3)-adsim%zMid)/InflowProfileThick))
+        case ('y')
+          call gracefulExit('The code only supports x-direction streamwise'//&
+            'coordinate at this time',123)
+        case ('z')
+          call gracefulExit('The code only supports x-direction streamwise'//&
+            'coordinate at this time',123)
+      end select
     end select
-    vtarget0 = 0.d0                                                      
-    wtarget0 = 0.d0                                                      
     call adsim%fringe_x1%associateFringeTargets(utarget0, vtarget0, wtarget0) 
 
     call adsim%fringe_x2%allocateTargetArray_Cells(utarget1)                
@@ -86,22 +117,31 @@ program HIT_AD_interact
     call adsim%fringe_x2%associateFringeTargets(utarget1, vtarget1, wtarget1) 
 
     nxHIT = hit%gpC%xsz(1)
+    nyHIT = hit%gpC%ysz(2)
+    nzHIT = hit%gpC%zsz(3)
     nxADSIM  = adsim%gpC%xsz(1)
+    nyADSIM  = adsim%gpC%ysz(2)
+    nzADSIM  = adsim%gpC%zsz(3)
 
     call hit%spectC%init_bandpass_filter(k_bandpass_left, k_bandpass_right, hit%cbuffzC(:,:,:,1), hit%cbuffyC(:,:,:,1))
 
+  
+
     ! Set the true target field for AD simulation
     x_shift = adsim%tsim*InflowSpeed 
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
-    call hit%interpolate_cellField_to_edgeField(uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:),0,0)
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
-    
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uhitFilt, x_shift, streamWiseCoord)
+    call hit%interpolate_cellField_to_edgeField(uhitFilt,whitFilt,0,0)
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uhitFilt, x_shift, streamWiseCoord)
+    call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vhitFilt, x_shift, streamWiseCoord)
+
+    ! Go from hitFilt to uTargets  
+    call copyHITfieldsToADSIM(uhitFilt,vhitFilt,whitFilt,utarget1,vtarget1,wtarget1,hit,adsim,streamWiseCoord)
+
     ! Now scale rhw HIT field appropriately
     ! Note that the bandpass filtered velocity field has zero mean 
-    uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)  + uTarget0(nxADSIM-nxHIT+1:nxADSIM,:,:)
-    vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
-    wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
+    uTarget1 = uTarget1  + uTarget0
+    vTarget1 = vTarget1  + vTarget0
+    wTarget1 = wTarget1  + wTarget0
    
 
     ! Graceful exit if apply filter is true and shear type is not 0
@@ -111,6 +151,8 @@ program HIT_AD_interact
 
     ! Initialize the filters
     if (applyfilters) then
+      call assert(streamWiseCoord == 'x','Filters only supported for '//&
+        'streamwise coordinate in x')
       allocate(filt(nfilters))
       do fid = 1,nfilters
          call filt(fid)%init(adsim%runID, fof_dir, filoutdir, fid, adsim%spectC, adsim%cbuffyC(:,:,:,1), adsim%cbuffzC(:,:,:,1), .true., adsim%gpC)
@@ -123,6 +165,7 @@ program HIT_AD_interact
 
     call budg_tavg%init(AD_Inputfile, adsim)   !<-- Budget class initialization 
     call budg_vavg%init(HIT_Inputfile, hit)    !<-- Budget class initialization 
+    call budg_xyavg%init(AD_Inputfile, adsim)    !<-- Budget class initialization 
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
@@ -161,17 +204,27 @@ program HIT_AD_interact
 
        call budg_tavg%doBudgets()       !<--- perform budget related operations
        call budg_vavg%doBudgets()       !<--- perform budget related operations
+       call budg_xyavg%doBudgets()       !<--- perform budget related operations
 
        x_shift = adsim%tsim*InflowSpeed
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
-       call hit%interpolate_cellField_to_edgeField(uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:),0,0)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:), x_shift)
-      
+       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , &
+        uhitFilt, x_shift, streamWiseCoord)
+       call hit%interpolate_cellField_to_edgeField(uhitFilt, &
+         whitFilt,0,0)
+       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , &
+         uhitFilt, x_shift, streamWiseCoord)
+       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , &
+         vhitFilt, x_shift, streamWiseCoord)
+
+
+       ! Now copy hitFilt into Target1 
+       call copyHITfieldsToADSIM(uhitFilt,vhitFilt,whitFilt,utarget1,vtarget1,wtarget1,hit,adsim,streamWiseCoord)
+
        ! Now scale rhw HIT field appropriately
-       uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = uTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) + uTarget0(nxADSIM-nxHIT+1:nxADSIM,:,:)
-       vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = vTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
-       wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:) = wTarget1(nxADSIM-nxHIT+1:nxADSIM,:,:)
+       uTarget1 = uTarget1 + uTarget0 
+       vTarget1 = vTarget1 + vTarget0 
+       wTarget1 = wTarget1 + wTarget0 
+
      
 
        call doTemporalStuff(adsim, 1)                                        
@@ -207,9 +260,11 @@ program HIT_AD_interact
 
     call budg_tavg%doBudgets(.true.)   !<--- force dump if budget calculation had started
     call budg_vavg%doBudgets(.true.)   !<--- force dump if budget calculation had started
+    call budg_xyavg%doBudgets(.true.)   !<--- force dump if budget calculation had started
 
     call budg_tavg%destroy()           !<-- release memory taken by the budget class
     call budg_vavg%destroy()           !<-- release memory taken by the budget class
+    call budg_xyavg%destroy()           !<-- release memory taken by the budget class
 
     if (applyfilters) then
       do fid = 1,nfilters
@@ -219,6 +274,10 @@ program HIT_AD_interact
       deallocate(filt)
     end if
 
+    deallocate(uhitFilt, vhitFilt, whitFilt)
+    deallocate(utarget0, vtarget0, wtarget0)
+    deallocate(utarget1, vtarget1, wtarget1)
+    
     call hit%finalize_io()
     call adsim%finalize_io()
 

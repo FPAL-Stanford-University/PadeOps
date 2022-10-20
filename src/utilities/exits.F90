@@ -9,7 +9,8 @@ module exits
     public :: GracefulExit, message, message_min_max, warning, newline, nancheck, check_exit
         
     interface message
-        module procedure message_char, message_char_double, message_char_int, message_level_char, message_level_char_double, message_level_char_int
+        module procedure message_char, message_char_double, message_char_int, &
+          message_level_char, message_level_char_double, message_level_char_int
     end interface
 
     interface message_min_max
@@ -36,7 +37,6 @@ contains
         call MPI_Barrier(MPI_COMM_WORLD,ierr)
         call MPI_Abort(MPI_COMM_WORLD,errcode,ierr)
         !call decomp_2d_abort(errcode, message)
-    
     end subroutine
 
     subroutine newline()

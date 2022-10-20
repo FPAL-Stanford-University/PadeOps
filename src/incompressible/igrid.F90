@@ -448,7 +448,7 @@ contains
         namelist /IO/ vizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
                     & t_stop_pointProbe, t_pointProbe
-        namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
+        !namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,useforcedStratification,&
                           useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection, useHITRealSpaceLinearForcing, HITForceTimeScale
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
@@ -471,7 +471,7 @@ contains
         read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=NUMERICS)
         read(unit=ioUnit, NML=IO)
-        read(unit=ioUnit, NML=STATS)
+        !read(unit=ioUnit, NML=STATS)
         read(unit=ioUnit, NML=OS_INTERACTIONS)
         read(unit=ioUnit, NML=PHYSICS)
         read(unit=ioUnit, NML=PRESSURE_CALC)
@@ -1093,8 +1093,11 @@ contains
        if (this%PreprocessForKS) then
            allocate(this%LES2KS)
            if (this%KSinitType == 0) then
-               call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
+               !call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
+               call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%KSOutputDir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
                call this%LES2KS%link_pointers(this%uFil4KS, this%vFil4KS, this%wFil4KS)
+               call this%LES2KS%applyFilterForKS(this%u, this%v, this%w)
+               call this%LES2KS%dumpKSfilteredFields()
                if (this%useProbes) then
                    if (this%doIhaveAnyProbes) then
                        allocate(this%KS_Probe_Data(1:4,1:this%nprobes,0:this%probeTimeLimit-1))
@@ -1107,7 +1110,7 @@ contains
                   &         this%dz, this%planes2dumpC_KS, this%planes2dumpF_KS)
            end if
            this%KSupdated = .false. 
-           call message(0, "KS Preprocessor initializaed successfully.")
+           call message(0, "KS Preprocessor initialized successfully.")
        end if 
 
 
@@ -1153,14 +1156,17 @@ contains
        allocate(this%fringe_x)
        if (this%usedoublefringex) then
            call this%fringe_x1%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                       this%dz, this%mesh(1,1,:,3), & 
                                        this%spectC, this%spectE, this%gpC, this%gpE, &
                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=1)   
            call this%fringe_x2%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                       this%dz, this%mesh(1,1,:,3), & 
                                        this%spectC, this%spectE, this%gpC, this%gpE, &
                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE, fringeID=2)   
        else
            if (this%useFringe) then
                call this%fringe_x%init(inputfile, this%dx, this%mesh(:,1,1,1), this%dy, this%mesh(1,:,1,2), &
+                                       this%dz, this%mesh(1,1,:,3), & 
                                        this%spectC, this%spectE, this%gpC, this%gpE, &
                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
            end if

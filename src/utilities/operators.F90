@@ -29,8 +29,10 @@ contains
         real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: ztmp,zdum
         
         if ( (size(f,1) .NE. decomp%ysz(1)) .AND. (size(f,2) .NE. decomp%ysz(2)) .AND. (size(f,3) .NE. decomp%ysz(3)) ) then
-            call GracefulExit("Either size of input array to gradient operator is inconsistent with decomp or not in Y decomp. Other&
-                             & decomps have yet to be implemented",234)
+            call GracefulExit(&
+              "Either size of input array to gradient operator is "//&
+              "inconsistent with decomp or not in Y decomp. Other "//&
+              "decomps have yet to be implemented",234)
         end if
 
         x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
@@ -65,15 +67,21 @@ contains
         real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: ztmp,zdum
         
         if (    (size(u,1) .NE. decomp%ysz(1)) .AND. (size(u,2) .NE. decomp%ysz(2)) .AND. (size(u,3) .NE. decomp%ysz(3)) ) then
-            call GracefulExit("Either size of input array 'u' to the curl operator is inconsistent with decomp or not in Y decomp. Other&
-                             & decomps have yet to be implemented",234)
+            call GracefulExit(&
+              "Either size of input array 'u' to the curl operator is "//&
+              "inconsistent with decomp or not in Y decomp. Other "//&
+              "decomps have yet to be implemented",234)
         end if
         if (    (size(v,1) .NE. decomp%ysz(1)) .AND. (size(v,2) .NE. decomp%ysz(2)) .AND. (size(v,3) .NE. decomp%ysz(3)) ) then
-            call GracefulExit("Either size of input array 'v' to the curl operator is inconsistent with decomp or not in Y decomp. Other&
+            call GracefulExit(&
+              "Either size of input array 'v' to the curl operator is "//&
+              "inconsistent with decomp or not in Y decomp. Other&
                              & decomps have yet to be implemented",234)
         end if
         if (    (size(w,1) .NE. decomp%ysz(1)) .AND. (size(w,2) .NE. decomp%ysz(2)) .AND. (size(w,3) .NE. decomp%ysz(3)) ) then
-            call GracefulExit("Either size of input array 'w' to the curl operator is inconsistent with decomp or not in Y decomp. Other&
+            call GracefulExit(&
+              "Either size of input array 'w' to the curl operator is "//&
+              "inconsistent with decomp or not in Y decomp. Other&
                              & decomps have yet to be implemented",234)
         end if
 
@@ -128,7 +136,9 @@ contains
         real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: ztmp,zdum
         
         if ( (size(u,1) .NE. decomp%ysz(1)) .AND. (size(u,2) .NE. decomp%ysz(2)) .AND. (size(u,3) .NE. decomp%ysz(3)) ) then
-            call GracefulExit("Either size of input array to divergence operator is inconsistent with decomp or not in Y decomp. Other&
+            call GracefulExit(&
+              "Either size of input array to divergence operator is "//&
+              "inconsistent with decomp or not in Y decomp. Other&
                              & decomps have yet to be implemented",234)
         end if
 
@@ -169,7 +179,9 @@ contains
         real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: tmp1_in_z, tmp2_in_z
 
         if ( (size(arr,1) .NE. decomp%ysz(1)) .AND. (size(arr,2) .NE. decomp%ysz(2)) .AND. (size(arr,3) .NE. decomp%ysz(3)) ) then
-            call GracefulExit("Either size of input array to divergence operator is inconsistent with decomp or not in Y decomp. Other&
+            call GracefulExit(&
+              "Either size of input array to divergence operator is "//&
+              "inconsistent with decomp or not in Y decomp. Other&
                              & decomps have yet to be implemented",234)
         end if
 

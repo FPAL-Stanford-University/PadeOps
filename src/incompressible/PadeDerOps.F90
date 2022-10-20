@@ -85,6 +85,9 @@ subroutine init(this, gpC, sp_gpC, gpE, sp_gpE, dz, scheme, isPeriodic, spectC)
          else
             call GracefulExit("You need to pass in a spectral derived type if you want to use Fourier differentiation in z", 43)
          end if
+         ! Allocate the 6th order deviative operator anyway - needed for post-processing 
+         allocate(this%derPeriodic)
+         call this%derPeriodic%init(this%gp%zsz(3),dz)
       case(cd06)
          allocate(this%derPeriodic)
          call this%derPeriodic%init(this%gp%zsz(3),dz)
@@ -408,16 +411,25 @@ subroutine d2dz2_E2E_cmplx(this,input,output,bot,top)
 end subroutine 
 
 
-subroutine ddz_C2C_real(this, input, output, bot, top)
+subroutine ddz_C2C_real(this, input, output, bot, top, postProcess)
    class(Pade6stagg), intent(in) :: this
    real(rkind), dimension(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3)), intent(in)  :: input
    real(rkind), dimension(this%gp%zsz(1),this%gp%zsz(2),this%gp%zsz(3)), intent(out) :: output
    integer, intent(in) :: bot, top
+   logical, intent(in), optional :: postProcess 
 
    if (this%isPeriodic) then
       select case(this%scheme) 
       case (fourierColl)
-         call this%spectC%ddz_C2C_spect(input, output)
+        if (present(postProcess)) then 
+          if (postProcess) then 
+            call this%derPeriodic%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
+          else
+            call this%spectC%ddz_C2C_spect(input, output)
+          end if 
+        else
+          call this%spectC%ddz_C2C_spect(input, output)
+        end if 
       case (cd06)
          call this%derPeriodic%ddz_C2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
       case (fd02)    
@@ -494,16 +506,25 @@ subroutine ddz_C2C_real(this, input, output, bot, top)
 end subroutine 
 
 
-subroutine ddz_C2C_cmplx(this, input, output, bot, top)
+subroutine ddz_C2C_cmplx(this, input, output, bot, top, postProcess)
    class(Pade6stagg), intent(in) :: this
    complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(in)  :: input
    complex(rkind), dimension(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)), intent(out) :: output
    integer, intent(in) :: bot, top
+   logical, intent(in), optional :: postProcess 
 
    if (this%isPeriodic) then
       select case(this%scheme) 
       case (fourierColl)
-         call this%spectC%ddz_C2C_spect(input, output)
+          if (present(postProcess)) then 
+            if (postProcess) then 
+               call this%derPeriodic%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
+            else
+              call this%spectC%ddz_C2C_spect(input, output)
+            end if 
+          else 
+            call this%spectC%ddz_C2C_spect(input, output)
+          end if 
       case (cd06)
          call this%derPeriodic%ddz_C2C(input,output,this%sp_gp%zsz(1),this%sp_gp%zsz(2))
       case (fd02)    

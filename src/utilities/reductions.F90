@@ -20,7 +20,8 @@ module reductions
     end interface
 
     interface P_SUM
-        module procedure P_SUM_ARR2_locComm,P_SUM_ARR1_locComm,P_SUM_sca_locComm, P_SUM_ARR3_locComm, P_SUM_arr3, P_SUM_arr2, P_SUM_arr1, P_SUM_sca, P_SUM_sca_INT
+        module procedure P_SUM_ARR2_locComm,P_SUM_ARR1_locComm,P_SUM_sca_locComm, &
+          P_SUM_ARR3_locComm, P_SUM_arr3, P_SUM_arr2, P_SUM_arr1, P_SUM_sca, P_SUM_sca_INT
     end interface
 
     interface P_MEAN
