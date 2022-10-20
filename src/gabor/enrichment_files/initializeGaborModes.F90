@@ -86,11 +86,11 @@ subroutine generateIsotropicModes(this)
         xmin = this%QHgrid%xE(i)
 
         !TODO: Need better seed selection 
-        seed1 = 1 + i + j + k
-        seed2 = 2 + i + j + k
-        seed3 = 3 + i + j + k
-        seed4 = 4 + i + j + k
-        seed5 = 5 + i + j + k
+        seed1 = 1000 + i + j + k
+        seed2 = 2000 + i + j + k
+        seed3 = 3000 + i + j + k
+        seed4 = 4000 + i + j + k
+        seed5 = 5000 + i + j + k
 
         ! Uniformily distribute modes in QH region
         call uniform_random(rand1,0.d0,1.d0,seed1)

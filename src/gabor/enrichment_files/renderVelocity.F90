@@ -1,4 +1,4 @@
-subroutine renderLocalVelocity(this)
+subroutine renderLocalVelocity(this, utmp, vtmp, wtmp)
     use exits,     only: message
     use omp_lib,   only: omp_get_thread_num, omp_get_num_threads
     use decomp_2d, only: nrank
@@ -13,7 +13,7 @@ subroutine renderLocalVelocity(this)
     real(rkind) :: cs, ss, fx, fy, fz, f, xF, yF, zF
     real(rkind) :: wxSupport, wySupport, wzSupport, du, dv, dw
     integer :: tid
-    real(rkind), dimension(:,:,:,:), allocatable :: utmp,vtmp,wtmp
+    real(rkind), dimension(:,:,:,:), intent(inout) :: utmp, vtmp, wtmp
 
     call message("Rendering the Gabor-induced velocity field")
   
@@ -29,9 +29,9 @@ subroutine renderLocalVelocity(this)
     kst = this%smallScales%gpC%xst(3) 
     ken = this%smallScales%gpC%xen(3)
 
-    allocate(utmp(ist:ien,jst:jen,kst:ken,nthreads))
-    allocate(vtmp(ist:ien,jst:jen,kst:ken,nthreads))
-    allocate(wtmp(ist:ien,jst:jen,kst:ken,nthreads))
+!    allocate(utmp(ist:ien,jst:jen,kst:ken,nthreads))
+!    allocate(vtmp(ist:ien,jst:jen,kst:ken,nthreads))
+!    allocate(wtmp(ist:ien,jst:jen,kst:ken,nthreads))
  
     !$OMP PARALLEL SHARED(utmp,vtmp,wtmp) &
     !$OMP PRIVATE(tid,n,i,j,k,kdotx,kdotx3,kdotx2,fx,fy,fz,f) &
@@ -81,9 +81,9 @@ subroutine renderLocalVelocity(this)
 !              this%smallScales%v(i - iist + 1,j - jjst + 1,k - kkst + 1) + dv 
 !            this%smallScales%wC(i - iist + 1,j - jjst + 1,k - kkst + 1) = &
 !              this%smallScales%wC(i - iist + 1,j - jjst + 1,k - kkst + 1) + dw
-            utmp(i,j,k,tid+1) = utmp(i,j,k,tid+1) + du 
-            vtmp(i,j,k,tid+1) = vtmp(i,j,k,tid+1) + dv 
-            wtmp(i,j,k,tid+1) = wtmp(i,j,k,tid+1) + dw 
+            this%utmp(i,j,k,tid+1) = this%utmp(i,j,k,tid+1) + du 
+            this%vtmp(i,j,k,tid+1) = this%vtmp(i,j,k,tid+1) + dv 
+            this%wtmp(i,j,k,tid+1) = this%wtmp(i,j,k,tid+1) + dw 
           end do
         end do
       end do
@@ -95,10 +95,10 @@ subroutine renderLocalVelocity(this)
     end do
     !$OMP END DO
     !$OMP CRITICAL
-    this%smallScales%u  = this%smallScales%u  + utmp(:,:,:,tid+1)
-    this%smallScales%v  = this%smallScales%v  + vtmp(:,:,:,tid+1)
-    this%smallScales%wC = this%smallScales%wC + wtmp(:,:,:,tid+1)
+    this%smallScales%u  = this%smallScales%u  + this%utmp(:,:,:,tid+1)
+    this%smallScales%v  = this%smallScales%v  + this%vtmp(:,:,:,tid+1)
+    this%smallScales%wC = this%smallScales%wC + this%wtmp(:,:,:,tid+1)
     !$OMP END CRITICAL
     !$OMP END PARALLEL
-    deallocate(utmp,vtmp,wtmp)
+    !deallocate(utmp,vtmp,wtmp)
 end subroutine
