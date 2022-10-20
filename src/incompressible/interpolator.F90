@@ -37,12 +37,14 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
         call GracefulExit("Low bound of x-axis in out of bounds (interpolator)",34)
     end if
     if (xSource(size(xSource)) < xDest(size(xDest))) then
+        print*, xSource(size(xSource)), xDest(size(xDest))
         call GracefulExit("High bound of x-axis in out of bounds (interpolator)",34)
     end if  
     if (ySource(1) > yDest(1)) then
         call GracefulExit("Low bound of y-axis in out of bounds (interpolator)",34)
     end if
     if (ySource(size(ySource)) < yDest(size(yDest))) then
+        print*, ySource(size(ySource)),yDest(size(yDest)) 
         call GracefulExit("High bound of y-axis in out of bounds (interpolator)",34)
     end if  
     if (zSource(1) > zDest(1)) then
@@ -110,11 +112,13 @@ subroutine destroy(this)
     deallocate(this%fx_X, this%fx_Y, this%fxy_Y, this%fxy_Z)
 end subroutine
 
-subroutine LinInterp3D(this, fS, fD)
+subroutine LinInterp3D(this, fS, fD, buffer)
     use constants, only: one 
     class(interpolator), intent(inout) :: this 
     real(rkind), dimension(this%gpSource%xsz(1),this%gpSource%xsz(2), this%gpSource%xsz(3)), intent(in) :: fS
-    real(rkind), dimension(this%gpDest%xsz(1),this%gpDest%xsz(2), this%gpDest%xsz(3)), intent(out) :: fD
+    real(rkind), dimension(this%gpDest%xsz(1),this%gpDest%xsz(2), this%gpDest%xsz(3)), intent(inout) :: fD
+    real(rkind), dimension(this%gpDest%xsz(1),this%gpDest%xsz(2), this%gpDest%xsz(3)), intent(out), optional :: buffer
+
     integer :: i, j, k 
     
     ! interpolate in x
@@ -148,7 +152,15 @@ subroutine LinInterp3D(this, fS, fD)
 
     ! Finally, transpose back to x decomposition 
     call transpose_z_to_y(this%fxyz_Z,this%fxyz_Y,this%gpDest)
-    call transpose_y_to_x(this%fxyz_Y,fD, this%gpDest) ! DONE!
+    !call transpose_y_to_x(this%fxyz_Y,fD, this%gpDest) ! DONE!
+
+    if (present(buffer)) then 
+        call transpose_y_to_x(this%fxyz_Y, buffer, this%gpDest) 
+        fD = fD + buffer ! DONE!
+    else
+        call transpose_y_to_x(this%fxyz_Y,fD, this%gpDest) ! DONE!
+    end if 
+
 end subroutine 
 
 end module 

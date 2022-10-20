@@ -32,8 +32,9 @@ module IncompressibleGrid
     external :: MPI_BCAST, MPI_RECV, MPI_SEND, MPI_REDUCE
 
     private
-    public :: igrid, wBC_bottom, wBC_top  
+    public :: igrid, wBC_bottom, wBC_top
 
+    logical, dimension(3) :: periodicBCs
     complex(rkind), parameter :: zeroC = zero + imi*zero 
 
     ! Allow non-zero value (isEven) 
@@ -323,9 +324,9 @@ module IncompressibleGrid
             procedure, private :: FwdEuler
             procedure, private :: TVD_RK3
             procedure, private :: SSP_RK45
-            procedure, private :: ComputePressure
+            procedure          :: ComputePressure
             procedure, private :: interp_primitiveVars
-            procedure, private :: compute_duidxj
+            procedure          :: compute_duidxj
             procedure, private :: compute_Sijmean
             procedure, private :: compute_dTdxi
             procedure, private :: addNonLinearTerm_Rot
@@ -336,7 +337,7 @@ module IncompressibleGrid
             procedure, private :: addExtraForcingTerm 
             procedure, private :: addForcedStratification
             procedure, private :: dumpRestartFile
-            procedure, private :: readRestartFile
+            procedure          :: readRestartFile
             procedure, private :: compute_z_mean 
             procedure, private :: compute_deltaT
             procedure, private :: dump_pointProbes
@@ -385,6 +386,13 @@ module IncompressibleGrid
             procedure          :: advance_SSP_RK45_Stage_4 
             procedure          :: advance_SSP_RK45_Stage_5
             procedure          :: getMaxOddballModes 
+            procedure          :: getPeriodicBCs
+
+            ! Gabor mode specific procedures (ignored for normal igrid runs)
+            procedure          :: initLargeScales 
+            procedure          :: HaloUpdateVelocities
+            procedure          :: ProjectToFixBC
+            procedure, private :: readLargeScales
    end type
 
 contains 
@@ -397,6 +405,7 @@ contains
 #include "igrid_files/budgets_stuff.F90"
 #include "igrid_files/popRHS_stuff.F90"
 #include "igrid_files/RK45_staging.F90"
+#include "igrid_files/gaborMode_helpers.F90"
 
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
@@ -425,7 +434,7 @@ contains
           useHITRealSpaceLinearForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
-        logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
+        logical :: assume_fplane = .true., useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
         integer :: ii, idx, temploc(1)
@@ -873,11 +882,16 @@ contains
             else
                sgsmod_stratified = .false. 
             end if 
-            call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
-                                    this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
-                                    this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
-                                    this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%wTh_surf, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, &
+            call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, &
+                                    this%dx, this%dy, this%dz, inputfile, &
+                                    this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), &
+                                    this%fBody_x, this%fBody_y, this%fBody_z, &
+                                    this%storeFbody,this%Pade6opZ, this%cbuffyC, &
+                                    this%cbuffzC, this%cbuffyE, this%cbuffzE, &
+                                    this%rbuffxC, this%rbuffyC, this%rbuffzC, &
+                                    this%rbuffyE, this%rbuffzE, this%Tsurf, &
+                                    this%ThetaRef, this%wTh_surf, this%Fr, this%Re, &
+                                    this%isInviscid, sgsmod_stratified, &
                                     this%botBC_Temp, this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
             call message(0,"SGS model initialized successfully")
@@ -1682,6 +1696,15 @@ contains
        WdTdzBC_top = +1
 
        if (this%tsim > Tstop_InitSpinUp) this%initspinup = .false. 
+   end subroutine
+
+   subroutine getPeriodicBCs(this,BCs)
+     class(igrid), intent(inout) :: this
+     logical, dimension(3), intent(out) :: BCs
+
+     BCs(1) = periodicBCs(1)
+     BCs(2) = periodicBCs(2)
+     BCs(3) = periodicBCs(3)
    end subroutine 
 
    subroutine getMaxOddballModes(this,&

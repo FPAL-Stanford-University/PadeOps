@@ -1098,7 +1098,7 @@ subroutine interpz_E2C_real(this,input,output,bot,top)
          call this%fd02_nn%interpZ_Edge2Cell(input,output)
       case(cd06)
          select case (bot)
-         case(-1) 
+         case(-1) ! bottom = odd 
             if     (top == -1) then
                call this%derOO%interpz_E2C(input,output,this%gp%zsz(1),this%gp%zsz(2))
             elseif (top ==  0) then

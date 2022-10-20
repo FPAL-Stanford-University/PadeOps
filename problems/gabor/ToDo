@@ -1,0 +1,6 @@
+1. Add halo treatment inside igrid - halo'ed velocities can be accessed from outside via pointers - Aditya 
+2. Create QH regions for initialization: think code structure (Ryan) 
+3. Create a mapper between LargeScales -> QHRegions and LargeScales -> SmallScales - Aditya 
+4. Think code structure for Gabor modes - do you want a global container for modes? - Ryan
+
+--- Try to finish above by Wednesday morning (06/08/2022) --- 
