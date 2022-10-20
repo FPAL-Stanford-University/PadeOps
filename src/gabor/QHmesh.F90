@@ -38,6 +38,13 @@ module QHmeshMod
       close(ioUnit)
 
       this%LES => largeScales
+
+      call assert(mod(this%LES%nx,nxLESperQH) == 0,'nx in LES must be a '&
+        //'multiple of nxLESperQH -- QHmesh.F90')      
+      call assert(mod(this%LES%ny,nyLESperQH) == 0,'ny in LES must be a '&
+        //'multiple of nyLESperQH -- QHmesh.F90')      
+      call assert(mod(this%LES%nz,nzLESperQH) == 0,'nz in LES must be a '&
+        //'multiple of nzLESperQH -- QHmesh.F90')      
       
       this%nx = this%LES%nx/nxLESperQH
       this%ny = this%LES%ny/nyLESperQH
@@ -49,7 +56,7 @@ module QHmeshMod
 
       call decomp_info_init(this%nx,this%ny,this%nz,this%gpC)
       
-      call message('WARNING: QHmesh class assumes x-pencil decomposition')
+      call message('*** NOTE: QHmesh class assumes x-pencil decomposition ***')
       ist = this%gpC%xst(1)
       ien = this%gpC%xen(1)
       jst = this%gpC%xst(2)
