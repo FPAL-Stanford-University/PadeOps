@@ -29,10 +29,10 @@ subroutine renderLocalVelocity(this, utmp, vtmp, wtmp)
     kst = this%smallScales%gpC%xst(3) 
     ken = this%smallScales%gpC%xen(3)
 
-!    allocate(utmp(ist:ien,jst:jen,kst:ken,nthreads))
-!    allocate(vtmp(ist:ien,jst:jen,kst:ken,nthreads))
-!    allocate(wtmp(ist:ien,jst:jen,kst:ken,nthreads))
- 
+    utmp = 0.d0
+    vtmp = 0.d0
+    wtmp = 0.d0
+
     !$OMP PARALLEL SHARED(utmp,vtmp,wtmp) &
     !$OMP PRIVATE(tid,n,i,j,k,kdotx,kdotx3,kdotx2,fx,fy,fz,f) &
     !$OMP PRIVATE(cs,ss,iist,iien,jjst,jjen,kkst,kken)
@@ -74,31 +74,24 @@ subroutine renderLocalVelocity(this, utmp, vtmp, wtmp)
             du = f*(2.d0*this%uhatR(n)*cs - 2.d0*this%uhatI(n)*ss)
             dv = f*(2.d0*this%vhatR(n)*cs - 2.d0*this%vhatI(n)*ss)
             dw = f*(2.d0*this%whatR(n)*cs - 2.d0*this%whatI(n)*ss)
-!
-!            this%smallScales%u(i - iist + 1,j - jjst + 1,k - kkst + 1) = &
-!              this%smallScales%u(i - iist + 1,j - jjst + 1,k - kkst + 1) + du 
-!            this%smallScales%v(i - iist + 1,j - jjst + 1,k - kkst + 1) = &
-!              this%smallScales%v(i - iist + 1,j - jjst + 1,k - kkst + 1) + dv 
-!            this%smallScales%wC(i - iist + 1,j - jjst + 1,k - kkst + 1) = &
-!              this%smallScales%wC(i - iist + 1,j - jjst + 1,k - kkst + 1) + dw
-            this%utmp(i,j,k,tid+1) = this%utmp(i,j,k,tid+1) + du 
-            this%vtmp(i,j,k,tid+1) = this%vtmp(i,j,k,tid+1) + dv 
-            this%wtmp(i,j,k,tid+1) = this%wtmp(i,j,k,tid+1) + dw 
+
+            utmp(i,j,k,tid+1) = utmp(i,j,k,tid+1) + du 
+            vtmp(i,j,k,tid+1) = vtmp(i,j,k,tid+1) + dv 
+            wtmp(i,j,k,tid+1) = wtmp(i,j,k,tid+1) + dw 
           end do
         end do
       end do
 
       if (mod(n,100000) == 0 .and. tid == 0) then
-        write(mssg,'(F7.4,A10)')real(n,rkind)/real(this%nmodes,rkind)*100.d0*32.d0,'% Complete'
+        write(mssg,'(F7.4,A10)')real(n,rkind)/real(this%nmodes,rkind)*100.d0,'% Complete'
         call message(trim(mssg))
       end if
     end do
     !$OMP END DO
     !$OMP CRITICAL
-    this%smallScales%u  = this%smallScales%u  + this%utmp(:,:,:,tid+1)
-    this%smallScales%v  = this%smallScales%v  + this%vtmp(:,:,:,tid+1)
-    this%smallScales%wC = this%smallScales%wC + this%wtmp(:,:,:,tid+1)
+    this%smallScales%u  = this%smallScales%u  + utmp(:,:,:,tid+1)
+    this%smallScales%v  = this%smallScales%v  + vtmp(:,:,:,tid+1)
+    this%smallScales%wC = this%smallScales%wC + wtmp(:,:,:,tid+1)
     !$OMP END CRITICAL
     !$OMP END PARALLEL
-    !deallocate(utmp,vtmp,wtmp)
 end subroutine

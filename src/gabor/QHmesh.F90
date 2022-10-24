@@ -4,6 +4,7 @@ module QHmeshMod
   use incompressibleGrid, only: igrid
   use exits,              only: message
   use reductions,         only: p_minval
+  use fortran_assert,     only: assert
   implicit none
 
   type QHmesh

@@ -152,9 +152,9 @@ subroutine generateIsotropicModes(this)
 
   ! We have the modulus and orientation of the complex-valued amplitudes.
   ! Now assing the real and imaginary components
-    call uniform_random(rand2,0.d0,1.d0,seed7)
+    call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),seed7)
     uRmag = rand2*umag
-    uImag = sqrt(umag*umag - uRmag*uRmag)
+    uImag = sqrt(umag*umag/3.d0 - uRmag*uRmag)
 
     uR = uRmag*orientationX
     uI = uImag*orientationX
@@ -217,7 +217,10 @@ subroutine strainModes(this)
 
   kabs = sqrt(this%kx*this%kx + this%ky*this%ky + this%kz*this%kz)
   input = -(kabs)**(-2.0_rkind)
-
+ 
+  !$OMP PARALLEL SHARED(input) &
+  !$OMP PRIVATE(n, output, dudx, L, KE, U, V, W, S, k, uRtmp, uItmp, tauEddy)
+  !$OMP DO
   do n = 1,this%nmodes
     CALL PFQ(input(n),output)
     call this%getLargeScaleDataAtModeLocation(n,dudx,L,KE,U,V,W)
@@ -256,6 +259,8 @@ subroutine strainModes(this)
       print*, trim(mssg)
     end if
   end do
+  !$OMP END DO
+  !$OMP END PARALLEL
 
   call message('Finished straining isotropic modes')
 end subroutine
