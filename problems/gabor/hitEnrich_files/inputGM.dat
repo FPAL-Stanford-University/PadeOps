@@ -1,3 +1,12 @@
+&INPUT
+  dt         = 1.d-3
+/
+/
+&IO
+  outputdir           = '/anvil/projects/x-atm170028/ryanhass/Enrichment/HIT/HIT1/rawData' 
+  writeIsotropicModes = .true.
+/
+/
 &GABOR
   nk         = 32                    ! Number of wavenumber shells spanned by Gabor modes
   ntheta     = 16                    ! Number of modes per wavenumber shell
@@ -6,9 +15,9 @@
 /
 /
 &CONTROL
-  tidStop   = 100
-  tidRender = 25
-  tio       = 25
+  tidStop   = 1
+  tidRender = 1 
+  tio       = 1
 /
 /
 &QHMESH
