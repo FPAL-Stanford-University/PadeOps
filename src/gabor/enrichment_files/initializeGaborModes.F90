@@ -3,6 +3,7 @@ subroutine generateIsotropicModes(this)
   use random,    only: uniform_random
   use GaborModeRoutines, only: normalizeVec, isOrthogonal, getModelSpectrum, &
                                doWarning, small
+  use mpi
   class(enrichmentOperator), intent(inout) :: this
   character(len=clen) :: mssg1, mssg2, mssg3, mssg4
   real(rkind) :: xmin, ymin, zmin
@@ -26,6 +27,9 @@ subroutine generateIsotropicModes(this)
   ! Velocity-vector amplitudes
   real(rkind), dimension(:,:,:,:,:), allocatable :: uR, uI, vR, vI, wR, wI
 
+  ! Misc
+  integer :: ierr
+
 
   call message("                                                                ")
   call message("================================================================")
@@ -36,7 +40,7 @@ subroutine generateIsotropicModes(this)
   write(mssg3,'(A,I2,A,I2,A,I2,A)') &
     '(', this%QHgrid%nx,' QH regions in x) X (', &
     this%QHgrid%ny,' QH regions in y) X (', this%QHgrid%nz, ' QH regions in z) = ...'
-  write(mssg4,'(I6,A)') this%nmodes, ' modes'
+  write(mssg4,'(I8,A)') this%nmodesGlobal, ' modes'
   call message(                          trim(mssg1)                             )
   call message(                          trim(mssg2)                             )
   call message(                          trim(mssg3)                             )
@@ -189,6 +193,12 @@ subroutine generateIsotropicModes(this)
     this%kx,this%ky,this%kz),'Velocity not divergence free (R)')
   call assert(isOrthogonal(this%uhatI,this%vhatI,this%whatI,&
     this%kx,this%ky,this%kz),'Velocity not divergence free (I)')
+
+  ! Debug checks
+  if (this%debugChecks) then
+    call this%doDebugChecks()
+    call MPI_Barrier(MPI_COMM_WORLD,ierr)
+  end if
   
   ! Reset warning trigger
   doWarning = .true.
@@ -201,7 +211,7 @@ subroutine generateIsotropicModes(this)
   ! Acknowledge that isotropic modes are initialized
   call message('Finished generating isotropic modes')
 
-end subroutine 
+end subroutine
 
 subroutine strainModes(this)
   use GaborModeRoutines, only: PFQ, getDtMax, rk4Step, small
@@ -267,6 +277,7 @@ end subroutine
 
 subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   use GaborModeRoutines, only: interpToLocation, findMeshIdx, getNearestNeighborValue
+
   class(enrichmentOperator), intent(inout) :: this
   integer, intent(in) :: gmID
   real(rkind), dimension(3,3), intent(out) :: dudx
@@ -275,7 +286,6 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   logical, dimension(3) :: periodicBCs
 
   call this%largeScales%getPeriodicBCs(periodicBCs)
-
   call interpToLocation(this%uh, U, this%largeScales%gpC,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%x(gmID), this%y(gmID), this%z(gmID), periodicBCs)

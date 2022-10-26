@@ -28,7 +28,7 @@ program hitEnrich
   call enrich%init(smallScales,largeScales,inputfileGM,Lx,Ly,Lz)
 
   do while (enrich%continueSimulation())
-    call enrich%updateLargeScales()
+    call enrich%updateLargeScales(timeAdvance=.true.)
     call enrich%advanceTime()
     call enrich%wrapupTimeStep()
   end do

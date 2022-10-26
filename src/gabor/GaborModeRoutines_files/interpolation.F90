@@ -7,9 +7,7 @@ subroutine interpToLocation(datIn,datOut,gp,dx,dy,dz,x,y,z,periodicBCs)
   !     x,y,z    --> Coordinates of interpolation location
   ! Output:
   !     datOut --> Scalar value of interpolated data at (x,y,z)
-  use decomp_2d, only: decomp_info, &
-    nrank, nproc !DEBUG
-  use mpi !DEBUG
+  use decomp_2d, only: decomp_info
   real(rkind), dimension(:,:,:), intent(in) :: datIn
   real(rkind), intent(out) :: datOut
   type(decomp_info), intent(in) :: gp
@@ -21,7 +19,6 @@ subroutine interpToLocation(datIn,datOut,gp,dx,dy,dz,x,y,z,periodicBCs)
   integer :: ist, jst, kst
   real(rkind) :: xst, yst, zst
   integer :: nx, ny, nz
-  integer :: n, ierr !DEBUG
 
   ! Global array indices
   ist = gp%xst(1)
@@ -59,11 +56,6 @@ subroutine interpToLocation(datIn,datOut,gp,dx,dy,dz,x,y,z,periodicBCs)
   call getWeightsForLinInterp(x,y,z,xlo,xhi,ylo,yhi,zlo,zhi,&
     xst,yst,zst,dx,dy,dz,weights,xid,yid,zid)
 
-!DEBUG -----------------------------------------------------------
-if (ylo == 0) then
-  print*, "nrank: ", nrank, "y:", y, "ylo:", ylo, "jst:", jst
-end if
-!END DEBUG -------------------------------------------------------
   call interpDat(datOut,datIn,weights,xid,yid,zid)
 end subroutine
 
@@ -72,12 +64,12 @@ subroutine interpDat(datOut, datIn, weights, xid, yid, zid)
     real(rkind), dimension(:,:,:), intent(in) :: datIn
     real(rkind), dimension(8), intent(in) :: weights
     integer, dimension(8), intent(in) :: xid, yid, zid
-    integer :: idx
+    integer :: n
 
     ! Get interpolated value
     datOut  = weights(1)*datIn(xid(1),yid(1),zid(1))
-    do idx = 2,8
-      datOut  = datOut  + weights(idx)*datIn(xid(idx),yid(idx),zid(idx))
+    do n = 2,8
+      datOut  = datOut  + weights(n)*datIn(xid(n),yid(n),zid(n))
     end do
 end subroutine
 
@@ -143,7 +135,7 @@ pure subroutine getXYZneighbors(x,y,z,ist,jst,kst,dx,dy,dz,xlo,xhi,ylo,yhi,zlo,z
     real(rkind), intent(in) :: dx, dy, dz, x, y, z
     integer, intent(out) :: xlo, xhi, ylo, yhi, zlo, zhi
     
-    ! Step1: compute xlo, xhi, ylo, etc... for the 8 nearest points
+    ! Compute xlo, xhi, ylo, etc... for the 8 nearest points
 
     xlo = floor(x/dx) + 1 - ist + 1
     xhi = xlo + 1

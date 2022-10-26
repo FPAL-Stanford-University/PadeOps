@@ -41,6 +41,9 @@ module enrichmentMod
     ! Extra memory for velocity rendering
     real(rkind), dimension(:,:,:,:), allocatable :: utmp,vtmp,wtmp
 
+    ! Misc
+    logical :: debugChecks = .false.
+
     contains
       procedure          :: init
       procedure          :: destroy
@@ -54,12 +57,14 @@ module enrichmentMod
       procedure          :: wrapupTimeStep
       procedure          :: continueSimulation
       procedure          :: dumpData
+      procedure, private :: doDebugChecks
   end type
 
 contains
   include 'enrichment_files/initializeGaborModes.F90'
   include 'enrichment_files/renderVelocity.F90'
   include 'enrichment_files/gaborIO.F90'
+  include 'enrichment_files/debugChecks.F90'
 
   subroutine init(this,smallScales,largeScales,inputfile,Lx,Ly,Lz)
     use GaborModeRoutines, only: computeKminKmax
@@ -77,10 +82,11 @@ contains
     logical :: writeIsotropicModes = .false.
     integer :: ist, ien, jst, jen, kst, ken
     real(rkind) :: dt
+    logical :: debugChecks = .false.
     
     namelist /IO/      outputdir, writeIsotropicModes
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec
-    namelist /CONTROL/ tidRender, tio, tidStop, tidInit
+    namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
 
     ! Read inputfile
@@ -101,6 +107,7 @@ contains
     this%tidStop = tidStop
     this%tid = tidInit
     this%dt = dt 
+    this%debugChecks = debugChecks
 
     ! Initialization
     this%nk = nk
@@ -120,7 +127,7 @@ contains
     this%duidxj_LS => largeScales%duidxjC
 
     ! Get halo-padded velocity arrays
-    call this%updateLargeScales() 
+    call this%updateLargeScales(timeAdvance=.false.) 
 
     ! Ryan 
     ! STEP 1: Finish the QH region code to fill Gabor Modes (kx, ky, kz, x, y, z, uhat, ...)
@@ -195,15 +202,16 @@ contains
     call this%QHgrid%destroy()
   end subroutine 
 
-  subroutine updateLargeScales(this)
+  subroutine updateLargeScales(this,timeAdvance)
     class(enrichmentOperator), intent(inout) :: this 
+    logical, intent(in) :: timeAdvance
 
     ! Ryan: 
     ! STEP 1: Figure out how you want to advance the large-scales
     ! Either run a PadeOps time-step or, read in from a file 
     ! If you read in from a file, you would want to avoid doing this repeatedly. 
     ! Perhaps read in 20 snapshots at a time and so on..
-    call this%largeScales%timeAdvance(this%dt)
+    if (timeAdvance) call this%largeScales%timeAdvance(this%dt)
 
     ! Aditya: 
     ! STEP 2: Generate halo'd velocities
@@ -257,7 +265,7 @@ contains
 
     this%tid = this%tid + 1
 
-    call this%updateLargeScales()
+    !call this%updateLargeScales(timeAdvance=.false.)
 
   end subroutine
 
