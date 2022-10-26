@@ -1,6 +1,6 @@
 ! Template for PadeOps
 
-#include "shearlessMixing_files/initializeV2.F90"       
+#include "shearlessMixing_files/initialize.F90"       
 #include "shearlessMixing_files/temporalHook.F90"  
 
 program shearlessMixing
