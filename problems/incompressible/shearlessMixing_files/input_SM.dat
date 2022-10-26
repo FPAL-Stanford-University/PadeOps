@@ -1,25 +1,25 @@
 &INPUT
-inputdir              = "/nobackup/aghate/ad_channel/AD"   ! Directory for any input files
-outputdir             = "/nobackup/aghate/ad_channel/AD"   ! Directory for all output files
-nx                    = 64         ! Number of points in X
-ny                    = 64          ! Number of points in Y
-nz                    = 640          ! Number of points in Z
-tstop                 = 12800.D-2    ! Physical time to stop the simulation
-CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
-nsteps                = 999999
-prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .FALSE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 184000       ! TimeID of the restart file being used
-restartFile_RID       = 6            ! RunID of the restart file being used
+inputdir              = "/anvil/scratch/x-ryanhass/HITdecay/SM7/output/SMdata"   ! Directory for any input files
+outputdir             = "/anvil/scratch/x-ryanhass/HITdecay/SM7/output/SMdata"   ! Directory for all output files
+nx                    = 128         ! Number of points in X
+ny                    = 128          ! Number of points in Y
+nz                    = 192          ! Number of points in Z
+tstop                 = 12800.D6    ! Physical time to stop the simulation
+CFL                   = -0.8D0        ! CFL criterion for calculating the time step (Set to negative to disable)
+dt                    = 6.D-3        ! Fixed time step value (only used if CFL is set to negative)
+nsteps                = 999999 
+prow                  = 4            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol                  = 64            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
+restartFile_TID       = 136000       ! TimeID of the restart file being used
+restartFile_RID       = 7            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
 /
 &NUMERICS
 AdvectionTerm         = 1           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
 ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special circumstances.  
-NumericalSchemeVert   = 2           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06), 2: Fourier Collocation
+NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06), 2: Fourier Collocation
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
 t_DivergenceCheck     = 50          ! Check divergence every $ timesteps. Reproject if needed.
 TimeSteppingScheme    = 2           ! 0: Adams-Bashforth, 1: TVD-RK3, 2: SSP-RK45
@@ -28,21 +28,22 @@ useExhaustiveFFT      = .TRUE.
 dealiasFact           = 0.6667d0
 scheme_xy             = "FOUR"
 donot_dealias         = .FALSE.
+clearRoundOffFreq     = 100
 /
 /
 &IO
-RunID                 = 10          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 50000       ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 10000       ! Data dumping frequency (# of timesteps)
+RunID                 = 7          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump         = 1000       ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 100       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
-dumpPlanes            = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
+dumpPlanes            = .TRUE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 20         ! Plane dumping frequency (# of timesteps)
 t_start_planeDump     = 1          ! When do you want to start dumping planes?
-t_stop_planeDump      = 1000       ! When do you want to stop dumping planes?
+t_stop_planeDump      = 20000       ! When do you want to stop dumping planes?
 VizDump_Schedule      = 0          ! ???????
 deltaT_dump           = 1.D0       ! ???????
-useProbes             = .TRUE.     ! Use probes?
-dump_NU_SGS           = .FALSE.    ! Dump nu_sgs?
+useProbes             = .FALSE.     ! Use probes?
+dump_NU_SGS           = .TRUE.    ! Dump nu_sgs?
 dump_KAPPA_SGS        = .FALSE.    ! Dump kappa_sgs?
 t_start_pointProbe    = 1          ! When do you want to start recording data?
 t_stop_pointProbe     = 200000     ! When do you want to end recording data?
@@ -67,23 +68,23 @@ deleteInstructions    = .false.     ! Do you want to delete instruction after re
 /
 /
 &PHYSICS
-isInviscid            = .TRUE.      ! Is this an inviscid simulation?
-useCoriolis           = .TRUE.      ! Activate the coriolis term? 
+isInviscid            = .FALSE.      ! Is this an inviscid simulation?
+useCoriolis           = .FALSE.      ! Activate the coriolis term? 
 useExtraForcing       = .FALSE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
 useMoisture           = .FALSE.     ! Include moisture (passive scalar) transport?
-Re                    = 1.D10       ! Reynolds Number; used when isInvisid is FALSE
+Re                    = 1164.D0       ! Reynolds Number; used when isInvisid is FALSE
 Ro                    = 1.D10       ! Rossby Number used when Coriolis is ON
 Pr                    = 0.6D0       ! Turbulent Prandtl Number; used when 
 Fr                    = 1.D10       ! Froude number; used when isStratified is TRUE
 Ra                    = 1.D14       ! Rayleigh number; used when isStratified is TRUE && BuoyancyTermType==3
-useSGS                = .true.      ! Do you want to use the SGS model?  
-PrandtlFluid          = 1.0D0       ! ?????
+useSGS                = .TRUE.      ! Do you want to use the SGS model?  
+PrandtlFluid          = 7.0D0       ! ?????
 BulkRichardson        = 0.0D0       ! Used if isStratified is TRUE && BuoyancyTermType==2
-BuoyancyTermType      = 1           ! Used if isStratified is TRUE. 1: (Fr, ThetaRef); 2:BulkRichardson; 3: (Ra, Re)
+BuoyancyTermType      = 2           ! Used if isStratified is TRUE. 1: (Fr, ThetaRef); 2:BulkRichardson; 3: (Ra, Re)
 useforcedStratification = .FALSE.   ! ????
-useGeostrophicForcing = .TRUE.      ! This is true if forcing is provided using the coriolis term  
-G_geostrophic         = 1.D0        ! Geostrophic wind speed 
+useGeostrophicForcing = .FALSE.      ! This is true if forcing is provided using the coriolis term  
+G_geostrophic         = 0.D0        ! Geostrophic wind speed 
 G_alpha               = 0.D0        ! Geostrophic wind angle (degrees, from +x axis)
 dPfdx                 = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                 = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
@@ -98,28 +99,26 @@ buoyancyDirection     = 3           ! Are 1 and 2 implemented????
 /
 &PRESSURE_CALC
 fastCalcPressure      = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
-storePressure         = .FALSE.     ! Would you like to compute and store pressure?
-P_dumpFreq            = 100         ! How often (timesteps) do you want to dump pressure?
+storePressure         = .TRUE.     ! Would you like to compute and store pressure?
+P_dumpFreq            = 20         ! How often (timesteps) do you want to dump pressure?
 P_compFreq            = 10          ! How often (timesteps) do you want to compute pressure? 
 computeDNSPressure    = .TRUE.
 computeFringePressure = .TRUE.
-computeTurbinePressure    = .TRUE.
-computeRapidSlowPressure  = .FALSE.
 /
 /
 &BCs
-PeriodicInZ           = .TRUE.      ! Is the problem periodic in Z? If yes, then everything below is ignored. 
+PeriodicInZ           = .FALSE.      ! Is the problem periodic in Z? If yes, then everything below is ignored. 
 botWall               = 2           ! no_slip = 1, slip = 2
 topWall               = 2           ! no_slip = 1, slip = 2
-useSpongeLayer        = .FALSE.     ! Use a sponge layer at the top 
-zstSponge             = 0.8d0       ! Height above which the sponge layer is active
-SpongeTscale          = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
+useSpongeLayer        = .TRUE.     ! Use a sponge layer at the top 
+zstSponge             = 0.92d0       ! Height above which the sponge layer is active
+SpongeTscale          = 10.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 sponge_type           = 1           ! 1 or 2; used if useSpongeLayer is TRUE
-botBC_Temp            = 1           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
+botBC_Temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 topBC_temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
-useTopAndBottomSymmetricSponge = .FALSE. 
-useFringe             = .FALSE.     ! Use Fringe/Buffer region in x or y directions?
-usedoubleFringex      = .TRUE.      ! Use two fringes (in x)?
+useTopAndBottomSymmetricSponge = .TRUE. 
+useFringe             = .TRUE.     ! Use Fringe/Buffer region in x or y directions?
+usedoubleFringex      = .FALSE.      ! Use two fringes (in x)?
 usecontrol            = .FALSE.     ! Use frame angle controller?
 /
 /
@@ -152,7 +151,7 @@ WM_MatchingIndex              = 1
 /
 /
 &WINDTURBINES
-useWindTurbines       = .TRUE.    ! Do you want to use Wind turbines ?
+useWindTurbines       = .FALSE.    ! Do you want to use Wind turbines ?
 num_turbines          = 1
 ADM                   = .TRUE.    ! FALSE would be ALM, which is not implemented/linked fully
 turbInfoDir           = "/home5/aghate/fpal_padeops/PadeOps/bin/skylake/channel_ad/input_files/1rot"
@@ -160,20 +159,18 @@ ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 
 /
 /
 &FRINGE
-Fringe1_xst           = 0.75d0         
-Fringe1_xen           = 0.90d0
-Fringe1_delta_st_x    = 0.100d0
-Fringe1_delta_en_x    = 0.05d0
-Fringe2_xst           = 0.800d0         
-Fringe2_xen           = 0.980d0
-Fringe2_delta_st_x    = 0.02d0
-Fringe2_delta_en_x    = 0.05d0
-LambdaFact            = 0.60d0 
-LambdaFact2           = 0.75d0
+Fringe_zst           = 0.000d0         
+Fringe_zen           = 0.100d0
+Fringe_delta_st_z    = 0.02d0
+Fringe_delta_en_z    = 0.02d0
+LambdaFact           = 0.75d0
+LambdaFactPotTemp    = 0.d0
+Apply_x_fringe       = .FALSE.
+Apply_z_fringe       = .TRUE.
 /
 /
 &BUDGET_TIME_AVG
-do_budgets            = .TRUE.    ! Perform budget calculations? 
+do_budgets            = .FALSE.    ! Perform budget calculations? 
 budgetType            = 3         ! See type descriptions in budget_time_avg.F90
 budgets_dir           = "/nobackup/aghate/ad_channel/budgets"    ! Write in default output directory
 tidx_compute          = 10        ! How often should budgets be computed?  
@@ -213,9 +210,10 @@ moistureFactor    = 0.61D0
 moisture_info_dir = "null"
 /
 /
-&AD_CoriolisINPUT
-Lx                    = 31.415926535897d0           ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                    = 6.2831853071795d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
-Lz                    = 6.2831853071795d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
-uInflow               = 2.d0                        ! What's the inflow velocity? 
+&SMinput
+Lx                    = 12.566370614359172d0           ! Domain Length  (appropriate dimesions/non-dimensionalized)
+Ly                    = 12.566370614359172d0          ! Domain Width  (appropriate dimesions/non-dimensionalized)
+Lz                    = 15.707963267948966d0       ! Domain Half-height (appropriate dimesnions/non-dimensionalized)
+symmetricDomain       = .false.
+zmin                  = -3.141592653589793d0
 /
