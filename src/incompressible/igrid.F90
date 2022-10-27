@@ -1565,6 +1565,14 @@ contains
            dUdzBC_bottom   =  0; dVdzBC_bottom   =  0;
            WdUdzBC_bottom  = -1; WdVdzBC_bottom  = -1;
            UWBC_bottom     = -1; VWBC_bottom     = -1;   
+        case(4)
+           call message(1,"Free boundary")
+           uBC_bottom      = 0; vBC_bottom      = 0;
+           dUdzBC_bottom   = 0; dVdzBC_bottom   = 0;
+           WdUdzBC_bottom  = 0; WdVdzBC_bottom  = 0;
+           UWBC_bottom     = 0; VWBC_bottom     = 0;
+           wBC_bottom      = 0; WdWdzBC_bottom  = 0; 
+           WWBC_bottom     = 0; dwdzBC_bottom   = 0;
         case default
            call gracefulExit("Invalid choice for BOTTOM WALL BCs",423)
         end select
@@ -1596,6 +1604,14 @@ contains
            dUdzBC_top   =  0; dVdzBC_top   =  0;
            WdUdzBC_top  = -1; WdVdzBC_top  = -1;
            UWBC_top     = -1; VWBC_top     = -1;   
+        case(4)
+           call message(1,"Free boundary")
+           uBC_top      = 0; vBC_top      = 0;
+           dUdzBC_top   = 0; dVdzBC_top   = 0;
+           WdUdzBC_top  = 0; WdVdzBC_top  = 0;
+           UWBC_top     = 0; VWBC_top     = 0;   
+           wBC_top      = 0; WdWdzBC_top  = 0; 
+           WWBC_top     = 0; dwdzBC_top   = 0;
         case default
            call gracefulExit("Invalid choice for TOP WALL BCs",13)
         end select
@@ -1613,6 +1629,9 @@ contains
         case (3)
            TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
            WdTdzBC_top = 0;
+        case (4)
+           TBC_top = 0; dTdzBC_top = 0; WTBC_top = 0;
+           WdTdzBC_top = 0;
         end select 
         select case (botBC_Temp)
         case (0) ! Dirichlet BC for temperature at the bottom
@@ -1626,7 +1645,10 @@ contains
             WdTdzBC_bottom = 0;
         case (3) 
            TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1; 
-           WdTdzBC_bottom = 0;      
+           WdTdzBC_bottom = 0;
+        case (4) 
+           TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = 0; 
+           WdTdzBC_bottom = 0;
         end select
 
    end subroutine
