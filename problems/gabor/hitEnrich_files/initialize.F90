@@ -99,10 +99,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
 
-    u = one 
-    v = one
+    u  = one 
+    v  = one
     wC = one 
-    w = one 
+    w  = one 
       
     nullify(u,v,w,x,y,z)
    

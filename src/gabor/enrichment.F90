@@ -234,7 +234,7 @@ contains
 
     ! Ryan
     ! STEP 2: Render local velocity
-    call this%renderLocalVelocity(this%utmp,this%vtmp,this%wtmp) 
+    call this%renderLocalVelocity() 
 
     ! Aditya
     ! STEP 3: Impose boundary condition (no-penetration BC)

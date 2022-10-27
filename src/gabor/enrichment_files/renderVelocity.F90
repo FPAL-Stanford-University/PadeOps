@@ -1,4 +1,4 @@
-subroutine renderLocalVelocity(this, utmp, vtmp, wtmp)
+subroutine renderLocalVelocity(this)
     use exits,     only: message
     use omp_lib,   only: omp_get_thread_num, omp_get_num_threads
     use decomp_2d, only: nrank
@@ -13,7 +13,6 @@ subroutine renderLocalVelocity(this, utmp, vtmp, wtmp)
     real(rkind) :: cs, ss, fx, fy, fz, f, xF, yF, zF
     real(rkind) :: wxSupport, wySupport, wzSupport, du, dv, dw
     integer :: tid
-    real(rkind), dimension(:,:,:,:), intent(inout) :: utmp, vtmp, wtmp
 
     call message("Rendering the Gabor-induced velocity field")
   
@@ -29,11 +28,16 @@ subroutine renderLocalVelocity(this, utmp, vtmp, wtmp)
     kst = this%smallScales%gpC%xst(3) 
     ken = this%smallScales%gpC%xen(3)
 
-    utmp = 0.d0
-    vtmp = 0.d0
-    wtmp = 0.d0
+    ! Zero the arrays
+    this%utmp = 0.d0
+    this%vtmp = 0.d0
+    this%wtmp = 0.d0
 
-    !$OMP PARALLEL SHARED(utmp,vtmp,wtmp) &
+    this%smallScales%u  = 0.d0
+    this%smallScales%v  = 0.d0
+    this%smallScales%wC = 0.d0
+
+    !$OMP PARALLEL &
     !$OMP PRIVATE(tid,n,i,j,k,kdotx,kdotx3,kdotx2,fx,fy,fz,f) &
     !$OMP PRIVATE(cs,ss,iist,iien,jjst,jjen,kkst,kken)
     tid = omp_get_thread_num()
@@ -75,9 +79,9 @@ subroutine renderLocalVelocity(this, utmp, vtmp, wtmp)
             dv = f*(2.d0*this%vhatR(n)*cs - 2.d0*this%vhatI(n)*ss)
             dw = f*(2.d0*this%whatR(n)*cs - 2.d0*this%whatI(n)*ss)
 
-            utmp(i,j,k,tid+1) = utmp(i,j,k,tid+1) + du 
-            vtmp(i,j,k,tid+1) = vtmp(i,j,k,tid+1) + dv 
-            wtmp(i,j,k,tid+1) = wtmp(i,j,k,tid+1) + dw 
+            this%utmp(i,j,k,tid+1) = this%utmp(i,j,k,tid+1) + du 
+            this%vtmp(i,j,k,tid+1) = this%vtmp(i,j,k,tid+1) + dv 
+            this%wtmp(i,j,k,tid+1) = this%wtmp(i,j,k,tid+1) + dw 
           end do
         end do
       end do
@@ -89,9 +93,9 @@ subroutine renderLocalVelocity(this, utmp, vtmp, wtmp)
     end do
     !$OMP END DO
     !$OMP CRITICAL
-    this%smallScales%u  = this%smallScales%u  + utmp(:,:,:,tid+1)
-    this%smallScales%v  = this%smallScales%v  + vtmp(:,:,:,tid+1)
-    this%smallScales%wC = this%smallScales%wC + wtmp(:,:,:,tid+1)
+    this%smallScales%u  = this%smallScales%u  + this%utmp(:,:,:,tid+1)
+    this%smallScales%v  = this%smallScales%v  + this%vtmp(:,:,:,tid+1)
+    this%smallScales%wC = this%smallScales%wC + this%wtmp(:,:,:,tid+1)
     !$OMP END CRITICAL
     !$OMP END PARALLEL
 end subroutine
