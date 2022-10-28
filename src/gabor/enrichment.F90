@@ -234,7 +234,11 @@ contains
 
     ! Ryan
     ! STEP 2: Render local velocity
-    call this%renderLocalVelocity() 
+    call this%renderLocalVelocity()
+
+    ! TODO:
+    ! Step 2.b: interpolate wC to w. Do we need to get uhat, vhat, what from u,
+    ! v, w? 
 
     ! Aditya
     ! STEP 3: Impose boundary condition (no-penetration BC)
