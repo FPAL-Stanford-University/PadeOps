@@ -44,6 +44,7 @@ module enrichmentMod
 
     ! Misc
     logical :: debugChecks = .false.
+    logical :: strainInitialCondition = .true.
 
     contains
       procedure          :: init
@@ -85,9 +86,11 @@ contains
     integer :: ist, ien, jst, jen, kst, ken
     real(rkind) :: dt
     logical :: debugChecks = .false.
+    logical :: strainInitialCondition = .true.
     
     namelist /IO/      outputdir, writeIsotropicModes
-    namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec
+    namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
+      strainInitialCondition
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
 
@@ -117,6 +120,7 @@ contains
     this%scalefact = scalefact
     this%Anu = Anu 
     this%ctauGlobal = ctauGlobal
+    this%strainInitialCondition = strainInitialCondition
 
     ! IO
     this%outputdir = outputdir
@@ -170,7 +174,7 @@ contains
     ! Initialize the Gabor modes
     call this%generateIsotropicModes()
     if (this%writeIsotropicModes) call this%dumpData()
-    call this%strainModes()
+    if (this%strainInitialCondition) call this%strainModes()
 
     call this%wrapupTimeStep()
 
