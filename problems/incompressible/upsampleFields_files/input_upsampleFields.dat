@@ -1,11 +1,11 @@
 &INPUT
-nx                    = 256 
-ny                    = 128
-nz                    = 192
-inputdir              = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/debug_data/0_tall"   ! Directory for any input files
-outputdir             = "/scratch/04076/tg833754/Coriolis_ActuatorDisk/primary_data/0_tall_up"   ! Directory for all output files
-inputFile_TID         = 0308000       ! TimeID of the restart file for the original data
-inputFile_RID         = 01          ! RunID of the restart file for the original data
+nx                    = 128 
+ny                    = 64
+nz                    = 128
+inputdir              = "/scratch/05294/mhowland/1p65/neutral/coarse_4"   ! Directory for any input files
+outputdir             = "/scratch/05294/mhowland/1p65/neutral/coarse_4"   ! Directory for all output files
+inputFile_TID         = 026000       ! TimeID of the restart file for the original data
+inputFile_RID         = 05          ! RunID of the restart file for the original data
 outputFile_TID        = 0       ! TimeID of the restart file with upsampled data
 outputFile_RID        = 01          ! RunID of the restart file with the upsampled data
 upsampleInZ           = .TRUE.

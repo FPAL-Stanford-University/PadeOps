@@ -101,6 +101,7 @@ DynProcFreq                   = 5           ! Dynamic procedure used every DYNPR
 useWallDamping                = .FALSE.     ! Use the Wall Damping Function 
 ncWall                        = 3.d0        ! Wall Damping Function Exponent
 explicitCalcEdgeEddyViscosity = .false.      ! Explicitly calculate or interpolate edge values for eddy viscosity? 
+useFullyLocalWM               = .true.
 /
 /
 &WINDTURBINES

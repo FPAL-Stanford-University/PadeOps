@@ -69,6 +69,7 @@ contains
             call message_min_max(1,"Bounds for T:", p_minval(minval(igp%T)), p_maxval(maxval(igp%T)))
             call message(1,"u_star:",igp%sgsmodel%get_ustar())
             call message(1,"Inv. Ob. Length:",igp%sgsmodel%get_InvObLength())
+            call message(1,"T_surf:",igp%sgsmodel%get_T_surf())
             call message(1,"wTh_surf:",igp%sgsmodel%get_wTh_surf())
             call message(1,"hub angle, degrees:",igp%angleHubHeight * 180.d0/3.14d0)
             call message(1,"frameAngle:",igp%frameAngle)

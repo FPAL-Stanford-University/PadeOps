@@ -42,6 +42,9 @@ subroutine initWallModel(this, SurfaceFilterFact)
       allocate(this%q3HAT_AtWall(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2)))
       this%q3HAT_AtWall = dcmplx(0.d0, 0.d0)
    end if 
+   
+   this%T_surf_mean=0.d0
+   
 end subroutine
 
 
@@ -343,7 +346,9 @@ subroutine compute_local_wallmodel(this, ux, uy, Tmn, wTh_surf, ustar, Linv, Psi
           wTh_surf = zero
           PsiM = zero
           T_surf = Tmn 
-    end if 
+    end if
+ 
+   this%T_surf_mean = T_surf !p_sum(sum(T_surf))/real(this%gpC%xsz(1)*this%gpC%ysz(2),rkind)
 end subroutine 
 
 subroutine getMO_wallfunction(this, z, Linv, PsiM, PsiH)

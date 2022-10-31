@@ -67,7 +67,7 @@ module sgsmod_igrid
         integer :: botBC_temp = 1
         real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0, PsiM = 0.0d0, uw_surf = 0.0d0, vw_surf = 0.0d0
         real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0!, wTh_surf = 0.d0
-        real(rkind) :: z0, z0t, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
+        real(rkind) :: z0, z0t, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr, T_surf_mean
         real(rkind), pointer :: Tsurf, wTh_surf
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
         integer :: WM_matchingIndex, WallFunctionType = 1 
@@ -160,6 +160,7 @@ module sgsmod_igrid
             procedure          :: get_uspeedmean 
             procedure          :: get_DynamicProcedureType
             procedure          :: get_wTh_surf
+            procedure          :: get_T_surf
             procedure          :: get_uw_surf
             procedure          :: get_vw_surf
             procedure          :: getMax_DynSmagConst

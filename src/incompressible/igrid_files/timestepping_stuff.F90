@@ -363,12 +363,12 @@
            this%G_alpha = this%G_alpha - this%deltaGalpha
            this%frameAngle = this%frameAngle + this%deltaGalpha 
        end if
-       
-       !if (this%isStratified) then
-       !    if (this%botBC_Temp == 0) then
-       !        this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
-       !    end if
-       !end if  
+       ! MFH 9/14/22: THESE LINES OF CODE WERE COMMENTED OUT 
+       if (this%isStratified) then
+           if (this%botBC_Temp == 0) then
+               this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
+           end if
+       end if  
        if (this%PreprocessForKS) this%KSupdated = .false. 
        if (this%useProbes) call this%updateProbes()
        if (this%computevorticity) call this%compute_vorticity

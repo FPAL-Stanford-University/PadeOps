@@ -43,6 +43,15 @@ pure function get_uspeedmean(this) result(val)
 
 end function
 
+pure function get_T_surf(this) result(val)
+   class(sgs_igrid), intent(in) :: this
+   real(rkind)                     :: val
+
+   val = this%T_surf_mean
+
+end function
+
+
 pure function get_wTh_surf(this) result(val)
    class(sgs_igrid), intent(in) :: this
    real(rkind)                     :: val
