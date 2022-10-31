@@ -6,7 +6,8 @@ module kind_parameters
     implicit none
     
     private
-    public :: single_kind, double_kind, rkind, mpirkind, mpickind, clen, stdin, stdout, stderr
+    public :: single_kind, double_kind, rkind, mpirkind, mpickind, clen, &
+      stdin, stdout, stderr, castSingle
 
     integer, parameter :: single_kind = kind(0.0)
     integer, parameter :: double_kind = kind(0.d0)
@@ -20,4 +21,24 @@ module kind_parameters
     integer, parameter :: stdout = 6
     integer, parameter :: stderr = 0
 
+    interface castSingle
+      module procedure castSingleDouble, castSingleInt
+    end interface
+  
+    contains
+      
+        function castSingleDouble(fdouble) result(fsingle)
+            real(rkind), intent(in) :: fdouble
+            real(single_kind) :: fsingle
+
+            fsingle = real(fdouble,single_kind)
+        end function 
+        
+        function castSingleInt(fInt) result(fsingle)
+            integer, intent(in) :: fInt
+            real(single_kind) :: fsingle
+
+            fsingle = real(fInt,single_kind)
+        end function 
+   
 end module

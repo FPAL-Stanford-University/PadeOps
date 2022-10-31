@@ -1,5 +1,5 @@
 module enrichmentMod
-  use kind_parameters,    only: rkind, clen
+  use kind_parameters,    only: rkind, clen, single_kind, castSingle
   use incompressibleGrid, only: igrid
   use QHmeshMod,          only: QHmesh
   use exits,              only: message
@@ -7,6 +7,7 @@ module enrichmentMod
   use fortran_assert,     only: assert
   use omp_lib
   use gaborHooks
+  use timer,              only: tic, toc
   implicit none
 
   integer :: nthreads
@@ -39,7 +40,7 @@ module enrichmentMod
     logical :: writeIsotropicModes 
     
     ! Extra memory for velocity rendering
-    real(rkind), dimension(:,:,:,:), allocatable :: utmp,vtmp,wtmp
+    real(single_kind), dimension(:,:,:,:),   allocatable :: utmp,vtmp,wtmp
 
     ! Misc
     logical :: debugChecks = .false.
@@ -58,6 +59,7 @@ module enrichmentMod
       procedure          :: continueSimulation
       procedure          :: dumpData
       procedure, private :: doDebugChecks
+      procedure, private :: updateSeeds
   end type
 
 contains
@@ -258,7 +260,9 @@ contains
     class(enrichmentOperator), intent(inout) :: this 
 
     if (mod(this%tid,this%tidRender) == 0) then 
+      call tic()
       call this%renderVelocity()
+      call toc('Velocity rendering took')
     end if 
 
     if (mod(this%tid,this%tio) == 0) then 

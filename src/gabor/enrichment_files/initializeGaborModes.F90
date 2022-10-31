@@ -89,12 +89,11 @@ subroutine generateIsotropicModes(this)
       do i = 1,this%QHgrid%gpC%xsz(1)
         xmin = this%QHgrid%xE(i)
 
-        !TODO: Need better seed selection 
-        seed1 = 1000 + i + j + k
-        seed2 = 2000 + i + j + k
-        seed3 = 3000 + i + j + k
-        seed4 = 4000 + i + j + k
-        seed5 = 5000 + i + j + k
+        !TODO: Need better seed selection
+        call this%updateSeeds(seed1,seed2,seed3,seed4,seed5,&
+          this%QHgrid%gpC%xst(1)+i-1,&
+          this%QHgrid%gpC%xst(2)+j-1,&
+          this%QHgrid%gpC%xst(3)+k-1)
 
         ! Uniformily distribute modes in QH region
         call uniform_random(rand1,0.d0,1.d0,seed1)
@@ -229,7 +228,8 @@ subroutine strainModes(this)
   input = -(kabs)**(-2.0_rkind)
  
   !$OMP PARALLEL SHARED(input) &
-  !$OMP PRIVATE(n, output, dudx, L, KE, U, V, W, S, k, uRtmp, uItmp, tauEddy)
+  !$OMP PRIVATE(n, output, dudx, L, KE, U, V, W, S, k, uRtmp, uItmp, tauEddy) &
+  !$OMP PRIVATE(dt)
   !$OMP DO
   do n = 1,this%nmodes
     CALL PFQ(input(n),output)
@@ -314,4 +314,16 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   ! Use L and KE for the QH region that the mode resides in
   L = this%QHgrid%L(QHx,QHy,QHz)
   KE = this%QHgrid%KE(QHx,QHy,QHz)
+end subroutine
+
+subroutine updateSeeds(this,seed1,seed2,seed3,seed4,seed5,QHi,QHj,QHk)
+  class(enrichmentOperator), intent(inout) :: this
+  integer, intent(inout) :: seed1, seed2, seed3, seed4, seed5
+  integer :: QHi, QHj, QHk
+
+  seed1 = 1000 + QHi + QHj + QHk
+  seed2 = 2000 + QHi + QHj + QHk
+  seed3 = 3000 + QHi + QHj + QHk
+  seed4 = 4000 + QHi + QHj + QHk
+  seed5 = 5000 + QHi + QHj + QHk
 end subroutine

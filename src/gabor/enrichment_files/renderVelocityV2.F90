@@ -3,24 +3,26 @@ subroutine renderLocalVelocity(this)
     use omp_lib,   only: omp_get_thread_num, omp_get_num_threads
     use decomp_2d, only: nrank
     
-    class(enrichmentOperator), intent(inout) :: this
+    class(enrichmentOperator), intent(inout), target :: this
     integer :: n
     real(rkind) :: small = 1.d-14
     character(len=clen) :: mssg
-    real(single_kind) :: kdotx, kdotx2, kdotx3
     integer :: i, j, k, iist, iien, jjst, jjen, kkst, kken
     integer :: ist, ien, jst, jen, kst, ken
-    real(single_kind) :: cs, ss, fx, fy, fz, f, xF, yF, zF, kx, ky, kz
-    real(single_kind) :: uR, uI, vR, vI, wR, wI, x, y, z, dx, dy, dz
-    real(single_kind) :: wxSupport, wySupport, wzSupport, du, dv, dw
-    integer :: tid
+    real(single_kind), dimension(:,:,:), pointer :: cs, ss, f, xF, yF, zF
+    real(single_kind), dimension(:,:,:), pointer :: kdotx
+    real(single_kind) :: dx, dy, dz, x, y, z
+    real(single_kind) :: uR, uI, vR, vI, wR, wI
+    real(single_kind) :: kx, ky, kz
+    real(single_kind) :: wxSupport, wySupport, wzSupport
+    integer :: tid, idx
 
     call message("Rendering the Gabor-induced velocity field")
- 
-    ! Cast variables to single precision
-    dx = castSingle(this%smallScales%dx) 
-    dy = castSingle(this%smallScales%dy) 
-    dz = castSingle(this%smallScales%dz) 
+  
+    ! Make single precision versions of various parameters
+    dx = castSingle(this%smallScales%dx)
+    dy = castSingle(this%smallScales%dy)
+    dz = castSingle(this%smallScales%dz)
 
     wxSupport = castSingle(this%nxsupp+1)*dx
     wySupport = castSingle(this%nysupp+1)*dy
@@ -44,7 +46,7 @@ subroutine renderLocalVelocity(this)
     this%smallScales%wC = 0.d0
 
     !$OMP PARALLEL &
-    !$OMP PRIVATE(tid,n,i,j,k,kdotx,kdotx3,kdotx2,fx,fy,fz,f) &
+    !$OMP PRIVATE(tid,n,i,j,k,kdotx,f,xF,yF,zF) &
     !$OMP PRIVATE(cs,ss,iist,iien,jjst,jjen,kkst,kken)
     tid = omp_get_thread_num()
     if (tid == 0 .and. nrank == 0) print*, "# of threads spawned:", omp_get_num_threads()
@@ -63,51 +65,68 @@ subroutine renderLocalVelocity(this)
       kkst = max(ceiling((this%z(n)+small)/this%smallScales%dz) - this%nzsupp/2, kst)
       kken = min(floor(  (this%z(n)+small)/this%smallScales%dz) + this%nzsupp/2, ken)
 
-      ! Cast variables to single precision
-      kx = castSingle(this%kx(n))
-      ky = castSingle(this%ky(n))
-      kz = castSingle(this%kz(n))
-      
-      x  = castSingle(this%x(n))
-      y  = castSingle(this%y(n))
-      z  = castSingle(this%z(n))
+      xF    => this%buff(iist:iien,jjst:jjen,kkst:kken,tid+1,1)
+      yF    => this%buff(iist:iien,jjst:jjen,kkst:kken,tid+1,2)
+      zF    => this%buff(iist:iien,jjst:jjen,kkst:kken,tid+1,3)
 
+      kdotx => this%buff(iist:iien,jjst:jjen,kkst:kken,tid+1,4)
+      cs    => this%buff(iist:iien,jjst:jjen,kkst:kken,tid+1,5)
+      ss    => this%buff(iist:iien,jjst:jjen,kkst:kken,tid+1,6)
+      f     => this%buff(iist:iien,jjst:jjen,kkst:kken,tid+1,7)
+
+      ! Creat single-precision version of variables
       uR = castSingle(this%uhatR(n))
       uI = castSingle(this%uhatI(n))
       vR = castSingle(this%vhatR(n))
       vI = castSingle(this%vhatI(n))
       wR = castSingle(this%whatR(n))
       wI = castSingle(this%whatI(n))
+      
+      kx = castSingle(this%kx(n))
+      ky = castSingle(this%ky(n))
+      kz = castSingle(this%kz(n))
 
+      x  = castSingle(this%x(n))
+      y  = castSingle(this%y(n))
+      z  = castSingle(this%z(n))
+
+      idx = 1
       do k = kkst,kken
-        zF = dz*castSingle(k - 1)
-        kdotx3 = kz*(zF - z)
-        fz = cos(pi*(zF - z)/wzSupport)
-        do j = jjst,jjen
-          yF = dy*castSingle(j - 1)
-          kdotx2 = ky*(yF - y)
-          fy = cos(pi*(yF - y)/wySupport)
-          do i = iist,iien
-            xF = dx*castSingle(i - 1)
-            kdotx = kdotx2 + kdotx3 + kx*(xF - x)
-
-            cs = cos(kdotx)
-            ss = sin(kdotx)
-
-            fx = cos(pi*(xF - x)/wxSupport)
-            f = fx*fy*fz
-
-            du = 2.d0*f*(uR*cs - uI*ss)
-            dv = 2.d0*f*(vR*cs - vI*ss)
-            dw = 2.d0*f*(wR*cs - wI*ss)
-
-            this%utmp(i,j,k,tid+1) = this%utmp(i,j,k,tid+1) + du 
-            this%vtmp(i,j,k,tid+1) = this%vtmp(i,j,k,tid+1) + dv 
-            this%wtmp(i,j,k,tid+1) = this%wtmp(i,j,k,tid+1) + dw 
-          end do
-        end do
+        zF(:,:,idx) = dz*castSingle(k - 1)
+        idx = idx + 1
       end do
+      idx = 1
+      do j = jjst,jjen
+        yF(:,idx,:) = dy*castSingle(j - 1)
+        idx = idx + 1
+      end do
+      idx = 1
+      do i = iist,iien
+        xF(idx,:,:) = dx*castSingle(i - 1)
+        idx = idx + 1
+      end do
+      
+      kdotx = kx*(xF - x) + ky*(yF - y) + kz*(zF - z)
+      cs = cos(kdotx)
+      ss = sin(kdotx)
 
+      f =     cos(pi*(xF - x)/wxSupport)
+      f = f * cos(pi*(yF - y)/wySupport)
+      f = f * cos(pi*(zF - z)/wzSupport)
+
+      this%utmp(iist:iien,jjst:jjen,kkst:kken,tid+1) = &
+        this%utmp(iist:iien,jjst:jjen,kkst:kken,tid+1) + &
+        f*(2.d0*uR*cs - 2.d0*uI*ss) 
+      
+      this%vtmp(iist:iien,jjst:jjen,kkst:kken,tid+1) = &
+        this%vtmp(iist:iien,jjst:jjen,kkst:kken,tid+1) + &
+        f*(2.d0*vR*cs - 2.d0*vI*ss)
+      
+      this%wtmp(iist:iien,jjst:jjen,kkst:kken,tid+1) = &
+        this%wtmp(iist:iien,jjst:jjen,kkst:kken,tid+1) + &
+        f*(2.d0*wR*cs - 2.d0*wI*ss)
+
+      nullify(xF, yF, zF, kdotx, cs, ss, f)
       if (mod(n,100000) == 0 .and. tid == 0) then
         write(mssg,'(F7.4,A10)')real(n,rkind)/real(this%nmodes,rkind)*100.d0,'% Complete'
         call message(trim(mssg))
