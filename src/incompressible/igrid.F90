@@ -1343,7 +1343,7 @@ contains
            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
        end if 
        if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
-           !call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
+           call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
        end if
 
        if ((this%usescalars) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
@@ -1567,6 +1567,8 @@ contains
            UWBC_bottom     = -1; VWBC_bottom     = -1;   
         case(4)
            call message(1,"Free boundary")
+           call gracefulExit("This boundary condition is not currently "//&
+             "supported in the Poisson solver",423)
            uBC_bottom      = 0; vBC_bottom      = 0;
            dUdzBC_bottom   = 0; dVdzBC_bottom   = 0;
            WdUdzBC_bottom  = 0; WdVdzBC_bottom  = 0;
@@ -1606,6 +1608,8 @@ contains
            UWBC_top     = -1; VWBC_top     = -1;   
         case(4)
            call message(1,"Free boundary")
+           call gracefulExit("This boundary condition is not currently "//&
+             "supported in the Poisson solver",423)
            uBC_top      = 0; vBC_top      = 0;
            dUdzBC_top   = 0; dVdzBC_top   = 0;
            WdUdzBC_top  = 0; WdVdzBC_top  = 0;
