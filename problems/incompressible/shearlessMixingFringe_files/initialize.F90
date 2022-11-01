@@ -477,7 +477,7 @@ subroutine hook_probes(inputfile, probe_locs)
     use kind_parameters,    only: rkind
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
-    integer, parameter :: nprobes = 9
+    integer, parameter :: nprobes = 40
     
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
     ! Example: If you have at least 3 probes:
@@ -492,49 +492,204 @@ subroutine hook_probes(inputfile, probe_locs)
     allocate(probe_locs(3,nprobes))
     
     ! Probe 1
-    probe_locs(1,1) = 0.1d0; 
-    probe_locs(2,1) = 3.141592653589d0; 
-    probe_locs(3,1) = 3.141592653589d0; 
-    
-    ! Probe 2 
-    probe_locs(1,2) = 5.783185307179d0; 
-    probe_locs(2,2) = 3.141592653589d0; 
-    probe_locs(3,2) = 3.141592653589d0; 
-
+    probe_locs(1,1) = 3.14159265358979d0
+    probe_locs(2,1) = 3.14159265358979d0
+    probe_locs(3,1) = 3.01592894744620d0
+     
+    ! Probe 2
+    probe_locs(1,2) = 9.42477796076938d0
+    probe_locs(2,2) = 3.14159265358979d0
+    probe_locs(3,2) = 3.01592894744620d0
+     
     ! Probe 3
-    probe_locs(1,3) = 6.783185307179d0; 
-    probe_locs(2,3) = 3.141592653589d0; 
-    probe_locs(3,3) = 3.141592653589d0; 
-    
+    probe_locs(1,3) = 3.14159265358979d0
+    probe_locs(2,3) = 9.42477796076938d0
+    probe_locs(3,3) = 3.01592894744620d0
+     
     ! Probe 4
-    probe_locs(1,4) = 10.28318530718d0; 
-    probe_locs(2,4) = 3.141592653589d0; 
-    probe_locs(3,4) = 3.141592653589d0; 
-
+    probe_locs(1,4) = 9.42477796076938d0
+    probe_locs(2,4) = 9.42477796076938d0
+    probe_locs(3,4) = 3.01592894744620d0
+     
     ! Probe 5
-    probe_locs(1,5) = 14.28318530718d0; 
-    probe_locs(2,5) = 3.141592653589d0; 
-    probe_locs(3,5) = 3.141592653589d0;
-
+    probe_locs(1,5) = 3.14159265358979d0
+    probe_locs(2,5) = 3.14159265358979d0
+    probe_locs(3,5) = 8.79645943005142d0
+     
     ! Probe 6
-    probe_locs(1,6) = 18.28318530718d0; 
-    probe_locs(2,6) = 3.141592653589d0; 
-    probe_locs(3,6) = 3.141592653589d0;
-
+    probe_locs(1,6) = 9.42477796076938d0
+    probe_locs(2,6) = 3.14159265358979d0
+    probe_locs(3,6) = 8.79645943005142d0
+     
     ! Probe 7
-    probe_locs(1,7) = 10.28318530718d0; 
-    probe_locs(2,7) = 3.141592653589d0; 
-    probe_locs(3,7) = 4.25d0; 
-
+    probe_locs(1,7) = 3.14159265358979d0
+    probe_locs(2,7) = 9.42477796076938d0
+    probe_locs(3,7) = 8.79645943005142d0
+     
     ! Probe 8
-    probe_locs(1,8) = 14.28318530718d0; 
-    probe_locs(2,8) = 3.141592653589d0; 
-    probe_locs(3,8) = 4.250;
-
+    probe_locs(1,8) = 9.42477796076938d0
+    probe_locs(2,8) = 9.42477796076938d0
+    probe_locs(3,8) = 8.79645943005142d0
+     
     ! Probe 9
-    probe_locs(1,9) = 18.28318530718d0; 
-    probe_locs(2,9) = 3.141592653589d0; 
-    probe_locs(3,9) = 4.25d0;
+    probe_locs(1,9) = 3.14159265358979d0
+    probe_locs(2,9) = 3.14159265358979d0
+    probe_locs(3,9) = 14.57698991265664d0
+     
+    ! Probe 10
+    probe_locs(1,10) = 9.42477796076938d0
+    probe_locs(2,10) = 3.14159265358979d0
+    probe_locs(3,10) = 14.57698991265664d0
+     
+    ! Probe 11
+    probe_locs(1,11) = 3.14159265358979d0
+    probe_locs(2,11) = 9.42477796076938d0
+    probe_locs(3,11) = 14.57698991265664d0
+     
+    ! Probe 12
+    probe_locs(1,12) = 9.42477796076938d0
+    probe_locs(2,12) = 9.42477796076938d0
+    probe_locs(3,12) = 14.57698991265664d0
+     
+    ! Probe 13
+    probe_locs(1,13) = 3.14159265358979d0
+    probe_locs(2,13) = 3.14159265358979d0
+    probe_locs(3,13) = 20.35752039526186d0
+     
+    ! Probe 14
+    probe_locs(1,14) = 9.42477796076938d0
+    probe_locs(2,14) = 3.14159265358979d0
+    probe_locs(3,14) = 20.35752039526186d0
+     
+    ! Probe 15
+    probe_locs(1,15) = 3.14159265358979d0
+    probe_locs(2,15) = 9.42477796076938d0
+    probe_locs(3,15) = 20.35752039526186d0
+     
+    ! Probe 16
+    probe_locs(1,16) = 9.42477796076938d0
+    probe_locs(2,16) = 9.42477796076938d0
+    probe_locs(3,16) = 20.35752039526186d0
+     
+    ! Probe 17
+    probe_locs(1,17) = 3.14159265358979d0
+    probe_locs(2,17) = 3.14159265358979d0
+    probe_locs(3,17) = 26.13805087786708d0
+     
+    ! Probe 18
+    probe_locs(1,18) = 9.42477796076938d0
+    probe_locs(2,18) = 3.14159265358979d0
+    probe_locs(3,18) = 26.13805087786708d0
+     
+    ! Probe 19
+    probe_locs(1,19) = 3.14159265358979d0
+    probe_locs(2,19) = 9.42477796076938d0
+    probe_locs(3,19) = 26.13805087786708d0
+     
+    ! Probe 20
+    probe_locs(1,20) = 9.42477796076938d0
+    probe_locs(2,20) = 9.42477796076938d0
+    probe_locs(3,20) = 26.13805087786708d0
+     
+    ! Probe 21
+    probe_locs(1,21) = 3.14159265358979d0
+    probe_locs(2,21) = 3.14159265358979d0
+    probe_locs(3,21) = 35.68849254478005d0
+     
+    ! Probe 22
+    probe_locs(1,22) = 9.42477796076938d0
+    probe_locs(2,22) = 3.14159265358979d0
+    probe_locs(3,22) = 35.68849254478005d0
+     
+    ! Probe 23
+    probe_locs(1,23) = 3.14159265358979d0
+    probe_locs(2,23) = 9.42477796076938d0
+    probe_locs(3,23) = 35.68849254478005d0
+     
+    ! Probe 24
+    probe_locs(1,24) = 9.42477796076938d0
+    probe_locs(2,24) = 9.42477796076938d0
+    probe_locs(3,24) = 35.68849254478005d0
+     
+    ! Probe 25
+    probe_locs(1,25) = 3.14159265358979d0
+    probe_locs(2,25) = 3.14159265358979d0
+    probe_locs(3,25) = 0.00000000000000d0
+     
+    ! Probe 26
+    probe_locs(1,26) = 9.42477796076938d0
+    probe_locs(2,26) = 3.14159265358979d0
+    probe_locs(3,26) = 0.00000000000000d0
+     
+    ! Probe 27
+    probe_locs(1,27) = 3.14159265358979d0
+    probe_locs(2,27) = 9.42477796076938d0
+    probe_locs(3,27) = 0.00000000000000d0
+     
+    ! Probe 28
+    probe_locs(1,28) = 9.42477796076938d0
+    probe_locs(2,28) = 9.42477796076938d0
+    probe_locs(3,28) = 0.00000000000000d0
+     
+    ! Probe 29
+    probe_locs(1,29) = 3.14159265358979d0
+    probe_locs(2,29) = 3.14159265358979d0
+    probe_locs(3,29) = -3.14159265358979d0
+     
+    ! Probe 30
+    probe_locs(1,30) = 9.42477796076938d0
+    probe_locs(2,30) = 3.14159265358979d0
+    probe_locs(3,30) = -3.14159265358979d0
+     
+    ! Probe 31
+    probe_locs(1,31) = 3.14159265358979d0
+    probe_locs(2,31) = 9.42477796076938d0
+    probe_locs(3,31) = -3.14159265358979d0
+     
+    ! Probe 32
+    probe_locs(1,32) = 9.42477796076938d0
+    probe_locs(2,32) = 9.42477796076938d0
+    probe_locs(3,32) = -3.14159265358979d0
+     
+    ! Probe 33
+    probe_locs(1,33) = 3.14159265358979d0
+    probe_locs(2,33) = 3.14159265358979d0
+    probe_locs(3,33) = -6.28318530717959d0
+     
+    ! Probe 34
+    probe_locs(1,34) = 9.42477796076938d0
+    probe_locs(2,34) = 3.14159265358979d0
+    probe_locs(3,34) = -6.28318530717959d0
+     
+    ! Probe 35
+    probe_locs(1,35) = 3.14159265358979d0
+    probe_locs(2,35) = 9.42477796076938d0
+    probe_locs(3,35) = -6.28318530717959d0
+     
+    ! Probe 36
+    probe_locs(1,36) = 9.42477796076938d0
+    probe_locs(2,36) = 9.42477796076938d0
+    probe_locs(3,36) = -6.28318530717959d0
+     
+    ! Probe 37
+    probe_locs(1,37) = 3.14159265358979d0
+    probe_locs(2,37) = 3.14159265358979d0
+    probe_locs(3,37) = -9.42477796076938d0
+     
+    ! Probe 38
+    probe_locs(1,38) = 9.42477796076938d0
+    probe_locs(2,38) = 3.14159265358979d0
+    probe_locs(3,38) = -9.42477796076938d0
+     
+    ! Probe 39
+    probe_locs(1,39) = 3.14159265358979d0
+    probe_locs(2,39) = 9.42477796076938d0
+    probe_locs(3,39) = -9.42477796076938d0
+     
+    ! Probe 40
+    probe_locs(1,40) = 9.42477796076938d0
+    probe_locs(2,40) = 9.42477796076938d0
+    probe_locs(3,40) = -9.42477796076938d0
 end subroutine
 
 subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
