@@ -33,7 +33,8 @@ if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O5 -mkl -warn all -xhost -dynamic -qopt-report=2 -qopt-report-phase=vec -fp-model precise")
     	message(STATUS "Using floating point model = precise")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -pg -mkl -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -pg -mkl -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone -fp-model precise")
+    	message(STATUS "Using floating point model = precise")
     endif()
 
 # GNU compiler on OSX
