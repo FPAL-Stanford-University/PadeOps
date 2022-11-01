@@ -194,7 +194,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
-    integer :: ioUnit
+    integer :: ioUnit, i
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac
@@ -409,33 +409,23 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         VFL  = mix%material(1)%VF(1,1,1)
         VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
 
-
-        !gt should be same as g
-        mix%material(1)%gt11 = one;  mix%material(1)%gt12 = zero; mix%material(1)%gt13 = zero
-        mix%material(1)%gt21 = zero; mix%material(1)%gt22 = one;  mix%material(1)%gt23 = zero
-        mix%material(1)%gt31 = zero; mix%material(1)%gt32 = zero; mix%material(1)%gt33 = one
-        
-        mix%material(1)%gt11 = (rho2*dum + rho1*(one-dum))/rho_0
-        if (mix%use_gTg.and.(mix%strainHard)) then
-           mix%material(1)%gt11 = mix%material(1)%gt11**2
-        end if
-        
-        mix%material(1)%gp11 = one;  mix%material(1)%gp12 = zero; mix%material(1)%gp13 = zero
-        mix%material(1)%gp21 = zero; mix%material(1)%gp22 = one;  mix%material(1)%gp23 = zero
-        mix%material(1)%gp31 = zero; mix%material(1)%gp32 = zero; mix%material(1)%gp33 = one
-        
-
-
-        mix%material(2)%gt11 = one;  mix%material(2)%gt12 = zero; mix%material(2)%gt13 = zero
-        mix%material(2)%gt21 = zero; mix%material(2)%gt22 = one;  mix%material(2)%gt23 = zero
-        mix%material(2)%gt31 = zero; mix%material(2)%gt32 = zero; mix%material(2)%gt33 = one
-        
-        mix%material(2)%gt11 = mix%material(1)%gt11
-        
-        mix%material(2)%gp11 = one;  mix%material(2)%gp12 = zero; mix%material(2)%gp13 = zero
-        mix%material(2)%gp21 = zero; mix%material(2)%gp22 = one;  mix%material(2)%gp23 = zero
-        mix%material(2)%gp31 = zero; mix%material(2)%gp32 = zero; mix%material(2)%gp33 = one
-        
+        do i=1,mix%ns
+            !gt should be same as g
+            mix%material(i)%gt11 = mix%material(i)%g11 
+            mix%material(i)%gt21 = mix%material(i)%g21 
+            mix%material(i)%gt31 = mix%material(i)%g31 
+            mix%material(i)%gt12 = mix%material(i)%g12
+            mix%material(i)%gt22 = mix%material(i)%g22
+            mix%material(i)%gt32 = mix%material(i)%g32
+            mix%material(i)%gt13 = mix%material(i)%g13
+            mix%material(i)%gt23 = mix%material(i)%g23
+            mix%material(i)%gt33 = mix%material(i)%g33
+            
+            !gp should be identity
+            mix%material(i)%gp11 = one;  mix%material(i)%gp12 = zero; mix%material(i)%gp13 = zero
+            mix%material(i)%gp21 = zero; mix%material(i)%gp22 = one;  mix%material(i)%gp23 = zero
+            mix%material(i)%gp31 = zero; mix%material(i)%gp32 = zero; mix%material(i)%gp33 = one
+        enddo
 
         !set Ys bounds for interface sharpening
 
@@ -447,24 +437,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         YsL = VFL * rho_0 / rhoL
         YsR = VFR * rho_0 / rhoR
-
-
-
-        ! mix%material(1)%g11 = (rho2*dum + rho1*(one-dum))/rho_0
-
-        ! tmp = rho_0*mix%material(1)%VF*mix%material(1)%g11 + rho_0_2*mix%material(2)%g11*(one-mix%material(1)%VF) ! Mixture density
-
-        ! mix%material(1)%VF = minVF + (one-two*minVF)*tmp
-        ! mix%material(2)%VF = one - mix%material(1)%VF
-
-        ! tmp = rho_0*mix%material(1)%VF + rho_0_2*(one-mix%material(1)%VF) ! Mixture density
-
-        ! mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
-        ! mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
-
-
-        ! YsL  = mix%material(1)%Ys(1,1,1)
-        ! YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
 
         mix%material(1)%intSharp_ysc(1) = YsR
         mix%material(1)%intSharp_ysc(2) = YsL
@@ -782,13 +754,20 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         !!! Hack to stop liquid's g from blowing up
-        mix%material(2)%g11 = one;  mix%material(2)%g12 = zero; mix%material(2)%g13 = zero
-        mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
-        mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
-        
-        mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
-        mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
-        mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
+        do i=1,mix%ns
+            mix%material(i)%g11 = one;  mix%material(i)%g12 = zero; mix%material(i)%g13 = zero
+            mix%material(i)%g21 = zero; mix%material(i)%g22 = one;  mix%material(i)%g23 = zero
+            mix%material(i)%g31 = zero; mix%material(i)%g32 = zero; mix%material(i)%g33 = one
+            
+            mix%material(i)%gt11 = one;  mix%material(i)%gt12 = zero; mix%material(i)%gt13 = zero
+            mix%material(i)%gt21 = zero; mix%material(i)%gt22 = one;  mix%material(i)%gt23 = zero
+            mix%material(i)%gt31 = zero; mix%material(i)%gt32 = zero; mix%material(i)%gt33 = one
+
+            mix%material(i)%gp11 = one;  mix%material(i)%gp12 = zero; mix%material(i)%gp13 = zero
+            mix%material(i)%gp21 = zero; mix%material(i)%gp22 = one;  mix%material(i)%gp23 = zero
+            mix%material(i)%gp31 = zero; mix%material(i)%gp32 = zero; mix%material(i)%gp33 = one
+        enddo
+
 
         if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then
