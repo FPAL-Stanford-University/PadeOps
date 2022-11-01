@@ -48,14 +48,14 @@ module SolidMixtureMod
         real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
         real(rkind), allocatable, dimension(:,:,:,:) :: intSharp_f,intSharp_h,VFboundDiff,intSharp_fDiff,intSharp_hDiff,intSharp_fFV
-        real(rkind), allocatable, dimension(:,:,:,:) :: surfaceTension_f
+        real(rkind), allocatable, dimension(:,:,:,:) :: surfaceTension_f,xi
         real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e
         real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV
         
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa
         real(rkind), allocatable, dimension(:,:,:,:) :: norm
-	real(rkind), allocatable, dimension(:,:,:)   :: phi, xi
+	real(rkind), allocatable, dimension(:,:,:)   :: phi
         real(rkind), allocatable, dimension(:,:,:)   :: fmask
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_send_1, buffer_send_k_1
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_send_2, buffer_send_k_2
@@ -322,7 +322,7 @@ contains
 
 
         if(allocated(this%xi)) deallocate(this%xi)
-        allocate(this%xi(this%nxp, this%nyp, this%nzp))
+        allocate(this%xi(this%nxp, this%nyp, this%nzp, 3))
 
 	if(allocated(this%fmask)) deallocate(this%fmask)
         allocate(this%fmask(this%nxp, this%nyp, this%nzp))
@@ -574,7 +574,7 @@ stop
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rho1gambyone, rho2gambyone, diffPInf,  tmp
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: VF1, VF2
         integer :: imat, i,j,k,a(3), s = 2
-        real(rkind) :: gamfac,eps2, eps1 = 1D-8, minVF = 1D-8
+        real(rkind) :: gamfac,eps2, eps1 = 1D-8, minVF = 1D-8, thresh
 
         ! print *, '---'
         ! subtract elastic energy to determine hydrostatic energy. Temperature
@@ -584,6 +584,48 @@ stop
        ! print *, "  read energy "
         ehmix = ehmix*mixRho
         tmp = zero
+
+        thresh = eps
+
+        where((this%material(1)%VF .LE. thresh) .OR. (this%material(1)%Ys .LE. thresh*this%material(1)%elastic%rho0) )
+             this%material(1)%VF = thresh
+             this%material(1)%Ys = thresh*this%material(1)%elastic%rho0
+        !     this%material(2)%VF = 1-this%material(1)%VF 
+        !     this%material(2)%Ys = 1 - this%material(1)%Ys
+              
+        endwhere
+
+
+        where((this%material(2)%VF .LE. thresh) .OR. (this%material(2)%Ys .LE. thresh/this%material(1)%elastic%rho0) )
+             this%material(2)%VF = thresh
+             this%material(2)%Ys = thresh/this%material(1)%elastic%rho0
+         !    this%material(1)%VF = 1-this%material(2)%VF
+         !    this%material(1)%Ys = 1 - this%material(2)%Ys
+
+        endwhere
+
+
+        where((this%material(1)%VF .GE. 1) .OR. (this%material(1)%Ys .GE. 1) )
+             this%material(1)%VF = 1
+             this%material(1)%Ys = 1
+        endwhere
+
+
+        where((this%material(2)%VF .GE. 1) .OR. (this%material(2)%Ys .GE. 1) )
+             this%material(2)%VF = 1
+             this%material(2)%Ys = 1
+        endwhere
+
+
+        do i = 1, this%ns
+
+          call this%material(i)%getSpeciesDensity(mixRho, rhom)
+
+        enddo
+
+      !   this%material(2)%VF = 1 - this%material(1)%VF
+      !  this%material(2)%Ys = 1 - this%material(1)%Ys
+
         do imat = 1, this%ns
         
       
@@ -593,24 +635,24 @@ stop
 
         ! call this%material(imat)%getSpeciesDensity(mixRho,rhom)
       
-        where( this%material(imat)%VF .lt. this%intSharp_cut)      
+      ! where( this%material(imat)%VF .lt. this%intSharp_cut)      
            !  ehmix = ehmix - gamfac*this%material(imat)%VF
            !ehmix = ehmix - gamfac*this%material(imat)%VF/mixRho
            !  tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%Ys/rhom
-            ehmix = ehmix - gamfac*(this%intSharp_cut)
-            tmp = tmp + this%material(imat)%hydro%onebygam_m1*(this%intSharp_cut)
+      !     ehmix = ehmix - gamfac*(this%intSharp_cut)
+      !     tmp = tmp + this%material(imat)%hydro%onebygam_m1*(this%intSharp_cut)
 
-         elsewhere( this%material(imat)%VF .gt. 1-this%intSharp_cut)
+      !  elsewhere( this%material(imat)%VF .gt. 1-this%intSharp_cut)
 
-           ehmix = ehmix - gamfac*(1-this%intSharp_cut)
-           tmp = tmp + this%material(imat)%hydro%onebygam_m1*(1-this%intSharp_cut)
+      !    ehmix = ehmix - gamfac*(1-this%intSharp_cut)
+      !    tmp = tmp + this%material(imat)%hydro%onebygam_m1*(1-this%intSharp_cut)
 
-         elsewhere
+      !  elsewhere
 
-            ehmix = ehmix - gamfac*this%material(imat)%VF
-            tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
+         ehmix = ehmix - gamfac*this%material(imat)%VF
+         tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
 
-         endwhere
+      !  endwhere
             
 
 
@@ -635,6 +677,14 @@ stop
          ! print *, "  loc: ", minloc(ehmix)
          ! !a(1) = 122; a(2:3) = 1
          ! print *, "Mat1 Ys, VF = ", this%material(1)%Ys(a(1),a(2),a(3)), this%material(1)%VF(a(1),a(2),a(3))
+         ! print *, "Mat2 Ys, VF = ", this%material(2)%Ys(a(1),a(2),a(3)), this%material(2)%VF(a(1),a(2),a(3))
+         ! print *, "Mat1,2 T1   = ", this%material(1)%hydro%gam * this%material(1)%hydro%onebygam_m1 * this%material(1)%hydro%PInf   * this%material(1)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3)),  this%material(2)%hydro%gam * this%material(2)%hydro%onebygam_m1 * this%material(2)%hydro%PInf   * this%material(2)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
+         ! print *, "Mat1,2 eel = ",  this%material(1)%eel(a(1),a(2),a(3)),  this%material(2)%eel(a(1),a(2),a(3))
+         ! print *, "Mat1,2 g11 = ",  this%material(1)%g11(a(1),a(2),a(3)),  this%material(2)%g11(a(1),a(2),a(3))
+         ! print *, "Mat1,2 g22 = ",  this%material(1)%g22(a(1),a(2),a(3)),  this%material(2)%g22(a(1),a(2),a(3))
+         ! print *, "Mix eh      = ",  mixE(a(1),a(2),a(3)), mixE(a(1),a(2),a(3)) -   (this%material(1)%Ys(a(1),a(2),a(3)) * this%material(1)%eel(a(1),a(2),a(3)) + this%material(2)%Ys(a(1),a(2),a(3)) * this%material(2)%eel(a(1),a(2),a(3)) )
+         ! print *, "ehmix      = ",  ehmix(a(1),a(2),a(3))
+         ! print *, "tmp        = ",  tmp(a(1),a(2),a(3))
          ! print *, "Mat2 Ys, VF = ", this%material(2)%Ys(a(1),a(2),a(3)), this%material(2)%VF(a(1),a(2),a(3))
          ! print *, "Mat1,2 T1   = ", this%material(1)%hydro%gam * this%material(1)%hydro%onebygam_m1 * this%material(1)%hydro%PInf   * this%material(1)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3)),  this%material(2)%hydro%gam * this%material(2)%hydro%onebygam_m1 * this%material(2)%hydro%PInf   * this%material(2)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
          ! print *, "Mat1,2 eel = ",  this%material(1)%eel(a(1),a(2),a(3)),  this%material(2)%eel(a(1),a(2),a(3))
@@ -744,7 +794,7 @@ stop
          do imat = 1, this%ns
 
              this%material(imat)%p = mixP
-            call this%material(imat)%get_ehydroT_from_p(mixRho)
+             call this%material(imat)%get_ehydroT_from_p(mixRho)
             ! call this%material(imat)%getSpeciesDensity(mixRho,rhom)
 
             ! e_species = this%material(imat)%eh
@@ -1793,7 +1843,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint, VFint,uFVint,vFVint,wFVint,gFVint,gtFVint,gpFVint,rhoFVint, kernel
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,antiDiff,mask,RhoYsbound,filt,antiDiffFV,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i, VF_RHS_i, Kij_coeff_i
 
@@ -1848,27 +1898,56 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
            else if(this%usePhiForm) then
 
+             VF_fil = this%material(i)%VF
+
+             call filter3D(this%decomp, this%fil, VF_fil,iflag, x_bc,y_bc,z_bc)
 
              !! Construct xi and account for outbounds behaviour
              where( this%material(i)%VF .GE. 1-this%intSharp_cut)
-                 this%xi = this%intSharp_eps*log( ( 1-2*this%intSharp_cut + e )/ (e))*(1/(1-2*this%intSharp_cut))
+                 this%xi(:,:,:,i) = this%intSharp_eps*log( ( 1-2*this%intSharp_cut + e )/ (e))*(1/(1-2*this%intSharp_cut))
 
              elsewhere( this%material(i)%VF .LE. this%intSharp_cut )
-                 this%xi = this%intSharp_eps*log( ( e )/ (1 -2*this%intSharp_cut+ e))*(1/(1-2*this%intSharp_cut))
+                 this%xi(:,:,:,i) = this%intSharp_eps*log( ( e )/ (1 -2*this%intSharp_cut + e))*(1/(1-2*this%intSharp_cut))
 
 
              elsewhere
-                 this%xi = this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( this%material(i)%VF - this%intSharp_cut + e )/ (1 - this%intSharp_cut - this%material(i)%VF + e) )
+                 this%xi(:,:,:,i) = this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( this%material(i)%VF - this%intSharp_cut + e )/ (1 - this%intSharp_cut - this%material(i)%VF + e) )
 
              endwhere
-             
 
+          !  where( this%material(i)%VF .GE. 1-this%intsharp_cut)
+          !       this%xi(:,:,:,i) = this%intSharp_eps*log( (1-this%intsharp_cut + e )/ (this%intsharp_cut + e))
+          !  elsewhere( this%material(i)%VF .LE. this%intSharp_cut )
+          !       this%xi(:,:,:,i) = this%intSharp_eps*log( ( e + this%intsharp_cut)/ (1-this%intSharp_cut + e))
+          !  elsewhere
+          !       this%xi(:,:,:,i) = this%intSharp_eps*log( ( this%material(i)%VF + e )/ (1  - this%material(i)%VF + e) )
+
+          !  endwhere
+
+!             where( VF_fil .GE. 1-this%intSharp_cut)
+!                 this%xi(:,:,:,i) = this%intSharp_eps*log( (1-2*this%intSharp_cut + e )/ (e))*(1/(1-2*this%intSharp_cut))
+
+!             elsewhere( VF_fil .LE. this%intSharp_cut )
+!                 this%xi(:,:,:,i) = this%intSharp_eps*log( ( e )/ (1-2*this%intSharp_cut + e))*(1/(1-2*this%intSharp_cut))
+
+
+!             elsewhere
+!                 this%xi(:,:,:,i) =this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( VF_fil -this%intSharp_cut + e )/ (1 - this%intSharp_cut - VF_fil + e) )
+
+!             endwhere
+
+
+         !    call filter3D(this%decomp, this%fil, this%xi(:,:,:,1),iflag, x_bc, y_bc,z_bc)
+         !    call filter3D(this%decomp, this%fil, this%xi(:,:,:,2), iflag,x_bc,y_bc,z_bc)
+         !    call filter3D(this%decomp, this%fil, this%xi(:,:,:,3), iflag,x_bc,y_bc,z_bc)
+
+          
            !  call filter3D(this%decomp, this%fil, this%xi, iflag, x_bc,y_bc,z_bc)
 
              if(this%intSharp_d02) then       
-               call gradient(this%decomp,this%derD02,this%xi,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3)) !low order
+               call gradient(this%decomp,this%derD02,this%xi(:,:,:,i),gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3)) !low order
              else
-               call gradient(this%decomp,this%derD06,this%xi,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3))
+               call gradient(this%decomp,this%derD06,this%xi(:,:,:,i),gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3))
              endif
                            
 
@@ -1905,6 +1984,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
           else !high order FD -- high order norm with FV is stable
               !magnitude of surface vector
+            
+           call filter3D(this%decomp, this%gfil, gradVF(:,:,:,1), iflag,x_bc, y_bc,z_bc)
+           call filter3D(this%decomp, this%gfil, gradVF(:,:,:,2), iflag,x_bc,y_bc,z_bc)
+           call filter3D(this%decomp, this%gfil, gradVF(:,:,:,3), iflag,x_bc,y_bc,z_bc)
+
+
               GVFmag = sqrt( gradVF(:,:,:,1)**two + gradVF(:,:,:,2)**two + gradVF(:,:,:,3)**two )
 
               !surface normal
@@ -1922,8 +2007,13 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            
          if (this%usePhiForm) then
            !magnitude of surface vector
+  
+        !  call filter3D(this%decomp, this%gfil, gradphi(:,:,:,1), iflag, x_bc, y_bc,z_bc)
+        !  call filter3D(this%decomp, this%gfil, gradphi(:,:,:,2), iflag, x_bc,y_bc,z_bc)
+        !  call filter3D(this%decomp, this%gfil, gradphi(:,:,:,3), iflag, x_bc,y_bc,z_bc)
            GVFmag = sqrt( gradphi(:,:,:,1)**two + gradphi(:,:,:,2)**two + gradphi(:,:,:,3)**two )
-      
+
+
            !surface normal
            where (GVFmag < eps)
               norm(:,:,:,1) = zero
@@ -1942,6 +2032,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                call filter3D(this%decomp, this%gfil, norm(:,:,:,2), iflag, x_bc, y_bc,z_bc)
                call filter3D(this%decomp, this%gfil, norm(:,:,:,3), iflag, x_bc, y_bc,z_bc)
            ! endif
+
+            this%norm = norm
 
 
            !2nd order finite volume discretization
@@ -3116,16 +3208,18 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                
           !! Construct xi and account for outbounds behaviour
-          where( this%material(1)%VF .GT. 1)
-             xi = this%intSharp_eps*log( ( 1 + e )/ ( e))
+          where( this%material(1)%VF .GE. 1)
+                 xi = this%intSharp_eps*log( ( 1-this%intSharp_cut+ e )/ (-1+e))*(1/(1-2*this%intSharp_cut))
 
-          elsewhere( this%material(1)%VF .LT. 0)
-             xi = this%intSharp_eps*log( ( e )/ (1 + e) )
+             elsewhere( this%material(1)%VF .LE. eps )
+                 xi = this%intSharp_eps*log( ( e-this%intSharp_cut + abs(this%material(1)%VF) )/ (1 -this%intSharp_cut-abs(this%material(1)%VF) + e))*(1/(1-2*this%intSharp_cut))
 
-          elsewhere
-             xi = this%intSharp_eps*log( ( this%material(1)%VF + e )/ (1-this%material(1)%VF + e) )
 
-          endwhere
+             elsewhere
+                 xi = this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( this%material(1)%VF -this%intSharp_cut + e )/ (1 - this%intSharp_cut - this%material(1)%VF + e) )
+
+             endwhere
+
 
           call gradient(this%decomp,this%der,xi,gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3)) 
 
@@ -3361,6 +3455,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
        endif
 
+       
+       where( this%material(1)%VF .LE. 2d-6)
+
+          this%kappa = 0
+
+       endwhere
 
 
 
@@ -4304,14 +4404,6 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 !           !    if(urlx.ge.two) goto 10
 !           ! enddo
-
-
-
-
-
-
-
-!           ! urlx0 = 1.01
 !           ! urlx0 = one + (urlx0-one)*(0.5*(1.0+tanh((1.0-real(ii)/(0.5*itmax))/0.1))) !reduce step size for increasing iterations
 !           ! urlx  = urlx0
           
