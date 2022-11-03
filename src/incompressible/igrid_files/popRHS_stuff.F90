@@ -298,4 +298,10 @@
             call this%addForcedStratification()
        end if 
 
+       ! Step 12: Immersed Bodies 
+       if (allocated(this%immersedBodies)) then 
+         do idx = 1, size(this%immersedBodies)
+            call this%immersedBodies(idx)%updateRHS(this%u, this%v, this%w, this%u_rhs, this%v_rhs, this%w_rhs, this%dt) 
+         end do 
+       end if 
    end subroutine 

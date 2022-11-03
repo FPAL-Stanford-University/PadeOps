@@ -26,6 +26,7 @@ module IncompressibleGrid
     use scalar_igridMod, only: scalar_igrid 
     use io_hdf5_stuff, only: io_hdf5 
     use PoissonPeriodicMod, only: PoissonPeriodic
+    use immersedbodyMod, only: immersedBody 
 
     implicit none
 
@@ -95,9 +96,10 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsE
 
+        type(immersedBody), dimension(:), allocatable :: immersedBodies 
 
         type(padepoisson), allocatable :: padepoiss
-        real(rkind), dimension(:,:,:), allocatable :: divergence
+        real(rkind), dimension(:,:,:), allocatable :: divergence, zE
 
         real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat, uEhat, vEhat
@@ -431,7 +433,9 @@ contains
         integer :: MeanTIDX, MeanRID, vizDump_schedule = 0    
         character(len=clen) :: MeanFilesDir, powerDumpDir 
         logical :: WriteTurbineForce = .false., useforcedStratification = .false., useDynamicYaw = .FALSE. 
-        integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0
+        integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0, numberOfImmersedBodies = 0
+        logical :: useImmersedBodies = .false. 
+        real(rkind) :: immersed_taufact = 1.d0 
 
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -441,7 +445,7 @@ contains
                     & t_stop_pointProbe, t_pointProbe
         namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,useforcedStratification,&
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection, useHITRealSpaceLinearForcing, HITForceTimeScale
+                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection, useHITRealSpaceLinearForcing, HITForceTimeScale, useImmersedBodies, numberOfImmersedBodies, immersed_taufact  
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
@@ -588,6 +592,7 @@ contains
        ! STEP 3: GENERATE MESH (CELL CENTERED) 
        if ( allocated(this%mesh) ) deallocate(this%mesh) 
        allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
+       allocate(this%zE(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
        call meshgen_WallM(this%gpC, this%dx, this%dy, &
            this%dz, this%mesh,inputfile) ! <-- this procedure is part of user defined HOOKS
        this%zTop = p_maxval(this%mesh(:,:,:,3)) + this%dz/2.d0
@@ -839,18 +844,19 @@ contains
            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
        end if  
 
+        zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
+        zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
+        call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
+        call transpose_y_to_z(zinY,zinZ,this%gpC)
+        call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
+        zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
+        call transpose_z_to_y(zEinZ,zEinY,this%gpE)
+        call transpose_y_to_x(zEinY,this%zE, this%gpE)
+
         ! STEP 11: Initialize SGS model
         allocate(this%SGSmodel)
         if (this%useSGS) then
             ! First get z at edges
-            zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
-            zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
-            call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
-            call transpose_y_to_z(zinY,zinZ,this%gpC)
-            call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
-            zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
-            call transpose_z_to_y(zEinZ,zEinY,this%gpE)
-            call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
 
             if ((this%initSpinup) .or. (this%useScalars) .or. (this%isStratified)) then
                sgsmod_stratified = .true. 
@@ -858,7 +864,7 @@ contains
                sgsmod_stratified = .false. 
             end if 
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
-                                    this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
+                                    this%zE(1,1,:), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
                                     this%ThetaRef, this%wTh_surf, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, &
@@ -1228,6 +1234,15 @@ contains
        elseif (this%initSpinup) then
             this%BuoyancyFact = one/(this%Fr*this%Fr*this%ThetaRef)
             call this%sgsModel%set_BuoyancyFactor(this%BuoyancyFact)
+       end if 
+
+       ! STEP 22: immersedBodies 
+       if (useImmersedBodies) then 
+         allocate(this%immersedBodies(numberOfImmersedBodies))
+         do idx = 1, numberOfImmersedBodies 
+            call this%immersedBodies(idx)%init(this%spectC, this%spectE, this%gpC, this%gpE, this%sp_gpC, this%sp_gpE, immersed_taufact, & 
+                this%rbuffxC(:,:,:,1), this%rbuffxE(:,:,:,1), this%cbuffyC(:,:,:,1), this%cbuffyE(:,:,:,1))
+         end do 
        end if 
 
        ! STEP 22a: Set moisture
