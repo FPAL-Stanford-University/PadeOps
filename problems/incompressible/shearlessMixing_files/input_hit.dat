@@ -1,17 +1,17 @@
 &INPUT
-inputdir              = "/anvil/scratch/x-ryanhass/LES/HITdecay/SpatialDecay40/output/HITdata"   ! Directory for any input files
-outputdir             = "/anvil/scratch/x-ryanhass/LES/HITdecay/SpatialDecay40/output/HITdata"   ! Directory for all output files
+inputdir              = "/anvil/scratch/x-ryanhass/LES/HITforced/HIT64_forced1/output"   ! Directory for any input files
+outputdir             = "/anvil/scratch/x-ryanhass/LES/HITforced/HIT64_forced1/output"   ! Directory for all output files
 nx                    = 64          ! Number of points in X
 ny                    = 64          ! Number of points in Y
-nz                    = 128          ! Number of points in Z
-tstop                 = 12800.D-2    ! Physical time to stop the simulation
+nz                    = 64          ! Number of points in Z
+tstop                 = 12800.D8    ! Physical time to stop the simulation
 CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 5.D-3        ! Fixed time step value (only used if CFL is set to negative)
+dt                    = 6.D-3        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile        = .TRUE.       ! Set to false if it's a fresh simulation 
-restartFile_TID       = 00         ! TimeID of the restart file being used
+restartFile_TID       = 300000       ! TimeID of the restart file being used
 restartFile_RID       = 1            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
@@ -32,8 +32,8 @@ donot_dealias         = .FALSE.
 /
 &IO
 RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 100       ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 500       ! Data dumping frequency (# of timesteps)
+t_restartDump         = 100000       ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump            = 100000       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes            = .FALSE.    ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump           = 100        ! Plane dumping frequency (# of timesteps)
@@ -174,15 +174,16 @@ nKSvertFilt           = 1
 Nwaves = 20
 kmin = 3.d0
 kmax = 5.d0
-EpsAmplitude = 0.00225d0
+EpsAmplitude = 2.25d0
 RandSeedToAdd = 1234
-DomAspectRatioZ = 2
+DomAspectRatioZ = 5
+version = 2
 /
 /
 &HIT_PeriodicINPUT
 Lx                    = 6.283185307179586d0
 Ly                    = 6.283185307179586d0
-Lz                    = 12.56637061435917d0 
+Lz                    = 6.283185307179586d0
 /
 /
 &SCALARS

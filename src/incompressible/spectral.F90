@@ -62,7 +62,7 @@ module spectralMod
         integer(kind=8) :: plan_c2c_bwd_z_oop
         integer(kind=8) :: plan_c2c_bwd_z_ip
         integer(kind=8) :: plan_r2c_z, plan_c2r_z 
-        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact
+        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact, yshiftfact, zshiftfact
         real(rkind), dimension(:), allocatable, public :: k1inZ, k2inZ, k3inZ
 
         real(rkind), dimension(:), allocatable :: mk3sq
@@ -91,6 +91,7 @@ module spectralMod
             procedure           :: mTimes_ik1_ip
             procedure           :: mTimes_ik2_oop
             procedure           :: mTimes_ik2_ip
+            procedure           :: mTimes_ik3_ip
             procedure           :: TestFilter_ip
             procedure           :: TestFilter_oop
             procedure           :: SurfaceFilter_ip
@@ -157,12 +158,14 @@ module spectralMod
 
 contains
 
-      subroutine bandpassFilter_and_PhaseShift(this, uhat, uFilt, xshift)
+      subroutine bandpassFilter_and_PhaseShift(this, uhat, uFilt, xshift, coord)
          use constants, only: imi
          class(spectral),  intent(inout)         :: this
          complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in) :: uhat 
          real(rkind)   , dimension(this%physdecomp%xsz(1),this%physdecomp%xsz(2), this%physdecomp%xsz(3)), intent(out) :: uFilt
          real(rkind), intent(in) :: xShift 
+         character(len=1), intent(in), optional :: coord
+         character(len=1) :: coordShift = 'x'
          integer :: k, j, i
 
          call transpose_y_to_z(uhat, this%cbuffz_bp, this%spectdecomp)
@@ -173,17 +176,45 @@ contains
          !   this%cbuffz_bp = zero
          !end where
       
+         if (present(coord)) coordShift = coord
+         select case (coordShift)
+           case ('x')
+             this%xshiftfact = exp(-imi*this%k1inZ*xshift)
+           case ('y')
+             this%yshiftfact = exp(-imi*this%k2inZ*xshift)
+           case ('z')
+             this%zshiftfact = exp(-imi*this%k3inZ*xshift)
+         end select
 
-         this%xshiftfact = exp(-imi*this%k1inZ*xshift)
-         do k = 1,size(this%cbuffz_bp,3)
-            do j = 1,size(this%cbuffz_bp,2)
-               !$omp simd 
-	    	      do i = 1,size(this%cbuffz_bp,1)
-                  !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
-                  this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
-	       	   end do 
-            end do 
-         end do 
+         select case (coordShift)
+           case ('x')
+             do k = 1,size(this%cbuffz_bp,3)
+                do j = 1,size(this%cbuffz_bp,2)
+                   !$omp simd 
+                   do i = 1,size(this%cbuffz_bp,1)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
+                   end do 
+                end do 
+             end do 
+           case('y')
+             do k = 1,size(this%cbuffz_bp,3)
+                do j = 1,size(this%cbuffz_bp,2)
+                   !$omp simd 
+                   do i = 1,size(this%cbuffz_bp,1)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%yshiftfact(j)
+                   end do 
+                end do 
+             end do 
+           case ('z')
+             do k = 1,size(this%cbuffz_bp,3)
+                do j = 1,size(this%cbuffz_bp,2)
+                   !$omp simd 
+                   do i = 1,size(this%cbuffz_bp,1)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%zshiftfact(k)
+                   end do 
+                end do 
+             end do 
+         end select
 
          call this%take_ifft1d_z2z_ip(this%cbuffz_bp)
          call transpose_z_to_y(this%cbuffz_bp, this%cbuffy_bp, this%spectdecomp)
@@ -194,8 +225,10 @@ contains
       subroutine init_bandpass_filter(this, kleft, kright, cbuffz, cbuffy)
          class(spectral),  intent(inout)         :: this
          real(rkind), intent(in) :: kleft, kright
-         complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in), target :: cbuffy
-         complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(in), target :: cbuffz
+         complex(rkind), dimension(this%spectdecomp%ysz(1),&
+           this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in), target :: cbuffy
+         complex(rkind), dimension(this%spectdecomp%zsz(1),&
+           this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(in), target :: cbuffz
          real(rkind), dimension(:,:,:), allocatable :: rbuffz1, rbuffz2
         
          this%cbuffz_bp => cbuffz
@@ -329,6 +362,24 @@ contains
             end do 
         end do 
 
+    end subroutine
+
+    subroutine mTimes_ik3_ip(this, fin)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fin
+        integer :: i, j, k
+        real(rkind) :: rpart, ipart
+        
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                !$omp simd 
+                do i = 1,this%fft_size(1)
+                    rpart = -this%k3(i,j,k)*dimag(fin(i,j,k))
+                    ipart = this%k3(i,j,k)*dreal(fin(i,j,k))
+                    fin(i,j,k) = dcmplx(rpart,ipart)
+                end do 
+            end do 
+        end do 
     end subroutine
 
     subroutine dealias(this, fhat)
@@ -968,7 +1019,6 @@ contains
          end select 
      
          !allocate(this%k1inZ(size(this%k1,1)))
-         !allocate(this%xshiftfact(size(this%k1,1)))
          !this%k1inZ = this%k1(:,1,1)
 
          allocate(this%k1inZ(size(rbuffz,1)))
@@ -989,6 +1039,7 @@ contains
          end select 
 
          allocate(this%k2inZ(size(rbuffz,2)))
+         allocate(this%yshiftfact(size(rbuffz,2)))
          this%k2inZ = rbuffz(1,:,1)
          
          
@@ -1005,6 +1056,7 @@ contains
             end where
          end select 
          allocate(this%k3inZ(size(rbuffz,3)))
+         allocate(this%zshiftfact(size(rbuffz,3)))
          this%k3inZ = rbuffz(1,1,:)
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &

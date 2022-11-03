@@ -9,14 +9,14 @@ module random
    
     implicit none
     private 
-    public :: uniform_random, gaussian_random
+    public :: uniform_random, gaussian_random, randperm
 
     interface uniform_random
         module procedure unrand3R, unrand2R, unrand1R, unrand0R
     end interface 
     interface gaussian_random
         module procedure grand3R, grand2R, grand1R
-    end interface 
+    end interface
 contains
 
     subroutine grand3R(array,mu,sigma,seed)
@@ -174,19 +174,62 @@ contains
         array = array + left
     end subroutine
 
-    subroutine unrand0R(val,left, right)
+    subroutine unrand0R(val,left, right, seed)
         real(rkind), intent(inout) :: val
         real(rkind), intent(in) :: left, right
+        integer, intent(in), optional :: seed
+        integer, allocatable :: iseed(:)
         real(rkind) :: diff
+        integer :: n
 
         diff = right - left
+
+        if (present(seed)) then
+            call random_seed(size = n)
+            allocate(iseed(n))
+            iseed = seed
+            call random_seed(put=iseed)
+            deallocate(iseed)
+        else
+            call init_random_seed()
+        end if 
     
-        call init_random_seed()
         call random_number(val)
         val = diff*val
         val = val + left
     end subroutine
 
+    subroutine randperm(N,seed,arrout)
+      use fortran_assert, only: assert
+      use arrayTools,     only: swap
+      ! Return an array of size N with elements ranging 1:N without
+      ! repitition and randomly ordered
+      integer, intent(in) :: N, seed
+      integer, dimension(N), intent(out) :: arrout
+      integer :: i, a, newseed
+      real(rkind) :: val
+
+      do i = 1,N
+        arrout(i) = i
+      end do
+      
+      newseed = seed
+      do i = 1,N-1
+        ! Ensure seed isn't close to max possible integer value
+        call assert(abs(huge(0) - newseed) > 1000000,&
+          'Seed value exceeds maximum representable integer -- random.F90')
+        
+        call uniform_random(val,real(i,rkind),real(N,rkind),newseed)
+        a = nint(val)
+
+        ! Swap arrout(i) with arrout(a)
+        call swap(arrout,a,i)
+
+        ! Update seed
+        newseed = seed + 125932
+      end do
+
+    end subroutine
 
     subroutine init_random_seed()
         ! Taken from GNU 
