@@ -1,17 +1,24 @@
-subroutine renderLocalVelocity(this)
+subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     use exits,     only: message
     use omp_lib,   only: omp_get_thread_num, omp_get_num_threads
     use decomp_2d, only: nrank
+    ! Render the velocity local to the MPI rank
+    ! INPUTS:
+    !   x, y, z     --> Gabor mode location
+    !   kx, ky,kz   --> Gabor mode wave-vector components 
+    !   uR, uI, ... --> Gabor mode velocity amplitudes
     
     class(enrichmentOperator), intent(inout) :: this
+    real(rkind), dimension(:), intent(in) :: uR, uI, vR, vI, wR, wI, x, y, z, &
+      kx, ky, kz
     integer :: n
     real(rkind) :: small = 1.d-14
     character(len=clen) :: mssg
     real(single_kind) :: kdotx, kdotx2, kdotx3
     integer :: i, j, k, iist, iien, jjst, jjen, kkst, kken
     integer :: ist, ien, jst, jen, kst, ken
-    real(single_kind) :: cs, ss, fx, fy, fz, f, xF, yF, zF, kx, ky, kz
-    real(single_kind) :: uR, uI, vR, vI, wR, wI, x, y, z, dx, dy, dz
+    real(single_kind) :: cs, ss, fx, fy, fz, f, xF, yF, zF, kxs, kys, kzs
+    real(single_kind) :: uRs, uIs, vRs, vIs, wRs, wIs, xs, ys, zs, dx, dy, dz
     real(single_kind) :: wxSupport, wySupport, wzSupport, du, dv, dw
     integer :: tid
 
@@ -34,15 +41,6 @@ subroutine renderLocalVelocity(this)
     kst = this%smallScales%gpC%xst(3) 
     ken = this%smallScales%gpC%xen(3)
 
-    ! Zero the arrays
-    this%utmp = 0.e0
-    this%vtmp = 0.e0
-    this%wtmp = 0.e0
-
-    this%smallScales%u  = 0.d0
-    this%smallScales%v  = 0.d0
-    this%smallScales%wC = 0.d0
-
     !$OMP PARALLEL &
     !$OMP PRIVATE(tid,n,i,j,k,kdotx,kdotx3,kdotx2,fx,fy,fz,f) &
     !$OMP PRIVATE(cs,ss,iist,iien,jjst,jjen,kkst,kken)
@@ -54,52 +52,52 @@ subroutine renderLocalVelocity(this)
       ! NOTE: The contribution of Gabor modes on neighboring processes is not
       ! accounted for here, nor is the periodic contribution for periodic
       ! directions whose data resides exlusively on the process (e.g. in x)
-      iist = max(ceiling((this%x(n)+small)/this%smallScales%dx) - this%nxsupp/2, ist)
-      iien = min(floor(  (this%x(n)+small)/this%smallScales%dx) + this%nxsupp/2, ien)
+      iist = max(ceiling((x(n)+small)/this%smallScales%dx) - this%nxsupp/2, ist)
+      iien = min(floor(  (x(n)+small)/this%smallScales%dx) + this%nxsupp/2, ien)
 
-      jjst = max(ceiling((this%y(n)+small)/this%smallScales%dy) - this%nysupp/2, jst)
-      jjen = min(floor(  (this%y(n)+small)/this%smallScales%dy) + this%nysupp/2, jen)
+      jjst = max(ceiling((y(n)+small)/this%smallScales%dy) - this%nysupp/2, jst)
+      jjen = min(floor(  (y(n)+small)/this%smallScales%dy) + this%nysupp/2, jen)
 
-      kkst = max(ceiling((this%z(n)+small)/this%smallScales%dz) - this%nzsupp/2, kst)
-      kken = min(floor(  (this%z(n)+small)/this%smallScales%dz) + this%nzsupp/2, ken)
+      kkst = max(ceiling((z(n)+small)/this%smallScales%dz) - this%nzsupp/2, kst)
+      kken = min(floor(  (z(n)+small)/this%smallScales%dz) + this%nzsupp/2, ken)
 
       ! Cast variables to single precision
-      kx = castSingle(this%kx(n))
-      ky = castSingle(this%ky(n))
-      kz = castSingle(this%kz(n))
+      kxs = castSingle(kx(n))
+      kys = castSingle(ky(n))
+      kzs = castSingle(kz(n))
       
-      x  = castSingle(this%x(n))
-      y  = castSingle(this%y(n))
-      z  = castSingle(this%z(n))
+      xs  = castSingle(x(n))
+      ys  = castSingle(y(n))
+      zs  = castSingle(z(n))
 
-      uR = castSingle(this%uhatR(n))
-      uI = castSingle(this%uhatI(n))
-      vR = castSingle(this%vhatR(n))
-      vI = castSingle(this%vhatI(n))
-      wR = castSingle(this%whatR(n))
-      wI = castSingle(this%whatI(n))
+      uRs = castSingle(uR(n))
+      uIs = castSingle(uI(n))
+      vRs = castSingle(vR(n))
+      vIs = castSingle(vI(n))
+      wRs = castSingle(wR(n))
+      wIs = castSingle(wI(n))
 
       do k = kkst,kken
         zF = dz*castSingle(k - 1)
-        kdotx3 = kz*(zF - z)
-        fz = cos(pi*(zF - z)/wzSupport)
+        kdotx3 = kzs*(zF - zs)
+        fz = cos(pi*(zF - zs)/wzSupport)
         do j = jjst,jjen
           yF = dy*castSingle(j - 1)
-          kdotx2 = ky*(yF - y)
-          fy = cos(pi*(yF - y)/wySupport)
+          kdotx2 = kys*(yF - ys)
+          fy = cos(pi*(yF - ys)/wySupport)
           do i = iist,iien
             xF = dx*castSingle(i - 1)
-            kdotx = kdotx2 + kdotx3 + kx*(xF - x)
+            kdotx = kdotx2 + kdotx3 + kxs*(xF - xs)
 
             cs = cos(kdotx)
             ss = sin(kdotx)
 
-            fx = cos(pi*(xF - x)/wxSupport)
+            fx = cos(pi*(xF - xs)/wxSupport)
             f = fx*fy*fz
 
-            du = 2.d0*f*(uR*cs - uI*ss)
-            dv = 2.d0*f*(vR*cs - vI*ss)
-            dw = 2.d0*f*(wR*cs - wI*ss)
+            du = 2.d0*f*(uRs*cs - uIs*ss)
+            dv = 2.d0*f*(vRs*cs - vIs*ss)
+            dw = 2.d0*f*(wRs*cs - wIs*ss)
 
             this%utmp(i,j,k,tid+1) = this%utmp(i,j,k,tid+1) + du 
             this%vtmp(i,j,k,tid+1) = this%vtmp(i,j,k,tid+1) + dv 

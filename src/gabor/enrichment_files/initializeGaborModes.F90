@@ -283,9 +283,7 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   real(rkind), dimension(3,3), intent(out) :: dudx
   real(rkind), intent(out) :: L, KE, U, V, W
   integer :: i, j, idx, QHx, QHy, QHz
-  logical, dimension(3) :: periodicBCs
 
-  call this%largeScales%getPeriodicBCs(periodicBCs)
   call interpToLocation(this%uh, U, this%largeScales%gpC,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%x(gmID), this%y(gmID), this%z(gmID), periodicBCs)

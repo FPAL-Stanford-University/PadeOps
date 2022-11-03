@@ -1,6 +1,6 @@
 module enrichmentMod
-  use kind_parameters,    only: rkind, clen, single_kind, castSingle
-  use incompressibleGrid, only: igrid
+  use kind_parameters,    only: rkind, clen, single_kind, castSingle, mpirkind
+  use incompressibleGrid, only: igrid, prow, pcol
   use QHmeshMod,          only: QHmesh
   use exits,              only: message
   use constants,          only: pi
@@ -8,9 +8,17 @@ module enrichmentMod
   use omp_lib
   use gaborHooks
   use timer,              only: tic, toc
+  use decomp_2d,          only: DECOMP_2D_COMM_CART_X, nrank, nproc
+  use mpi
+  use reductions,         only: p_maxval, p_minval
   implicit none
 
   integer :: nthreads
+  integer, dimension(4) :: neighbour
+  integer, dimension(2) :: coords, dims
+  logical, dimension(3) :: periodicBCs
+
+  real(rkind), dimension(2) :: xDom, yDom, zDom
 
   type :: enrichmentOperator
     real(rkind), dimension(:), allocatable :: kx, ky, kz
@@ -41,6 +49,11 @@ module enrichmentMod
     
     ! Extra memory for velocity rendering
     real(single_kind), dimension(:,:,:,:),   allocatable :: utmp,vtmp,wtmp
+    real(rkind), dimension(:,:), allocatable :: haloBuff ! Store info of modes
+                                                         ! on neighbor ranks 
+                                                         ! that are within the 
+                                                         ! support window "halo"
+    real(rkind), dimension(:,:), allocatable :: sendBuff
 
     ! Misc
     logical :: debugChecks = .false.
@@ -61,6 +74,12 @@ module enrichmentMod
       procedure          :: dumpData
       procedure, private :: doDebugChecks
       procedure, private :: updateSeeds
+      procedure, private :: runTests
+
+      ! MPI communication stuff
+      procedure, private :: sendRecvHaloModes
+      procedure, private :: howManyHaloModes
+      procedure, private :: copyMode
   end type
 
 contains
@@ -68,14 +87,17 @@ contains
   include 'enrichment_files/renderVelocity.F90'
   include 'enrichment_files/gaborIO.F90'
   include 'enrichment_files/debugChecks.F90'
+  include 'enrichment_files/MPIstuff.F90'
+  include 'enrichment_files/tests.F90'
 
-  subroutine init(this,smallScales,largeScales,inputfile,Lx,Ly,Lz)
+  subroutine init(this,smallScales,largeScales,inputfile,testOnly)
     use GaborModeRoutines, only: computeKminKmax
     
     class(enrichmentOperator), intent(inout) :: this 
     class(igrid), intent(inout), target :: smallScales, largeScales
-    real(rkind), intent(in) :: Lx, Ly, Lz
     character(len=*), intent(in) :: inputfile
+    logical, intent(in), optional :: testOnly
+    logical :: doTestOnly = .false.
     character(len=clen) :: outputdir
     integer :: ierr, ioUnit
     integer :: nk, ntheta
@@ -126,6 +148,19 @@ contains
     this%outputdir = outputdir
     this%writeIsotropicModes = writeIsotropicModes
 
+    if (present(testOnly)) doTestOnly = testOnly
+
+    ! Get domain boundaries
+    xDom(1) = p_minval(this%largeScales%mesh(1,1,1,1))
+    xDom(2) = p_maxval(this%largeScales%mesh(this%largeScales%gpC%xsz(1),1,1,1)) &
+      + this%largeScales%dx
+    yDom(1) = p_minval(this%largeScales%mesh(1,1,1,2))
+    yDom(2) = p_maxval(this%largeScales%mesh(1,this%largeScales%gpC%xsz(2),1,2)) &
+      + this%largeScales%dy
+    zDom(1) = p_minval(this%largeScales%mesh(1,1,1,3))
+    zDom(2) = p_maxval(this%largeScales%mesh(1,1,this%largeScales%gpC%xsz(3),3)) &
+      + this%largeScales%dz
+
     ! STEP  0: Get filenames for u, v and w from (input file?) for initialization
     ! Use the same file-naming convention for PadeOps restart files: 
     ! RESTART_Run00_u.000000
@@ -153,7 +188,7 @@ contains
       this%QHgrid%nx*this%QHgrid%ny*this%QHgrid%nz
     
     ! Compute kmin and kmax based on LES and high-resolution grids 
-    call computeKminKmax(Lx, Ly, Lz, &
+    call computeKminKmax(xDom(2)-xDom(1), yDom(2)-yDom(1), zDom(2)-zDom(1), &
       this%largeScales%nx, this%largeScales%ny, this%largeScales%nz, &
       this%smallScales%nx, this%smallScales%ny, this%smallScales%nz, &
       this%kmin, this%kmax)
@@ -170,14 +205,23 @@ contains
     allocate(this%utmp(ist:ien,jst:jen,kst:ken,nthreads))
     allocate(this%vtmp(ist:ien,jst:jen,kst:ken,nthreads))
     allocate(this%wtmp(ist:ien,jst:jen,kst:ken,nthreads))
+
+    ! Set things up for distributed memory
+    call getNeighbours(neighbour)
+    call getMPIcartCoords(coords)
+    dims = [prow,pcol]
+    call this%largeScales%getPeriodicBCs(periodicBCs)
     
-    ! Initialize the Gabor modes
-    call this%generateIsotropicModes()
-    if (this%writeIsotropicModes) call this%dumpData()
-    if (this%strainInitialCondition) call this%strainModes()
+    if (doTestOnly) then
+      call this%runTests()
+    else
+      ! Initialize the Gabor modes
+      call this%generateIsotropicModes()
+      if (this%writeIsotropicModes) call this%dumpData()
+      if (this%strainInitialCondition) call this%strainModes()
 
-    call this%wrapupTimeStep()
-
+      call this%wrapupTimeStep()
+    end if
   end subroutine
 
   subroutine destroy(this)
@@ -204,6 +248,8 @@ contains
     if (allocated(this%utmp))     deallocate(this%utmp)
     if (allocated(this%vtmp))     deallocate(this%vtmp)
     if (allocated(this%wtmp))     deallocate(this%wtmp)
+    if (allocated(this%haloBuff)) deallocate(this%haloBuff)
+    if (allocated(this%sendBuff)) deallocate(this%sendBuff)
 
     call this%QHgrid%destroy()
   end subroutine 
@@ -233,14 +279,40 @@ contains
 
   subroutine renderVelocity(this)
     class(enrichmentOperator), intent(inout) :: this 
+    
+    ! Zero the velocity arrays
+    this%utmp = 0.e0
+    this%vtmp = 0.e0
+    this%wtmp = 0.e0
+
+    this%smallScales%u  = 0.d0
+    this%smallScales%v  = 0.d0
+    this%smallScales%wC = 0.d0
+    
+    ! Ryan
+    ! STEP 1: Render local velocity
+    call this%renderLocalVelocity(this%x,this%y,this%z,this%kx,this%ky,this%kz,&
+      this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI)
 
     ! Aditya & Ryan 
-    ! STEP 1: Exchange Gabor modes from neighbors that have influence on your domain 
+    ! STEP 2: Exchange Gabor modes from neighbors that have influence on your domain 
+    call this%sendRecvHaloModes(this%haloBuff)
 
+    ! Add halo contribution
+    call this%renderLocalVelocity(this%haloBuff(:,1), this%haloBuff(:,2), &
+      this%haloBuff(:,3), this%haloBuff(:,4), this%haloBuff(:,5), &
+      this%haloBuff(:,6), this%haloBuff(:,7), this%haloBuff(:,8), &
+      this%haloBuff(:,9), this%haloBuff(:,10), this%haloBuff(:,11), &
+      this%haloBuff(:,12))
 
-    ! Ryan
-    ! STEP 2: Render local velocity
-    call this%renderLocalVelocity()
+    if (periodicBCs(1)) then
+      ! TODO:
+      ! Need to make copies of modes on the periodic boundary and shift their
+      ! location by Lx (or -Lx) and then pass them back through the velocity
+      ! rendering routine. See the way this is handled for y and z in
+      ! this%sendRecvHaloModes()
+      call assert(.false.) 
+    end if
 
     ! TODO:
     ! Step 2.b: interpolate wC to w. Do we need to get uhat, vhat, what from u,

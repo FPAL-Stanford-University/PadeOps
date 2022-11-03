@@ -32,10 +32,12 @@ module IncompressibleGrid
     external :: MPI_BCAST, MPI_RECV, MPI_SEND, MPI_REDUCE
 
     private
-    public :: igrid, wBC_bottom, wBC_top
+    public :: igrid, wBC_bottom, wBC_top, prow, pcol
 
     logical, dimension(3) :: periodicBCs
     complex(rkind), parameter :: zeroC = zero + imi*zero 
+
+    integer :: prow = 0, pcol = 0
 
     ! Allow non-zero value (isEven) 
     integer :: ierr 
@@ -411,7 +413,7 @@ contains
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
         character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null", moisture_info_dir, inputDirDyaw
-        integer :: nx, ny, nz, prow = 0, pcol = 0, ioUnit, nsteps = 999999, sponge_type = 1
+        integer :: nx, ny, nz, ioUnit, nsteps = 999999, sponge_type = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
         integer :: t_pointProbe = 10000, t_start_pointProbe = 10000, t_stop_pointProbe = 1
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 

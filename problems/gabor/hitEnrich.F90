@@ -25,7 +25,7 @@ program hitEnrich
   call largeScales%init(inputfileLS, .true.) 
   call smallScales%init(inputfileSS, .false.)
 
-  call enrich%init(smallScales,largeScales,inputfileGM,Lx,Ly,Lz)
+  call enrich%init(smallScales,largeScales,inputfileGM)
 
   do while (enrich%continueSimulation())
     call enrich%updateLargeScales(timeAdvance=.true.)
