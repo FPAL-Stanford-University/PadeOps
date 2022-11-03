@@ -27,10 +27,15 @@ module constants
     real(rkind), parameter :: fourthird = 4._rkind/3._rkind
 
     real(rkind), parameter :: pi=4._rkind*atan(1._rkind)
+    real(rkind), parameter :: piby2=2._rkind*atan(1._rkind)
+    real(rkind), parameter :: twopi=8._rkind*atan(1._rkind)
     
     complex(rkind), parameter :: imi=(zero,one)
     complex(rkind), parameter :: im0=(zero,zero)
 
     real(rkind), parameter :: kappa = 0.40_rkind ! Kappa used in Turbulent BL wall models
     real(rkind), parameter :: eps = epsilon(real(1.0,rkind))
+
+    real(rkind), parameter :: deg_to_radians   = pi/180.0_rkind
+    real(rkind), parameter :: rpm_to_radpersec = twopi/60.0_rkind
 end module

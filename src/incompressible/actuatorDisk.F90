@@ -90,7 +90,7 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
-    write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
+    write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
     ioUnit = 55
@@ -189,11 +189,11 @@ subroutine init(this, inputDir, ActuatorDiskID, xG, yG, zG, gpC)
         this%xs = xLoc
         this%normfactor = (1.d0/(real(size(this%xs),rkind)))*this%pfactor
         
-        !write(turboutfname,'(a,i3.3,a)') 'TurbineInitLog_', ActuatorDiskID, '.out'
+        !write(turboutfname,'(a,i4.4,a)') 'TurbineInitLog_', ActuatorDiskID, '.out'
         !ioUnit = 100+nrank
         !open(unit=ioUnit, file=trim(turboutfname), form='FORMATTED')
-        !write(ioUnit,'(a,i3.3,1x,2(e19.12,1x),i5.5,1x,e19.12)') '----Turbine No.---', ActuatorDiskID, this%normfactor, this%pfactor, size(this%xs), this%delta
-        !write(ioUnit,'(a,i3.3,1x,2(e19.12,1x),i5.5,1x,e19.12)') 'No. of points across actuator disk = ', ntry
+        !write(ioUnit,'(a,i4.4,1x,2(e19.12,1x),i5.5,1x,e19.12)') '----Turbine No.---', ActuatorDiskID, this%normfactor, this%pfactor, size(this%xs), this%delta
+        !write(ioUnit,'(a,i4.4,1x,2(e19.12,1x),i5.5,1x,e19.12)') 'No. of points across actuator disk = ', ntry
 
         allocate(this%Cloud(this%max_num_clouds))
         allocate(this%xst(this%max_num_clouds),  this%xen(this%max_num_clouds))
@@ -354,7 +354,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     class(actuatorDisk), intent(inout), target :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
-    real(rkind), dimension(8),                                  intent(out), optional  :: inst_val
+    real(rkind), dimension(8),                                  intent(out)   :: inst_val
     integer :: j, icl
     real(rkind), dimension(:,:,:), pointer :: xCloudPtr, yCloudPtr, zCloudPtr, dsqPtr, eta_deltaPtr, sourcePtr
     real(rkind) :: usp_sq, force
@@ -379,7 +379,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
           rhszvals(this%xst(icl):this%xen(icl),this%yst(icl):this%yen(icl),this%zst(icl):this%zen(icl)) = 0.d0
           nullify(sourcePtr, eta_deltaPtr, dsqPtr, zCloudPtr, yCloudPtr, xCloudPtr)
         end do
-        if (present(inst_val)) then
+        !if (present(inst_val)) then
           if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
             inst_val(1) = force
             inst_val(2) = force*sqrt(usp_sq)
@@ -390,7 +390,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
             inst_val(7) = this%vface
             inst_val(8) = this%wface
           end if
-        end if 
+        !end if 
     end if 
 end subroutine
 

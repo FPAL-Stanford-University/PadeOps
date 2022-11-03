@@ -14,6 +14,7 @@ module HIT_Periodic_parameters
     real(rkind) :: k_bp_left, k_bp_right, uadvect = 10.0, x_shift 
     real(rkind), dimension(:,:,:), allocatable :: uTarget, vTarget, wTarget
 
+    logical :: useRealSpaceLinearForcing = .false.
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
@@ -29,12 +30,14 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    real(rkind)  :: Lx = two*pi, Ly = two*pi, Lz = two*pi
     character(len=clen)  :: dir_init_files
-    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, TI = 0.1d0
     character(len=clen)  :: ufname, vfname, wfname
+    integer :: init_type = 0
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    integer :: initType = 0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11
@@ -42,7 +45,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     read(unit=ioUnit, NML=HIT_PeriodicINPUT)
     close(ioUnit)    
 
-    Lx = two*pi; Ly = two*pi; Lz = two*pi
+    !Lx = two*pi; Ly = two*pi; Lz = two*pi
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
@@ -95,9 +98,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use random,             only: gaussian_random
     use decomp_2d          
     use decomp_2d_io
-    use reductions,         only: p_maxval, p_minval
+    use reductions,         only: p_maxval, p_minval, p_sum
     use cd06staggstuff,     only: cd06stagg
     use exits,              only: gracefulExit,message_min_max
+    use reductions,         only: p_sum
+    use random
+
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -112,9 +118,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     type(cd06stagg), allocatable :: der
     integer :: nz, nzE, k
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1, uadv = 0.d0, kleft = 10.d0, kright = 64.d0
-    logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    real(rkind) :: uadv = 0.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz, TI = 0.1d0
+    logical :: BandpassFilterFields = .false.
+    integer :: initType = 0, seed = 23455
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -130,33 +137,42 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
- 
-    dz = z(1,1,2) - z(1,1,1)
-
     
-    call decomp_2d_read_one(1,u ,ufname, decompC)
-    call decomp_2d_read_one(1,v ,vfname, decompC)
-    call decomp_2d_read_one(1,wC,wfname, decompC)
+    if (initType == 0) then
+        
+       dz = z(1,1,2) - z(1,1,1)
+
+       
+       call decomp_2d_read_one(1,u ,ufname, decompC)
+       call decomp_2d_read_one(1,v ,vfname, decompC)
+       call decomp_2d_read_one(1,wC,wfname, decompC)
   
-    u  = TI*u
-    v  = TI*v
-    wC = TI*wC
+       call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
+       call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
+       call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
+       
+       !u = one!1.6d0*z*(2.d0 - z) 
+       !v = zero;
+       !w = zero;
 
-    call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
-    call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
-    call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
+    else
+
+        call uniform_random(u ,-5.d0,5.d0,seed+1234*nrank+54321)
+        call uniform_random(v ,-5.d0,5.d0,seed+25634*nrank+54321)
+        call uniform_random(wC,-5.d0,5.d0,seed+32454*nrank+54321)
+        
+        u = u - p_sum(u)/(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3))
+        v = v - p_sum(v)/(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3))
+        wC = wC - p_sum(wC)/(decompE%xsz(1)*decompE%ysz(2)*decompE%zsz(3))
     
-    !u = one!1.6d0*z*(2.d0 - z) 
-    !v = zero;
-    !w = zero;
-
+    end if 
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
     allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
 
     allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
     allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
-   
+    
     nz = decompC%zsz(3)
     nzE = nz + 1
 
@@ -170,10 +186,9 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     deallocate(der)
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
-   
+    
 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
-  
       
     nullify(u,v,w,x,y,z)
    
@@ -187,12 +202,14 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 0, nyplanes = 0, nzplanes = 1
+    integer, parameter :: nxplanes = 1, nyplanes = 1, nzplanes = 1
 
+    allocate( xplanes(nxplanes))
+    allocate( yplanes(nyplanes))
     allocate( zplanes(nzplanes))
 
-    !xplanes = [64]
-    !yplanes = [64]
+    xplanes = [1]
+    yplanes = [1]
     zplanes = [1]
 
 end subroutine
@@ -207,8 +224,30 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use HIT_Periodic_parameters    
+    use kind_parameters,    only: rkind, clen 
+    use constants, only: one, zero
+    implicit none
+    real(rkind), intent(out) :: wTh_surf
+    character(len=clen),                intent(in)    :: inputfile
+    integer :: ioUnit 
+    character(len=clen)  :: ufname, vfname, wfname 
+    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
+    logical :: BandpassFilterFields = .false. 
+    integer :: initType = 0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
+    
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
+    close(ioUnit)    
+
+    ! Do nothing really since this is an unstratified simulation
+end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
+    use HIT_Periodic_parameters    
     use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one
     implicit none
@@ -218,9 +257,10 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind) :: ThetaRef
     integer :: iounit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz, TI = 0.1d0
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    integer :: initType = 0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -235,15 +275,17 @@ end subroutine
 
 
 subroutine set_Reference_Temperature(inputfile, Tref)
+    use HIT_Periodic_parameters    
     use kind_parameters,    only: rkind, clen 
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
     integer :: iounit
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0
+    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz, TI = 0.1d0
     logical :: BandpassFilterFields = .false. 
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields
+    integer :: initType = 0
+    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -278,3 +320,27 @@ subroutine hook_probes(inputfile, probe_locs)
 
 
 end subroutine
+
+subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+
+    scalarField = 0.d0
+end subroutine 
+
+subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+
+    scalarSource = 0.d0
+end subroutine 

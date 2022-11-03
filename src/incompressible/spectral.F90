@@ -15,6 +15,10 @@ module spectralMod
     private
     public :: spectral, GetWaveNums, useExhaustiveFFT 
     
+    external :: MPI_CART_GET, DFFTW_PLAN_MANY_DFT_R2C, DFFTW_PLAN_MANY_DFT_C2R, & 
+      DFFTW_PLAN_MANY_DFT, DFFTW_DESTROY_PLAN, DFFTW_EXECUTE, DFFTW_EXECUTE_DFT, & 
+      DFFTW_EXECUTE_DFT_C2R,  DFFTW_EXECUTE_DFT_R2C
+    
     include "fftw3.f"
 
     logical :: useExhaustiveFFT = .true. 
@@ -23,7 +27,7 @@ module spectralMod
         private
         real(rkind), dimension(:,:,:), allocatable, public :: k1, k2, k3, kabs_sq, k1_der2, k2_der2, k3_der2, one_by_kabs_sq
         integer, dimension(3) :: fft_start, fft_end, fft_size
-        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt, arr1Up, arr2Up, GksPrep1, GksPrep2
+        real(rkind), dimension(:,:,:), allocatable, public :: Gdealias, GtestFilt, arr1Up, arr2Up, GksPrep1, GksPrep2, GhitForcing
         !real(rkind), dimension(:,:,:), allocatable :: k3inZ
         complex(rkind), dimension(:,:,:), allocatable :: fhatz, ctmpz
         integer :: rPencil ! Pencil dimension for the real input
@@ -43,6 +47,7 @@ module spectralMod
         integer, public :: zeroK_i = 123456, zeroK_j = 123456
         real(rkind), dimension(:,:), allocatable :: GsurfaceFilter 
         real(rkind) :: dealiasFact = 2.d0/3.d0
+        integer :: dealiasType = 0
         real(rkind), public :: dx, dy, dz
 
         real(rkind), dimension(:,:,:), allocatable :: G_bandpass
@@ -57,11 +62,12 @@ module spectralMod
         integer(kind=8) :: plan_c2c_bwd_z_oop
         integer(kind=8) :: plan_c2c_bwd_z_ip
         integer(kind=8) :: plan_r2c_z, plan_c2r_z 
-        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact
+        complex(rkind), dimension(:), allocatable :: k3_C2Cder, k3_C2Eshift, k3_E2Cshift, E2Cshift, C2Eshift, xshiftfact, yshiftfact, zshiftfact
         real(rkind), dimension(:), allocatable, public :: k1inZ, k2inZ, k3inZ
 
         real(rkind), dimension(:), allocatable :: mk3sq
 
+        character(len=4) :: scheme_xy = "FOUR"
         contains
             procedure           :: init
             procedure           :: init_bandpass_filter
@@ -79,11 +85,13 @@ module spectralMod
             procedure           :: fft1_x2y
             procedure, private  :: initializeEverything
             procedure           :: dealias
+            procedure           :: softdealias
             procedure           :: dealias_edgeField
             procedure           :: mTimes_ik1_oop
             procedure           :: mTimes_ik1_ip
             procedure           :: mTimes_ik2_oop
             procedure           :: mTimes_ik2_ip
+            procedure           :: mTimes_ik3_ip
             procedure           :: TestFilter_ip
             procedure           :: TestFilter_oop
             procedure           :: SurfaceFilter_ip
@@ -97,6 +105,9 @@ module spectralMod
             procedure           :: KSprepFilter2
             procedure           :: KSprepFilter1
             procedure           :: bandpassFilter_and_PhaseShift
+            procedure           :: GetModifiedWavenumber_xy_oop
+            procedure           :: GetModifiedWavenumber_xy_ip 
+            procedure           :: ResetSurfaceFilter 
 
             procedure           :: InitTestFilter
             procedure           :: take_fft1d_z2z_ip
@@ -117,8 +128,11 @@ module spectralMod
             procedure, private  :: interp_E2C_spect_real
             procedure, private  :: interp_C2E_spect_real
             
-            procedure           :: ddz_C2C_real_inplace
-            procedure           :: ddz_C2C_complex_inplace
+            procedure, private  :: ddz_C2C_real_inplace
+            procedure, private  :: ddz_C2C_complex_inplace
+            procedure, private  :: ddz_C2C_real_outofplace
+            procedure, private  :: ddz_C2C_complex_outofplace
+            generic             :: ddz_C2C_spect => ddz_C2C_real_inplace, ddz_C2C_real_outofplace, ddz_C2C_complex_inplace, ddz_C2C_complex_outofplace
             generic             :: ddz_E2C_spect => ddz_E2C_spect_cmplx, ddz_E2C_spect_real
             generic             :: ddz_C2E_spect => ddz_C2E_spect_cmplx, ddz_C2E_spect_real
             generic             :: interp_E2C_spect => interp_E2C_spect_cmplx, interp_E2C_spect_real
@@ -130,6 +144,13 @@ module spectralMod
             procedure           :: destroyPP
             procedure           :: destroy_bandpass_filter
             procedure           :: spectralFilter_ip
+            
+            procedure           :: init_HIT_linearForcing
+            procedure           :: hitForceFilter 
+            procedure           :: hitForceFilter_edgeField 
+
+            procedure, private :: getmodK1_d1_coefficients 
+            procedure, private :: modify_my_xy_wavenumbers            
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
 
@@ -137,12 +158,14 @@ module spectralMod
 
 contains
 
-      subroutine bandpassFilter_and_PhaseShift(this, uhat, uFilt, xshift)
+      subroutine bandpassFilter_and_PhaseShift(this, uhat, uFilt, xshift, coord)
          use constants, only: imi
          class(spectral),  intent(inout)         :: this
          complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in) :: uhat 
          real(rkind)   , dimension(this%physdecomp%xsz(1),this%physdecomp%xsz(2), this%physdecomp%xsz(3)), intent(out) :: uFilt
          real(rkind), intent(in) :: xShift 
+         character(len=1), intent(in), optional :: coord
+         character(len=1) :: coordShift = 'x'
          integer :: k, j, i
 
          call transpose_y_to_z(uhat, this%cbuffz_bp, this%spectdecomp)
@@ -153,17 +176,45 @@ contains
          !   this%cbuffz_bp = zero
          !end where
       
+         if (present(coord)) coordShift = coord
+         select case (coordShift)
+           case ('x')
+             this%xshiftfact = exp(-imi*this%k1inZ*xshift)
+           case ('y')
+             this%yshiftfact = exp(-imi*this%k2inZ*xshift)
+           case ('z')
+             this%zshiftfact = exp(-imi*this%k3inZ*xshift)
+         end select
 
-         this%xshiftfact = exp(-imi*this%k1inZ*xshift)
-         do k = 1,size(this%cbuffz_bp,3)
-            do j = 1,size(this%cbuffz_bp,2)
-               !$omp simd 
-	    	      do i = 1,size(this%cbuffz_bp,1)
-                  !this%cbuffz_bp(i,j,k) = this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
-                  this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
-	       	   end do 
-            end do 
-         end do 
+         select case (coordShift)
+           case ('x')
+             do k = 1,size(this%cbuffz_bp,3)
+                do j = 1,size(this%cbuffz_bp,2)
+                   !$omp simd 
+                   do i = 1,size(this%cbuffz_bp,1)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%xshiftfact(i)
+                   end do 
+                end do 
+             end do 
+           case('y')
+             do k = 1,size(this%cbuffz_bp,3)
+                do j = 1,size(this%cbuffz_bp,2)
+                   !$omp simd 
+                   do i = 1,size(this%cbuffz_bp,1)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%yshiftfact(j)
+                   end do 
+                end do 
+             end do 
+           case ('z')
+             do k = 1,size(this%cbuffz_bp,3)
+                do j = 1,size(this%cbuffz_bp,2)
+                   !$omp simd 
+                   do i = 1,size(this%cbuffz_bp,1)
+                      this%cbuffz_bp(i,j,k) = this%G_bandpass(i,j,k)*this%cbuffz_bp(i,j,k)*this%zshiftfact(k)
+                   end do 
+                end do 
+             end do 
+         end select
 
          call this%take_ifft1d_z2z_ip(this%cbuffz_bp)
          call transpose_z_to_y(this%cbuffz_bp, this%cbuffy_bp, this%spectdecomp)
@@ -174,8 +225,10 @@ contains
       subroutine init_bandpass_filter(this, kleft, kright, cbuffz, cbuffy)
          class(spectral),  intent(inout)         :: this
          real(rkind), intent(in) :: kleft, kright
-         complex(rkind), dimension(this%spectdecomp%ysz(1),this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in), target :: cbuffy
-         complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(in), target :: cbuffz
+         complex(rkind), dimension(this%spectdecomp%ysz(1),&
+           this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)), intent(in), target :: cbuffy
+         complex(rkind), dimension(this%spectdecomp%zsz(1),&
+           this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)), intent(in), target :: cbuffz
          real(rkind), dimension(:,:,:), allocatable :: rbuffz1, rbuffz2
         
          this%cbuffz_bp => cbuffz
@@ -311,6 +364,24 @@ contains
 
     end subroutine
 
+    subroutine mTimes_ik3_ip(this, fin)
+        class(spectral),  intent(in)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fin
+        integer :: i, j, k
+        real(rkind) :: rpart, ipart
+        
+        do k = 1,this%fft_size(3)
+            do j = 1,this%fft_size(2)
+                !$omp simd 
+                do i = 1,this%fft_size(1)
+                    rpart = -this%k3(i,j,k)*dimag(fin(i,j,k))
+                    ipart = this%k3(i,j,k)*dreal(fin(i,j,k))
+                    fin(i,j,k) = dcmplx(rpart,ipart)
+                end do 
+            end do 
+        end do 
+    end subroutine
+
     subroutine dealias(this, fhat)
         class(spectral),  intent(inout)         :: this
         complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
@@ -339,7 +410,74 @@ contains
         end if 
          
     end subroutine
-  
+ 
+    subroutine hitForceFilter(this, fhat)
+        class(spectral),  intent(inout)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
+        integer :: i, j, k
+
+        call this%take_fftz(fhat)
+        do k = 1,this%spectdecomp%zsz(3)
+           do j = 1,this%spectdecomp%zsz(2)
+              !$omp simd
+              do i = 1,this%spectdecomp%zsz(1)
+                 this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%Ghitforcing(i,j,k)
+              end do 
+           end do 
+        end do 
+        call this%take_ifftz(fhat)
+         
+    end subroutine
+    
+    subroutine hitForceFilter_edgeField(this, fhat)
+        class(spectral),  intent(inout)         :: this
+        complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(inout) :: fhat
+        integer :: i, j, k
+
+        call dfftw_execute_dft(this%plan_c2c_fwd_z_ip, fhat(:,:,1:this%spectdecomp%zsz(3)) , fhat(:,:,1:this%spectdecomp%zsz(3)))  
+        do k = 1,this%spectdecomp%zsz(3)
+           do j = 1,this%spectdecomp%zsz(2)
+              !$omp simd
+              do i = 1,this%spectdecomp%zsz(1)
+                 fhat(i,j,k) = fhat(i,j,k)*this%Ghitforcing(i,j,k)
+              end do 
+           end do 
+        end do 
+        call dfftw_execute_dft(this%plan_c2c_bwd_z_ip, fhat(:,:,1:this%spectdecomp%zsz(3)) , fhat(:,:,1:this%spectdecomp%zsz(3)))  
+        fhat(:,:,1:this%spectdecomp%zsz(3)) = this%normfactz*fhat(:,:,1:this%spectdecomp%zsz(3))
+        fhat(:,:,this%spectdecomp%zsz(3)+1) = fhat(:,:,1)
+
+    end subroutine 
+
+    subroutine softdealias(this, fhat)
+        class(spectral),  intent(inout)         :: this
+        complex(rkind), dimension(this%fft_size(1),this%fft_size(2),this%fft_size(3)), intent(inout) :: fhat
+        integer :: i, j, k
+
+        if (this%init_periodicinZ) then
+            call this%take_fftz(fhat)
+            do k = 1,this%spectdecomp%zsz(3)
+               do j = 1,this%spectdecomp%zsz(2)
+                  !$omp simd
+                  do i = 1,this%spectdecomp%zsz(1)
+                     this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%Gdealias(i,j,k)
+                  end do 
+               end do 
+            end do 
+            call this%take_ifftz(fhat)
+        else
+         do k = 1,this%fft_size(3)
+             do j = 1,this%fft_size(2)
+                 !$omp simd 
+                 do i = 1,this%fft_size(1)
+                     fhat(i,j,k) = fhat(i,j,k)*this%GksPrep1(i,j,k)
+                 end do 
+             end do 
+         end do 
+        end if 
+         
+    end subroutine
+
     subroutine dealias_edgeField(this, fhat)
         class(spectral),  intent(inout)         :: this
         complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)+1), intent(inout) :: fhat
@@ -525,6 +663,28 @@ contains
 
     end subroutine 
     
+    subroutine ddz_C2C_real_outofplace(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)  ), intent(in)  :: arr_in
+      real(rkind), dimension(this%physdecomp%zsz(1),this%physdecomp%zsz(2),this%physdecomp%zsz(3)  ), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft_r2c(this%plan_r2c_z, arr_in, this%fhatz)
+         do k = 1,this%physdecomp%zsz(3)/2 ! Note that the oddball is ignored 
+            do j = 1,this%physdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%physdecomp%zsz(1)
+                  this%fhatz(i,j,k) = this%fhatz(i,j,k)*this%k3_C2Cder(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft_c2r(this%plan_c2r_z, this%fhatz, arr_out)
+         arr_out = arr_out*this%normfactz
+      end if
+
+    end subroutine 
+    
     subroutine ddz_C2C_complex_inplace(this, arr_inout)
       class(spectral), intent(inout) :: this
       complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(inout)  :: arr_inout
@@ -542,6 +702,28 @@ contains
          end do
          call dfftw_execute_dft(this%plan_c2c_bwd_z_oop, this%ctmpz, arr_inout)
          arr_inout =  this%normfactz*arr_inout
+      end if
+
+    end subroutine 
+    
+    subroutine ddz_C2C_complex_outofplace(this, arr_in, arr_out)
+      class(spectral), intent(inout) :: this
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(in)  :: arr_in
+      complex(rkind), dimension(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)), intent(out) :: arr_out
+      integer :: i, j, k
+
+      if (this%init_periodicInZ) then
+         call dfftw_execute_dft(this%plan_c2c_fwd_z_oop, arr_in, this%ctmpz)
+         do k = 1,this%spectdecomp%zsz(3)
+            do j = 1,this%spectdecomp%zsz(2)
+               !$omp simd
+               do i = 1,this%spectdecomp%zsz(1)
+                  this%ctmpz(i,j,k) = this%ctmpz(i,j,k)*this%k3_C2Cder(k) 
+               end do 
+            end do 
+         end do
+         call dfftw_execute_dft(this%plan_c2c_bwd_z_oop, this%ctmpz, arr_out)
+         arr_out =  this%normfactz*arr_out
       end if
 
     end subroutine 
@@ -752,6 +934,46 @@ contains
          
     end subroutine
 
+    subroutine init_HIT_linearForcing(this, filtfact)
+         use constants, only: imi
+         class(spectral),  intent(inout)         :: this
+         real(rkind), intent(in) :: filtfact
+         real(rkind), dimension(:,:,:),  allocatable :: rbuffz, rbuffz1
+         real(rkind), dimension(:), allocatable :: k3_1d
+         complex(rkind), dimension(:,:,:), allocatable :: cbuffz
+         real(rkind) :: kdealiasx, kdealiasy, kdealiasz
+         integer :: nz, nxT, nyT
+        
+         nxT = this%spectdecomp%zsz(1)
+         nyT = this%spectdecomp%zsz(2)
+         nz = this%spectdecomp%zsz(3)
+         
+         allocate(this%Ghitforcing(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(rbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+    
+         this%Ghitforcing = one 
+
+         kdealiasx = (filtfact*pi/this%dx)
+         kdealiasy = (filtfact*pi/this%dy)
+         kdealiasz = (filtfact*pi/this%dz)
+
+         call transpose_y_to_z(this%k1, rbuffz, this%spectdecomp)
+         where (abs(rbuffz) >= kdealiasx)    
+            this%Ghitforcing = zero
+         end where
+
+         call transpose_y_to_z(this%k2, rbuffz, this%spectdecomp)
+         where (abs(rbuffz) >= kdealiasy)    
+            this%Ghitforcing = zero
+         end where
+         
+         call transpose_y_to_z(this%k3, rbuffz, this%spectdecomp)
+         where (abs(rbuffz) >= kdealiasz)
+            this%Ghitforcing = zero 
+         end where
+     
+     end subroutine        
+
       subroutine init_periodic_inZ_procedures(this, dx, dy, dz)
          use constants, only: imi
          class(spectral),  intent(inout)         :: this
@@ -787,12 +1009,16 @@ contains
          kdealiasz = (this%dealiasFact*pi/dz)
 
          call transpose_y_to_z(this%k1, rbuffz, this%spectdecomp)
-         where (abs(rbuffz) >= kdealiasx)    
-            this%Gdealias = zero
-         end where
+         select case (this%dealiasType)
+         case (1)
+            this%Gdealias = this%Gdealias*exp(-36.d0*((abs(rbuffz)/(pi/dx))**36))
+         case default
+            where (abs(rbuffz) >= kdealiasx)    
+               this%Gdealias = zero
+            end where
+         end select 
      
          !allocate(this%k1inZ(size(this%k1,1)))
-         !allocate(this%xshiftfact(size(this%k1,1)))
          !this%k1inZ = this%k1(:,1,1)
 
          allocate(this%k1inZ(size(rbuffz,1)))
@@ -800,19 +1026,37 @@ contains
          this%k1inZ = rbuffz(:,1,1)
 
          call transpose_y_to_z(this%k2, rbuffz, this%spectdecomp)
-         where (abs(rbuffz) >= kdealiasy)    
-            this%Gdealias = zero
-         end where
+         !where (abs(rbuffz) >= kdealiasy)    
+         !   this%Gdealias = zero
+         !end where
+         select case (this%dealiasType)
+         case (1)
+            this%Gdealias = this%Gdealias*exp(-36.d0*((abs(rbuffz)/(pi/dy))**36))
+         case default
+            where (abs(rbuffz) >= kdealiasx)    
+               this%Gdealias = zero
+            end where
+         end select 
 
          allocate(this%k2inZ(size(rbuffz,2)))
+         allocate(this%yshiftfact(size(rbuffz,2)))
          this%k2inZ = rbuffz(1,:,1)
          
          
          call transpose_y_to_z(this%k3, rbuffz, this%spectdecomp)
-         where (abs(rbuffz) >= kdealiasz)
-            this%Gdealias = zero 
-         end where
+         !where (abs(rbuffz) >= kdealiasz)
+         !   this%Gdealias = zero 
+         !end where
+         select case (this%dealiasType)
+         case (1)
+            this%Gdealias = this%Gdealias*exp(-36.d0*((abs(rbuffz)/(pi/dz))**36))
+         case default
+            where (abs(rbuffz) >= kdealiasx)    
+               this%Gdealias = zero
+            end where
+         end select 
          allocate(this%k3inZ(size(rbuffz,3)))
+         allocate(this%zshiftfact(size(rbuffz,3)))
          this%k3inZ = rbuffz(1,1,:)
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
@@ -864,12 +1108,12 @@ contains
          deallocate(rbuffz, cbuffz, rbuffz1)
       end subroutine 
 
-    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT, init_periodicInZ, dealiasF) 
+    subroutine init(this,pencil, nx_g, ny_g, nz_g, dx, dy, dz, scheme, filt, dimTransform, fixOddball, use2decompFFT, useConsrvD2, createK, exhaustiveFFT, init_periodicInZ, dealiasF, dealiasType) 
         class(spectral),  intent(inout)         :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
         real(rkind),      intent(in)            :: dx, dy, dz          ! PHYSICAL grid spacing 
-        character(len=*), intent(in)            :: scheme              ! Scheme used for modified wavenumbers
+        character(len=4), intent(in)            :: scheme              ! Scheme used for modified wavenumbers
         character(len=*), intent(in)            :: filt                ! Scheme used for modified wavenumbers
         integer,          intent(in), optional  :: dimTransform        ! 2 or 3 (number of periodic directions) - default is 3
         logical,                      optional  :: fixOddball          ! Fix the oddball wavenumber - default is TRUE
@@ -879,7 +1123,7 @@ contains
         logical, intent(in),          optional  :: exhaustiveFFT 
         logical, intent(in),          optional  :: init_periodicInZ 
         real(rkind), intent(in),      optional  :: dealiasF
-
+        integer, intent(in),          optional  :: dealiasType
         if (present(createK)) then
             this%storeK = createK
         end if 
@@ -900,7 +1144,16 @@ contains
         this%dy = dy
         this%dz = dz
 
+        this%scheme_xy = scheme
+        if ((scheme .ne. "FOUR") .and. (scheme .ne. "ED02") .and. (scheme .ne. "ED04") .and. (scheme .ne. "CD06") .and. (scheme .ne. "CD10")) then
+            this%scheme_xy = "FOUR"
+            call message(0,"WARNING: Invalid choice for SCHEME in initialization for the SPECTRAL derived type.&
+               & Defaulting to Fourier Collocation")
+        end if 
+
         if (present(dealiasF)) this%dealiasFact = dealiasF
+        if (present(dealiasType)) this%dealiasType = dealiasType
+
         if (present(fixOddball)) this%fixOddball = fixOddball
         if (present(use2decompFFT)) this%use2decompFFT = use2decompFFT 
         if (present(useConsrvD2)) this%useConsrvD2 = useConsrvD2
@@ -908,15 +1161,15 @@ contains
         if (present(dimTransform)) then
             if (dimTransform == 2) then
                 this%is3dFFT = .false.
-                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,.true.)
+                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,filt,.true.)
             else if (dimTransform == 3) then
-                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
+                call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,filt)
             else
                 call GracefulExit("Incorrect choice for DIMTRANSFORM while initializing SPECTRAL derived type. &
                                    & Available options include 2 and 3", 102)
             end if 
         else
-            call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt)
+            call this%initializeEverything(pencil,nx_g,ny_g,nz_g,dx,dy,dz,filt)
         end if 
       
         this%normfact = one/real(nx_g)/real(ny_g)/real(nz_g) 
@@ -926,16 +1179,64 @@ contains
             if (init_periodicInZ) then
                call this%init_periodic_inZ_procedures(dx, dy, dz)
             end if
-        end if 
+        end if
+
+        call this%modify_my_xy_wavenumbers()
+        where (this%Gdealias < 1.D-11) this%Gdealias = 0.D0
     end subroutine 
 
+    subroutine modify_my_xy_wavenumbers(this)
+      class(spectral), intent(inout) :: this
+      integer :: i, j, k
 
-    subroutine initializeEverything(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,scheme,filt,nonPeriodic)
+      do k = 1,size(this%k1,3)
+         do j = 1,size(this%k1,2)
+            call this%GetModifiedWavenumber_xy_ip(this%k1(:,j,k), this%dx)
+         end do 
+      end do 
+
+      do k = 1,size(this%k2,3)
+         do i = 1,size(this%k2,1)
+            call this%GetModifiedWavenumber_xy_ip(this%k2(i,:,k), this%dy)
+         end do 
+      end do
+
+      this%kabs_sq = this%k1*this%k1 + this%k2*this%k2
+    end subroutine 
+    
+    subroutine ResetSurfaceFilter(this, surfaceFilterFact) 
+        class(spectral), intent(inout) :: this
+        real(rkind), intent(in) :: surfaceFilterfact 
+        real(rkind), dimension(:,:,:), allocatable :: tmp1, tmp2
+        real(rkind) :: kdealiasx, kdealiasy
+        integer :: i, j 
+
+        allocate(tmp1(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
+        allocate(tmp2(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2), this%spectdecomp%zsz(3)))
+        call transpose_y_to_z(this%k1,tmp1,this%spectdecomp)
+        call transpose_y_to_z(this%k2,tmp2,this%spectdecomp)
+        if (allocated(this%GsurfaceFilter)) deallocate(this%GsurfaceFilter)
+        allocate(this%Gsurfacefilter(this%spectdecomp%zsz(1), this%spectdecomp%zsz(2)))
+        kdealiasx = (one/three)*pi/this%dx*surfaceFilterFact
+        kdealiasy = (one/three)*pi/this%dy*surfaceFilterFact
+        do j = 1,size(tmp1,2)
+            do i = 1,size(tmp1,1)
+                if ((abs(tmp1(i,j,1)) <= kdealiasx) .and. (abs(tmp2(i,j,1)) <= kdealiasy)) then
+                    this%GSurfaceFilter(i,j) = one
+                else
+                    this%GSurfaceFilter(i,j) = zero
+                end if
+            end do 
+        end do 
+        deallocate(tmp1,tmp2)
+
+    end subroutine 
+
+    subroutine initializeEverything(this,pencil,nx_g,ny_g,nz_g,dx,dy,dz,filt,nonPeriodic)
         class(spectral),  intent(inout), target :: this
         character(len=1), intent(in)            :: pencil              ! PHYSICAL decomposition direction
         integer,          intent(in)            :: nx_g, ny_g, nz_g    ! Global data size
         real(rkind),      intent(in)            :: dx, dy, dz          ! PHYSICAL grid spacing 
-        character(len=*), intent(in)            :: scheme              ! Scheme used for modified wavenumbers
         character(len=*), intent(in)            :: filt                ! Scheme used for modified wavenumbers
 
         real(rkind), dimension(nx_g) :: k1_1d 
@@ -1144,6 +1445,12 @@ contains
            ! case default
            !     call GracefulExit("The dealiasing filter specified is incorrect.",104)
            ! end select
+           select case (this%dealiasType)
+           case (1)
+             this%Gdealias = exp(-36.d0*(abs(this%k1)/(pi/this%dx))**36)*exp(-36.d0*(abs(this%k2)/(pi/this%dy))**36) 
+             call message(1, "Dealiasing Summary:")
+             call message(2, "Dealias type:", this%dealiasType)
+           case default
             kdealiasx = ((two/three)*pi/dx)
             kdealiasy = ((two/three)*pi/dy)
             do k = 1,size(this%k1,3)
@@ -1158,8 +1465,9 @@ contains
                 end do  
             end do 
             call message(1, "Dealiasing Summary:")
+            call message(2, "Dealias type:", this%dealiasType)
             call message(2, "Total non zero:", p_sum(sum(this%Gdealias)))
-
+            end select 
 
             !kdealiasx = kdealiasx/3.d0
             !kdealiasy = kdealiasy/3.d0
@@ -1289,11 +1597,12 @@ contains
                 end if
             end do 
         end do 
-     
+        deallocate(tmp1,tmp2)
+
         ! STEP 14: Prep filter for KS  
         allocate(this%GksPrep1(this%spectdecomp%ysz(1), this%spectdecomp%ysz(2), this%spectdecomp%ysz(3)))
-        kdealiasx = (one/four)*pi/dx
-        kdealiasy = (one/four)*pi/dy
+        kdealiasx = (4.d0/5.d0)*pi/dx
+        kdealiasy = (4.d0/5.d0)*pi/dy
         do k = 1,this%spectdecomp%ysz(3)
             do j = 1,this%spectdecomp%ysz(2)
                 do i = 1,this%spectdecomp%ysz(1)
@@ -1333,33 +1642,49 @@ contains
     subroutine InitTestFilter(this, filtfact)  
       class(spectral), intent(inout) :: this
       real(rkind), intent(in) :: filtfact  
-      real(rkind) :: kfiltx,kfilty, kdealiasx, kdealiasy
+      real(rkind) :: kfiltx,kfilty, kdealiasx, kdealiasy, kdealiasz, kfiltz
       integer :: i, j, k
 
-      if (this%init_periodicinZ) then
-         call gracefulExit("Test filtering currently not supported for problems & 
-            & with periodic BC in z", 1233)
-      end if 
+      !if (this%init_periodicinZ) then
+      !   call gracefulExit("Test filtering currently not supported for problems & 
+      !      & with periodic BC in z", 1233)
+      !end if 
       kdealiasx = ((two/three)*pi/this%dx)
       kdealiasy = ((two/three)*pi/this%dy)
+      kdealiasy = ((two/three)*pi/this%dz)
 
       kfiltx = kdealiasx/filtfact
       kfilty = kdealiasy/filtfact
+      kfiltz = kdealiasz/filtfact
       
       if (allocated(this%GTestFilt)) deallocate(this%GTestFilt)
       allocate (this%GTestFilt(this%fft_size(1),this%fft_size(2),this%fft_size(3)))     
-      
-      do k = 1,size(this%k1,3)
-          do j = 1,size(this%k1,2)
-              do i = 1,size(this%k1,1)
-                  if ((abs(this%k1(i,j,k)) < kfiltx) .and. (abs(this%k2(i,j,k))< kfilty)) then
-                      this%GTestFilt(i,j,k) = one
-                  else
-                      this%GTestFilt(i,j,k) = zero
-                  end if
-              end do 
-          end do  
-      end do 
+     
+      if (this%init_periodicinZ) then
+        do k = 1,size(this%k1,3)
+            do j = 1,size(this%k1,2)
+                do i = 1,size(this%k1,1)
+                    if ((abs(this%k1(i,j,k)) < kfiltx) .and. (abs(this%k2(i,j,k))< kfilty) .and. (abs(this%k3(i,j,k))< kfiltz)) then
+                        this%GTestFilt(i,j,k) = one
+                    else
+                        this%GTestFilt(i,j,k) = zero
+                    end if
+                end do 
+            end do  
+        end do 
+      else
+        do k = 1,size(this%k1,3)
+            do j = 1,size(this%k1,2)
+                do i = 1,size(this%k1,1)
+                    if ((abs(this%k1(i,j,k)) < kfiltx) .and. (abs(this%k2(i,j,k))< kfilty)) then
+                        this%GTestFilt(i,j,k) = one
+                    else
+                        this%GTestFilt(i,j,k) = zero
+                    end if
+                end do 
+            end do  
+        end do 
+      end if 
       call message(1, "TestFilter Summary:")
       call message(2, "Total non zero:", p_sum(sum(this%GTestFilt)))
       
@@ -1828,4 +2153,68 @@ contains
 
       arr = this%G_PostProcess*arr
     end subroutine
+
+    pure subroutine GetModifiedWavenumber_xy_ip(this, k, dx)
+      class(spectral), intent(in) :: this
+      real(rkind), dimension(:), intent(inout) :: k
+      real(rkind), intent(in) :: dx
+      real(rkind) :: a, b, c, alpha, beta
+      
+      if (this%scheme_xy == "FOUR") then
+         k = k
+         return
+      else
+         call this%getmodK1_d1_coefficients(alpha, beta, a, b, c)
+         k = (a*sin(k*dx) + (b/2.d0)*sin(2.d0*k*dx) + (c/3.d0)*sin(3.d0*k*dx))/(1.d0 + 2.d0*alpha*cos(k*dx) + 2.d0*beta*cos(2.d0*k*dx))
+      end if 
+    end subroutine
+
+    pure subroutine GetModifiedWavenumber_xy_oop(this, k, kmod, dx)
+      class(spectral), intent(in) :: this
+      real(rkind), dimension(:), intent(in) :: k
+      real(rkind), dimension(:), intent(out) :: kmod
+      real(rkind), intent(in) :: dx
+      real(rkind) :: a, b, c, alpha, beta
+      
+      if (this%scheme_xy == "FOUR") then
+         kmod = k
+         return
+      else
+         call this%getmodK1_d1_coefficients(alpha, beta, a, b, c)
+         kmod = (a*sin(k*dx) + (b/2.d0)*sin(2.d0*k*dx) + (c/3.d0)*sin(3.d0*k*dx))/(1.d0 + 2.d0*alpha*cos(k*dx) + 2.d0*beta*cos(2.d0*k*dx))
+      end if 
+    end subroutine
+
+    pure subroutine getmodK1_d1_coefficients(this, alpha, beta, a, b, c)
+      class(spectral), intent(in) :: this
+      real(rkind), intent(out) :: alpha, beta, a, b, c
+
+      select case(this%scheme_xy)
+      case("ED02")
+         alpha = 0.d0;
+         beta = 0.d0;
+         a = 1.d0;
+         b = 0.d0;
+         c = 0.d0;
+      case("ED04") 
+         alpha = 0;
+         beta = 0;
+         a = 4.d0/3.d0;
+         b = -1.d0/3.d0;
+         c = 0;
+      case("CD06") 
+         alpha = 1.d0/3.d0;
+         beta = 0.d0;
+         a = 14.d0/9.d0;
+         b = 1.d0/9.d0;
+         c = 0.d0;
+      case("CD10") 
+         alpha = 1.d0/2.d0;
+         beta = 1.d0/20.d0;
+         a = 17.d0/12.d0;
+         b = 101.d0/150.d0;
+         c = 1.d0/100.d0;
+      end select 
+
+    end subroutine 
 end module 

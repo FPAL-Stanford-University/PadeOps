@@ -13,22 +13,23 @@ module actuatorDisk_T2mod
     private
     public :: actuatorDisk_T2
     
-    real(rkind), parameter :: alpha_Smooth = 0.9d0 ! Exonential smoothing constant
+    real(rkind), parameter :: alpha_Smooth = 1.d0 ! 0.9d0 ! Exonential smoothing constant
     integer, parameter :: xReg = 8, yReg = 8, zReg = 8
 
     type :: actuatorDisk_T2
         ! Actuator Disk_T2 Info
         integer :: xLoc_idx, ActutorDisk_T2ID
         integer, dimension(:,:), allocatable :: tag_face 
-        real(rkind) :: yaw, tilt
+        real(rkind) :: yaw, tilt, Cp=0.3
         real(rkind) :: xLoc, yLoc, zLoc
         real(rkind) :: diam, cT, pfactor, normfactor, OneBydelSq
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0
-        integer :: totPointsOnFace
+        integer :: totPointsOnFace, tInd
         real(rkind), dimension(:,:,:), allocatable :: eta_delta, dsq
         real(rkind), dimension(:,:), allocatable :: xp, yp, zp
         real(rkind), dimension(:), allocatable :: xs, ys, zs
         integer, dimension(:,:), allocatable :: startEnds
+        real(rkind), dimension(:,:), allocatable :: powerTime
 
         ! Grid Info
         integer :: nxLoc, nyLoc, nzLoc 
@@ -69,16 +70,16 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     !integer :: i, ylen, zlen
     integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
     integer  :: ntry = 100
-    real(rkind) :: time2initialize = 0
+    real(rkind) :: time2initialize = 0, correction_factor = 1.0d0, normfact_p
 
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
     
     ! Read input file for this turbine    
-    write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_T2_", ActuatorDisk_T2ID, "_input.inp"
+    write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_", ActuatorDisk_T2ID, "_input.inp"
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
 
     ioUnit = 55
-    open(unit=ioUnit, file=trim(fname), form='FORMATTED')
+    open(unit=ioUnit, file=trim(fname), form='FORMATTED', action="read")
     read(unit=ioUnit, NML=ACTUATOR_DISK)
     close(ioUnit)
     
@@ -89,6 +90,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
 
     this%delta = epsFact * (dx*dy*dz)**(1.d0/3.d0)
     this%OneByDelSq = 1.d0/(this%delta**2)
+    this%tInd = 1
 
     allocate(tmp(size(xG,2),size(xG,3)))
     allocate(tmp_tag(size(xG,2),size(xG,3)))
@@ -145,6 +147,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     end if 
 
      ntry = 2*ceiling(diam/min(dx, dy, dz))
+     ntry = p_maxval(ntry) ! prevents mismatch across processors due to roundoff
     
     if (this%Am_I_Active) then
         allocate(this%rbuff(size(xG,2),size(xG,3)))
@@ -183,6 +186,19 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
                                 this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
                                 this%startEnds(5,j),this%startEnds(6,j),this%startEnds(7,j))
     end do 
+
+    ! correction factor ::  required if this%smearing_base does not sum up to one because part of the cloud is outside the domain
+    ! this can happen if turbine is close to the bottom wall, or, in the future, close to an immersed boundary
+    normfact_p = p_maxval(this%normfactor)
+    this%normfactor = normfact_p
+    correction_factor = p_sum(this%smearing_base)*dx*dy*dz*this%pfactor*this%normfactor
+    call message(2, "correction factor = ", correction_factor)
+    !write(*,'(a,i4,e19.12,1x,e19.12)') '--', nrank, correction_factor, this%normfactor
+    this%smearing_base = this%smearing_base/correction_factor
+    if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
+           allocate(this%powerTime(1000000,1))
+    end if
+
     call message(2, "Smearing grid parameter, ntry", ntry)
     call toc(mpi_comm_world, time2initialize)
     call message(2, "Time (seconds) to initialize", time2initialize)
@@ -243,17 +259,17 @@ subroutine getMeanU(this, u, v, w)
 
 end subroutine
 
-subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
-!subroutine get_RHS(this, u, v, w, rhsvals)
+subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     class(actuatordisk_T2), intent(inout) :: this
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
-    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in) :: u, v, w
-    integer :: j
+    real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
+    real(rkind), dimension(8),                                  intent(out)   :: inst_val
     real(rkind) :: usp_sq, force
 
     call this%getMeanU(u,v,w)
     usp_sq = this%uface**2 + this%vface**2 + this%wface**2
     force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+   
     !do j = 1,size(this%xs)
     !        call this%smear_this_source(rhsxvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
     !                            this%startEnds(2,j),this%startEnds(3,j),this%startEnds(4,j), &
@@ -262,6 +278,25 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals)
     rhsxvals = rhsxvals + force*this%smearing_base 
     rhsyvals = zero
     rhszvals = zero
+
+    !if (present(inst_val)) then
+      if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
+        inst_val(1) = force
+        inst_val(2) = force*sqrt(usp_sq)
+        inst_val(3) = sqrt(usp_sq)
+        inst_val(4) = usp_sq
+        inst_val(5) = usp_sq*inst_val(3)
+        inst_val(6) = this%uface
+        inst_val(7) = this%vface
+        inst_val(8) = this%wface
+        if (usp_sq /= 0.d0) then ! this was added since this function is called
+                                 ! somewhere besides turbineMod which corrupts
+                                 ! the power measurements!
+            this%powerTime(this%tInd,1) = -force*sqrt(usp_sq)
+            this%tInd = this%tInd + 1
+        end if
+      end if
+    !end if 
 
 end subroutine
 
@@ -329,5 +364,7 @@ subroutine sample_on_circle(R,xcen, ycen, xloc,yloc,np)
 
     xloc = xloc + xcen; yloc = yloc + ycen 
 end subroutine
+
+
 
 end module 

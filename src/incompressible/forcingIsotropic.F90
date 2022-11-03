@@ -1,9 +1,14 @@
 module forcingmod
-   use kind_parameters, only: rkind
+   use kind_parameters, only: rkind, mpirkind
    use decomp_2d
-   use constants, only: im0, one, zero, two, pi
-   use spectralMod, only: spectral 
-   use mpi 
+   use constants,       only: im0, one, zero, two, pi
+   use spectralMod,     only: spectral 
+   use exits,           only: GracefulExit, message
+   use mpi
+   use fortran_assert,  only: assert 
+   use random,          only: uniform_random, randperm
+   use arrayTools,      only: findGL 
+   use gridtools,       only: loc2glob, glob2loc
 
    implicit none
    private
@@ -13,31 +18,41 @@ module forcingmod
       private
       type(decomp_info), pointer :: sp_gpC, sp_gpE
       real(rkind) :: kmin, kmax
-      integer(rkind) :: Nwaves
-      real(rkind) :: EpsAmplitude
+      integer :: Nwaves
+      real(rkind), public :: EpsAmplitude
       class(spectral), pointer :: spectC
 
       integer, dimension(:), allocatable :: wave_x, wave_y, wave_z
-      complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what
+      complex(rkind), dimension(:,:,:), allocatable :: uhat, vhat, what, fxhat_old, fyhat_old, fzhat_old
       complex(rkind), dimension(:,:,:), pointer :: fxhat, fyhat, fzhat, cbuffzE, cbuffyE, cbuffyC
-      integer, dimension(:), allocatable :: k1inZ, k2inZ, k3inZ
 
       real(rkind), dimension(:), allocatable :: kabs_sample, zeta_sample, theta_sample
-      integer :: seed0, seed1, seed2, seed3
-      integer :: myk1min, myk1max, myk2min, myk2max
+      integer, public :: seed0, seed1, seed2, seed3
       real(rkind) :: Nwaves_rkind
       real(rkind), dimension(:), allocatable :: tmpModes
-
-      real(rkind) :: normfact = 1.d0
-
+      real(rkind) :: alpha_t = 1.d0 
+      real(rkind) :: normfact = 1.d0, A_force = 1.d0 
+      integer     :: DomAspectRatioZ
+      logical :: useLinearForcing, firstCall
+      
+      ! Ryan's additions/changes:
+      real(rkind), dimension(:,:,:), allocatable :: k1, k2, k3, kmag
+      integer, dimension(:), allocatable :: k1_1d, k2_1d, k3_1d
+      integer, dimension(:), allocatable :: i, j, k
+      integer :: version
+    
       contains
       procedure          :: init
       procedure          :: destroy
       procedure, private :: update_seeds
       procedure, private :: pick_random_wavenumbers
+      procedure, private :: pick_random_wavenumbersV2
       procedure, private :: compute_forcing
       procedure, private :: embed_forcing_mode
       procedure          :: getRHS_HITforcing
+      procedure, private :: scrubConjPairs
+      !procedure, private :: scrubConjPairsV2
+      procedure, private :: replaceConjPartners
    end type 
 
 contains
@@ -50,29 +65,100 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    complex(rkind), dimension(:,:,:  ), intent(inout), target :: cbuffzE, cbuffyE, cbuffyC
    complex(rkind), dimension(:,:,:,:), intent(inout), target :: cbuffzC
    class(spectral), intent(in), target :: spectC
-   real(rkind), dimension(:,:,:), allocatable :: rbuffzC
-   integer :: RandSeedToAdd = 0, ierr
-
+   integer :: RandSeedToAdd = 0, ierr, DomAspectRatioZ = 1
+   real(rkind) :: alpha_t = 1.d0 
    integer :: Nwaves = 20
-   real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0
-   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd 
+   real(rkind) :: kmin = 2.d0, kmax = 10.d0, EpsAmplitude = 0.1d0, A_force = 1.d0 
+   logical :: useLinearForcing = .false. 
+   real(rkind) :: filtfact_linForcing = 0.5d0
+   integer :: nforce, version = 1
+
+   namelist /HIT_Forcing/ kmin, kmax, Nwaves, EpsAmplitude, RandSeedToAdd, &
+     DomAspectRatioZ, alpha_t, useLinearForcing, filtfact_linForcing, &
+     version
 
    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
    read(unit=123, NML=HIT_Forcing)
    close(123)
 
+   if(DomAspectRatioZ < 1.0d0) then
+       call GracefulExit("Aspect ratio in z must be greater than 1", 111)
+   endif
+
+   this%A_force = A_force
    this%kmin = kmin
    this%kmax = kmax
    this%EpsAmplitude = EpsAmplitude
    this%Nwaves = Nwaves
+   this%DomAspectRatioZ = DomAspectRatioZ
    this%sp_gpC => sp_gpC
    this%sp_gpE => sp_gpE
    this%spectC => spectC
-
+   this%useLinearForcing = useLinearForcing
+   this%version = version
    allocate(this%uhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%vhat (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    allocate(this%what (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
+   allocate(this%fxhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
+   allocate(this%fyhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
+   allocate(this%fzhat_old (this%sp_gpC%zsz(1), this%sp_gpC%zsz(2), this%sp_gpC%zsz(3)))
    
+   this%seed0 = tidStart + RandSeedToAdd
+   call this%update_seeds()
+  
+   ! Define the wave-vector grid
+   nforce = ceiling(this%kmax)*2
+   if (mod(ceiling(this%kmax),2) .ne. 0) nforce = ceiling(this%kmax + 1.d0)*2
+
+   select case (this%version)
+     case (1)
+       allocate(this%kabs_sample(Nwaves))
+       allocate(this%theta_sample(Nwaves))
+       allocate(this%zeta_sample(Nwaves))
+       allocate(this%tmpModes(Nwaves))
+
+       allocate(this%wave_x(Nwaves))
+       allocate(this%wave_y(Nwaves))
+       allocate(this%wave_z(Nwaves))
+
+       call message("Initializating VERSION 1 of HIT_shell_forcing")
+     case (2)
+       call message("Initializating VERSION 2 of HIT_shell_forcing")
+       allocate(this%k1  (nforce/2+1,nforce,nforce))
+       allocate(this%k2  (nforce/2+1,nforce,nforce))
+       allocate(this%k3  (nforce/2+1,nforce,nforce))
+       allocate(this%kmag(nforce/2+1,nforce,nforce))
+       call getIsotropicWaveVectorComponents(this%k1,this%k2,this%k3,nforce) 
+       this%kmag = sqrt(this%k1*this%k1 + this%k2*this%k2 + this%k3*this%k3)
+
+       allocate(this%k1_1d(nforce/2+1), this%k2_1d(nforce), this%k3_1d(nforce))
+       this%k1_1d = nint(this%k1(:,1,1))
+       this%k2_1d = nint(this%k2(1,:,1))
+       this%k3_1d = nint(this%k3(1,1,:))
+
+       ! Find the indices of each mode that satisfies kmin <= k <= kmax
+       call findGL(this%kmag,this%kmin,this%kmax,this%i,this%j,this%k)
+
+       ! Shuffle the modes before scrubbing conjugate pairs so we don't get biased statistics
+       ! (do it a few times to make sure it is well shuffled)
+       !call randomShuffle(this%i, this%j, this%k, this%seed0)
+       !call randomShuffle(this%i, this%j, this%k, this%seed1)
+       !call randomShuffle(this%i, this%j, this%k, this%seed2)
+       !call randomShuffle(this%i, this%j, this%k, this%seed3)
+  
+       ! Remove complex conjugate pairs
+       !call this%scrubConjPairsV2(this%i,this%j,this%k,&
+       !  nint(this%k1(:,1,1)),nint(this%k2(1,:,1)),nint(this%k3(1,1,:)))
+      
+       ! Allocate Nwaves + a buffer of Nwaves 
+       allocate(this%wave_x(Nwaves+50))
+       allocate(this%wave_y(Nwaves+50))
+       allocate(this%wave_z(Nwaves+50))
+     case default
+       call assert(.false.,'Invalid version number -- forcingIsotropic.F90')
+   end select
+
+   this%firstCall = .true.
    this%fxhat    => cbuffzC(:,:,:,1)
    this%fyhat    => cbuffzC(:,:,:,2)
    this%fzhat    => cbuffzC(:,:,:,3)
@@ -80,48 +166,26 @@ subroutine init(this, inputfile, sp_gpC, sp_gpE, spectC, cbuffyE, cbuffyC, cbuff
    this%cbuffyE  => cbuffyE
    this%cbuffyC  => cbuffyC
 
-   this%seed0 = tidStart + RandSeedToAdd
-   call this%update_seeds()
-  
    this%normfact = (real(spectC%physdecomp%xsz(1),rkind)*real(spectC%physdecomp%ysz(2),rkind)*real(spectC%physdecomp%zsz(3),rkind))**2
-   
-   allocate(this%kabs_sample(Nwaves))
-   allocate(this%theta_sample(Nwaves))
-   allocate(this%zeta_sample(Nwaves))
-   allocate(this%tmpModes(Nwaves))
-
-   allocate(this%wave_x(Nwaves))
-   allocate(this%wave_y(Nwaves))
-   allocate(this%wave_z(Nwaves))
-
-   allocate(rbuffzC(sp_gpC%zsz(1), sp_gpC%zsz(2), sp_gpC%zsz(3)))
-   allocate(this%k1inZ(sp_gpC%zsz(1)))
-   allocate(this%k2inZ(sp_gpC%zsz(2)))
-   allocate(this%k3inZ(sp_gpC%zsz(3)))
-
-   call transpose_y_to_z(spectC%k1, rbuffzC, sp_gpC)
-   this%k1inZ = nint(rbuffzC(:,1,1)) 
-   
-   call transpose_y_to_z(spectC%k2, rbuffzC, sp_gpC)
-   this%k2inZ = nint(rbuffzC(1,:,1)) 
   
-   call transpose_y_to_z(spectC%k3, rbuffzC, sp_gpC)
-   this%k3inZ = nint(rbuffzC(1,1,:))
-
-   this%myk1min = minval(this%k1inZ)
-   this%myk2min = minval(this%k2inZ)
-   
-   this%myk1max = maxval(this%k1inZ)
-   this%myk2max = maxval(this%k2inZ)
-
-   deallocate(rbuffzC)
-
    this%Nwaves_rkind = real(this%Nwaves, rkind)
 
+   if (this%useLinearForcing) then
+      call this%spectC%init_HIT_linearForcing(filtfact_linForcing)
+   end if 
 end subroutine 
 
 subroutine update_seeds(this)
    class(HIT_shell_forcing), intent(inout) :: this
+   integer :: big
+
+   big = huge(0)
+   if (big - this%seed0 < 10000000 .or. &
+       big - this%seed1 < 10000000 .or. &
+       big - this%seed2 < 10000000 .or. &
+       big - this%seed3 < 10000000 ) then
+     this%seed0 = 1
+   end if
    this%seed0 = abs(this%seed0 + 2223345) 
    this%seed1 = abs(this%seed0 + 1423246)
    this%seed2 = abs(this%seed0 + 8723446)
@@ -130,86 +194,253 @@ end subroutine
 
 
 subroutine pick_random_wavenumbers(this)
-   use random, only: uniform_random 
    class(HIT_shell_forcing), intent(inout) :: this
-
 
    call uniform_random(this%kabs_sample, this%kmin, this%kmax, this%seed1)
    call uniform_random(this%zeta_sample, -one, one, this%seed2)
    call uniform_random(this%theta_sample, zero, two*pi, this%seed3)
+ 
+   call convertCylindricalToSphericalWaveVectors(&
+     this%wave_x, this%wave_y, this%wave_z, this%tmpModes, &
+     this%kabs_sample, this%zeta_sample, this%theta_sample)
+
+   call this%scrubConjPairs(this%wave_x, this%wave_y, this%wave_z)
+
+end subroutine
+
+subroutine convertCylindricalToSphericalWaveVectors(kx, ky, kz, tmp, kabs, &
+    zeta, theta)
+  integer, dimension(:), intent(inout) :: kx, ky, kz
+  real(rkind), dimension(:), intent(inout) :: tmp
+  real(rkind), dimension(:), intent(in) :: kabs, zeta, theta
+   
+  tmp = kabs*sqrt(1 - zeta**2)*cos(theta)
+  where(tmp < 0) tmp = -tmp
+  kx = nint(tmp)
   
-   this%tmpModes = this%kabs_sample*sqrt(1 - this%zeta_sample**2)*cos(this%theta_sample)
-   where(this%tmpModes < 0) this%tmpModes = -this%tmpModes
-   this%wave_x = ceiling(this%tmpModes)
-   
-   this%tmpModes = this%kabs_sample*sqrt(1 - this%zeta_sample**2)*sin(this%theta_sample)
-   where(this%tmpModes < 0) this%tmpModes = -this%tmpModes
-   this%wave_y = ceiling(this%tmpModes)
-   
-   this%tmpModes = this%kabs_sample*this%zeta_sample
-   where(this%tmpModes < 0) this%tmpModes = -this%tmpModes
-   this%wave_z = ceiling(this%tmpModes)
+  tmp = kabs*sqrt(1 - zeta**2)*sin(theta)
+  ky = nint(tmp)
+  
+  tmp = kabs*zeta
+  kz = nint(tmp)
 
+end subroutine
 
-end subroutine 
+subroutine pick_random_wavenumbersV2(this)
+  class(HIT_shell_forcing), intent(inout) :: this
+  integer :: n, Nadd1, Nadd2, Nmodes
+  !integer, dimension(this%Nwaves) :: i, j, k
+  
+  ! Randomly sort the arrays
+  call randomShuffle(this%i,this%j,this%k,this%seed3)
 
+  ! Choose the first N modes
+  Nmodes = this%Nwaves
+  Nadd1 = 1
+  Nadd2 = 0
+  do while ((Nadd1 - Nadd2) /= 0)
+    Nadd1 = NmodesToAdd(this%i, this%j, this%k, this%k1_1d, this%k2_1d, &
+     this%k3_1d, Nmodes + Nadd2)
+    Nadd2 = NmodesToAdd(this%i, this%j, this%k, this%k1_1d, this%k2_1d, &
+     this%k3_1d, Nmodes + Nadd1)
+  end do
+  Nmodes = Nmodes + Nadd2
+  !i = this%i(1:this%Nwaves)
+  !j = this%j(1:this%Nwaves)
+  !k = this%k(1:this%Nwaves)
+  
+  this%wave_x = 0
+  this%wave_y = 0
+  this%wave_z = 0
+  call assert(Nmodes <= this%Nwaves+50,&
+    'Did not allocated enough memory for wave_x, wave_y, and wave_z '//&
+    '-- forcingIsotropic.F90')
+
+  do n = 1,Nmodes
+    this%wave_x(n) = this%k1(this%i(n),this%j(n),this%k(n)) 
+    this%wave_y(n) = this%k2(this%i(n),this%j(n),this%k(n)) 
+    this%wave_z(n) = this%k3(this%i(n),this%j(n),this%k(n)) 
+  end do
+
+end subroutine
+
+function NmodesToAdd(i,j,k,k1,k2,k3,Ninit) result(Nadd)
+  integer, dimension(:), intent(in) :: i, j, k, k1, k2, k3
+  integer, intent(in) :: Ninit
+  integer :: Nadd, n, m
+
+  Nadd = 0
+  do n = 1,Ninit-1
+    do m = n+1,Ninit
+      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
+        Nadd = Nadd + 1
+      end if
+    end do
+  end do
+end function
+
+subroutine randomShuffle(i,j,k,seed)
+  integer, dimension(:), intent(inout) :: i, j, k
+  integer, intent(in) :: seed
+  integer, dimension(size(i)) :: idx
+
+  call randperm(size(i),seed,idx)
+
+  i = i(idx)
+  j = j(idx)
+  k = k(idx)
+  
+end subroutine
+
+!subroutine scrubConjPairsV2(this,i,j,k,k1,k2,k3)
+!  use sorting_mod, only: binary_sort
+!  ! Ensure none of the wavevectors indexed by i, j, and k correspond to
+!  ! complex conjugate (C.C.) modes
+!
+!  class(HIT_shell_forcing), intent(inout) :: this
+!  integer, dimension(:), allocatable, intent(inout) :: i, j, k
+!  integer, dimension(:), intent(in) :: k1, k2, k3
+!  integer, dimension(:), allocatable :: icpy, jcpy, kcpy
+!  integer :: counter, m, n, id, Nmodes, big
+!  integer, dimension(:), allocatable :: idCC
+!
+!  counter = 0
+!  Nmodes = size(i)
+!
+!  do n = 1,Nmodes-1
+!    do m = n+1,Nmodes
+!      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
+!        counter = counter + 1
+!      end if
+!    end do
+!  end do
+!
+!  if (counter > 0) then
+!    call assert(Nmodes - counter > this%Nwaves)
+!    allocate(idCC(counter))
+!
+!    id = 1
+!    do n = 1,size(i)-1
+!      do m = n+1,size(i)
+!      if(k1(i(n)) == 0 .and. k2(j(n)) == -k2(j(m)) .and. k3(k(n)) == -k3(k(m))) then
+!          idCC(id) = m
+!          id = id + 1
+!        end if
+!      end do
+!    end do
+!    
+!    allocate(icpy(Nmodes),jcpy(Nmodes),kcpy(Nmodes))
+!    icpy = i
+!    jcpy = j
+!    kcpy = k
+!    deallocate(i,j,k)
+!    allocate(i(Nmodes-counter),j(Nmodes-counter),k(Nmodes-counter))
+!   
+!    call binary_sort(idCC) 
+!    call removeItems(icpy,jcpy,kcpy,idCC,i,j,k)
+!
+!    deallocate(icpy,jcpy,kcpy)
+!    deallocate(idCC)
+!  end if
+!end subroutine
+
+subroutine removeItems(ii,ji,ki,idrmv,io,jo,ko)
+  integer, dimension(:), intent(in) :: ii, ji, ki, idrmv
+  integer, dimension(:), intent(out) :: io, jo, ko
+  integer :: m, n, id
+
+  call assert(size(io) == size(ii) - size(idrmv))
+  
+  m = 1
+  id = 1
+  do n = 1,size(ii)
+    if (n == idrmv(id)) then
+      id = min(id + 1,size(idrmv))
+    else
+      io(m) = ii(n)
+      jo(m) = ji(n)
+      ko(m) = ki(n)
+      m = m + 1
+    end if
+  end do
+end subroutine
+
+subroutine scrubConjPairs(this,kx,ky,kz)
+  class(HIT_shell_forcing), intent(inout) :: this
+  integer, dimension(:), intent(inout) :: kx, ky, kz
+  integer :: id, m, n, counter
+  integer, dimension(:), allocatable :: idCC
+
+  counter = 0
+  do n = 1,size(ky) - 1
+    do m = n+1,size(ky)
+      if (kx(n) == 0 .and. ky(n) == -ky(m) .and. kz(n) == -kz(m)) then
+        counter = counter + 1
+      end if 
+    end do
+  end do
+
+  if (counter > 0) then
+    allocate(idCC(counter))
+    id = 1
+    do n = 1,size(ky) - 1
+      do m = n+1,size(ky)
+        if (kx(n) == 0 .and. ky(n) == -ky(m) .and. kz(n) == -kz(m)) then
+          idCC(id) = m
+          id = id + 1
+        end if 
+      end do
+    end do
+    call this%replaceConjPartners(kx,ky,kz,idCC)
+    deallocate(idCC)
+  end if
+end subroutine
+
+subroutine replaceConjPartners(this,kx,ky,kz,idCC)
+  class(HIT_shell_forcing), intent(inout) :: this
+  integer, dimension(:), intent(inout) :: kx, ky, kz
+  integer, dimension(:), intent(in) :: idCC
+  integer :: id
+  real(rkind), dimension(size(idCC)) :: tmp, kabs, zeta, theta
+  integer, dimension(size(idCC)) :: kxtmp, kytmp, kztmp
+
+  call this%update_seeds()
+  call uniform_random(kabs, this%kmin, this%kmax, this%seed1)
+  call uniform_random(zeta, -one, one, this%seed2)
+  call uniform_random(theta, zero, two*pi, this%seed3)
+  
+  call convertCylindricalToSphericalWaveVectors(&
+    kxtmp, kytmp, kztmp, tmp, kabs, zeta, theta)
+
+  do id = 1,size(idCC)
+    kx(idCC(id)) = kxtmp(id)
+    ky(idCC(id)) = kytmp(id)
+    kz(idCC(id)) = kztmp(id)
+  end do
+  
+  ! Now check that we didn't inadvertantly introduce a new conjugate pair
+  call this%scrubConjPairs(kx,ky,kz)
+end subroutine
 
 subroutine destroy(this)
    class(HIT_shell_forcing), intent(inout) :: this
 
    deallocate(this%uhat, this%vhat, this%what)
    nullify(this%fxhat, this%fyhat, this%fzhat, this%cbuffzE)
-   deallocate(this%k1inZ, this%k2inZ, this%k3inZ)
-   if (nrank == 0) then
-      deallocate(this%kabs_sample, this%theta_sample, this%zeta_sample)
-   end if
+   if (allocated(this%kabs_sample)) deallocate(this%kabs_sample)
+   if (allocated(this%theta_sample)) deallocate(this%theta_sample)
+   if (allocated(this%zeta_sample)) deallocate(this%zeta_sample)
    deallocate(this%wave_x, this%wave_y, this%wave_z)
    nullify(this%sp_gpC, this%spectC)
+   if (allocated(this%k1)) deallocate(this%k1)
+   if (allocated(this%k2)) deallocate(this%k2)
+   if (allocated(this%k3)) deallocate(this%k3)
+   if (allocated(this%kmag)) deallocate(this%kmag)
+
+   if (allocated(this%i)) deallocate(this%i)
+   if (allocated(this%j)) deallocate(this%j)
+   if (allocated(this%k)) deallocate(this%k)
 end subroutine 
-
-
-!subroutine embed_forcing(this)
-!   class(HIT_shell_forcing), intent(inout) :: this
-!
-!!!!!NOTE:::::!!!! 
-!!   I am assuming wave_x, wave_y and wave_z are in z decomp, and are
-!!   integers from (1:N) irrespective of domain size.
-!
-!   integer :: ik, indx, indy, indz
-!   real(rkind) :: Nwaves_rkind, den, fac
-!
-!   Nwaves_rkind = real(this%Nwaves, rkind)
-!   this%fxhat = im0; this%fyhat = im0; this%fzhat = im0
-!   do ik = 1, size(this%wave_x)
-!       ! check if kx is on this processor
-!       indx = this%wave_x(ik) - this%sp_gpC%zst(1) + 1
-!       if(indx > this%sp_gpC%zsz(1)) then
-!         ! not on this processor
-!         cycle
-!       endif
-!
-!       ! check if ky is on this processor
-!       indy = this%wave_y(ik) - this%sp_gpC%zst(2) + 1
-!       if(indy > this%sp_gpC%zsz(2)) then
-!         ! not on this processor
-!         cycle
-!       endif
-!
-!       ! kz must be on this processor because we are in zdecomp
-!       indz = this%wave_z(ik) - this%sp_gpC%zst(3) + 1
-!
-!      ! now indx, indy, indz are indices for this wavenumber
-!      den = abs(this%uhat(indx, indy, indz))**2 + &
-!            abs(this%vhat(indx, indy, indz))**2 + &
-!            abs(this%what(indx, indy, indz))**2
-!      fac = this%EpsAmplitude/den/Nwaves_rkind
-!      this%fxhat(indx, indy, indz) = this%fxhat(indx, indy, indz) + fac*conjg(this%uhat(indx,indy,indz))
-!      this%fyhat(indx, indy, indz) = this%fyhat(indx, indy, indz) + fac*conjg(this%vhat(indx,indy,indz))
-!      this%fzhat(indx, indy, indz) = this%fzhat(indx, indy, indz) + fac*conjg(this%what(indx,indy,indz))
-!   enddo
-!
-!end subroutine 
-
 
 subroutine compute_forcing(this)
    class(HIT_shell_forcing), intent(inout) :: this
@@ -220,6 +451,9 @@ subroutine compute_forcing(this)
    this%fzhat = im0
    do ik = 1,this%Nwaves
       call this%embed_forcing_mode(this%wave_x(ik),  this%wave_y(ik),  this%wave_z(ik))
+      if (this%wave_x(ik) == 0) then
+        call this%embed_forcing_mode(this%wave_x(ik),  -this%wave_y(ik),  -this%wave_z(ik))
+      end if
    end do
 end subroutine 
 
@@ -233,10 +467,20 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
 
    ! Get global ID of the mode and conjugate
    gid_x  = kx + 1
-   gid_y  = ky + 1
-   gid_yC = this%sp_gpC%ysz(2) - ky + 1 
-   gid_z  = kz + 1
-   gid_zC = this%sp_gpC%zsz(3) - kz + 1 
+   if (ky >= 0) then
+     gid_y  = ky + 1
+     gid_yC = this%sp_gpC%ysz(2) - ky + 1 
+   else
+     gid_yC = -ky + 1
+     gid_y  = this%sp_gpC%ysz(2) + ky + 1 
+   end if
+   if (kz >= 0) then
+     gid_z  = this%DomAspectRatioZ*kz + 1
+     gid_zC = this%sp_gpC%zsz(3) - this%DomAspectRatioZ*kz + 1
+   else
+     gid_zC = this%DomAspectRatioZ*(-kz) + 1
+     gid_z  = this%sp_gpC%zsz(3) - this%DomAspectRatioZ*(-kz) + 1
+   end if 
 
    ! Get local ID of the mode and conjugate
    lid_x  = gid_x  - this%sp_gpC%zst(1) + 1
@@ -250,15 +494,18 @@ subroutine embed_forcing_mode(this, kx, ky, kz)
                abs(this%vhat(lid_x,lid_y,gid_z))**2 + &
                abs(this%what(lid_x,lid_y,gid_z))**2 + 1.d-14
          
-         fac = this%normfact*this%EpsAmplitude/den/this%Nwaves_rkind
-         this%fxhat(lid_x, lid_y, gid_z ) = this%fxhat(lid_x, lid_y, gid_z ) + fac*conjg(this%uhat(lid_x, lid_y, gid_z ))
-         this%fyhat(lid_x, lid_y, gid_z ) = this%fyhat(lid_x, lid_y, gid_z ) + fac*conjg(this%vhat(lid_x, lid_y, gid_z ))
-         this%fzhat(lid_x, lid_y, gid_z ) = this%fzhat(lid_x, lid_y, gid_z ) + fac*conjg(this%what(lid_x, lid_y, gid_z ))
+         fac = 0.5d0*this%normfact*this%EpsAmplitude/den/this%Nwaves_rkind
+         this%fxhat(lid_x, lid_y, gid_z ) = this%fxhat(lid_x, lid_y, gid_z )&
+           + fac*this%uhat(lid_x, lid_y, gid_z )
+         this%fyhat(lid_x, lid_y, gid_z ) = this%fyhat(lid_x, lid_y, gid_z )&
+           + fac*this%vhat(lid_x, lid_y, gid_z )
+         this%fzhat(lid_x, lid_y, gid_z ) = this%fzhat(lid_x, lid_y, gid_z )&
+           + fac*this%what(lid_x, lid_y, gid_z )
+
       end if 
    end if 
 
 end subroutine 
-
 
 subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, what_xy, newTimestep)
    class(HIT_shell_forcing), intent(inout) :: this
@@ -269,51 +516,119 @@ subroutine getRHS_HITforcing(this, urhs_xy, vrhs_xy, wrhs_xy, uhat_xy, vhat_xy, 
    complex(rkind), dimension(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: wrhs_xy
    
    logical, intent(in) :: newTimestep
+   real(rkind) :: alpha_t
+
+   integer, dimension(this%Nwaves) :: i, j, k ! Indices of the N random modes
+
+   if (this%useLinearForcing) then
+        this%cbuffyC = uhat_xy
+        call this%spectC%hitForceFilter(this%cbuffyC)
+        urhs_xy = urhs_xy + (1.d0/this%A_force)*this%cbuffyC 
+       
+        this%cbuffyC = vhat_xy
+        call this%spectC%hitForceFilter(this%cbuffyC)
+        vrhs_xy = vrhs_xy + (1.d0/this%A_force)*this%cbuffyC
+        
+        call transpose_y_to_z(what_xy, this%cbuffzE, this%sp_gpE)
+        call this%spectC%hitForceFilter_edgeField(this%cbuffzE)
+        call transpose_z_to_y(this%cbuffzE, this%cbuffyE, this%sp_gpE)
+        wrhs_xy = wrhs_xy + (1.d0/this%A_force)*this%cbuffyE
+   else
 
 
-   ! STEP 1: Populate wave_x, wave_y, wave_z
-   if (newTimestep) then
-      call this%pick_random_wavenumbers()
-      call this%update_seeds()
-   end if
+        ! STEP 1: Populate wave_x, wave_y, wave_z
+        
+        if (newTimestep) then
+           this%fxhat_old = this%fxhat
+           this%fyhat_old = this%fyhat
+           this%fzhat_old = this%fzhat
+           select case (this%version)
+             case (1) 
+               call this%pick_random_wavenumbers()
+             case (2) 
+               call this%pick_random_wavenumbersV2()
+           end select
+           call this%update_seeds()
+        end if
 
 
-   ! STEP 2: Take FFTz
-   call transpose_y_to_z(uhat_xy, this%uhat, this%sp_gpC)
-   call this%spectC%take_fft1d_z2z_ip(this%uhat)
+        ! STEP 2: Take FFTz
+        call transpose_y_to_z(uhat_xy, this%uhat, this%sp_gpC)
+        call this%spectC%take_fft1d_z2z_ip(this%uhat)
 
-   call transpose_y_to_z(vhat_xy, this%vhat, this%sp_gpC)
-   call this%spectC%take_fft1d_z2z_ip(this%vhat)
+        call transpose_y_to_z(vhat_xy, this%vhat, this%sp_gpC)
+        call this%spectC%take_fft1d_z2z_ip(this%vhat)
 
-   call transpose_y_to_z(what_xy, this%cbuffzE, this%sp_gpE)
-   this%what = this%cbuffzE(:,:,1:this%sp_gpC%zsz(3))
-   call this%spectC%take_fft1d_z2z_ip(this%what)
-   call this%spectC%shiftz_E2C(this%what)
+        call transpose_y_to_z(what_xy, this%cbuffzE, this%sp_gpE)
+        this%what = this%cbuffzE(:,:,1:this%sp_gpC%zsz(3))
+        call this%spectC%take_fft1d_z2z_ip(this%what)
+        call this%spectC%shiftz_E2C(this%what)
 
 
-   ! STEP 3: embed into fhat
-   call this%compute_forcing()
+        ! STEP 3a: embed into fhat
+        call this%compute_forcing()
+        
+        if (newTimeStep .and. this%firstCall) then
+            this%fxhat_old = this%fxhat
+            this%fyhat_old = this%fyhat
+            this%fzhat_old = this%fzhat
+        end if 
 
-   ! STEP 4: Take ifft of fx, fy, fz and add to RHS
-   call this%spectC%take_ifft1d_z2z_ip(this%fxhat)
-   call transpose_z_to_y(this%fxhat, this%cbuffyC, this%sp_gpC)
-   urhs_xy = urhs_xy + this%cbuffyC
+        ! STEP 3b: Time filter
+        this%fxhat = this%alpha_t*this%fxhat + (1.d0 - this%alpha_t)*this%fxhat_old
+        this%fyhat = this%alpha_t*this%fyhat + (1.d0 - this%alpha_t)*this%fyhat_old
+        this%fzhat = this%alpha_t*this%fzhat + (1.d0 - this%alpha_t)*this%fzhat_old
 
-   call this%spectC%take_ifft1d_z2z_ip(this%fyhat)
-   call transpose_z_to_y(this%fyhat, this%cbuffyC, this%sp_gpC)
-   vrhs_xy = vrhs_xy + this%cbuffyC
+        ! STEP 4: Take ifft of fx, fy, fz and add to RHS
+        call this%spectC%take_ifft1d_z2z_ip(this%fxhat)
+        call transpose_z_to_y(this%fxhat, this%cbuffyC, this%sp_gpC)
+        urhs_xy = urhs_xy + this%cbuffyC
 
-   call this%spectC%shiftz_C2E(this%fzhat)
-   call this%spectC%take_ifft1d_z2z_ip(this%fzhat)
-   this%cbuffzE(:,:,1:this%sp_gpC%zsz(3)) = this%fzhat
-   this%cbuffzE(:,:,this%sp_gpC%zsz(3)+1) = this%cbuffzE(:,:,1)
-   call transpose_z_to_y(this%cbuffzE, this%cbuffyE, this%sp_gpE)
-   wrhs_xy = wrhs_xy + this%cbuffyE
+        call this%spectC%take_ifft1d_z2z_ip(this%fyhat)
+        call transpose_z_to_y(this%fyhat, this%cbuffyC, this%sp_gpC)
+        vrhs_xy = vrhs_xy + this%cbuffyC
 
+        call this%spectC%shiftz_C2E(this%fzhat)
+        call this%spectC%take_ifft1d_z2z_ip(this%fzhat)
+        this%cbuffzE(:,:,1:this%sp_gpC%zsz(3)) = this%fzhat
+        this%cbuffzE(:,:,this%sp_gpC%zsz(3)+1) = this%cbuffzE(:,:,1)
+        call transpose_z_to_y(this%cbuffzE, this%cbuffyE, this%sp_gpE)
+        wrhs_xy = wrhs_xy + this%cbuffyE
+    
+   end if 
 
 end subroutine
 
+subroutine getIsotropicWaveVectorComponents(k1,k2,k3,n)
+  real(rkind), dimension(:,:,:), intent(inout) :: k1, k2, k3
+  integer, intent(in) :: n
+  integer :: i, j, k, id 
 
+  do i = 1,n/2
+    k1(i,:,:) = real(i - 1,rkind)
+  end do
+  k1(n/2+1,:,:) = real(-n/2,rkind)
 
+  do j = 1,n/2
+    k2(:,j,:) = real(j - 1,rkind)
+  end do
+
+  id = n/2
+  do j = n/2+1,n
+    k2(:,j,:) = -k2(:,id,:) - 1.d0
+    id = id - 1
+  end do
+
+  do k = 1,n/2
+    k3(:,:,k) = real(k - 1,rkind)
+  end do
+  
+  id = n/2
+  do k = n/2+1,n
+    k3(:,:,k) = -k3(:,:,id) - 1.d0
+    id = id - 1
+  end do
+
+end subroutine
 
 end module 

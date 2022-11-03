@@ -6,6 +6,9 @@ module io_hdf5_stuff
     use exits,           only: GracefulExit
     implicit none
 
+    external :: MPI_ALLREDUCE, SYSTEM, MPI_BCAST
+
+
     type :: io_hdf5
 
         logical :: reduce_precision = .false. ! Reduce precision to single for I/O?
@@ -49,6 +52,7 @@ module io_hdf5_stuff
         logical :: master
         logical :: active
 
+        logical :: wider_time_format = .false. 
     contains
 
         procedure          :: init
@@ -69,19 +73,19 @@ module io_hdf5_stuff
         procedure          :: write_variable
         procedure          :: find_last_dump
         procedure          :: destroy
-
+        procedure          :: update_vizcount 
     end type
 
 contains
 
-    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, write_xdmf, read_only, subdomain_lo, subdomain_hi, jump_to_last)
+    subroutine init(this, comm, gp, pencil, vizdir, filename_prefix, reduce_precision, write_xdmf, read_only, subdomain_lo, subdomain_hi, jump_to_last, wider_time_format)
         class(io_hdf5),     intent(inout) :: this
         integer,            intent(in)    :: comm
         class(decomp_info), intent(in)    :: gp
         character(len=1),   intent(in)    :: pencil
         character(len=*),   intent(in)    :: vizdir
         character(len=*),   intent(in)    :: filename_prefix
-        logical, optional,  intent(in)    :: reduce_precision, write_xdmf, read_only, jump_to_last
+        logical, optional,  intent(in)    :: reduce_precision, write_xdmf, read_only, jump_to_last, wider_time_format
         integer, dimension(3), optional, intent(in) :: subdomain_lo, subdomain_hi
 
         integer(hsize_t), dimension(3) :: tmp
@@ -92,6 +96,8 @@ contains
 
         this%read_only = .true.
         if (present(read_only)) this%read_only = read_only
+
+        if (present(wider_time_format)) this%wider_time_format = wider_time_format
 
         info = mpi_info_null
 
@@ -121,7 +127,7 @@ contains
         end if
 
         ! Create vizdir if it does not exist
-        if (this%master) call system('mkdir -p ' // adjustl(trim(this%vizdir)))
+        !if (this%master) call system('mkdir -p ' // adjustl(trim(this%vizdir)))
         call mpi_barrier(mpi_comm_world, error)
 
         ! Initialize the HDF5 library and Fortran interfaces
@@ -227,6 +233,9 @@ contains
         ! Make sure the same chunk parameters are passed in from every process
         call MPI_Allreduce( this%chunk_dims, tmp, 3, MPI_INTEGER8, MPI_MAX, this%comm, error )
         this%chunk_dims = tmp
+
+        ! Set the XDMF file ID
+        this%xdmf_file_id = 347
 
         ! print *, "active = ", this%active
         ! print '(I2,A,3I4)', nrank, ": chunk_dims = ", this%chunk_dims
@@ -610,6 +619,14 @@ contains
         call h5fclose_f(this%file_id, error)
     end subroutine
 
+    subroutine update_vizcount(this, viznum) 
+        class(io_hdf5), intent(inout) :: this
+        integer, intent(in) :: viznum
+
+        this%vizcount = viznum 
+
+    end subroutine 
+    
     subroutine start_viz(this, time)
         class(io_hdf5), intent(inout) :: this
         real(rkind),    intent(in)    :: time
@@ -626,8 +643,13 @@ contains
 
         this%filename = ''
         this%basename = ''
-        write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
-        write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        if (this%wider_time_format) then
+            write(this%filename, '(2A,I7.7,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+            write(this%basename, '(2A,I7.7,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        else
+            write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+            write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        end if 
 
         ! Create the file collectively
         if (this%read_only) then
@@ -646,7 +668,11 @@ contains
         if (this%write_xdmf) then
             this%xdmf_filename = ''
             ! write(this%xdmf_filename,'(A,A,I4.4,A)') adjustl(trim(this%vizdir)), "/", this%vizcount, '.xmf'
-            write(this%xdmf_filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.xmf'
+            if (this%wider_time_format) then
+                write(this%xdmf_filename, '(2A,I7.7,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.xmf'
+            else
+                write(this%xdmf_filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.xmf'
+            end if 
 
             if (this%master) then
                 open(unit=this%xdmf_file_id, file=adjustl(trim(this%xdmf_filename)), form='FORMATTED', status='REPLACE')
@@ -682,7 +708,6 @@ contains
 
         character(len=clen) :: dsetname
 
-        ! write(dsetname,'(I4.4,A,A)') this%vizcount, '/', adjustl(trim(varname))
         write(dsetname,'(A)') adjustl(trim(varname))
         call this%write_dataset(field, dsetname)
 
@@ -732,8 +757,13 @@ contains
 
         this%filename = ''
         this%basename = ''
-        write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
-        write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        if (this%wider_time_format) then
+            write(this%filename, '(2A,I7.7,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+            write(this%basename, '(2A,I7.7,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        else
+            write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', this%vizcount, '.h5'
+            write(this%basename, '(2A,I4.4,A)') adjustl(trim(this%basename_prefix)), '_', this%vizcount, '.h5'
+        end if 
 
         ! Setup file access property list with parallel I/O access.
         call h5pcreate_f(H5P_FILE_ACCESS_F, this%plist_id, error)
@@ -770,8 +800,11 @@ contains
             fileexists = .true.
             vizcount = 0
             do while (fileexists)
-                write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', vizcount, '.h5'
-
+                if (this%wider_time_format) then
+                    write(this%filename, '(2A,I7.7,A)') adjustl(trim(this%filename_prefix)), '_', vizcount, '.h5'
+                else
+                    write(this%filename, '(2A,I4.4,A)') adjustl(trim(this%filename_prefix)), '_', vizcount, '.h5'
+                end if 
                 inquire(file=trim(this%filename), exist=fileexists)
                 vizcount = vizcount + 1
             end do

@@ -1,0 +1,17 @@
+ &ACTUATOR_DISK
+ xLoc             =   4.0d0
+ yLoc             =   2.4d0
+ zLoc             =   0.833d0
+ diam             =   1.0d0
+ NacelleRad       =   0.0375d0
+ TSR              =   7.50d0
+ yaw              =   0.000000000000000E+000
+ tilt             =   0.000000000000000E+000
+ blade_pitch      =   0.0d0
+ num_blades       =   3
+ bladeTypeID      =   2
+ reference_length =   80.0d0
+ RPMController    =   0
+ sampleUpsDist    =   0.2d0
+ diagnostics_write_freq = 100
+ /

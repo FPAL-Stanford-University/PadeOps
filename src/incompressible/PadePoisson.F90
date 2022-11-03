@@ -2,7 +2,7 @@ module PadePoissonMod
     use kind_parameters, only: rkind
     use spectralMod, only: spectral, GetWaveNums, useExhaustiveFFT 
     use constants, only: pi, zero, one, three, five, two, imi
-    use exits, only: message, GracefulExit
+    use exits, only: message, GracefulExit, nancheck
     use decomp_2d
     use cd06staggstuff, only: cd06stagg
     use mpi
@@ -16,6 +16,10 @@ module PadePoissonMod
 
     public :: Padepoisson
     
+    external :: MPI_CART_GET, DFFTW_PLAN_MANY_DFT_R2C, DFFTW_PLAN_MANY_DFT_C2R, & 
+      DFFTW_PLAN_MANY_DFT, DFFTW_DESTROY_PLAN, DFFTW_EXECUTE, DFFTW_EXECUTE_DFT, & 
+      DFFTW_EXECUTE_DFT_C2R,  DFFTW_EXECUTE_DFT_R2C
+    
     include "fftw3.f"
 
     integer :: fft_planning 
@@ -24,10 +28,10 @@ module PadePoissonMod
     type :: Padepoisson
         integer :: nzG, nx_in, ny_in, nz_in
         integer ::      nxE_in, nyE_in, nzE_in
-        type(cd06stagg), allocatable :: derZ
-        type(Pade6stagg), pointer :: derivZ 
-        type(spectral), pointer :: sp, spE
-        type(decomp_info), pointer :: sp_gp, sp_gpE
+        class(cd06stagg), allocatable :: derZ
+        class(Pade6stagg), pointer :: derivZ 
+        class(spectral), pointer :: sp, spE
+        class(decomp_info), pointer :: sp_gp, sp_gpE
 
         real(rkind), dimension(:,:,:), pointer :: k1_2d, k2_2d
         real(rkind), dimension(:,:,:), allocatable :: kradsq_inv
@@ -58,6 +62,7 @@ module PadePoissonMod
 
         contains
             procedure :: init
+            procedure :: PoissonSolver_HomogeneousNeumannBCz
             procedure, private :: PeriodicProjection
             procedure, private :: InitPeriodicPoissonSolver
             procedure :: PressureProjection
@@ -94,6 +99,8 @@ contains
          k1 = GetWaveNums(this%sp%nx_g, dx)
          k2 = GetWaveNums(this%sp%ny_g, dy)
          k3_loc = GetWaveNums(nz, dz)
+         call this%sp%GetModifiedWavenumber_xy_ip(k1,dx)
+         call this%sp%GetModifiedWavenumber_xy_ip(k2,dy)
          call this%derivZ%getModifiedWavenumbers(k3_loc,k3_loc_mod)
          
          myxst = this%sp_gp%zst(1); myyst = this%sp_gp%zst(2)
@@ -127,7 +134,7 @@ contains
 
     end subroutine 
 
-    subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC, derivZ, PeriodicInZ)
+    subroutine init(this, dx, dy, dz, sp, spE, computeStokesPressure, Lz, storePressure, gpC, derivZ, PeriodicInZ, useTrueWavenumbers)
         class(padepoisson), intent(inout) :: this
         real(rkind), intent(in) :: dx, dy, dz
         !class(cd06stagg), intent(in), target :: derZ
@@ -144,6 +151,7 @@ contains
         type(decomp_info), intent(in), target :: gpC
         type(Pade6stagg), intent(in), target :: derivZ
         logical, intent(in) :: PeriodicInZ
+        logical, intent(in), optional :: useTrueWavenumbers
 
         call  message("=========================================")
         call  message(0,"Initializing PADEPOISSON derived type")
@@ -191,8 +199,19 @@ contains
             k1 = GetWaveNums(sp%nx_g, dx)
             k2 = GetWaveNums(sp%ny_g, dy)
             k3 = GetWaveNums(nzExt, dz)
-            !call getmodCD06stagg(k3, dz, k3mod)
-            call this%derivZ%getModifiedWavenumbers(k3,k3mod)
+            
+            call this%sp%GetModifiedWavenumber_xy_ip(k1,dx)
+            call this%sp%GetModifiedWavenumber_xy_ip(k2,dy)
+            if (present(useTrueWavenumbers)) then
+                if(useTrueWavenumbers) then
+                    k3mod = k3
+                    !k3mod(nzExt/2+1) = 0.d0
+                else
+                    call this%derivZ%getModifiedWavenumbers(k3,k3mod)
+                end if 
+            else
+                call this%derivZ%getModifiedWavenumbers(k3,k3mod)
+            end if 
 
             tfm = exp(imi*(-dz/two)*k3); tfp = exp(imi*( dz/two)*k3)
 
@@ -308,6 +327,8 @@ contains
             if (storePressure) then
                 allocate(this%phat_z1(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
                 allocate(this%phat_z2(this%sp_gp%zsz(1),this%sp_gp%zsz(2),this%sp_gp%zsz(3)))
+                this%phat_z1 = cmplx(0.0_rkind, 0.0_rkind, rkind)
+                this%phat_z2 = cmplx(0.0_rkind, 0.0_rkind, rkind)
             end if
 
             deallocate(k1, k2, k3, k3mod, tfm, tfp)
@@ -517,7 +538,7 @@ contains
             call dfftw_execute_dft(this%plan_c2c_fwd_z, this%wext  , this%wext  )  
       
 
-            ! Step 5: Solve the Poisson System and project out w velocity
+            ! Step 5: Solve the Poisson System 
             do kk = 1,size(this%f2dext,3) 
                 do jj = 1,size(this%f2dext,2) 
                     !$omp simd
@@ -897,6 +918,75 @@ contains
          end if 
     end subroutine 
 
+    subroutine PoissonSolver_HomogeneousNeumannBCz(this, frhs, pressure) 
+        class(PadePoisson), intent(inout) :: this
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(out) :: pressure
+        real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: frhs
+        integer :: ii, jj, kk
+      
+        ! Step 1: Take fft_xy for rhs and transpose to z
+        call this%sp%fft(frhs,this%f2dy)
+        call transpose_y_to_z(this%f2dy,this%f2d,this%sp_gp)
+
+         ! Step 2: Create Extensions
+         do kk = 1,this%nzG
+             do jj = 1,size(this%f2dext,2)
+                !$omp simd
+                do ii = 1,size(this%f2dext,1)
+                   this%f2dext(ii,jj,kk) = this%f2d(ii,jj,this%nzG-kk+1)
+                end do 
+             end do 
+         end do
+         do kk = 1,size(this%f2d,3)
+            do jj = 1,size(this%f2d,2)
+               !$omp simd
+               do ii = 1,size(this%f2d,1)
+                  !this%f2dext(ii,jj,this%nzG+1:2*this%nzG) = this%f2d
+                  this%f2dext(ii,jj,this%nzG+kk) = this%f2d(ii,jj,kk)
+               end do
+            end do
+         end do
+
+         ! Step 3: Take Fourier Transform 
+         call dfftw_execute_dft(this%plan_c2c_fwd_z, this%f2dext, this%f2dext)  
+
+         ! Step 4: Solve the Poisson equation 
+         do kk = 1,size(this%f2dext,3) 
+             do jj = 1,size(this%f2dext,2) 
+                 !$omp simd
+                 do ii = 1,size(this%f2dext,1) 
+                     this%f2dext(ii,jj,kk) = -this%f2dext(ii,jj,kk)*this%kradsq_inv(ii,jj,kk)
+                 end do 
+             end do 
+         end do 
+
+         ! Step 5: Take inverse Fourier Transform
+         call dfftw_execute_dft(this%plan_c2c_bwd_z, this%f2dext, this%f2dext)  
+         !this%f2dext = this%f2dext*this%mfact
+         do kk = 1,size(this%f2dext,3)
+             do jj = 1,size(this%f2dext,2)
+                !$omp simd
+                do ii = 1,size(this%f2dext,1)
+                   this%f2dext(ii,jj,kk) = this%mfact*this%f2dext(ii,jj,kk)
+                end do
+             end do
+         end do
+
+         ! Step 6: Extract the top half
+         do kk = 1,size(this%f2d,3)
+             do jj = 1,size(this%f2d,2)
+                !$omp simd
+                do ii = 1,size(this%f2d,1)
+                   this%f2d(ii,jj,kk) = this%f2dext(ii,jj,this%nzG+kk)
+                end do
+             end do
+         end do
+
+         ! Step 7: transpose to y and take inverse fourier transform
+         call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
+         call this%sp%ifft(this%f2dy,pressure)
+    end subroutine 
+    
     subroutine Periodic_getPressureAndUpdateRHS(this, uhat, vhat, what, pressure)
         class(PadePoisson), intent(inout) :: this
         complex(rkind), dimension(this%nx_in, this%ny_in, this%nz_in), intent(inout) :: uhat, vhat
@@ -1156,6 +1246,13 @@ contains
                 end do
                 call transpose_z_to_y(this%f2d,this%f2dy,this%sp_gp)
             end if 
+            !print *, "ph1 : ", nancheck(real(this%phat_z1)), nancheck(aimag(this%phat_z1))
+            !print *, "ph2 : ", nancheck(real(this%phat_z2)), nancheck(aimag(this%phat_z2))
+            !print *, "f2d : ", nancheck(real(this%f2d)), nancheck(aimag(this%f2d))
+            !print *, "f2dy: ", nancheck(real(this%f2dy)), nancheck(aimag(this%f2dy))
+            !call message(1, " ++++Calling ifft")
+            !print *, 'size of pressure: ', size(pressure)
+            !call message(1, " ++++Calling ifft")
             call this%sp%ifft(this%f2dy,pressure)
 
          end if 

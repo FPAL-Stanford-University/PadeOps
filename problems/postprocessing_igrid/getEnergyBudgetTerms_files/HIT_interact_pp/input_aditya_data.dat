@@ -1,0 +1,48 @@
+&INPUT
+inputdir                      = "/scratch/globus/aghate/SPOD_Data/Case10/ad_data"   ! Directory for any input files
+outputdir                     = "/scratch/05428/tg847275/aditya_Case10/budget"   ! Directory for all output files
+nx                            = 1280          ! Number of points in X
+ny                            = 256          ! Number of points in Y
+nz                            = 256          ! Number of points in Z
+Lx                            = 31.415926535897d0                        ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 6.2831853071795d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
+Lz                            = 6.2831853071795d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
+RID                           = 6  
+tid_initial                   = 196500
+tid_final                     = 197000
+dtid                          = 75
+/
+/
+&NUMERICS
+NumericalSchemeVert           = 2           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06), 2: Spectral
+/
+/
+&BCs
+PeriodicInZ                   = .TRUE.      ! Is the problem periodic in Z? If yes, then everything below is ignored. 
+botWall                       = 2           ! no_slip = 1, slip = 2
+topWall                       = 2           ! no_slip = 1, slip = 2
+/
+/
+&WINDTURBINES
+useWindTurbines               = .TRUE.    ! Do you want to use Wind turbines ?
+num_turbines                  = 1
+ADM                           = .TRUE.
+turbInfoDir                   = "/projects/windsim/PadeOps/bin/HIT_Interact/SPOD_Case/Case10"
+ADM_Type                      = 2
+/
+/
+&SGS_MODEL
+SGSModelID                    = 1            ! 0: smagorinsky, 1: sigma, 2: AMD 
+DynamicProcedureType          = 0          ! 0: no dynamic procedure, 1: Standard Dynamic Procedure, 2: Global Dynamic Procedure
+DynProcFreq                   = 1           ! Dynamic procedure used every DYNPROCFREQ timesteps. 
+UseDynamicProcedureScalar     = .false.      ! Use dynamic procedure to compute the turbulent prandtl number? 
+deltaRatio                    = 2.d0 
+useWallDamping                = .FALSE.    ! Use the Wall Damping Function 
+ncWall                        = 3.d0       ! Wall Damping Function Exponent
+Csgs                          = 0.90d0      ! Asymptotic model constant (wall damping function)
+WallModelType                 = 0          ! 0: no wall model, 1: Moeng's wall model, 2: Bou-zeid wall model
+explicitCalcEdgeEddyViscosity = .false.     ! Explicitely compute eddy viscosity at edges? or interpolate? 
+useVerticalTfilter            = .false.    ! Vertical filtering used for dynamic procedure? 
+DynProcFreq                   = 5          ! Frequency of dynamic procedure
+/
+/

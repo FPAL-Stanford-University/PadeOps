@@ -25,12 +25,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    real(rkind) :: z0init
+    real(rkind) :: z0init = 1.0d-4, ustarinit  = 1.0d0
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -87,13 +87,13 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
     real(rkind), dimension(:,:,:), allocatable :: randArr
-    real(rkind) :: z0init, epsnd = 0.1, sig
+    real(rkind) :: z0init = 1.0d-4, epsnd = 0.1, sig, ustarinit = 1.0d0
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, ioUnit, k
     real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0
     real(rkind) :: zpeak = 0.2d0
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit 
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -112,16 +112,16 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
  
     epsnd = 5.0d0
 
-    u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
    
     !Add random numbers
-    randomScaleFact = 0.0d0
+    randomScaleFact = 0.1d0
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
     call gaussian_random(randArr,zero,one,seedu + 10*nrank)
     do k = 1,size(u,3)
-        sig = randomScaleFact*(one/kappa)*log(z(1,1,k)/z0init)
+        sig = randomScaleFact*(ustarinit/kappa)*log(z(1,1,k)/z0init)
         u(:,:,k) = u(:,:,k) + sig*randArr(:,:,k)
     end do  
     deallocate(randArr)
@@ -169,14 +169,14 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
     integer, dimension(:), allocatable,  intent(inout) :: zplanes
-    integer, parameter :: nxplanes = 5, nyplanes = 1, nzplanes = 1
+    integer, parameter :: nxplanes = 5, nyplanes = 1, nzplanes = 6
 
-    allocate(xplanes(nxplanes))
+    !allocate(xplanes(nxplanes))
     !allocate(yplanes(nxplanes))
-    allocate(zplanes(nxplanes))
+    allocate(zplanes(nzplanes))
 
-    xplanes = [109,151,193,235,277]
-    zplanes = [50]
+    !xplanes = [109,151,193,235,277]
+    zplanes = [13, 26, 39, 52, 65, 77]
 
 end subroutine
 
@@ -188,6 +188,28 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
     planesCoarseGrid = [8]
     planesFineGrid = [16]
 
+end subroutine
+
+subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use kind_parameters,    only: rkind
+    use constants,          only: zero, one
+    implicit none
+
+    character(len=*),                intent(in)    :: inputfile
+    real(rkind), intent(out) :: wTh_surf
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init
+    integer :: iounit
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init 
+    
+    wTh_surf = zero;
+    
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PBLINPUT)
+    close(ioUnit)    
+
+    ! Do nothing really since this is an unstratified simulation
 end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
@@ -267,14 +289,14 @@ subroutine hook_probes(inputfile, probe_locs)
     ! each turbine. For a more generic implementation of probes check the
     ! initialization.F90 files for other igridWallM problems. 
 
-    integer :: num_Turbines, nprobes = 2, ActuatorDiskID, ioUnit, ii 
+    integer :: num_Turbines, nprobes = 2, ActuatorDiskID, ioUnit, ii, ADM_Type 
     logical :: useWindTurbines, ADM
     real(rkind) :: xloc, yloc, zloc, diam, ct, yaw, tilt
     real(rkind) :: upstreamdisplacement = 0.05d0 ! Place the probes this far upstream of the turbine centers
     character(len=clen) :: turbInfoDir, fname, tempname
 
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
-    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir
+    namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type
     
     
     ioUnit = 11
@@ -290,7 +312,7 @@ subroutine hook_probes(inputfile, probe_locs)
 
     ! Set 1: Located at Hub height 
     do ActuatorDiskID = 1,num_turbines
-        write(tempname,"(A13,I3.3,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
+        write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_", ActuatorDiskID, "_input.inp"
         fname = turbInfoDir(:len_trim(turbInfoDir))//"/"//trim(tempname)
 
         ioUnit = 55
@@ -334,3 +356,27 @@ subroutine hook_probes(inputfile, probe_locs)
     call message(0,"Total number of probes desired:", nprobes)
 
 end subroutine
+
+subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+
+    scalarField = 0.d0
+end subroutine 
+
+subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+
+    scalarSource = 0.d0
+end subroutine 

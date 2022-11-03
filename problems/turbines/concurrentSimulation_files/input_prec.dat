@@ -1,52 +1,54 @@
 &INPUT
-inputdir                      = "/home/nghaisas/PadeOps/problems/turbines/concurrentSimulation_files"
-outputdir                     = "/home/nghaisas/PadeOps/problems/turbines/concurrentSimulation_files"
-nx                            = 96          ! Number of points in X
-ny                            = 96          ! Number of points in Y
-nz                            = 64          ! Number of points in Z
-tstop                         = 60.D0       ! Physical time to stop the simulation
-CFL                           = 0.75D0       ! CFL criterion for calculating the time step (Set to negative to disable)
+inputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe"
+outputdir                     = "/scratch/05294/mhowland/channel_yaw/two_turbines_dynamic_fringe"
+nx                            = 256         ! Number of points in X
+ny                            = 256         ! Number of points in Y
+nz                            = 64         ! Number of points in Z
+tstop                         = 700.D0       ! Physical time to stop the simulation
+CFL                           = 0.8D0       ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                            = 0.001D0     ! Fixed time step value (only used if CFL is set to negative)
 prow                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                          = 0           ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile                = .FALSE.     ! Set to false if it's a fresh simulation 
-restartFile_TID               = 8000        ! TimeID of the restart file being used
-restartFile_RID               = 33          ! RunID of the restart file being used
+useRestartFile                = .TRUE.      ! Set to false if it's a fresh simulation 
+restartFile_TID               = 22000       ! TimeID of the restart file being used
+restartFile_RID               = 02          ! RunID of the restart file being used
 /
 /
 &NUMERICS
-TimeSteppingScheme            = 1           ! 0: Adams-Bashforth, 1: TVD-RK3 (use this)
+TimeSteppingScheme            = 2           ! 0: Adams-Bashforth, 1: TVD-RK3 (use this)
 AdvectionTerm                 = 1           ! 0: Rotational Form, 1: Skew-Symmetric Form (use this for Compact Scheme)
 NumericalSchemeVert           = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06)
 ComputeStokesPressure         = .TRUE.      ! This would be FALSE only is very special circumstances.  
 useDealiasFilterVert          = .FALSE.     ! Dealiasing filter used in vertical direction
 t_DivergenceCheck             = 100         ! Check divergence every $ timesteps. Reproject if needed.
+InitSpinUp                    = .FALSE.     ! Perform initialization spinup? 
 /
 /
 &IO
-RunID                         = 33          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump                 = 1000        ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump                    = 500        ! Data dumping frequency (# of timesteps)
+RunID                         = 02          ! Run Label (All output files will be tagged with this nubber)
+t_restartDump                 = 10000       ! Restart File Dumping Frequency  (# of timesteps)
+t_dataDump                    = 10000       ! Data dumping frequency (# of timesteps)
 ioType                        = 0           ! 0: Fortran Binaries, 1: .vtk files
 dumpPlanes                    = .FALSE.     ! Dump plane visualations. Select planes in initialize.F90
 t_planeDump                   = 100         ! Plane dumping frequency (# of timesteps)
 t_start_planeDump             = 1           ! When do you want to start dumping planes?
 t_stop_planeDump              = 5000        ! When do you want to stop dumping planes?
+useProbes                     = .FALSE.
 /
 /
 &STATS
-tid_StatsDump                 = 20000        ! Dumping Frequency for Statistics file (# of time steps)
-tid_compStats                 = 10         ! Frequency of Computing Statistics
-tSimStartStats                = 20.d0       ! Simulation time for starting stats calculations 
-normStatsByUstar              = .TRUE.      ! Normalize Statistics by ustar at each instant
-computeSpectra                = .FALSE.     ! Compute and time average x - spectra on the run
-timeAvgFullFields             = .FALSE.     ! Time average and store fields on the run
+tid_StatsDump                 = 10000       ! Dumping Frequency for Statistics file (# of time steps)
+tid_compStats                 = 10          ! Frequency of Computing Statistics
+tSimStartStats                = 58.d0       ! Simulation time for starting stats calculations 
+normStatsByUstar              = .FALSE.     ! Normalize Statistics by ustar at each instant
+computeSpectra                = .TRUE.      ! Compute and time average x - spectra on the run
+timeAvgFullFields             = .TRUE.      ! Time average and store fields on the run
 /
 /
 &OS_INTERACTIONS
 useSystemInteractions         = .TRUE.      ! Do you wish to interact with the program while its running
-tSystemInteractions           = 10          ! Check for interactions commands after these many time steps
-controlDir                    = "null"          ! Check in this directory for command files (NULL = Check in output directory)
+tSystemInteractions           = 100         ! Check for interactions commands after these many time steps
+controlDir                    = "null"      ! Check in this directory for command files (NULL = Check in output directory)
 /
 /
 &PHYSICS
@@ -59,9 +61,8 @@ Pr                            = 0.6D0       ! Turbulent Prandtl Number; used whe
 Ro                            = 1.D10       ! Rossby Number used when Coriolis is ON
 Re                            = 1.D10       ! Reynolds Number; used when isInvisid is FALSE
 Fr                            = 1.D10       ! Froude number; used when isStratified is TRUE
-Gx                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gy                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
-Gz                            = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+G_geostrophic                 = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
+G_alpha                       = 0.D0        ! Geostrophic wind in x; used if useGeostrophicForcing is ON
 dPfdx                         = 1.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
 dPfdy                         = 0.D0        ! Additional Acceleration in Y; used if useExtraForcing is ON
 dPfdz                         = 0.D0        ! Additional Acceleration in Z; used if useExtraForcing is ON
@@ -70,9 +71,9 @@ useSGS                        = .true.      ! Do you want to use the SGS model?
 /
 &PRESSURE_CALC
 fastCalcPressure              = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
-storePressure                 = .TRUE.     ! Would you like to compute and store pressure?
-P_dumpFreq                    = 100         ! How often (timesteps) do you want to dump pressure?
-P_compFreq                    = 10          ! How often (timesteps) do you want to compute pressure? 
+storePressure                 = .TRUE.      ! Would you like to compute and store pressure?
+P_dumpFreq                    = 10000       ! How often (timesteps) do you want to dump pressure?
+P_compFreq                    = 40          ! How often (timesteps) do you want to compute pressure? 
 /
 /
 &BCs
@@ -81,27 +82,28 @@ topWall                       = 2           ! no_slip = 1, slip = 2
 useSpongeLayer                = .FALSE.     ! Use a sponge layer at the top 
 zstSponge                     = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale                  = 50.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
-useFringe                     = .false.      ! This is false if simulation is periodic. 
+useFringe                     = .false.     ! This is false if simulation is periodic. 
 /
 /
 &SGS_MODEL
-DynamicProcedureType          = 0          ! 0: no dynamic procedure, 1: Standard Dynamic Procedure, 2: Global Dynamic Procedure
-SGSModelID                    = 1          ! 0: smagorinsky, 1: sigma, 2: Shear Improved Smagorinsky
-z0                            = 1.0d-4     ! roughness length scale (used only if wall model is used)
-useWallDamping                = .FALSE.    ! Use the Wall Damping Function 
-ncWall                        = 3.d0       ! Wall Damping Function Exponent
-Csgs                          = 1.3d0      ! Asymptotic model constant (wall damping function)
-WallModelType                 = 0          ! 0: no wall model, 1: Moeng's wall model, 2: Bou-zeid wall model
-explicitCalcEdgeEddyViscosity = .true.     ! Explicitely compute eddy viscosity at edges? or interpolate? 
-useVerticalTfilter            = .false.    ! Vertical filtering used for dynamic procedure? 
-DynProcFreq                   = 5          ! Frequency of dynamic procedure
+DynamicProcedureType          = 0           ! 0: no dynamic procedure, 1: Standard Dynamic Procedure, 2: Global Dynamic Procedure
+SGSModelID                    = 2           ! 0: smagorinsky, 1: sigma, 2: AMD
+z0                            = 1.0d-4      ! roughness length scale (used only if wall model is used)
+useWallDamping                = .FALSE.     ! Use the Wall Damping Function 
+ncWall                        = 3.d0        ! Wall Damping Function Exponent
+Csgs                          = 1.0d0       ! Asymptotic model constant (wall damping function)
+WallModelType                 = 2           ! 0: no wall model, 1: Moeng's wall model, 2: Bou-zeid wall model
+explicitCalcEdgeEddyViscosity = .true.      ! Explicitely compute eddy viscosity at edges? or interpolate? 
+useVerticalTfilter            = .false.     ! Vertical filtering used for dynamic procedure? 
+DynProcFreq                   = 5           ! Frequency of dynamic procedure
 /
 /
 &WINDTURBINES
-useWindTurbines               = .FALSE.             ! Do you want to use Wind turbines ?
+useWindTurbines               = .FALSE.     ! Do you want to use Wind turbines ?
 num_turbines                  = 1
 ADM                           = .TRUE.
-turbInfoDir                   = "/home/aditya90/Codes/PadeOps/problems/turbines/isolatedTurbine_files/turbInfo/"
+turbInfoDir                   = "/scratch/04769/ghaisasn/runs/PadeOps/concurrent/turb1/dom1/4d/g2/turbInfo"
+ADM_Type                      = 2
 /
 /
 &FRINGE
@@ -126,7 +128,7 @@ t_dumpKSprep                  = 10             ! Dumping Frequency for KS files
 /
 /
 &concurrentSimulationINPUT
-Lx                            = 6.283185307179d0          ! Domain Length (appropriate dimesnions/non-dimensionalized)
-Ly                            = 6.283185307179d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
-Lz                            = 1.d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
+Lx                            = 18.84955592153876d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                            = 9.424777960769379d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Lz                            = 1.0d0              ! Domain Height (appropriate dimesnions/non-dimensionalized)
 /

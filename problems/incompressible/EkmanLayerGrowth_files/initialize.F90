@@ -3,6 +3,8 @@ module EkmanDNS_parameters
     use exits, only: message
     use kind_parameters,  only: rkind
     use constants, only: kappa 
+    use decomp_2d
+    use reductions, only: p_sum
     implicit none
     integer :: seedu = 321341
     integer :: seedv = 423424
@@ -67,6 +69,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
          call GracefulExit("Incorrect value set for NZ. Needs to be 512",213)
       end if 
       Lx = 16.d0*pi; Ly = 16.d0*pi; Lz = 25.d0
+    case (3)
+      Lx = 1.d0; Ly = 1.d0; Lz = 25.d0  
     case default
       call GracefulExit("Incorrect choice for ProblemMode.",21)
     end select
@@ -118,7 +122,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: alphaRot, dz 
+    real(rkind) :: alphaRot, dz , speed, um, vm
     character(len=clen) :: InitFileTag, InitFileDirectory
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE
@@ -222,8 +226,53 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
         fname = InitFileDirectory(:len_trim(InitFileDirectory))//"/mystery_w.bin"
         call decomp_2d_read_one(1,w,fname, decompE)
 
-    end select
-      
+    case (3)
+
+         allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
+         allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
+
+         allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
+         allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
+ 
+         u  =  cos(alphaRot*pi/180.d0) - exp(-z)*cos(z - (alphaRot*pi/180.d0))
+         v  =  sin(alphaRot*pi/180.d0) + exp(-z)*sin(z - (alphaRot*pi/180.d0))
+         wC = zero
+         !u = sqrt(u*u + v*v)
+         !v = cos(30.d0*pi/180.d0) * u  !u*sin(0.d0*pi/180.d0)
+         !u = !u*cos(0.d0*pi/180.d0)
+        
+         call transpose_x_to_y(u,ybuffC,decompC)
+         call transpose_y_to_z(ybuffC,zbuffC,decompC) 
+         um = p_sum(sum(zbuffC(:,:,256))) / &
+                 (real(decompC%xsz(1),rkind) * real(decompC%ysz(2),rkind))
+         call transpose_x_to_y(v,ybuffC,decompC)
+         call transpose_y_to_z(ybuffC,zbuffC,decompC)
+         vm = p_sum(sum(zbuffC(:,:,256))) / &
+                 (real(decompC%xsz(1),rkind) * real(decompC%ysz(2),rkind))
+         speed = sqrt(um*um + vm*vm)
+         !speed = atan2(vm,um)
+         call message(1,"speed top init:",speed)
+  
+         nz = decompC%zsz(3)
+         nzE = nz + 1
+         allocate(derW)
+         dz = z(1,1,2) - z(1,1,1)
+         call derW%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .true., &
+                                     isTopSided = .false., isBotSided = .false.)
+
+         call transpose_x_to_y(wC,ybuffC,decompC)
+         call transpose_y_to_z(ybuffC,zbuffC,decompC)
+         !zbuffE = zero
+         !zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
+         call derW%interpz_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))
+         zbuffE(:,:,1) = zero
+         call transpose_z_to_y(zbuffE,ybuffE,decompE)
+         call transpose_y_to_x(ybuffE,w,decompE) 
+         call derW%destroy()
+         deallocate(derW)
+
+         deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
+    end select  
     nullify(u,v,w,x,y,z)
    
 
@@ -257,6 +306,25 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 
 end subroutine
 
+subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
+    use kind_parameters,    only: rkind
+    use constants, only: one, zero 
+    implicit none
+    real(rkind), intent(out) :: wTh_surf
+    character(len=*),                intent(in)    :: inputfile
+    integer :: ioUnit 
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    real(rkind) :: Noise_Amp = 1.d-6, alphaRot
+    integer :: ProblemMode = 1
+    namelist /EkmanLayerGrowth/ Lx, Ly, Lz, alphaRot, Noise_Amp, ProblemMode
+     
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=EkmanLayerGrowth)
+    close(ioUnit)    
+
+    ! Do nothing really since this is an unstratified simulation
+end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
@@ -307,14 +375,36 @@ subroutine set_Reference_Temperature(inputfile, Tref)
 end subroutine
 
 
+subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarField
 
+    scalarField = 0.d0
+end subroutine 
+
+subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    type(decomp_info),                                          intent(in)    :: decompC
+    character(len=*),                intent(in)    :: inpDirectory
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    integer, intent(in)                            :: scalar_id
+    real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
+
+    scalarSource = 0.d0
+end subroutine 
 
 subroutine hook_probes(inputfile, probe_locs)
     use kind_parameters,    only: rkind
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
     integer, parameter :: nprobes = 2
-    
+   
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
     ! Example: If you have at least 3 probes:
     ! probe_locs(1,3) : x -location of the third probe
@@ -326,7 +416,7 @@ subroutine hook_probes(inputfile, probe_locs)
     ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
     ! (0.2,0.2,0.2)  
     allocate(probe_locs(3,nprobes))
-    probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
+    probe_locs(4,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
     probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;
 
 

@@ -15,9 +15,9 @@ module fof_mod
       private
       character(len=clen) :: outputdir
       logical :: PeriodicInZ
-      type(decomp_info), pointer :: gpC, sp_gpC
+      class(decomp_info), pointer :: gpC, sp_gpC
       integer :: fof_id, runID
-      type(spectral), pointer :: spectC 
+      class(spectral), pointer :: spectC 
       real(rkind), dimension(:), allocatable :: Gfilt_x, Gfilt_y, Gfilt_z
       complex(rkind), dimension(:,:,:), pointer :: fhaty, fhatz
      

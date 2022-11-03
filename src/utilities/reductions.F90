@@ -9,8 +9,10 @@ module reductions
     private
     public :: P_MAXVAL, P_MINVAL, P_SUM, P_MEAN, P_AVGZ
 
+    external :: MPI_ALLREDUCE
+
     interface P_MAXVAL
-        module procedure P_MAXVAL_arr4, P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca
+        module procedure P_MAXVAL_arr4, P_MAXVAL_arr3, P_MAXVAL_arr2, P_MAXVAL_sca, P_MAXVAL_int, P_MAXVAL_int_locComm
     end interface
 
     interface P_MINVAL
@@ -40,13 +42,15 @@ contains
     function P_MEAN_arr3(x) result(mean)
         real(rkind), dimension(:,:,:), intent(in) :: x
         real(rkind) :: mean
-        real(rkind) :: mysum
+        real(rkind) :: mysum, mysize, allsize
         real(rkind) :: summation
         integer :: ierr
 
         mysum = sum(x)
+        mysize = real(size(x,1)*size(x,2)*size(x,3),rkind)
         call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
-        mean = summation/( real(size(x,1)*size(x,2)*size(x,3)*nproc,rkind))
+        call MPI_Allreduce(mysize, allsize, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        mean = summation/allsize
 
     end function
 
@@ -90,6 +94,24 @@ contains
 
         call MPI_Allreduce(x, maximum, 1, mpirkind, MPI_MAX, MPI_COMM_WORLD, ierr)
 
+    end function
+    
+    function P_MAXVAL_int(x) result(maximum)
+        integer, intent(in) :: x
+        integer :: maximum
+        integer :: ierr
+
+        call MPI_Allreduce(x, maximum, 1, mpi_int, MPI_MAX, MPI_COMM_WORLD, ierr)
+
+    end function
+
+    function P_MAXVAL_int_locComm(x,locCommWorld) result(maximum)
+        integer, intent(in) :: x
+        integer, intent(in) :: locCommWorld
+        integer :: maximum
+        integer :: ierr
+
+        call MPI_Allreduce(x, maximum, 1, mpi_int, MPI_MAX, locCommWorld, ierr)
     end function
     
     function P_MINVAL_arr4(x) result(minimum)

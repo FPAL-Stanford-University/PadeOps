@@ -65,8 +65,11 @@ subroutine DoStandardDynamicProcedureScalar(this, u, v, w, T, That, dTdx, dTdy, 
 
 
    ! =========================  WRAPUP  ================================
-   call this%planarAverage_and_TakeRatio(numerator,denominator,this%BetaDynProc_C, this%Beta_1d)
-
+   if (this%DomainAveraged_DynProc) then
+       call this%DomainAverage_and_TakeRatio(numerator,denominator,this%BetaDynProc_C, this%Beta_1d)
+   else
+       call this%planarAverage_and_TakeRatio(numerator,denominator,this%BetaDynProc_C, this%Beta_1d)
+   end if  
 
 end subroutine 
 
@@ -165,8 +168,11 @@ subroutine DoStandardDynamicProcedure(this, u, v, w, uhat, vhat, what, Sij)
    denominator = 2.d0*denominator
    
    ! =========================  WRAPUP  ================================
-   call this%planarAverage_and_TakeRatio(numerator,denominator,this%LambdaDynProc_C, this%Lambda_1d)
-
+   if (this%DomainAveraged_DynProc) then
+       call this%DomainAverage_and_TakeRatio(numerator,denominator,this%LambdaDynProc_C, this%Lambda_1d)
+   else
+       call this%planarAverage_and_TakeRatio(numerator,denominator,this%LambdaDynProc_C, this%Lambda_1d)
+   end if 
 
    ! What happens after this?
    ! this%nSGS is computed as this%nuSGS = this%LambdaDynProc_C*this%this%Dsgs
@@ -244,6 +250,20 @@ subroutine planarAverage_and_TakeRatio(this, num, den, ratC, rat1d)
 end subroutine
 
 
+subroutine DomainAverage_and_TakeRatio(this, num, den, ratC, rat1d)
+   class(sgs_igrid), intent(inout) :: this
+   real(rkind), dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)), intent(in)  :: num, den
+   real(rkind), dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)), intent(out) :: ratC
+   real(rkind), dimension(this%gpC%zsz(3)), intent(out) :: rat1d
+   real(rkind) :: num_avg, ratio
+
+   num_avg = p_sum(sum(num))
+   ratio = num_avg/(p_sum(sum(den)) + 1.d-18)
+
+   ratC = ratio
+   rat1d = ratio
+   
+end subroutine
 
 
 

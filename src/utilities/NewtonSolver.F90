@@ -3,6 +3,8 @@ module NewtonSolverMod
     use constants,       only: half
     implicit none
 
+    external :: DGESV
+
     ! Unary functor y = f(x) used in the Newton Solver
     type, abstract :: newton_functor
         real(rkind) :: alpha = half

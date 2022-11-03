@@ -4,7 +4,9 @@ module timer
         use kind_parameters, only: rkind
         use reductions,      only: P_MAXVAL 
         implicit none
-        
+
+        external :: MPI_BARRIER
+
         double precision :: start, finish
 
         interface toc

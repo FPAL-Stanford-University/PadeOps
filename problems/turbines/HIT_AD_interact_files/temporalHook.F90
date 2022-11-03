@@ -43,8 +43,19 @@ contains
                 call message(1,"Current dt:",gp%dt)
             end if 
             call message(0,"------------------------------------------")
-            if (simid == 2) then
-               call message(1,"Mean TKE for HIT:",gp%getMeanKE())
+            if (simid == 1) then
+               if (allocated(gp%scalars)) then
+                  call message_min_max(1,"Bounds for SCALAR 1:", p_minval(minval(gp%scalars(1)%F)), p_maxval(maxval(gp%scalars(1)%F)))
+                  call message_min_max(1,"Bounds for SCALAR 2:", p_minval(minval(gp%scalars(2)%F)), p_maxval(maxval(gp%scalars(2)%F)))
+               end if
+            elseif (simid == 2) then
+               call message(1,"Mean TKE for HIT:", gp%getMeanKE())
+               call message(1,"Mean  uu for HIT:", gp%getMeanuu())
+               call message(1,"Mean  uv for HIT:", gp%getMeanuv())
+               call message(1,"Mean  uw for HIT:", gp%getMeanuw())
+               call message(1,"Mean  vv for HIT:", gp%getMeanvv())
+               call message(1,"Mean  vw for HIT:", gp%getMeanvw())
+               call message(1,"Mean  ww for HIT:", gp%getMeanww())
                call toc()
                call tic()
             end if 
