@@ -546,78 +546,6 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 
 end subroutine
 
-!subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
-!    use kind_parameters,  only: rkind
-!    use constants,        only: zero, half, one
-!    use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
-!    use decomp_2d,        only: decomp_info
-!    use SolidMixtureMod,  only: solid_mixture
-!    use operators,        only: filter3D
-!
-!    use velocityDiscontinuity_data
-!
-!    implicit none
-!    type(decomp_info),               intent(in)    :: decomp
-!    real(rkind),                     intent(in)    :: tsim
-!    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
-!    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-!    type(solid_mixture),             intent(inout) :: mix
-!    integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
-!    
-!    integer :: nx, i, j
-!    real(rkind) :: dx, xspng, tspng, xspngL, xspngR
-!    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR
-!    
-!    nx = decomp%ysz(1)
-!    
-!    associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
-!                 v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
-!                 p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
-!                 e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
-!                 bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
-!                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-!
-!        !Apply Dirichlet BCs with initial condition 
-!        !(only run sim until waves reach edges of domain)
-!
-!        if(decomp%yst(1)==1) then !left
-!          if(x_bc(1)==0) then 
-!              rho( 1,:,:) = rho_L
-!              u  ( 1,:,:) = u_L
-!              v  ( 1,:,:) = v_L
-!              w  ( 1,:,:) = zero
-!              mix%material(1)%p  (1,:,:) = p_L
-!              
-!              mix%material(1)%g11( 1,:,:) = ge11_L; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:)    = zero
-!              mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:)   = ge22_L;  mix%material(1)%g23( 1,:,:) = zero
-!              mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:)   = zero; mix%material(1)%g33( 1,:,:)    = ge22_L
-!  
-!              mix%material(1)%Ys ( 1,:,:) = one
-!              mix%material(1)%VF ( 1,:,:) = one
-!          end if
-!        endif
-!        
-!        if(decomp%yen(1)==decomp%xsz(1)) then !right
-!          if(x_bc(2)==0) then
-!            rho(nx,:,:) = rho_R
-!            u  (nx,:,:) = u_R 
-!            v  (nx,:,:) = v_R 
-!            w  (nx,:,:) = zero 
-!            mix%material(1)%p  (nx,:,:) = p_R
-!            
-!            mix%material(1)%g11(nx,:,:) = ge11_R;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
-!            mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:)    = ge22_R;  mix%material(1)%g23(nx,:,:) = zero
-!            mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:)    = zero; mix%material(1)%g33(nx,:,:)    = ge22_R
-!  
-!            mix%material(1)%Ys (nx,:,:) = one
-!            mix%material(1)%VF (nx,:,:) = one
-!          endif
-!        endif
-!
-!    end associate
-!end subroutine
-
-
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!Adapted from Multispecies_contact/hooks.f90!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -664,7 +592,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               w  ( 1,:,:) = zero
               mix%material(1)%p  (1,:,:) = p_L ! mix%material(1)%p(nx-1,:,:)
               
-              mix%material(1)%g11( 1,:,:)  = ge11_L; mix%material(1)%g12( 1,:,:) = ge21_L;   mix%material(1)%g13( 1,:,:) = zero
+              mix%material(1)%g11( 1,:,:)  = ge11_L; mix%material(1)%g12( 1,:,:) = ge12_L; mix%material(1)%g13( 1,:,:) = zero
               mix%material(1)%g21( 1,:,:)  = ge21_L; mix%material(1)%g22( 1,:,:) = ge22_L; mix%material(1)%g23( 1,:,:) = zero
               mix%material(1)%g31( 1,:,:)  = zero;   mix%material(1)%g32( 1,:,:) = zero;   mix%material(1)%g33( 1,:,:) = ge22_L
 
@@ -672,7 +600,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               mix%material(1)%gp21( 1,:,:)  = zero;      mix%material(1)%gp22( 1,:,:) = gp22_L**2; mix%material(1)%gp23( 1,:,:) = zero
               mix%material(1)%gp31( 1,:,:)  = zero;      mix%material(1)%gp32( 1,:,:) = zero;      mix%material(1)%gp33( 1,:,:) = gp22_L**2
 
-              mix%material(1)%gt11( 1,:,:) = ge11_L*gp11_L; mix%material(1)%gt12( 1,:,:) = ge21_L*gp11_L; mix%material(1)%gt13( 1,:,:) = zero
+              mix%material(1)%gt11( 1,:,:) = ge11_L*gp11_L; mix%material(1)%gt12( 1,:,:) = ge12_L*gp22_L; mix%material(1)%gt13( 1,:,:) = zero
               mix%material(1)%gt21( 1,:,:) = ge21_L*gp11_L; mix%material(1)%gt22( 1,:,:) = ge22_L*gp22_L; mix%material(1)%gt23( 1,:,:) = zero
               mix%material(1)%gt31( 1,:,:) = zero;          mix%material(1)%gt32( 1,:,:) = zero;          mix%material(1)%gt33( 1,:,:) = ge22_L*gp22_L
   
@@ -690,7 +618,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             w  (nx,:,:) = zero ! w(nx-1,:,:)
             mix%material(1)%p  (nx,:,:) = p_R ! mix%material(1)%p(nx-1,:,:)
             
-            mix%material(1)%g11(nx,:,:) = ge11_R;  mix%material(1)%g12(nx,:,:) = zero;   mix%material(1)%g13(nx,:,:) = zero
+            mix%material(1)%g11(nx,:,:) = ge11_R;  mix%material(1)%g12(nx,:,:) = ge12_R;   mix%material(1)%g13(nx,:,:) = zero
             mix%material(1)%g21(nx,:,:) = ge21_R;  mix%material(1)%g22(nx,:,:) = ge22_R; mix%material(1)%g23(nx,:,:) = zero
             mix%material(1)%g31(nx,:,:) = zero;    mix%material(1)%g32(nx,:,:) = zero;   mix%material(1)%g33(nx,:,:) = ge22_R
   
@@ -698,7 +626,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             mix%material(1)%gp21(nx,:,:) = zero;      mix%material(1)%gp22(nx,:,:) = gp22_R**2; mix%material(1)%gp23(nx,:,:) = zero
             mix%material(1)%gp31(nx,:,:) = zero;      mix%material(1)%gp32(nx,:,:) = zero;      mix%material(1)%gp33(nx,:,:) = gp22_R**2
   
-            mix%material(1)%gt11(nx,:,:) = ge11_R*gp11_R; mix%material(1)%gt12(nx,:,:) = zero;          mix%material(1)%gt13(nx,:,:) = zero
+            mix%material(1)%gt11(nx,:,:) = ge11_R*gp11_R; mix%material(1)%gt12(nx,:,:) = ge12_R*gp22_R; mix%material(1)%gt13(nx,:,:) = zero
             mix%material(1)%gt21(nx,:,:) = ge21_R*gp11_R; mix%material(1)%gt22(nx,:,:) = ge22_R*gp22_R; mix%material(1)%gt23(nx,:,:) = zero
             mix%material(1)%gt31(nx,:,:) = zero;          mix%material(1)%gt32(nx,:,:) = zero;          mix%material(1)%gt33(nx,:,:) = ge22_R*gp22_R
   
