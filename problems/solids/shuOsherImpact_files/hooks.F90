@@ -13,7 +13,7 @@ module shuOsherImpact_data
     integer     :: kos_sh
     logical     :: explPlast = .true.
     logical     :: plastic = .true.
-    real(rkind) :: Ly = one, Lx = 1.0d0 
+    real(rkind) :: Ly = one, Lx = 10.0d0 
     real(rkind) :: eta_det_ge = one, eta_det_gp = one, eta_det_gt = one, diff_c_ge = one
     real(rkind) :: diff_c_gp = one, diff_c_gt = one
     
@@ -259,8 +259,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         dumR = half*(one + tanh( (x-(one-spng)*Lx)/(spng/3.0d0) ))
         tmp_01 = one - (dumL + dumR) !0 ... 1 ... 0 
 
-        !Impose perturbations on rho
-        rho = rho_0 * ( one + tmp_01*rho_amp*sin(two*pi*k_perturb*(x-interface_init)) )
+        !Impose perturbations on rho (symmetric about interface_init)
+        k_perturb = two * pi * k_perturb / Lx
+        rho = rho_0 * ( one + tmp_01*rho_amp*cos(k_perturb*(x-interface_init)) )
 
         !Set initial values of ge to agree with density, no plastic deformation
         mix%material(1)%g11  = rho/rho_0; mix%material(1)%g12  = zero; mix%material(1)%g13  = zero
