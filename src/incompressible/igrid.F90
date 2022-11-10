@@ -1,6 +1,6 @@
 module IncompressibleGrid
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa 
+    use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa, im0
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
     use igrid_hooks!, only: setDirichletBC_Temp, set_Reference_Temperature, meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
@@ -109,6 +109,8 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer :: uhat2, vhat2, what2, That2
         complex(rkind), dimension(:,:,:), pointer :: uhat3, vhat3, what3, That3
         complex(rkind), dimension(:,:,:), pointer :: uhat4, vhat4, what4, That4
+        complex(rkind), dimension(:,:,:), pointer :: ustar, vstar, wstar
+        complex(rkind), dimension(:,:,:), pointer :: du, dv, dw
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC2, SfieldsE2
         complex(rkind), dimension(:,:,:,:), allocatable :: uExtra, vExtra, wExtra, TExtra 
         complex(rkind), dimension(:,:,:,:), allocatable :: uRHSExtra, vRHSExtra, wRHSExtra, TRHSExtra 
@@ -325,6 +327,7 @@ module IncompressibleGrid
             procedure, private :: FwdEuler
             procedure, private :: TVD_RK3
             procedure, private :: SSP_RK45
+            procedure, private :: RK4
             procedure, private :: ComputePressure
             procedure, private :: interp_primitiveVars
             procedure, private :: compute_duidxj
@@ -386,6 +389,8 @@ module IncompressibleGrid
             procedure          :: advance_SSP_RK45_Stage_3 
             procedure          :: advance_SSP_RK45_Stage_4 
             procedure          :: advance_SSP_RK45_Stage_5
+            procedure, private :: advance_RK4_all_stages
+            procedure          :: advance_RK4_Stage 
             procedure          :: getMaxOddballModes 
    end type
 
@@ -399,6 +404,7 @@ contains
 #include "igrid_files/budgets_stuff.F90"
 #include "igrid_files/popRHS_stuff.F90"
 #include "igrid_files/RK45_staging.F90"
+#include "igrid_files/RK4_staging.F90"
 
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
@@ -1148,9 +1154,50 @@ contains
            call this%spectE%alloc_r2c_out(this%wRHSExtra,1)
            call this%spectC%alloc_r2c_out(this%TExtra,3)
            call this%spectC%alloc_r2c_out(this%TRHSExtra,1)
-        end if 
+        else if (timeSteppingScheme == 5 .or. timeSteppingScheme == 6) then
+           call this%spectC%alloc_r2c_out(this%uExtra,2)
+           call this%spectC%alloc_r2c_out(this%vExtra,2)
+           call this%spectE%alloc_r2c_out(this%wExtra,2)
 
-       if ((timeSteppingScheme .ne. 0) .and. (timeSteppingScheme .ne. 1) .and. (timeSteppingScheme .ne. 2)) then
+           !this%uhat1 => this%uExtra(:,:,:,1)
+           !this%vhat1 => this%vExtra(:,:,:,1)
+           !this%what1 => this%wExtra(:,:,:,1)
+
+           !this%uhat2 => this%uExtra(:,:,:,2)
+           !this%vhat2 => this%vExtra(:,:,:,2)
+           !this%what2 => this%wExtra(:,:,:,2)
+
+           !this%uhat3 => this%uExtra(:,:,:,3)
+           !this%vhat3 => this%vExtra(:,:,:,3)
+           !this%what3 => this%wExtra(:,:,:,3)
+
+           !this%uhat4 => this%uExtra(:,:,:,4)
+           !this%vhat4 => this%vExtra(:,:,:,4)
+           !this%what4 => this%wExtra(:,:,:,4)
+
+           this%ustar => this%uExtra(:,:,:,1)
+           this%vstar => this%vExtra(:,:,:,1)
+           this%wstar => this%wExtra(:,:,:,1)
+
+           this%du => this%uExtra(:,:,:,2)
+           this%dv => this%vExtra(:,:,:,2)
+           this%dw => this%wExtra(:,:,:,2)
+
+           this%ustar = im0
+           this%vstar = im0
+           this%wstar = im0
+
+           this%du = im0
+           this%dv = im0
+           this%dw = im0
+      end if 
+
+       if ((timeSteppingScheme .ne. 0) .and. &
+           (timeSteppingScheme .ne. 1) .and. &
+           (timeSteppingScheme .ne. 2) .and. &
+           (timeSteppingScheme .ne. 4) .and. &
+           (timeSteppingScheme .ne. 5) .and. &
+           (timeSteppingScheme .ne. 6)) then
            call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
        end if 
 
@@ -1358,8 +1405,11 @@ contains
        if ((this%vizDump_Schedule == 1) .and. (.not. this%useCFL)) then
            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
        end if 
-       if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
-           call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
+       if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. &
+                                          (TimeSteppingScheme .ne. 2) .and. &
+                                          (TimeSteppingScheme .ne. 5) .and. &
+                                          (TimeSteppingScheme .ne. 6))) then
+           call GracefulExit("fastCalcPressure feature is only supported with TVD RK3, SSP RK45, or RK4 time stepping.",123)
        end if
 
        if ((this%usescalars) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
@@ -1423,6 +1473,18 @@ contains
            end if
         case(4)
             call this%FwdEuler()
+        case(5)
+           if(present(dtforced)) then
+             call this%RK4(dtforced)
+           else
+             call this%RK4()
+           endif
+        case(6)
+           if(present(dtforced)) then
+             call this%advance_RK4_all_stages(dtforced)
+           else
+             call this%advance_RK4_all_stages()
+           endif
         end select
 
    end subroutine

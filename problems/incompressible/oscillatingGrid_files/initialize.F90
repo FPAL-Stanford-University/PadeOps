@@ -1,24 +1,22 @@
-module convective_igrid_parameters
-
-      ! TAKE CARE OF TIME NON-DIMENSIONALIZATION IN THIS MODULE
-
+module oscillating_grid_parameters
     use exits, only: message
     use kind_parameters,  only: rkind
-    use constants, only: zero, kappa 
+    use constants, only: zero, kappa, one
     implicit none
-    integer :: seedu = 321341
-    integer :: seedv = 423424
-    integer :: seedw = 131344
-    real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
-    integer :: nxg, nyg, nzg
     
-    real(rkind), parameter :: xDim = 1000._rkind, uDim = 8._rkind !sqrt(3.0_rkind**2+9._rkind**2)
-    real(rkind), parameter :: timeDim = xDim/uDim
-
+    real(rkind) :: omega = 1.d0     ! Oscillating frequency of the grid
+    real(rkind) :: stroke = 0.1d0   ! Amplitude of the grid (i.e. "stroke length")
+    real(rkind) :: lxbar = 0.1d0, &
+                   lybar = 0.1d0, &
+                   lzbar = 0.1d0    ! The width of each "bar"
+    integer :: Nbx = 2, Nby = 2     ! The number of bars in x and y
+    real(rkind) :: z0 = 0.5d0       ! z-location of the center of the grid at t=0
+    real(rkind) :: Lx = one, Ly = one, Lz = one
+    
 end module     
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use convective_igrid_parameters
+    use oscillating_grid_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half, three
     use gridtools,          only: alloc_buffs
@@ -59,7 +57,7 @@ end subroutine
 
 subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     use kind_parameters,    only: rkind
-    use convective_igrid_parameters
+    use oscillating_grid_parameters
     use constants, only: one, zero 
     implicit none
     real(rkind), intent(inout) :: wTh_surf
@@ -73,13 +71,13 @@ end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
-    use convective_igrid_parameters
+    use oscillating_grid_parameters
     use constants, only: one, zero 
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, z0init = 1.d-4, Tsurf0 = 290.0d0
+    real(rkind)  :: Tref = zero, wTh_surf0 = one, z0init = 1.d-4, Tsurf0 = 290.0d0
     namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, Tsurf0 
      
     ioUnit = 11
@@ -101,9 +99,9 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
-    xplanes = [64]
-    yplanes = [64]
-    zplanes = [256]
+    xplanes = [182]
+    yplanes = [182]
+    zplanes = [182]
 
 end subroutine
 
@@ -135,7 +133,7 @@ end subroutine
 
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use convective_igrid_parameters    
+    use oscillating_grid_parameters    
     use kind_parameters,  only: rkind
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
@@ -147,21 +145,25 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz
+    integer :: nxg, nyg, nzg
+    real(rkind) :: z0fact = 0.5d0
+    
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, lxbar, lybar, lzbar, z0fact, omega, &
+      stroke, Nbx, Nby
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBLEM_INPUT)
     close(ioUnit)    
 
-    !Lx = two*pi; Ly = two*pi; Lz = one
-
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
     ix1 = decomp%xst(1); iy1 = decomp%xst(2); iz1 = decomp%xst(3)
     ixn = decomp%xen(1); iyn = decomp%xen(2); izn = decomp%xen(3)
+
+    ! Compute the physical z0
+    z0 = z0fact*Lz
     
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
