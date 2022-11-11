@@ -12,6 +12,7 @@ module oscillating_grid_parameters
     integer :: Nbx = 2, Nby = 2     ! The number of bars in x and y
     real(rkind) :: z0 = 0.5d0       ! z-location of the center of the grid at t=0
     real(rkind) :: Lx = one, Ly = one, Lz = one
+    logical :: filterMask = .false.
     
 end module     
 
@@ -149,7 +150,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind) :: z0fact = 0.5d0
     
     namelist /PROBLEM_INPUT/ Lx, Ly, Lz, lxbar, lybar, lzbar, z0fact, omega, &
-      stroke, Nbx, Nby
+      stroke, Nbx, Nby, filterMask
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

@@ -6,25 +6,21 @@
 module gridFuncMod
     use kind_parameters,    only: rkind 
     use IncompressibleGrid, only: igrid
+    use igrid_Operators,    only: igrid_ops
     use constants
     use decomp_2d,          only: decomp_info
     use exits,              only: gracefulExit, message
     use reductions,         only: p_maxval
+    use oscillating_grid_parameters, only: omega, stroke, lxbar, lybar, lzbar, z0, &
+      Nbx, Nby, Lx, Ly, Lz, filterMask
     implicit none 
 
 contains 
 
-    subroutine setGridMask(x, y, z, Lx, Ly, Lz, time, omega, stroke, mask, &
-        lxbar, lybar, lzbar, Nbx, Nby, z0, gp) 
+    subroutine setGridMask(x, y, z, time, mask, gp) 
         real(rkind), dimension(:,:,:), intent(in) :: x, y, z
-        real(rkind), intent(in) :: Lx, Ly, Lz
         real(rkind), dimension(:,:,:), intent(out) :: mask
         real(rkind), intent(in) :: time
-        real(rkind), intent(in) :: omega      ! Oscillating frequency of the grid
-        real(rkind), intent(in) :: stroke     ! Amplitude of the grid (i.e. "stroke length")
-        real(rkind), intent(in) :: lxbar, lybar, lzbar ! The width of each "bar"
-        integer, intent(in) :: Nbx, Nby       ! The number of bars in x and y
-        real(rkind), intent(in) :: z0         ! z-location of the center of the grid at t=0
         class(decomp_info), intent(in) :: gp
         integer :: n, i, j, k
         integer :: ist, ien, jst, jen, kst, ken 
@@ -48,8 +44,9 @@ contains
           
         kst = kst - gp%xst(3) + 1
         ken = ken - gp%xst(3) + 1
+
         do n = 1,Nbx
-          xmin = x(1,1,1) + (n-1)*(dxgrid + lxbar) 
+          xmin = (n-1)*(dxgrid + lxbar) 
           xmax = xmin + lxbar - 1.d-14
           ist = max(ceiling(xmin/dx),gp%xst(1))
           ien = min(floor(  xmax/dx),gp%xen(1))
@@ -67,7 +64,7 @@ contains
         end do
         
         do n = 1,Nby
-          ymin = y(1,1,1) + (n-1)*(dygrid + lybar) 
+          ymin = (n-1)*(dygrid + lybar) 
           ymax = ymin + lybar - 1.d-14
           jst = max(ceiling(ymin/dy),gp%xst(2))
           jen = min(floor(  ymax/dy),gp%xen(2))
@@ -77,25 +74,17 @@ contains
           
           do k = kst, ken
             do j = jst, jen
-              do i = 1, gp%xsz(1)
-                mask(i,j,k) = one
-              end do
+              mask(:,j,k) = one
             end do
           end do
         end do
 
     end subroutine 
 
-    subroutine set_grid_position(igp, rkStage, Lx, Ly, Lz, omega, stroke, &
-        lxbar, lybar, lzbar, Nbx, Nby, z0) 
+    subroutine set_grid_position(igp, igpOp, rkStage)
         class(igrid), intent(inout) :: igp 
+        class(igrid_ops), intent(inout) :: igpOp 
         integer, intent(in) :: rkStage
-        real(rkind), intent(in) :: Lx, Ly, Lz
-        real(rkind), intent(in) :: omega      ! Oscillating frequency of the grid
-        real(rkind), intent(in) :: stroke     ! Amplitude of the grid (i.e. "stroke length")
-        real(rkind), intent(in) :: lxbar, lybar, lzbar ! The width of each "bar"
-        integer, intent(in) :: Nbx, Nby       ! The number of bars in x and y
-        real(rkind), intent(in) :: z0         ! z-location of the center of the grid at t=0
         real(rkind) :: tnow 
         integer :: ierr
 
@@ -114,11 +103,21 @@ contains
         end select 
 
         call setGridMask(igp%mesh(:,:,:,1), igp%mesh(:,:,:,2), igp%mesh(:,:,:,3), &
-          Lx, Ly, Lz, tnow, omega, stroke, igp%immersedBodies(1)%RbodyC, lxbar, lybar, &
-          lzbar, Nbx, Nby, z0, igp%gpC) 
-        call setGridMask(igp%mesh(:,:,:,1), igp%mesh(:,:,:,2), igp%zE           , &
-          Lx, Ly, Lz, tnow, omega, stroke, igp%immersedBodies(1)%RbodyE, lxbar, lybar, &
-          lzbar, Nbx, Nby, z0, igp%gpE) 
+          tnow, igp%immersedBodies(1)%RbodyC, igp%gpC) 
+
+        if (filterMask) then
+          igp%rbuffxC(:,:,:,1) = igp%immersedBodies(1)%RbodyC
+          igp%rbuffxE(:,:,:,1) = igp%immersedBodies(1)%RbodyE
+          
+          call igpOp%filterField(igp%rbuffxC(:,:,:,1),&
+            igp%immersedBodies(1)%RbodyC)
+        end if
+!DEBUG
+if (rkStage == 1) call igp%dumpFullField(igp%immersedBodies(1)%RbodyC,'mask',igp%gpC)
+!END DEBUG
+        
+        call igp%interpolate_cellField_to_edgeField(&
+          igp%immersedBodies(1)%RbodyC,igp%immersedBodies(1)%RbodyE,0,0)
 
         igp%immersedBodies(1)%uTarget = zero 
         igp%immersedBodies(1)%vTarget = zero 
@@ -132,16 +131,18 @@ program oscillatingGrid
     use mpi
     use kind_parameters,  only: clen
     use IncompressibleGrid, only: igrid
+    use igrid_Operators, only: igrid_ops
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message
     use gridFuncMod, only: set_grid_position
-    use oscillating_grid_parameters, only: omega, stroke, lxbar, lybar, lzbar, z0, &
-      Nbx, Nby, Lx, Ly, Lz
+    use oscillating_grid_parameters, only: filterMask
+    use fortran_assert, only: assert
 
     implicit none
 
     type(igrid), allocatable, target :: igp
+    type(igrid_ops) :: igpOp
     character(len=clen) :: inputfile
     integer :: ierr
 
@@ -163,26 +164,31 @@ program oscillatingGrid
         stop 
     end if 
 
+    call igpOp%init(igp%nx, igp%ny, igp%nz, igp%dx, igp%dy, igp%dz, &
+      igp%inputdir, igp%outputdir, igp%runID, igp%periodicInZ, &
+      igp%numericalSchemeVert)
+    if (filterMask) then
+      call assert(mod(igp%nx,2) == 0,'choose different domain or filter size')
+      call assert(mod(igp%ny,2) == 0,'choose different domain or filter size')
+      call igpOp%initFilter(igp%nx/2,igp%ny/2,1)
+    endif
+
     call tic() 
-    do while (igp%tsim < igp%tstop) 
+    do while (igp%tsim < igp%tstop .and. igp%step < igp%nsteps) 
 
        call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
        
-       call set_grid_position(igp, 1, Lx, Ly, Lz, omega, stroke, lxbar, lybar, lzbar, &
-         Nbx, Nby, z0)
+       call set_grid_position(igp, igpOp, 1)
        call igp%advance_RK4_Stage(stage=1)
        
-       call set_grid_position(igp, 2, Lx, Ly, Lz, omega, stroke, lxbar, lybar, lzbar, &
-         Nbx, Nby, z0)
+       call set_grid_position(igp, igpOp, 2)
        call igp%advance_RK4_Stage(stage=2)
 
-       call set_grid_position(igp, 3, Lx, Ly, Lz, omega, stroke, lxbar, lybar, lzbar, &
-         Nbx, Nby, z0)
+       call set_grid_position(igp, igpOp, 3)
        call igp%advance_RK4_Stage(stage=3)
 
-       call set_grid_position(igp, 4, Lx, Ly, Lz, omega, stroke, lxbar, lybar, lzbar, &
-         Nbx, Nby, z0)
+       call set_grid_position(igp, igpOp, 4)
        call igp%advance_RK4_Stage(stage=4)
 
        call igp%wrapup_timestep()

@@ -69,6 +69,7 @@ module IncompressibleGrid
         character(clen) :: inputDir
         integer :: headerfid = 12345   
         integer :: clearRoundOffFreq
+        integer :: NumericalSchemeVert = 0
 
         ! Variables common to grid
         integer :: nx, ny, nz, t_datadump, t_restartdump
@@ -522,6 +523,7 @@ contains
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
         this%donot_dealias = donot_dealias; this%ioType = ioType; this%HITForceTimeScale = HITForceTimeScale
         this%moistureFactor = moistureFactor; this%useHITRealSpaceLinearForcing = useHITRealSpaceLinearForcing
+        this%NumericalSchemeVert = NumericalSchemeVert
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
