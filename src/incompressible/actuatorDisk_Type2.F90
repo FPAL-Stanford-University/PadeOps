@@ -65,7 +65,7 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     integer :: ioUnit, tmpSum, totSum
     real(rkind) :: xLoc=1.d0, yLoc=1.d0, zLoc=0.1d0, diam=0.08d0, cT=0.65d0
     real(rkind) :: yaw=0.d0, tilt=0.d0, epsFact = 1.5d0, dx, dy, dz
-    real(rkind) :: epsFact_yz, epsFact_x
+    real(rkind) :: epsFact_yz = 1.5d0, epsFact_x = 1.5d0
     real(rkind), dimension(:,:), allocatable :: tmp
     integer, dimension(:,:), allocatable :: tmp_tag
     integer :: j, locator(1)
@@ -76,7 +76,8 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
     logical :: smear_xsep = .false.
 
     namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt, smear_xsep, epsFact, epsFact_x, epsFact_yz
-    
+   
+    !print*, "hello" 
     ! Read input file for this turbine    
     write(tempname,"(A13,I4.4,A10)") "ActuatorDisk_", ActuatorDisk_T2ID, "_input.inp"
     fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
@@ -177,8 +178,8 @@ subroutine init(this, inputDir, ActuatorDisk_T2ID, xG, yG, zG)
                 yst = max(1, yLc(1) - yReg) 
                 zst = max(1, zLc(1) - zReg)
                 xen = min(this%nxLoc,xLc(1) + xReg) 
-                yen = min(this%nyLoc,yLc(1) + yreg) 
-                zen = min(this%nzLoc,zLc(1) + zreg)
+                yen = min(this%nyLoc,yLc(1) + yReg) 
+                zen = min(this%nzLoc,zLc(1) + zReg)
                 xlen = xen - xst + 1; !ylen = yen - yst + 1; zlen = zen - zst + 1
                 this%startEnds(1,j) = xst; this%startEnds(2,j) = xen; this%startEnds(3,j) = yst
                 this%startEnds(4,j) = yen; this%startEnds(5,j) = zst; this%startEnds(6,j) = zen
@@ -330,18 +331,20 @@ subroutine smear_this_source(this,rhsfield, xC, yC, zC, valSource, xst, xen, yst
                     this%dline(1:xlen) = (this%xG(xst:xen,jj,kk) - xC)**2
                     this%dline(1:xlen) = -this%dline(1:xlen)*this%oneBydelSq_x
                     rhsfield(xst:xen,jj,kk) = rhsfield(xst:xen,jj,kk) + &
-                                              valSource*factor_yz*exp(this%dline)
+                                              valSource*factor_yz*exp(this%dline(1:xlen))
                 end do 
             end do  
         else
             do kk = zst,zen
                 do jj = yst,yen
+                    !print '(a,4(i5,1x))', 'done 1', nrank, xlen, xst, xen
                     this%dline(1:xlen) = (this%xG(xst:xen,jj,kk) - xC)**2 &
                                        + (this%yG(xst:xen,jj,kk) - yC)**2 & 
                                        + (this%zG(xst:xen,jj,kk) - zC)**2
+                    !print *, 'done 2'
                     this%dline(1:xlen) = -this%dline(1:xlen)*this%oneBydelSq
                     rhsfield(xst:xen,jj,kk) = rhsfield(xst:xen,jj,kk) + &
-                                              valSource*exp(this%dline)
+                                              valSource*exp(this%dline(1:xlen))
                 end do 
             end do  
         end if 

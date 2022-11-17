@@ -958,11 +958,10 @@ contains
                 this%igrid_sim%inst_horz_avg(5) = this%igrid_sim%wTh_surf
             endif
             this%runningSum_sc = this%runningSum_sc + this%igrid_sim%inst_horz_avg
-            if(this%useWindTurbines) then
-                this%runningSum_sc_turb = this%runningSum_sc_turb + this%igrid_sim%inst_horz_avg_turb
-            endif
         endif
-
+        if(this%useWindTurbines) then
+            this%runningSum_sc_turb = this%runningSum_sc_turb + this%igrid_sim%inst_horz_avg_turb
+        endif
     end subroutine 
 
     subroutine DumpScalarStats(this)

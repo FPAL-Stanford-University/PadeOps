@@ -21,7 +21,7 @@ module actuatorDisk_Rotmod
         integer :: xface_idx, xdisk_idx, ActuatorDisk_RotID, diagnostic_counter, NacelleRadInd, diagnostics_write_freq=100
         integer, dimension(:,:), allocatable :: tag_face 
         real(rkind) :: yaw, tilt, TSR, Omega, Lref
-        real(rkind) :: xLoc, yLoc, zLoc, diam, blade_pitch, NacelleRad
+        real(rkind) :: xLoc, yLoc, zLoc, diam, blade_pitch, NacelleRad, DiskArea, CTp_eff
         real(rkind) :: pfactor, OneBydelSq, normfactor, sampleUpsDist
         real(rkind) :: uface = 0.d0, vface = 0.d0, wface = 0.d0 ! goes with xface_idx - can be upstream of disk
         real(rkind) :: udisk = 0.d0, vdisk = 0.d0, wdisk = 0.d0 ! goes with xdisk_idx - always closest to disk
@@ -109,6 +109,8 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
     this%OneByDelSq = 1.d0/(this%delta**2)
     this%ActuatorDisk_RotID = ActuatorDisk_RotID
 
+    this%DiskArea = pi * fourth * this%diam**2
+
     !do j = 0, nproc-1
     !  call mpi_barrier(mpi_comm_world, ierr)
     !  if(nrank==j) then
@@ -179,6 +181,8 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
         call MPI_COMM_SIZE( this%mycomm, this%myComm_nproc, ierr )
     end if 
 
+    !print '(a,i4,1x,L2,1x,L2,a)', '((((', nrank, this%Am_I_Split, this%Am_I_Active, ')))))'
+
     if (present(ntryparam)) then
         ntry = ntryparam*ceiling(diam/min(dx, dy, dz))
     else
@@ -193,11 +197,11 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
         allocate(this%startEnds_global(7))
         this%startEnds = 0
         do j = 1,size(this%xs)
-            xLc = minloc(abs(this%xs(j) - this%xline)); 
+            xLc = minloc(abs(this%xs(j) - this%xline)); ! location of turbine
             yLc = minloc(abs(this%ys(j) - this%yline)); 
             zLc = minloc(abs(this%zs(j) - this%zline))
 
-            xst = max(1, xLc(1) - xReg)
+            xst = max(1, xLc(1) - xReg) ! grid starting point for turbine
             yst = max(1, yLc(1) - yReg) 
             zst = max(1, zLc(1) - zReg)
             xen = min(this%nxLoc,xLc(1) + xReg) 
@@ -222,6 +226,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
     call message(2, "Sampling velocity at ", this%xLine(this%xface_idx))
     call tic()
     if(this%Am_I_Active) then
+        !print *, '--', nrank, '---yy'
         xsize = this%startEnds_global(4)-this%startEnds_global(1) + 1
         ysize = this%startEnds_global(5)-this%startEnds_global(2) + 1
         zsize = this%startEnds_global(6)-this%startEnds_global(3) + 1
@@ -251,15 +256,22 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
         do j = 1,size(this%xs)
             call this%smear_this_source(this%smearing_base(:,:,:,j),this%xs(j),this%ys(j),this%zs(j),one)
         end do
+        !print *, '-------', nrank, '---yy'
     else
+        !print *, '++', nrank, '+++++'
         ! makes it easier for reductions if this is allocated
+        allocate(this%xs(ntry*ntry))
         allocate(this%smearing_base(1,1,1,size(this%xs)))
         allocate(this%force_local(1,1,1))
         allocate(this%force_x(1))
         allocate(this%force_y(1))
         allocate(this%force_z(1))
-    endif
 
+        ! initialize all arrays
+        this%smearing_base = zero; this%force_local = zero;  this%force_x = zero;
+        this%force_y = zero;  this%force_z = zero;
+        !print *, '+++++', nrank, this%smearing_base(1,1,1,size(this%xs)), '+++++'
+    endif
     ! correction factor :: required if this%smearing_base doesn't sum up to one 
     ! this can happen if part of the cloud is outside the domain, which can happen if
     ! turbine is close to the bottom wall, or, in the future, close to an immersed boundary
@@ -273,6 +285,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
         corrfacarr(j) = correction_factor
     enddo
     correction_factor = p_maxval(maxval(corrfacarr))
+    
     call message(2, "correction factor max ", correction_factor)
     correction_factor = p_minval(minval(corrfacarr))
     call message(2, "correction factor min ", correction_factor)
@@ -547,7 +560,7 @@ subroutine getMeanU(this, u, v, w)
         this%wface = this%alpha_tau*wmn + (1.d0 - this%alpha_tau)*this%wface
 
         ! Get u disk
-        this%rbuff = u(this%xdisk_idx,:,:)
+        this%rbuff = u(this%xdisk_idx,:,:); 
         this%rbuff = this%rbuff*this%tag_face
         if (this%AM_I_Split) then
             tmpSum = p_sum(sum(this%rbuff),this%myComm) 
@@ -590,10 +603,21 @@ subroutine get_Omega(this)
     select case(this%RPMController)
     case(0)
       ! fixed TSR
-      this%Omega = two*this%TSR*this%uface/this%diam
+      this%Omega = two*this%TSR*this%uface/this%diam  !; print '(2(i5,1x),a,e19.12)', nrank, this%ActuatorDisk_RotID, " Omega = ",this%Omega 
     case(1)
       ! fixed Omega read in at init, so do nothing
     case(2)
+      ! adjust Omega to obtain a required CTp
+
+      !! Step 1 :: Find current CTp
+      !! !-----Already found and stored in this%CTp_eff
+
+      !! Step 2 :: Drive Omega to the required CTp
+      !! ! ---- Need to understand relation between CTp and TSR or Omega; If
+      !! !they are proportional, then a PI controller can be implemented
+
+      call GracefulExit("Only fixed TSR implemented for now. Set RPMController to 0", 111)
+    case(3)
       ! variable based on some control algorithm to be implemented
       call GracefulExit("Only fixed TSR implemented for now. Set RPMController to 0", 111)
     end select
@@ -809,6 +833,10 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
             end if
           end if
         !end if 
+
+        ! calculate the effective CTp
+        this%CTp_eff = -total_thrust/(half * (this%udisk**2 + this%vdisk**2 + this%wdisk**2) * this%DiskArea)
+
     endif
 
 end subroutine
