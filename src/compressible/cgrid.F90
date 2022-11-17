@@ -14,6 +14,7 @@ module CompressibleGrid
     use PowerLawViscosityMod,  only: powerLawViscosity
     use TKEBudgetMod,          only: tkeBudget
     use ScaleDecompositionMod, only: scaleDecomposition
+    use sgsmod_cgrid,          only: sgs_cgrid
     implicit none
 
     integer, parameter :: rho_index    = 1 
@@ -94,6 +95,11 @@ module CompressibleGrid
         integer :: nrestart = 0
         integer :: vizramp  = 5
 
+        ! SGS model
+        logical :: useSGS
+        real(rkind), allocatable, dimension(:,:,:,:) :: tausgs, Qjsgs
+        type(sgs_cgrid), allocatable :: sgsmodel
+
         contains
             procedure          :: init
             procedure          :: destroy_grid
@@ -173,6 +179,7 @@ contains
         logical     :: compute_tke_budget = .false.
         logical     :: compute_scale_decomposition = .false.
         logical     :: forcing = .false. ! KVM 2021
+        logical     :: useSGS = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
@@ -184,7 +191,8 @@ contains
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
                              inviscid, nrestart, rewrite_viz, vizramp, &
                       compute_tke_budget, compute_scale_decomposition, &
-                           x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, forcing
+                             x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
+                                                      forcing, useSGS
 
 
         ioUnit = 11
@@ -298,6 +306,15 @@ contains
         ! Initialize everything to a constant Zero
         this%fields = zero
         this%Ys(:,:,:,1) = one   ! So that all massfractions add up to unity
+
+        this%useSGS = useSGS
+        if(this%useSGS) then
+            call alloc_buffs(this%tausgs,6,'y',this%decomp)
+            call alloc_buffs(this%Qjsgs, 3,'y',this%decomp)
+
+            allocate(this%sgsmodel)
+            call this%sgsmodel%init(this%decomp)
+        endif
 
         ! Finally, set the local array dimensions
         this%nxp = this%decomp%ysz(1)
@@ -483,6 +500,14 @@ contains
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         
+        if (this%useSGS) then
+          call this%sgsmodel%destroy()
+          deallocate(this%sgsmodel)
+
+          if(allocated(this%tausgs)) deallocate(this%tausgs)
+          if(allocated(this%Qjsgs )) deallocate(this%Qjsgs)
+        end if
+
         call this%der%destroy()
         if (allocated(this%der)) deallocate(this%der) 
         
@@ -1218,9 +1243,11 @@ contains
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp,3), target :: gradT
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,3*this%mix%ns), target :: gradYs
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
+        real(rkind), dimension(:,:,:), pointer :: dTdx, dTdy, dTdz
         real(rkind), dimension(:,:,:), pointer :: tauxx,tauxy,tauxz,tauyy,tauyz,tauzz
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
         real(rkind), dimension(:,:,:,:), pointer :: Jx,Jy,Jz
@@ -1229,13 +1256,20 @@ contains
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+        dTdx =>  gradT(:,:,:,1); dTdy =>  gradT(:,:,:,2); dTdz =>  gradT(:,:,:,3);
         
         call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
+        call this%gradient(this%T,dTdx,dTdy,dTdz, this%x_bc, this%y_bc, this%z_bc)
 
         ! call this%getPhysicalProperties()
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
+
+        if(this%useSGS) then
+            call this%sgsmodel%getTauSGS(duidxj, this%rho, this%tausgs)
+            call this%sgsmodel%getQjSGS (duidxj, this%rho, gradT, this%Qjsgs)
+        endif
 
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
@@ -1268,6 +1302,18 @@ contains
         call this%get_q  ( duidxj, Jx, Jy, Jz )
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
 
+        if(this%useSGS) then
+            tauxx = tauxx + this%tausgs(:,:,:,1)
+            tauxy = tauxy + this%tausgs(:,:,:,2)
+            tauxz = tauxz + this%tausgs(:,:,:,3)
+            tauyy = tauyy + this%tausgs(:,:,:,4)
+            tauyz = tauyz + this%tausgs(:,:,:,5)
+            tauzz = tauzz + this%tausgs(:,:,:,6)
+
+            qx = qx + this%Qjsgs(:,:,:,1)
+            qy = qy + this%Qjsgs(:,:,:,2)
+            qz = qz + this%Qjsgs(:,:,:,3)
+        endif
 
         rhs = zero
         call this%getRHS_x(              rhs,&
