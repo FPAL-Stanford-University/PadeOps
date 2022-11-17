@@ -208,6 +208,9 @@ module RoutinesUpsampling
             else
                 logcorr_factor = log(dzf/two/z0)/log(dz/two/z0)
                 arrOut(:,:,1) = arrIn(:,:,1) * logcorr_factor
+                print*, sum(arrIn(:,:,1)), sum(arrOut(:,:,1)), logcorr_factor
+                print*, log(dzf/two/z0), log(dz/two/z0)
+                print*, dzf, dz, z0
             endif
         endif
 
@@ -416,6 +419,7 @@ program upsampleFields
     call decomp_2d_read_one(1,f,fname, gpC)
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",outputFile_RID, "_u.",outputFile_TID
     fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+    print*, sum(f(:,:,1))/(nx*ny)
 
     call upsampleX(f,fxup_inX)
     call transpose_x_to_y(fxup_inX,fxup_inY,gpC_upX)
@@ -440,6 +444,7 @@ program upsampleFields
         call transpose_y_to_x(fxyup_inY,fxyup_inX,gpC_upXY)
         call decomp_2d_write_one(1,fxyup_inX,fname, gpC_upXY)
     end if 
+    print*, sum(fxyzup_inX(:,:,1))/(nxf*nyf)
     
     ! Read and Write v - field
     write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",inputFile_RID, "_v.",inputFile_TID

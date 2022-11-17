@@ -945,7 +945,7 @@ contains
 
         if(this%is_z0_varying) then
             ! time-averaged quntities related to varying z0
-            iind_max = 8     ! ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1); Uxspan; Uyspan; ustarsqspan; nlptype 
+            iind_max = 4     ! ustarsqvar; Uxvar; Uyvar; filteredSpeedSq(:,:,1); Uxspan; Uyspan; ustarsqspan; nlptype 
             call this%igrid_sim%sgsmodel%get_z0varstats(this%igrid_sim%rbuffxC(:,:,:,1))
             this%z0varstats(:,:,1:iind_max) = this%z0varstats(:,:,1:iind_max) + this%igrid_sim%rbuffxC(:,:,1:iind_max,1)
         else

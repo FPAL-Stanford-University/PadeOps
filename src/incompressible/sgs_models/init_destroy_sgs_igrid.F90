@@ -276,6 +276,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
               xl = xMesh(i) - rpstart
               if(xl > epssmall) then
                   this%alpfac(i,j) = 0.004551_rkind * (xl/blht_for_alpfac)**(-0.3593)
+                  !write(*,'(1(a10,1x),2(i5,1x),e19.12)') "alp >", i, j, this%alpfac(i,j)
               endif
           enddo
         enddo
@@ -288,7 +289,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     deli = 0.0_rkind
     do j = 1, this%gpC%xsz(2)
       do i = 1, this%gpC%xsz(1)
-        if((xMesh(i) < rpstart) .or. (xMesh(i) > rpstart+spx)) then
+        if((xMesh(i) < rpstart) .or. (xMesh(i) > rpstart+rpx)) then !! this was wrongly written as spx earlier
             ! upstream smooth patch
             this%lamfact(i,j) = 1.1d0 ! set some number above 1.0
         else
@@ -306,7 +307,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     if(this%gpC%xst(3)==1) then
         do j = 1, this%gpC%xsz(2)
           do i = 1, this%gpC%xsz(1)
-            if((xMesh(i) < (rpstart-excludedist)) .or. (xMesh(i) > (rpstart+spx+excludedist))) then
+            if((xMesh(i) < (rpstart-excludedist)) .or. (xMesh(i) > (rpstart+rpx+excludedist))) then !! this was wrongly written as spx earlier
                 this%mask_upstream(i,j) = one
             endif
           enddo

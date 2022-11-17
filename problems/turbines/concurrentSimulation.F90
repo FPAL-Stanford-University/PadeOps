@@ -23,7 +23,7 @@ program concurrentSimulation
     integer :: ierr
     integer :: ioUnit, prec_ixen_2
     type(interpolator) :: interpC, interpE
-    type(budgets_time_avg) :: budg_tavg
+    type(budgets_time_avg) :: budg_tavg1, budg_tavg2
     type(budgets_xy_avg) :: budg_xyavg1, budg_xyavg2
     logical :: useInterpolator = .false., restrict_igp_dt = .false.
     real(rkind) :: srcxst, srcyst, srczst, tsub, dtfull, dtpart
@@ -123,9 +123,10 @@ program concurrentSimulation
     endif
 
     call budg_xyavg1%init(precInputFile, prec)   !<-- Budget class initialization 
+    call budg_tavg1%init(precInputFile, prec)   !<-- Budget class initialization 
 
     call budg_xyavg2%init(mainInputFile, igp)   !<-- Budget class initialization 
-    call budg_tavg%init(mainInputFile, igp)   !<-- Budget class initialization 
+    call budg_tavg2%init(mainInputFile, igp)   !<-- Budget class initialization 
     ! NOTE: Beyond this point, the target arrays can change in time, In case of
     ! concurrent simulations where inflow is turbulent, the utarget, vtarget and
     ! wtarget are simply set equal to the u, v, and w arrays of the concurrent
@@ -146,6 +147,7 @@ program concurrentSimulation
     do while (igp%tsim < igp%tstop) 
        call prec%timeAdvance()                                           !<- Time stepping scheme + Pressure Proj. (see igrid.F90)
        call budg_xyavg1%doBudgets()       
+       call budg_tavg1%doBudgets()       
 
        if(useInterpolator) then
            call doTemporalStuff_prec(prec)                                   !<-- Go to the temporal hook (see temporalHook.F90)
@@ -178,14 +180,14 @@ program concurrentSimulation
 
              call igp%timeAdvance(dtpart)                    !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
              call budg_xyavg2%doBudgets()       
-             call budg_tavg%doBudgets()       
+             call budg_tavg2%doBudgets()       
              call doTemporalStuff_gp(igp)                    !<-- Go to the temporal hook (see temporalHook.F90)
        
            end do 
        else
            call igp%timeAdvance(prec%get_dt())              !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
            call budg_xyavg2%doBudgets()       
-           call budg_tavg%doBudgets()       
+           call budg_tavg2%doBudgets()       
            call doTemporalStuff(prec, igp)                    !<-- Go to the temporal hook (see temporalHook.F90)
        endif
 
@@ -195,11 +197,13 @@ program concurrentSimulation
 
     call budg_xyavg1%doBudgets(.true.)
     call budg_xyavg2%doBudgets(.true.)
-    call budg_tavg%doBudgets(.true.)
+    call budg_tavg1%doBudgets(.true.)
+    call budg_tavg2%doBudgets(.true.)
 
     call budg_xyavg1%destroy()
     call budg_xyavg2%destroy()
-    call budg_tavg%destroy()
+    call budg_tavg1%destroy()
+    call budg_tavg2%destroy()
  
     call prec%finalize_io()                                              !<-- Close the header file (wrap up i/o)
     call igp%finalize_io()                                               !<-- Close the header file (wrap up i/o)
