@@ -206,12 +206,12 @@ subroutine get_z0varstats(this, fout)
     fout(:,:,2) = this%Uxvar
     fout(:,:,3) = this%Uyvar
     fout(:,:,4) = this%filteredSpeedSq(:,:,1)
-    fout(:,:,5) = this%Uxspan
-    fout(:,:,6) = this%Uyspan
-    fout(:,:,7) = this%ustarsqspan !!!!
-    if(this%WallModel == 4) then
-        fout(:,:,8) = this%nlptype
-    endif
+    !fout(:,:,5) = this%Uxspan
+    !fout(:,:,6) = this%Uyspan
+    !fout(:,:,7) = this%ustarsqspan !!!!
+    !if(this%WallModel == 4) then
+    !    fout(:,:,8) = this%nlptype
+    !endif
 
 end subroutine 
 

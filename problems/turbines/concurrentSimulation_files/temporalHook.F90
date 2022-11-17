@@ -10,7 +10,7 @@ module temporalHook
     implicit none 
 
     integer :: nt_print2screen = 1
-    integer :: tid_statsDump = 5000
+    integer :: tid_statsDump = 1000
     integer :: tid_compStats = 100
     real(rkind) :: maxDiv, DomMaxDiv
     
