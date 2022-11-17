@@ -216,8 +216,6 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
             end do
           else
             ! z goes from zmin to Lz where 
-            ! zmin = 0 - (size of forcing region) - (size of sponge):
-            ! zmin = Lz*(zstSponge - Fringe_zen - 1.d0)/zstSponge
             dz = (Lz - zmin)/real(nzg,rkind)
             
             do k=1,size(mesh,3)

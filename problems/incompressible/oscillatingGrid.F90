@@ -8,12 +8,17 @@ module gridFuncMod
     use IncompressibleGrid, only: igrid
     use igrid_Operators,    only: igrid_ops
     use constants
-    use decomp_2d,          only: decomp_info
+    use decomp_2d,          only: decomp_info, transpose_x_to_y, &
+      transpose_y_to_z, transpose_z_to_y, transpose_y_to_x
     use exits,              only: gracefulExit, message
     use reductions,         only: p_maxval
     use oscillating_grid_parameters, only: omega, stroke, lxbar, lybar, lzbar, z0, &
       Nbx, Nby, Lx, Ly, Lz, filterMask
+    use gaussianstuff, only: gaussian
     implicit none 
+    
+    type(gaussian) :: gauss_x, gauss_y, gauss_zC, gauss_zE
+    logical :: dumpInitialMask = .true.
 
 contains 
 
@@ -104,20 +109,39 @@ contains
 
         call setGridMask(igp%mesh(:,:,:,1), igp%mesh(:,:,:,2), igp%mesh(:,:,:,3), &
           tnow, igp%immersedBodies(1)%RbodyC, igp%gpC) 
+        call setGridMask(igp%mesh(:,:,:,1), igp%mesh(:,:,:,2), igp%zE           , &
+          tnow, igp%immersedBodies(1)%RbodyE, igp%gpE) 
 
         if (filterMask) then
           igp%rbuffxC(:,:,:,1) = igp%immersedBodies(1)%RbodyC
-          igp%rbuffxE(:,:,:,1) = igp%immersedBodies(1)%RbodyE
+          call gauss_x%filter1(igp%rbuffxC(:,:,:,1),igp%rbuffxC(:,:,:,2), &
+            igp%gpC%xsz(2), igp%gpC%xsz(3))
+          call transpose_x_to_y(igp%rbuffxC(:,:,:,2),igp%rbuffyC(:,:,:,1),igp%gpC)
+          call gauss_y%filter2(igp%rbuffyC(:,:,:,1),igp%rbuffyC(:,:,:,2), &
+            igp%gpC%ysz(1), igp%gpC%ysz(3))
+          call transpose_y_to_z(igp%rbuffyC(:,:,:,2),igp%rbuffzC(:,:,:,1),igp%gpC)
+          call gauss_zC%filter3(igp%rbuffzC(:,:,:,1),igp%rbuffzC(:,:,:,2), &
+            igp%gpC%zsz(1), igp%gpC%zsz(2))
+          call transpose_z_to_y(igp%rbuffzC(:,:,:,2),igp%rbuffyC(:,:,:,1),igp%gpC)
+          call transpose_y_to_x(igp%rbuffyC(:,:,:,1),igp%immersedBodies(1)%RbodyC,igp%gpC)
           
-          call igpOp%filterField(igp%rbuffxC(:,:,:,1),&
-            igp%immersedBodies(1)%RbodyC)
+          igp%rbuffxE(:,:,:,1) = igp%immersedBodies(1)%RbodyE
+          call gauss_x%filter1(igp%rbuffxE(:,:,:,1),igp%rbuffxE(:,:,:,2), &
+            igp%gpE%xsz(2), igp%gpE%xsz(3))
+          call transpose_x_to_y(igp%rbuffxE(:,:,:,2),igp%rbuffyE(:,:,:,1),igp%gpE)
+          call gauss_y%filter2(igp%rbuffyE(:,:,:,1),igp%rbuffyE(:,:,:,2), &
+            igp%gpE%ysz(1), igp%gpE%ysz(3))
+          call transpose_y_to_z(igp%rbuffyE(:,:,:,2),igp%rbuffzE(:,:,:,1),igp%gpE)
+          call gauss_zE%filter3(igp%rbuffzE(:,:,:,1),igp%rbuffzE(:,:,:,2), &
+            igp%gpE%zsz(1), igp%gpE%zsz(2))
+          call transpose_z_to_y(igp%rbuffzE(:,:,:,2),igp%rbuffyE(:,:,:,1),igp%gpE)
+          call transpose_y_to_x(igp%rbuffyE(:,:,:,1),igp%immersedBodies(1)%RbodyE,igp%gpE)
         end if
-!DEBUG
-if (rkStage == 1) call igp%dumpFullField(igp%immersedBodies(1)%RbodyC,'mask',igp%gpC)
-!END DEBUG
-        
-        call igp%interpolate_cellField_to_edgeField(&
-          igp%immersedBodies(1)%RbodyC,igp%immersedBodies(1)%RbodyE,0,0)
+
+        if (rkStage == 1 .and. dumpInitialMask) then
+          call igp%dumpFullField(igp%immersedBodies(1)%RbodyC,'mask',igp%gpC)
+          dumpInitialMask = .false.
+        end if
 
         igp%immersedBodies(1)%uTarget = zero 
         igp%immersedBodies(1)%vTarget = zero 
@@ -135,7 +159,8 @@ program oscillatingGrid
     use temporalhook, only: doTemporalStuff
     use timer, only: tic, toc
     use exits, only: message
-    use gridFuncMod, only: set_grid_position
+    use gridFuncMod, only: set_grid_position, gauss_x, gauss_y, gauss_zC, &
+      gauss_zE
     use oscillating_grid_parameters, only: filterMask
     use fortran_assert, only: assert
 
@@ -168,9 +193,14 @@ program oscillatingGrid
       igp%inputdir, igp%outputdir, igp%runID, igp%periodicInZ, &
       igp%numericalSchemeVert)
     if (filterMask) then
-      call assert(mod(igp%nx,2) == 0,'choose different domain or filter size')
-      call assert(mod(igp%ny,2) == 0,'choose different domain or filter size')
-      call igpOp%initFilter(igp%nx/2,igp%ny/2,1)
+      ierr = gauss_x%init( igp%nx,  .true.)
+      call assert(ierr == 0,'gauss_x initialization')
+      ierr = gauss_y%init( igp%ny,  .true.)
+      call assert(ierr == 0,'gauss_y initialization')
+      ierr = gauss_zC%init(igp%nz,  .false.)
+      call assert(ierr == 0,'gauss_zC initialization')
+      ierr = gauss_zE%init(igp%nz+1,.false.)
+      call assert(ierr == 0,'gauss_zE initialization')
     endif
 
     call tic() 

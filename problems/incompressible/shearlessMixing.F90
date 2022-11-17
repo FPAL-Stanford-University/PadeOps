@@ -51,7 +51,7 @@ program shearlessMixing
     close(ioUnit)    
 
     simulationID = 1
-    call SM%init(SM_InputFile, .true.)                               
+    call SM%init(SM_InputFile, .true.)                              
     call SM%start_io(.true.)                                          
     call SM%printDivergence()
    
