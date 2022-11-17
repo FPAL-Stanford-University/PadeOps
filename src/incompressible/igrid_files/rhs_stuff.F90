@@ -338,36 +338,50 @@
 
    subroutine addExtraForcingTerm(this)
        class(igrid), intent(inout) :: this
-       real(rkind) :: multfac, dpFdx_new, relax_fac = 0.0, ubulk_target = 0.8
+       real(rkind) :: multfac, dpFdx_new, relax_fac = 2.45d0, ubulk_target = 0.8d0, ubulks_target = 0.0d0, ubulks
        integer     :: a_avg = 1
 
        !if(this%adjustPresGradForce) then
            !print *, 'u: ', nrank, size(this%u)
            !print *, 'mask: ', nrank, size(this%mask_solid_xC)
          if(this%useibm) then
-           this%ubulk = p_sum(sum(this%u(1,:,:)*(one-this%mask_solid_xC(1,:,:))))
-           a_avg = p_sum(sum((one-this%mask_solid_xC(1,:,:))))
+           this%ubulk = p_sum(sum(this%u(:,:,:)*(one-this%mask_solid_xC(:,:,:))))
+           a_avg = p_sum(sum((one-this%mask_solid_xC(:,:,:))))
+           ubulks = p_sum(sum(this%u(:,:,:)*this%mask_solid_xC)) / (this%gpC%xsz(1)*this%gpC%ysz(2)*this%gpC%zsz(3) - a_avg)
          else
            this%ubulk = p_sum(sum(this%u(1,:,:)))
            a_avg = this%ny * this%nz
          endif
            this%ubulk = this%ubulk/real(a_avg, rkind)
-           !if(nrank==0) 
-           !  print *, nrank, a_avg, this%ubulk
+           !if(nrank==0) then
+           !  print '(a,4(i8,1x),7(e19.12,1x))', 'solidforc: = ', nrank, this%RKstage, a_avg, (this%gpC%xsz(1)*this%gpC%ysz(2)*this%gpC%zsz(3) - a_avg), this%ubulk, ubulks, ubulks_target, this%dt, relax_fac, this%dpFdxs
+           !endif
        !endif
-       if(this%newTimeStep) then
-         dpFdx_new = this%dpFdx + relax_fac*this%dt * (ubulk_target - this%ubulk) / this%dt
-         multfac = 1.0d0 + (relax_fac * this%dt * (ubulk_target - this%ubulk) / this%dt) / this%dpFdx
-         !if(nrank==0) then
-         !  print '(5(e12.5,1x))', this%ubulk, ubulk_target, this%dt, this%dpFdx, dpFdx_new
-         !endif
-         this%dpFdx = dpFdx_new
-         this%dpF_dxhat(1,1,:) = multfac * this%dpF_dxhat(1,1,:)
+       if(this%newTimeStep .and. this%RKstage==1) then
+         !!!! drive ubulk to desired value ???
+         !dpFdx_new = this%dpFdx + relax_fac*this%dt * (ubulk_target - this%ubulk) / this%dt
+         !multfac = 1.0d0 + (relax_fac * this%dt * (ubulk_target - this%ubulk) / this%dt) / this%dpFdx
+         !!if(nrank==0) then
+         !!  print '(5(e12.5,1x))', this%ubulk, ubulk_target, this%dt, this%dpFdx, dpFdx_new
+         !!endif
+         !this%dpFdx = dpFdx_new
+         !this%dpF_dxhat(1,1,:) = multfac * this%dpF_dxhat(1,1,:)
+         this%dpFdxs = this%dpFdxs + relax_fac / this%dt * (ubulks_target - ubulks)
+
+         !! turning off dpdx forcing inside solid. needs to be smoothened out???
+         !! this should be moved out of the time loop and done only at init
+         this%rbuffxC(:,:,:,1) = this%dpFdx*(one-this%mask_solid_xC)
+         where(this%mask_solid_xC > 0.999d0)
+             this%rbuffxC(:,:,:,1) = this%dpFdxs
+         end where
+         call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
        endif
        !write (100+nrank, '(800(e12.5,1x))') real(this%dpF_dxhat(1,1,:))
        !write (200+nrank, '(800(e12.5,1x))') aimag(this%dpF_dxhat(1,1,:))
 
-       this%u_rhs = this%u_rhs + this%dpF_dxhat
+       if(this%RKstage .ne. 0) then
+           this%u_rhs = this%u_rhs + this%dpF_dxhat
+       endif
        if (this%storeFbody) then
            this%fbody_x = this%fbody_x + this%dpFdx 
        end if

@@ -23,9 +23,11 @@
         integer     :: num_imptsC_glob, num_imptsE_glob
         integer     :: num_strsC_glob, num_strsE_glob, num_strsC, num_strsE
         real(rkind) :: ibwm_ustar, ibwm_z0, ibwm_utau_avg, ibwm_utau_max, ibwm_utau_min, phi_stressIm
-        real(rkind) :: ibwm_utaustrs_avg, ibwm_utaustrs_max, ibwm_utaustrs_min
+        real(rkind) :: ibwm_utauStrsC_avg, ibwm_utauStrsC_max, ibwm_utauStrsC_min
+        real(rkind) :: ibwm_utauStrsE_avg, ibwm_utauStrsE_max, ibwm_utauStrsE_min
+        real(rkind) :: ubulk_f(3), ubulk_s(3), npCfac_f, npEfac_f, npCfac_s, npEfac_s
         real(rkind), allocatable, dimension(:,:,:) :: surfelem
-        real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal ! SURFace CENTroid, SURFace NORMAL J1
+        real(rkind), allocatable, dimension(:,:)   :: surfcent, surfnormal, strsC_bnp, strsE_bnp ! SURFace CENTroid, SURFace NORMAL J1
         real(rkind), allocatable, dimension(:,:)   :: gptsC_xyz, gptsE_xyz, gptsC_bpt, gptsE_bpt
         real(rkind), allocatable, dimension(:,:)   :: strsC_xyz, strsE_xyz, strsC_bpt, strsE_bpt ! J1
         real(rkind), allocatable, dimension(:,:)   :: gptsC_img, gptsE_img, gptsC_bnp, gptsE_bnp
@@ -49,7 +51,7 @@
         real(rkind), allocatable, dimension(:,:)   ::  strsC_multfac,   strsE_multfac ! J1
         real(rkind), allocatable, dimension(:,:)   ::  imptsC_xyz_loc, imptsE_xyz_loc
         real(rkind), allocatable, dimension(:)     ::  imptsC_u, imptsC_v, imptsC_w, imptsE_u, imptsE_v, imptsE_w
-        real(rkind), allocatable, dimension(:)     ::  imptsC_u_tmp, imptsC_v_tmp, imptsC_w_tmp
+        real(rkind), allocatable, dimension(:)     ::  imptsC_u_tmp, imptsC_v_tmp, imptsC_w_tmp, utaustrsE_ib
         real(rkind), allocatable, dimension(:)     ::  imptsE_u_tmp, imptsE_v_tmp, imptsE_w_tmp, utauC_ib, utaustrsC_ib
         real(rkind), allocatable, dimension(:,:)   ::  gptsC_dst, gptsE_dst
         real(rkind), allocatable, dimension(:)     :: strsC_u_tmp, strsC_v_tmp, strsC_w_tmp, strsC_u, strsC_v, strsC_w
@@ -71,12 +73,18 @@
             procedure          :: update_ibmgp
             procedure          :: get_utauC_ib
             procedure          :: get_utaustrsC_ib
+            procedure          :: get_utaustrsE_ib
             procedure          :: get_ibwm_utau_avg
             procedure          :: get_ibwm_utau_max
             procedure          :: get_ibwm_utau_min
-            procedure          :: get_ibwm_utaustrs_avg
-            procedure          :: get_ibwm_utaustrs_max
-            procedure          :: get_ibwm_utaustrs_min
+            procedure          :: get_ibwm_utauStrsE_avg
+            procedure          :: get_ibwm_utauStrsE_max
+            procedure          :: get_ibwm_utauStrsE_min
+            procedure          :: get_ibwm_utauStrsC_avg
+            procedure          :: get_ibwm_utauStrsC_max
+            procedure          :: get_ibwm_utauStrsC_min
+            procedure          :: get_ubulk_f
+            procedure          :: get_ubulk_s
             procedure          :: get_num_gptsC
             procedure          :: add_ibm_wallstress
             procedure, private :: compute_levelset
@@ -488,14 +496,14 @@ subroutine init(this, inputDir, inputFile, outputDir, runID, gpC, gpE, spectC, s
   allocate(this%strsC_u(this%num_strsC_glob), this%strsC_v(this%num_strsC_glob), this%strsC_w(this%num_strsC_glob))
   allocate(this%strsE_u_tmp(this%num_strsE_glob), this%strsE_v_tmp(this%num_strsE_glob), this%strsE_w_tmp(this%num_strsE_glob))
   allocate(this%strsE_u(this%num_strsE_glob), this%strsE_v(this%num_strsE_glob), this%strsE_w(this%num_strsE_glob))
-  allocate(this%utaustrsC_ib(this%num_strsC))
+  allocate(this%utaustrsC_ib(this%num_strsC), this%utaustrsE_ib(this%num_strsE))
   this%strsC_u = zero; this%strsC_u_tmp = zero
   this%strsC_v = zero; this%strsC_v_tmp = zero
   this%strsC_w = zero; this%strsC_w_tmp = zero
   this%strsE_u = zero; this%strsE_u_tmp = zero
   this%strsE_v = zero; this%strsE_v_tmp = zero
   this%strsE_w = zero; this%strsE_w_tmp = zero
-  this%utaustrsC_ib    = zero;
+  this%utaustrsC_ib = zero;  this%utaustrsE_ib = zero;
 
   deallocate(flagE, flagC, mapC, mapE, levelsetC, levelsetE, xlinepart, ylinepart, zlinepart, zlinepartE)
 
@@ -583,21 +591,21 @@ subroutine add_ibm_wallstress(this, tau_ij, tau_13, tau_23)
     ! coordinate system
     do ii = 1, this%num_strsC
         ! surface normal of the closest boundary point
-        vec2 = this%surfnormal(this%strsC_bpind(ii),:)
+        vec3 = this%surfnormal(this%strsC_bpind(ii),:)
   
         ! get the direction of the local velocity
         ind_glob = this%strsC_index_st(nrank+1) + ii -1
         vec1(1) = this%strsC_u(ind_glob); vec1(2) = this%strsC_v(ind_glob); vec1(3) = this%strsC_w(ind_glob)
-        dotpr = sum(vec1*vec2);   unrm = vec2*dotpr;   utan = vec1-unrm;   vec1 = utan
+        dotpr = sum(vec1*vec3);   unrm = vec3*dotpr;   utan = vec1-unrm;   vec1 = utan
         vec1mag = sqrt(sum(vec1*vec1))
         if(vec1mag > 1.0d-12) then
           vec1(:) = vec1(:)/vec1mag
         endif
   
-        ! cross prod of vec1 and vec2
-        vec3(1) = vec1(2)*vec2(3) - vec1(3)*vec2(2)
-        vec3(2) = vec1(3)*vec2(1) - vec1(1)*vec2(3)
-        vec3(3) = vec1(1)*vec2(2) - vec1(2)*vec2(1)
+        ! cross prod of vec3 and vec1
+        vec2(1) = vec3(2)*vec1(3) - vec3(3)*vec1(2)
+        vec2(2) = vec3(3)*vec1(1) - vec3(1)*vec1(3)
+        vec2(3) = vec3(1)*vec1(2) - vec3(2)*vec1(1)
   
         utausq_local_ib = -(sum(utan*utan))*(kappa/log(this%phi_stressIm/this%ibwm_z0))**2
         this%utaustrsC_ib(ii) = dsqrt(-utausq_local_ib)
@@ -608,34 +616,59 @@ subroutine add_ibm_wallstress(this, tau_ij, tau_13, tau_23)
         dcarr(3,1) = vec3(1); dcarr(3,2) = vec3(2); dcarr(3,3) = vec3(3); 
         
         i = this%strsC_ind(ii,1); j = this%strsC_ind(ii,2); k = this%strsC_ind(ii,3);
-        tau_ij(i,j,k,1) = tau_ij(i,j,k,1) + two*dcarr(1,1)*dcarr(1,3)*utausq_local_ib
-        tau_ij(i,j,k,2) = tau_ij(i,j,k,1) + (dcarr(1,1)*dcarr(2,3) + dcarr(1,3)*dcarr(2,1))*utausq_local_ib
-        tau_ij(i,j,k,4) = tau_ij(i,j,k,1) + two*dcarr(2,1)*dcarr(2,3)*utausq_local_ib
-        tau_ij(i,j,k,6) = tau_ij(i,j,k,1) + two*dcarr(3,3)*dcarr(3,1)*utausq_local_ib
+        tau_ij(i,j,k,1) = tau_ij(i,j,k,1) + two*dcarr(1,1)*dcarr(3,1)*utausq_local_ib
+        tau_ij(i,j,k,2) = tau_ij(i,j,k,2) + (dcarr(1,1)*dcarr(3,2) + dcarr(3,1)*dcarr(1,2))*utausq_local_ib
+        tau_ij(i,j,k,4) = tau_ij(i,j,k,4) + two*dcarr(1,2)*dcarr(3,2)*utausq_local_ib
+        tau_ij(i,j,k,6) = tau_ij(i,j,k,6) + two*dcarr(3,3)*dcarr(1,3)*utausq_local_ib
   
+          !if((nrank==0) .and. ((ii==2) .or. (ii==1026)) ) then
+          !    print *, '++++++ ii = ', ii, '++++++'
+          !    print '(a,3(i5,1x))',     'ijk    : ', i, j, k
+          !    print '(a,3(e19.12,1x))', 'vec1   : ', vec1
+          !    print '(a,3(e19.12,1x))', 'vec2   : ', vec2
+          !    print '(a,3(e19.12,1x))', 'vec3   : ', vec3
+          !    print '(a,3(e19.12,1x))', 'dotpr  : ', dotpr
+          !    print '(a,3(e19.12,1x))', 'unrm   : ', unrm
+          !    print '(a,3(e19.12,1x))', 'utan   : ', utan
+          !    print '(a,3(e19.12,1x))', 'utausq : ', utausq_local_ib
+          !    print '(a,3(e19.12,1x))', 'dst,z0 : ', this%phi_stressIm, this%ibwm_z0
+          !    print '(a,3(e19.12,1x))', 'dcos1  : ', dcarr(1,:)
+          !    print '(a,3(e19.12,1x))', 'dcos2  : ', dcarr(2,:)
+          !    print '(a,3(e19.12,1x))', 'dcos3  : ', dcarr(3,:)
+          !    print '(a,3(e19.12,1x))', 'tij1   : ', tau_ij(i,j,k,1)
+          !    print '(a,3(e19.12,1x))', 'tij2   : ', tau_ij(i,j,k,2)
+          !    print '(a,3(e19.12,1x))', 'tij4   : ', tau_ij(i,j,k,4)
+          !    print '(a,3(e19.12,1x))', 'tij6   : ', tau_ij(i,j,k,6)
+          !    print *, '++++++---------------------------'
+          !endif
     enddo
-    this%ibwm_utaustrs_avg = p_sum(sum(this%utaustrsC_ib))/(real(this%num_strsC_glob, rkind) + 1.0d-18)
-    this%ibwm_utaustrs_max = p_maxval(maxval(this%utaustrsC_ib));  this%ibwm_utaustrs_min = p_minval(minval(this%utaustrsC_ib))
+    this%ibwm_utauStrsC_avg = p_sum(sum(this%utaustrsC_ib))/(real(this%num_strsC_glob, rkind) + 1.0d-18)
+    this%ibwm_utauStrsC_max = p_maxval(maxval(this%utaustrsC_ib));  this%ibwm_utauStrsC_min = p_minval(minval(this%utaustrsC_ib))
   
     do ii = 1, this%num_strsE
         ! surface normal of the closest boundary point
-        vec2 = this%surfnormal(this%strsE_bpind(ii),:)
+        vec3 = this%surfnormal(this%strsE_bpind(ii),:)
   
         ! get the direction of the local velocity
         ind_glob = this%strsE_index_st(nrank+1) + ii -1
         vec1(1) = this%strsE_u(ind_glob); vec1(2) = this%strsE_v(ind_glob); vec1(3) = this%strsE_w(ind_glob)
-        dotpr = sum(vec1*vec2);   unrm = vec2*dotpr;   utan = vec1-unrm;   vec1 = utan
+        dotpr = sum(vec1*vec3);   unrm = vec3*dotpr;   utan = vec1-unrm;   vec1 = utan
         vec1mag = sqrt(sum(vec1*vec1))
         if(vec1mag > 1.0d-12) then
           vec1(:) = vec1(:)/vec1mag
         endif
   
         ! cross prod of vec1 and vec2
-        vec3(1) = vec1(2)*vec2(3) - vec1(3)*vec2(2)
-        vec3(2) = vec1(3)*vec2(1) - vec1(1)*vec2(3)
-        vec3(3) = vec1(1)*vec2(2) - vec1(2)*vec2(1)
+        !vec3(1) = vec1(2)*vec2(3) - vec1(3)*vec2(2)
+        !vec3(2) = vec1(3)*vec2(1) - vec1(1)*vec2(3)
+        !vec3(3) = vec1(1)*vec2(2) - vec1(2)*vec2(1)
+        vec2(1) = vec3(2)*vec1(3) - vec3(3)*vec1(2)
+        vec2(2) = vec3(3)*vec1(1) - vec3(1)*vec1(3)
+        vec2(3) = vec3(1)*vec1(2) - vec3(2)*vec1(1)
+  
   
         utausq_local_ib = -(sum(utan*utan))*(kappa/log(this%phi_stressIm/this%ibwm_z0))**2
+        this%utaustrsE_ib(ii) = dsqrt(-utausq_local_ib)
   
         ! compute direction cosines
         dcarr(1,1) = vec1(1); dcarr(1,2) = vec1(2); dcarr(1,3) = vec1(3); 
@@ -644,9 +677,29 @@ subroutine add_ibm_wallstress(this, tau_ij, tau_13, tau_23)
         
         i = this%strsE_ind(ii,1); j = this%strsE_ind(ii,2); k = this%strsE_ind(ii,3);
         tau_13(i,j,k) = tau_13(i,j,k) + (dcarr(1,1)*dcarr(3,3) + dcarr(1,3)*dcarr(3,1))*utausq_local_ib
-        tau_23(i,j,k) = tau_23(i,j,k) + (dcarr(2,1)*dcarr(3,3) + dcarr(2,3)*dcarr(3,1))*utausq_local_ib
+        tau_23(i,j,k) = tau_23(i,j,k) + (dcarr(1,2)*dcarr(3,3) + dcarr(3,2)*dcarr(1,3))*utausq_local_ib
   
+          !if((nrank==0) .and. ((ii==2) .or. (ii==1026)) ) then
+          !    print *, '++++++ ii = ', ii, '++++++'
+          !    print '(a,3(i5,1x))',     'ijk    : ', i, j, k
+          !    print '(a,3(e19.12,1x))', 'vec1   : ', vec1
+          !    print '(a,3(e19.12,1x))', 'vec2   : ', vec2
+          !    print '(a,3(e19.12,1x))', 'vec3   : ', vec3
+          !    print '(a,3(e19.12,1x))', 'dotpr  : ', dotpr
+          !    print '(a,3(e19.12,1x))', 'unrm   : ', unrm
+          !    print '(a,3(e19.12,1x))', 'utan   : ', utan
+          !    print '(a,3(e19.12,1x))', 'utausq : ', utausq_local_ib
+          !    print '(a,3(e19.12,1x))', 'dst,z0 : ', this%phi_stressIm, this%ibwm_z0
+          !    print '(a,3(e19.12,1x))', 'dcos1  : ', dcarr(1,:)
+          !    print '(a,3(e19.12,1x))', 'dcos2  : ', dcarr(2,:)
+          !    print '(a,3(e19.12,1x))', 'dcos3  : ', dcarr(3,:)
+          !    print '(a,3(e19.12,1x))', 'tij1   : ', tau_13(i,j,k)
+          !    print '(a,3(e19.12,1x))', 'tij2   : ', tau_23(i,j,k)
+          !    print *, '++++++---------------------------'
+          !endif
     enddo
+    this%ibwm_utauStrsE_avg = p_sum(sum(this%utaustrsE_ib))/(real(this%num_strsE_glob, rkind) + 1.0d-18)
+    this%ibwm_utauStrsE_max = p_maxval(maxval(this%utaustrsE_ib));  this%ibwm_utauStrsE_min = p_minval(minval(this%utaustrsE_ib))
   endif
 
   ! print '(a,i4,1x,3(e12.5,1x))', 'After: ', nrank, p_maxval(abs(maxval(tau_ij))), p_maxval(abs(maxval(tau_13))), p_maxval(abs(maxval(tau_23)))
@@ -658,8 +711,8 @@ subroutine update_ibmgp(this, u, v, w, uE, vE, wC, uhat, vhat, what)
   real(rkind),    dimension(:,:,:), intent(inout) :: u, v, w, uE, vE, wC
   complex(rkind), dimension(:,:,:), intent(out)   :: uhat, vhat, what
 
-  integer :: ii, itmp
-  real(rkind) :: umax, umin, vmax, vmin, wmax, wmin, uEmax, uEmin, vEmax, vEmin, wCmax, wCmin
+  integer :: ii, itmp, nz, k
+  real(rkind) :: umax, umin, vmax, vmin, wmax, wmin, uEmax, uEmin, vEmax, vEmin, wCmax, wCmin, multfac
 
   !umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
   !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
@@ -669,10 +722,29 @@ subroutine update_ibmgp(this, u, v, w, uE, vE, wC, uhat, vhat, what)
   !    print '(a,6(e19.12,1x))', 'Edge uvw:', uEmax, uEmin, vEmax, vEmin, wmax, wmin
   !    print *, '------------------------------'
   !endif
+           !nz = size(this%rbuffzC1, 3)
+           !call transpose_x_to_y(u,this%rbuffyC1(:,:,:),this%gpC)
+           !call transpose_y_to_z(this%rbuffyC1(:,:,:),this%rbuffzC1(:,:,:),this%gpC)
+           !if(nrank==0) then
+           !  open(unit=10,file='debug02.dat',status='replace')
+           !  do k=1, nz
+           !    write(10,*) this%rbuffzC1(1,1,k)
+           !  enddo
+           !  close(10)
+           !endif
   call this%interp_imptsC(u, v,  wC)
   call this%interp_imptsE(uE, vE, w)
 
-  !umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+           !call transpose_x_to_y(u,this%rbuffyC1(:,:,:),this%gpC)
+           !call transpose_y_to_z(this%rbuffyC1(:,:,:),this%rbuffzC1(:,:,:),this%gpC)
+           !if(nrank==0) then
+           !  open(unit=10,file='debug03.dat',status='replace')
+           !  do k=1, nz
+           !    write(10,*) this%rbuffzC1(1,1,k)
+           !  enddo
+           !  close(10)
+           !endif
+  !umax = p!_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
   !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
   !if(nrank==0) then
   !    print *, '-----After  interp_impts------'
@@ -682,7 +754,16 @@ subroutine update_ibmgp(this, u, v, w, uE, vE, wC, uhat, vhat, what)
   !endif
   call this%update_ghostptsCE(u, v, w)
 
-  !umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+           !call transpose_x_to_y(u,this%rbuffyC1(:,:,:),this%gpC)
+           !call transpose_y_to_z(this%rbuffyC1(:,:,:),this%rbuffzC1(:,:,:),this%gpC)
+           !if(nrank==0) then
+           !  open(unit=10,file='debug04.dat',status='replace')
+           !  do k=1, nz
+           !    write(10,*) this%rbuffzC1(1,1,k)
+           !  enddo
+           !  close(10)
+           !endif
+  !umax = p!_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
   !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
   !if(nrank==0) then
   !    print *, '-----After  update_gpts ------'
@@ -692,7 +773,16 @@ subroutine update_ibmgp(this, u, v, w, uE, vE, wC, uhat, vhat, what)
   !endif
   call this%smooth_solidptsCE(u, v, w)
 
-  !umax = p_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
+           !call transpose_x_to_y(u,this%rbuffyC1(:,:,:),this%gpC)
+           !call transpose_y_to_z(this%rbuffyC1(:,:,:),this%rbuffzC1(:,:,:),this%gpC)
+           !if(nrank==0) then
+           !  open(unit=10,file='debug05.dat',status='replace')
+           !  do k=1, nz
+           !    write(10,*) this%rbuffzC1(1,1,k)
+           !  enddo
+           !  close(10)
+           !endif
+  !umax = p!_maxval(u); umin = p_minval(u);  vmax = p_maxval(v); vmin = p_minval(v);  wmax = p_maxval(w); wmin = p_minval(w);
   !uEmax = p_maxval(uE); uEmin = p_minval(uE);  vEmax = p_maxval(vE); vEmin = p_minval(vE);  wCmax = p_maxval(wC); wCmin = p_minval(wC);
   !if(nrank==0) then
   !    print *, '-----After  smooth_solidpts---'
@@ -709,6 +799,19 @@ subroutine update_ibmgp(this, u, v, w, uE, vE, wC, uhat, vhat, what)
   ! Step 4: Interpolate u, v, w to stress-image points for wall stress claculation
   call this%interp_strsImC(u, v, wC)
   call this%interp_strsImE(uE, vE, w)
+
+  ! Step 5: Diagnostics
+  this%ubulk_s(1) = p_sum(sum(u*this%mask_solid_xC))
+  this%ubulk_s(2) = p_sum(sum(v*this%mask_solid_xC))
+  this%ubulk_s(3) = p_sum(sum(w*this%mask_solid_xE))
+
+  this%ubulk_f(1) = p_sum(sum(u)) - this%ubulk_s(1)
+  this%ubulk_f(2) = p_sum(sum(v)) - this%ubulk_s(2)
+  this%ubulk_f(3) = p_sum(sum(w)) - this%ubulk_s(3)
+
+  this%ubulk_f(1:2) = this%ubulk_f(1:2)*this%npCfac_f;  this%ubulk_f(3) = this%ubulk_f(3)*this%npEfac_f
+  this%ubulk_s(1:2) = this%ubulk_s(1:2)*this%npCfac_s;  this%ubulk_s(3) = this%ubulk_s(3)*this%npEfac_s
+
 end subroutine
 
 subroutine smooth_solidptsCE(this, u, v, w)
@@ -1031,19 +1134,19 @@ subroutine update_ghostptsCE(this, u, v, w)
           !utan_gp = utan  ! (WM03)
           !! ---(WM04)----
           utau_local_ib = sqrt(sum(utan*utan))*kappa/log(dist/this%ibwm_z0)
-          utan_gp = utan * (one - (one + finv)/log(dist/this%ibwm_z0))
+          utan_gp = utan * (one - 1.0d0*(one + finv)/log(dist/this%ibwm_z0))
 
 
           this%utauC_ib(ii) = utau_local_ib
 
-          unrm_gp = -unrm
+          unrm_gp = -unrm * finv !! enforce unrm_bnp = 0
 
 
           i = this%gptsC_ind(ii,1);  j = this%gptsC_ind(ii,2);  k = this%gptsC_ind(ii,3)
           u(i,j,k) = utan_gp(1) + unrm_gp(1)
           v(i,j,k) = utan_gp(2) + unrm_gp(2)
           !this%gptsC_w(ii) = utan_gp(3) + unrm_gp(3)
-          !if(v(i,j,k) > 17.2d0 ) then
+          !if((nrank==0) .and. ((ii==2) .or. (ii==1026)) ) then
           !    print *, '++++++ ii = ', ii, '++++++'
           !    print '(a,3(e19.12,1x))', 'vec1   : ', vec1
           !    print '(a,3(e19.12,1x))', 'vec2   : ', vec2
@@ -1053,6 +1156,9 @@ subroutine update_ghostptsCE(this, u, v, w)
           !    print '(a,3(e19.12,1x))', 'unrm_gp: ', unrm_gp
           !    print '(a,3(e19.12,1x))', 'utan_gp: ', utan_gp
           !    print '(a,3(e19.12,1x))', 'u, v   : ', utan_gp(1:2) + unrm_gp(1:2)
+          !    print '(a,3(e19.12,1x))', 'finv   : ', finv, utau_local_ib
+          !    print '(a,3(e19.12,1x))', 'dist   : ', this%gptsC_dst(ii,:)
+          !    print '(a,3(e19.12,1x))', 'xyz    : ', this%gptsC_xyz(ii,:)
           !    print *, '++++++---------------------------'
           !endif
       enddo
@@ -1081,9 +1187,9 @@ subroutine update_ghostptsCE(this, u, v, w)
           !utan_gp = utan
           !! ---(WM04)----
           utau_local_ib = sqrt(sum(utan*utan))*kappa/log(dist/this%ibwm_z0)
-          utan_gp = utan * (one - (one + finv)/log(dist/this%ibwm_z0))
+          utan_gp = utan * (one - 1.0d0*(one + finv)/log(dist/this%ibwm_z0))
 
-          unrm_gp = -unrm
+          unrm_gp = -unrm * finv !! enforce unrm_bnp = 0
 
           i = this%gptsE_ind(ii,1);   j = this%gptsE_ind(ii,2);  k = this%gptsE_ind(ii,3)
           !this%gptsE_u(ii) = utan_gp(1) + unrm_gp(1)
@@ -1221,7 +1327,7 @@ subroutine setup_stress_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart,
 
     write(dumstr,"(A3,I2.2,A31,I4.4,A4)") "Run",this%runID,"_ibm_strsC_psum_numonproc_.dat"
     fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-    open(11,file=fname,status='unknown',action='write')
+    open(11,file=fname,status='replace',action='write')
     do ii = 1, this%num_strsC_glob
         !write(11, '(i4,1x,i4,1x,20(e19.12,1x))') ii, psum_numonproc(ii), psum_multfac(ii)
         write(11, *) ii, psum_numonproc(ii), psum_multfac(ii)
@@ -1236,7 +1342,7 @@ subroutine setup_stress_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart,
   ! Print Stress imptsC_numonproc for each processor and check manually
   write(dumstr,"(A3,I2.2,A22,I4.4,A4)") "Run",this%runID,"_ibm_strsC_numonproc_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_strsC_glob
       write(11, '(i4,1x,8(e19.12,1x),24(i4,1x))') this%strsC_numonproc(ii), this%strsC_multfac(:,ii), this%strsC_indices(:,:,ii)
   enddo
@@ -1277,7 +1383,7 @@ subroutine setup_stress_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart,
 
     write(dumstr,"(A3,I2.2,A31,I4.4,A4)") "Run",this%runID,"_ibm_strsE_psum_numonproc_.dat"
     fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-    open(11,file=fname,status='unknown',action='write')
+    open(11,file=fname,status='replace',action='write')
     do ii = 1, this%num_strsE_glob
         !write(11, '(i4,1x,i4,1x,40(e19.12,1x))') ii, psum_numonproc(ii), psum_multfac(ii)
         write(11, *) ii, psum_numonproc(ii), psum_multfac(ii)
@@ -1291,7 +1397,7 @@ subroutine setup_stress_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart,
 
   write(dumstr,"(A3,I2.2,A22,I4.4,A4)") "Run",this%runID,"_ibm_strsE_numonproc_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_strsE_glob
       write(11, '(i4,1x,8(e19.12,1x),24(i4,1x))') this%strsE_numonproc(ii), this%strsE_multfac(:,ii), this%strsE_indices(:,:,ii)
   enddo
@@ -1412,7 +1518,7 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinep
 
     write(dumstr,"(A3,I2.2,A31,I4.4,A4)") "Run",this%runID,"_ibm_imptsC_psum_numonproc_.dat"
     fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-    open(11,file=fname,status='unknown',action='write')
+    open(11,file=fname,status='replace',action='write')
     do ii = 1, this%num_imptsC_glob
         !write(11, '(i4,1x,i4,1x,20(e19.12,1x))') ii, psum_numonproc(ii), psum_multfac(ii)
         write(11, *) ii, psum_numonproc(ii), psum_multfac(ii)
@@ -1427,7 +1533,7 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinep
   ! Print imptsC_numonproc for each processor and check manually
   write(dumstr,"(A3,I2.2,A22,I4.4,A4)") "Run",this%runID,"_ibm_imptsC_numonproc_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_imptsC_glob
       write(11, '(i4,1x,8(e19.12,1x),24(i4,1x))') this%imptsC_numonproc(ii), this%imptsC_multfac(:,ii), this%imptsC_indices(:,:,ii)
   enddo
@@ -1532,7 +1638,7 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinep
 
     write(dumstr,"(A3,I2.2,A31,I4.4,A4)") "Run",this%runID,"_ibm_imptsE_psum_numonproc_.dat"
     fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-    open(11,file=fname,status='unknown',action='write')
+    open(11,file=fname,status='replace',action='write')
     do ii = 1, this%num_imptsE_glob
         !write(11, '(i4,1x,i4,1x,40(e19.12,1x))') ii, psum_numonproc(ii), psum_multfac(ii)
         write(11, *) ii, psum_numonproc(ii), psum_multfac(ii)
@@ -1546,7 +1652,7 @@ subroutine setup_interpolation(this, dx, dy, dz, zBot, Lx, Ly, xlinepart, ylinep
 
   write(dumstr,"(A3,I2.2,A22,I4.4,A4)") "Run",this%runID,"_ibm_imptsE_numonproc_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_imptsE_glob
       write(11, '(i4,1x,8(e19.12,1x),24(i4,1x))') this%imptsE_numonproc(ii), this%imptsE_multfac(:,ii), this%imptsE_indices(:,:,ii)
   enddo
@@ -1936,7 +2042,7 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop, dx, dy, dz)
 
   kk = this%imptsC_index_st(nrank+1)-1
 
-  min_accept_dist = 0.1d0*min(min(dx, dy), dz)
+  min_accept_dist = 1.1d0*min(min(dx, dy), dz)
 
   do ii = 1, this%num_gptsC
       ! compute image of gptsC_xyz(ii,:) wrt gptsc_bpt(ii,:) and
@@ -1989,7 +2095,7 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop, dx, dy, dz)
 
   write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsC_img_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_gptsC
       write(11, '(8(e19.12,1x))') this%gptsC_img(ii,:), this%gptsC_bnp(ii,:), this%gptsC_dst(ii,:)
   enddo
@@ -1997,7 +2103,7 @@ subroutine compute_image_points(this, Lx, Ly, zBot, zTop, dx, dy, dz)
 
   write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsE_img_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_gptsE
       write(11, '(8(e19.12,1x))') this%gptsE_img(ii,:), this%gptsE_bnp(ii,:), this%gptsE_dst(ii,:)
   enddo
@@ -2088,7 +2194,7 @@ subroutine mark_boundary_points(this)
 
   write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsC_bpt_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_gptsC
       write(11, '(3(e19.12,1x), 3(i5,1x))') this%gptsC_bpt(ii,:), this%gptsC_bpind(ii)
   enddo
@@ -2096,7 +2202,7 @@ subroutine mark_boundary_points(this)
 
   write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_gptsE_bpt_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_gptsE
       write(11, '(3(e19.12,1x), 3(i5,1x))') this%gptsE_bpt(ii,:), this%gptsE_bpind(ii)
   enddo
@@ -2181,14 +2287,14 @@ subroutine save_ghost_points(this, flagC, flagE, mapC, mapE,  xlinepart, ylinepa
 
   write(dumstr,"(A3,I2.2,A11,I4.4,A4)") "Run",this%runID,"_ibm_gptsC_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_gptsC
       write(11, '(3(e19.12,1x), 3(i5,1x))') this%gptsC_xyz(ii,:), this%gptsC_ind(ii,:)
   enddo
   close(11)
   write(dumstr,"(A3,I2.2,A11,I4.4,A4)") "Run",this%runID,"_ibm_gptsE_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_gptsE
       write(11, '(3(e19.12,1x), 3(i5,1x))') this%gptsE_xyz(ii,:), this%gptsE_ind(ii,:)
   enddo
@@ -2209,6 +2315,12 @@ subroutine save_ghost_points(this, flagC, flagE, mapC, mapE,  xlinepart, ylinepa
   write(dumstr,"(A3,I2.2,A12)") "Run",this%runID,"_mask_zC.dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
   call decomp_2d_write_one(3, this%mask_solid_zC, fname, this%gpC)
+
+  ! set factors for diagnostics
+  this%npCfac_s = one/(p_sum(this%mask_solid_xC) + 1.0d-35)
+  this%npEfac_s = one/(p_sum(this%mask_solid_xE) + 1.0d-35)
+  this%npCfac_f = one/( (this%gpC%xsz(1)*this%gpC%ysz(2)*this%gpC%zsz(3)) - one/this%npCfac_s )
+  this%npEfac_f = one/( (this%gpE%xsz(1)*this%gpE%ysz(2)*this%gpE%zsz(3)) - one/this%npEfac_s )
 
 
 end subroutine
@@ -2244,9 +2356,10 @@ subroutine mark_stress_points(this, levelsetC, levelsetE, xlinepart, ylinepart, 
   real(rkind) :: phib, two_phib
   character(len=clen) :: fname, dumstr
   real(rkind) :: xmax_img, xmin_img, ymax_img, ymin_img, zmax_img, zmin_img
+  real(rkind) :: vec1(3), vec2(3), dotpr
 
   phib = 0.75_rkind*dz; two_phib = two*phib
-  this%phi_stressIm = 0.75_rkind*dz
+  this%phi_stressIm = 1.1_rkind*dz   !!0.75_rkind*dz
   
   allocate(distfn(this%num_surfelem))
 
@@ -2267,10 +2380,10 @@ subroutine mark_stress_points(this, levelsetC, levelsetE, xlinepart, ylinepart, 
   ! allocate memory
   allocate(this%strsC_xyz(this%num_strsC,3),   this%strsC_ind(this%num_strsC,3))
   allocate(this%strsC_bpt(this%num_strsC,3),   this%strsC_bpind(this%num_strsC))
-  allocate(this%strsC_img(this%num_strsC,3))
-  this%strsC_xyz   = zero;  this%strsC_ind   = 0;
-  this%strsC_bpt   = zero;  this%strsC_bpind = 0;
-  this%strsC_img = zero;
+  allocate(this%strsC_img(this%num_strsC,3),   this%strsC_bnp(this%num_strsC,3))
+  this%strsC_xyz = zero;  this%strsC_ind   = 0;
+  this%strsC_bpt = zero;  this%strsC_bpind = 0;
+  this%strsC_img = zero;  this%strsC_bnp   = zero;
 
   ! store the xyz and indices of the stress points
   ii = 0
@@ -2322,8 +2435,17 @@ subroutine mark_stress_points(this, levelsetC, levelsetE, xlinepart, ylinepart, 
       this%strsC_bpt(ii,2) = this%surfcent(imin,2)
       this%strsC_bpt(ii,3) = this%surfcent(imin,3)
       this%strsC_bpind(ii) = imin
-      
-      this%strsC_img(ii,:) = this%strsC_bpt(ii,:) + this%phi_stressIm * this%surfnormal(imin,:)
+     
+      ! calculate strsC_img from strsC_xyz and surfnormal
+      vec1(:) = this%strsC_xyz(ii,:) - this%strsC_bpt(ii,:)
+      vec2(:) = this%surfnormal(imin,:)
+      dotpr = sum(vec1*vec2)
+      this%strsC_bnp(ii,:) = this%strsC_xyz(ii,:) - dotpr*vec2   ! note :: - sign here and (xyz-bpt) above
+      this%strsC_img(ii,:) = this%strsC_bnp(ii,:) + this%phi_stressIm * this%surfnormal(imin,:)
+
+      !!! calculate strsC_img from strsC_bpt and surfnormal
+      !!this%strsC_img(ii,:) = this%strsC_bpt(ii,:) + this%phi_stressIm * this%surfnormal(imin,:)
+
       !! -- min_accept_dist = 0.1d0*min(min(dx, dy), dz) -- replace phi_stressIm with min_accept_dist??
 
       ! prepare to store in the global array
@@ -2349,10 +2471,10 @@ subroutine mark_stress_points(this, levelsetC, levelsetE, xlinepart, ylinepart, 
   ! allocate memory
   allocate(this%strsE_xyz(this%num_strsE,3),   this%strsE_ind(this%num_strsE,3))
   allocate(this%strsE_bpt(this%num_strsE,3),   this%strsE_bpind(this%num_strsE))
-  allocate(this%strsE_img(this%num_strsE,3))
-  this%strsE_xyz   = zero;  this%strsE_ind     = 0;
-  this%strsE_bpt   = zero;  this%strsE_bpind   = 0;
-  this%strsE_img = zero;
+  allocate(this%strsE_img(this%num_strsE,3),   this%strsE_bnp(this%num_strsE,3))
+  this%strsE_xyz = zero;  this%strsE_ind   = 0;
+  this%strsE_bpt = zero;  this%strsE_bpind = 0;
+  this%strsE_img = zero;  this%strsE_bnp   = zero;
 
   ! store the xyz and indices of the stress points
   ii = 0
@@ -2404,7 +2526,15 @@ subroutine mark_stress_points(this, levelsetC, levelsetE, xlinepart, ylinepart, 
       this%strsE_bpt(ii,3) = this%surfcent(imin,3)
       this%strsE_bpind(ii) = imin
 
-      this%strsE_img(ii,:) = this%strsE_bpt(ii,:) + this%phi_stressIm * this%surfnormal(imin,:)
+      ! calculate strsE_img from strsE_xyz and surfnormal
+      vec1(:) = this%strsE_xyz(ii,:) - this%strsE_bpt(ii,:)
+      vec2(:) = this%surfnormal(imin,:)
+      dotpr = sum(vec1*vec2)
+      this%strsE_bnp(ii,:) = this%strsE_xyz(ii,:) - dotpr*vec2   ! note :: - sign here and (xyz-bpt) above
+      this%strsE_img(ii,:) = this%strsE_bnp(ii,:) + this%phi_stressIm * this%surfnormal(imin,:)
+
+      !!! calculate strsE_img from strsE_bpt and surfnormal
+      !!this%strsE_img(ii,:) = this%strsE_bpt(ii,:) + this%phi_stressIm * this%surfnormal(imin,:)
 
       ! prepare to store in the global array
       kk = kk+1
@@ -2418,17 +2548,17 @@ subroutine mark_stress_points(this, levelsetC, levelsetE, xlinepart, ylinepart, 
   write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_strsC_img_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
   print *, fname
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_strsC
-      write(11, '(10(e19.12,1x))') this%strsC_xyz(ii,:), this%strsC_img(ii,:), this%strsC_bpt(ii,:), this%phi_stressIm
+      write(11, '(13(e19.12,1x))') this%strsC_xyz(ii,:), this%strsC_img(ii,:), this%strsC_bpt(ii,:), this%strsC_bnp(ii,:), this%phi_stressIm
   enddo
   close(11)
 
   write(dumstr,"(A3,I2.2,A15,I4.4,A4)") "Run",this%runID,"_ibm_strsE_img_",nrank,".dat"
   fname = this%outputDir(:len_trim(this%outputDir))//"/"//trim(dumstr)
-  open(11,file=fname,status='unknown',action='write')
+  open(11,file=fname,status='replace',action='write')
   do ii = 1, this%num_strsE
-      write(11, '(10(e19.12,1x))') this%strsE_xyz(ii,:), this%strsE_img(ii,:), this%strsE_bpt(ii,:), this%phi_stressIm
+      write(11, '(13(e19.12,1x))') this%strsE_xyz(ii,:), this%strsE_img(ii,:), this%strsE_bpt(ii,:), this%strsE_bnp(ii,:), this%phi_stressIm
   enddo
   close(11)
 
@@ -2569,8 +2699,8 @@ subroutine compute_levelset(this, xlinepart, ylinepart, zlinepart, zlinepartE, m
           xk(1) = xlinepart(i)-this%surfcent(jj,1)
           xk(2) = ylinepart(j)-this%surfcent(jj,2)
           xk(3) = zlinepart(k)-this%surfcent(jj,3)
-          xkmag = sqrt(sum(xk*xk))
-          levelsetC(i,j,k) = sign(1.0_rkind, dot_product(xk, this%surfnormal(jj,:)))*xkmag
+          !xkmag = sqrt(sum(xk*xk));  levelsetC(i,j,k) = sign(1.0_rkind, dot_product(xk, this%surfnormal(jj,:)))*xkmag
+          levelsetC(i,j,k) = dot_product(xk, this%surfnormal(jj,:))
       enddo
     enddo
   enddo
@@ -2593,14 +2723,18 @@ subroutine compute_levelset(this, xlinepart, ylinepart, zlinepart, zlinepartE, m
           xk(1) = xlinepart(i)-this%surfcent(jj,1)
           xk(2) = ylinepart(j)-this%surfcent(jj,2)
           xk(3) = zlinepartE(k)-this%surfcent(jj,3)
-          xkmag = sqrt(sum(xk*xk))
-          levelsetE(i,j,k) = sign(1.0_rkind, dot_product(xk, this%surfnormal(jj,:)))*xkmag
+          !xkmag = sqrt(sum(xk*xk));  levelsetE(i,j,k) = sign(1.0_rkind, dot_product(xk, this%surfnormal(jj,:)))*xkmag
+          levelsetE(i,j,k) = dot_product(xk, this%surfnormal(jj,:))
       enddo
     enddo
   enddo
   where (levelsetE > zero)
     mapE = 1
   endwhere
+  print *, 'levelsetE max = ', p_maxval(levelsetE)
+  print *, 'levelsetE min = ', p_minval(levelsetE)
+  print *, '    mapE  min = ', -p_maxval(maxval(-mapE))
+  print *, '    mapE  max = ', p_maxval(maxval( mapE))
   
   call finalize_kdtree_ib()
   deallocate (lnearlistC, lnearlistE)
@@ -2646,25 +2780,46 @@ subroutine get_utauC_ib(this, fout)
 
 end subroutine
 
-pure function get_ibwm_utaustrs_max(this) result(val)
+pure function get_ibwm_utauStrsE_max(this) result(val)
    class(ibmgp), intent(in) :: this
    real(rkind)             :: val
    
-   val = this%ibwm_utaustrs_max
+   val = this%ibwm_utauStrsE_max
 end function
 
-pure function get_ibwm_utaustrs_min(this) result(val)
+pure function get_ibwm_utauStrsE_min(this) result(val)
    class(ibmgp), intent(in) :: this
    real(rkind)             :: val
    
-   val = this%ibwm_utaustrs_min
+   val = this%ibwm_utauStrsE_min
 end function
 
-pure function get_ibwm_utaustrs_avg(this) result(val)
+pure function get_ibwm_utauStrsE_avg(this) result(val)
    class(ibmgp), intent(in) :: this
    real(rkind)             :: val
    
-   val = this%ibwm_utaustrs_avg
+   val = this%ibwm_utauStrsE_avg
+end function
+
+pure function get_ibwm_utauStrsC_max(this) result(val)
+   class(ibmgp), intent(in) :: this
+   real(rkind)             :: val
+   
+   val = this%ibwm_utauStrsC_max
+end function
+
+pure function get_ibwm_utauStrsC_min(this) result(val)
+   class(ibmgp), intent(in) :: this
+   real(rkind)             :: val
+   
+   val = this%ibwm_utauStrsC_min
+end function
+
+pure function get_ibwm_utauStrsC_avg(this) result(val)
+   class(ibmgp), intent(in) :: this
+   real(rkind)             :: val
+   
+   val = this%ibwm_utauStrsC_avg
 end function
 
 subroutine get_utaustrsC_ib(this, fout)
@@ -2677,10 +2832,40 @@ subroutine get_utaustrsC_ib(this, fout)
 
 end subroutine
 
+subroutine get_utaustrsE_ib(this, fout)
+    use mpi
+    use kind_parameters, only: mpirkind
+    class(ibmgp), intent(in) :: this
+    real(rkind), dimension(this%num_gptsC) :: fout
+
+    fout(:) = this%utaustrsE_ib
+
+end subroutine
+
+subroutine get_ubulk_s(this, fout)
+    use mpi
+    use kind_parameters, only: mpirkind
+    class(ibmgp), intent(in) :: this
+    real(rkind), dimension(3) :: fout
+
+    fout(:) = this%ubulk_s
+
+end subroutine
+
+subroutine get_ubulk_f(this, fout)
+    use mpi
+    use kind_parameters, only: mpirkind
+    class(ibmgp), intent(in) :: this
+    real(rkind), dimension(3) :: fout
+
+    fout(:) = this%ubulk_f
+
+end subroutine
+
 subroutine destroy(this)
   class(ibmgp), intent(inout) :: this
 
-  deallocate(this%utaustrsC_ib)
+  deallocate(this%utaustrsC_ib, this%utaustrsE_ib)
   deallocate(this%strsC_u_tmp, this%strsC_v_tmp, this%strsC_w_tmp, this%strsC_u, this%strsC_v, this%strsC_w)
   deallocate(this%strsE_u_tmp, this%strsE_v_tmp, this%strsE_w_tmp, this%strsE_u, this%strsE_v, this%strsE_w)
   deallocate(this%strsC_numonproc, this%strsE_numonproc)
@@ -2703,6 +2888,8 @@ subroutine destroy(this)
   !deallocate(this%gptsC_u,  this%gptsE_u)
   !deallocate(this%gptsC_v,  this%gptsE_v)
   !deallocate(this%gptsC_w,  this%gptsE_w)
+  deallocate(this%strsE_xyz, this%strsE_ind, this%strsE_bpt, this%strsE_bpind, this%strsE_img, this%strsE_bnp)
+  deallocate(this%strsC_xyz, this%strsC_ind, this%strsC_bpt, this%strsC_bpind, this%strsC_img, this%strsC_bnp)
   deallocate(this%strsImC_xyz, this%strsImE_xyz)
   deallocate(this%num_imptsC_arr, this%num_imptsE_arr)
   deallocate(this%imptsC_index_st, this%imptsE_index_st)

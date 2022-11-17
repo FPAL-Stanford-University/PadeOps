@@ -29,8 +29,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn, init_profile
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, zpeak
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, init_profile
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, zpeak, translate_z = 0.0d0
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, init_profile, translate_z
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -89,11 +89,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr
     real(rkind) :: z0init = 1.0d-4, epsnd = 0.1, sig, ustarinit = 1.0d0
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
-    integer :: nz, nzE, ioUnit, k, init_profile = 1
+    integer :: nz, nzE, ioUnit, k, init_profile = 1, kmin
     real(rkind) :: Xperiods = 3.d0, Yperiods = 3.d0
-    real(rkind) :: zpeak = 0.2d0
-    real(rkind)  :: Lx = one, Ly = one, Lz = one
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, init_profile
+    real(rkind) :: zpeak = 0.2d0, translate_z = 0.0d0
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, dist2, uslipfac
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, init_profile, translate_z
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -133,10 +133,41 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
         ! parabolic init (utau = 1)
         epsnd = 2.0d-1
         u = 22.0d0*(one-(z-one)*(z-one)) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+    elseif(init_profile==4) then  ! PBL profile with translate_z
+        ! log law init (PBL)
+        epsnd = 0.0d-1
+
+        kmin = minloc(abs(z(1,1,:)-translate_z),1)
+        print *, 'Here ----', nrank, kmin, z(1,1,kmin), translate_z
+        if(z(1,1,kmin) < translate_z) then
+            kmin = kmin+1
+        endif
+        do k = kmin, size(u, 3)
+            u(:,:,k) = (ustarinit/kappa)*log((z(:,:,k)-translate_z)/z0init) + epsnd*cos(Yperiods*two*pi*y(:,:,k)/Ly)*exp(-half*((z(:,:,k)-translate_z)/zpeak/Lz)**2)
+        enddo
+
+        ! slip wall velocity
+        if(kmin>1) then  !! kmin==1 can happen if decomp is along z
+          dist2 = two*translate_z - z(1,1,kmin-1)
+          uslipfac = one - 2.0d0*two/log(dist2/1.0d-4)
+          do k = 1, kmin-1
+              u(:,:,k) = uslipfac*u(:,:,kmin)
+          enddo
+        endif
     endif
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     wC= zero  
    
+    if(init_profile==4) then  ! PBL profile with translate_z
+        v = epsnd*((z-translate_z)/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*((z-translate_z)/zpeak/Lz)**2)
+        kmin = minloc(abs(z(1,1,:)-translate_z),1)
+        if(kmin>1) then  !! kmin==1 can happen if decomp is along z
+          do k = 1, kmin-1
+            v(:,:,k) = -v(:,:,kmin)
+          enddo
+        endif
+    endif
+
     !Add random numbers
     randomScaleFact = 0.00d-1
     allocate(randArr(size(u,1),size(u,2),size(u,3)))
@@ -159,6 +190,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     write(*,*) 'vmax, vmin: ', p_maxval(maxval(v)), p_minval(minval(v))
 
 
+
+
     ! Interpolate wC to w
     allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
     allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
@@ -175,7 +208,17 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     zbuffE(:,:,2:nzE-1) = half*(zbuffC(:,:,1:nz-1) + zbuffC(:,:,2:nz))
     call transpose_z_to_y(zbuffE,ybuffE,decompE)
     call transpose_y_to_x(ybuffE,w,decompE) 
-    
+   
+    !! debug initial u profile 
+    call transpose_x_to_y(u,ybuffC,decompC)
+    call transpose_y_to_z(ybuffC,zbuffC,decompC)
+    if(nrank==0) then
+      open(unit=10,file='debug00.dat',status='replace')
+      do k=1, nz
+        write(10,*) zbuffC(1,1,k)
+      enddo
+      close(10)
+    endif
 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
   
@@ -222,9 +265,9 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, zpeak
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, zpeak, translate_z = 0.0d0
     integer :: iounit, init_profile = 1
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak, init_profile
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak, init_profile, translate_z
     
     wTh_surf = zero;
     
@@ -244,9 +287,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, zpeak
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, zpeak, translate_z = 0.0d0
     integer :: iounit, init_profile = 1
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak , init_profile
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak , init_profile, translate_z
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -264,10 +307,10 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, z0init, zpeak
+    real(rkind) :: Lx, Ly, Lz, z0init, zpeak, translate_z = 0.0d0
     integer :: iounit, init_profile = 1
     
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak, init_profile
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak, init_profile, translate_z
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -286,10 +329,10 @@ subroutine set_Reference_Temperatur(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, z0init, zpeak
+    real(rkind) :: Lx, Ly, Lz, z0init, zpeak, translate_z = 0.0d0
     integer :: iounit, init_profile = 1
     
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak, init_profile
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak, init_profile, translate_z
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

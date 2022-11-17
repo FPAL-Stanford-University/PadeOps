@@ -18,7 +18,8 @@
        end if
       
        ! Step 0: IBM
-       if(this%useibm) then
+       !if(this%useibm) then
+       if((this%useibm) .and. (this%RKstage .ne. 0)) then
            call this%ibm%update_ibmgp(this%u, this%v, this%w, this%uE, this%vE, this%wC, this%uhat, this%vhat, this%what)
            call this%interp_PrimitiveVars()
        endif
@@ -103,7 +104,7 @@
        end if
       
        ! Step 0: IBM
-       if(this%useibm) then
+       if((this%useibm) .and. (this%RKstage .ne. 0)) then
            call this%ibm%update_ibmgp(this%u, this%v, this%w, this%uE, this%vE, this%wC, this%uhat, this%vhat, this%what)
            call this%interp_PrimitiveVars()
        endif

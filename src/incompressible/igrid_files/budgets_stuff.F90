@@ -210,6 +210,7 @@ subroutine getMomentumTerms(this)
         ! Step 1: split the RHS terms into 4 contributions and pressure
         
         
+        this%RKstage = 0 !! ensures some parts of RHS are not calculated twice when called from budget
         call this%ComputePressure(ComputeRHSForBudget=.true.)
         
         ! Step 2: compute the pressure gradient term 

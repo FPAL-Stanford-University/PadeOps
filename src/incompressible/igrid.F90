@@ -131,7 +131,7 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer:: u_Orhs, v_Orhs, w_Orhs
 
         real(rkind), dimension(:,:,:), allocatable :: rDampC, rDampE         
-        real(rkind) :: Re, G_Geostrophic, G_alpha, frameAngle, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz, ubulk
+        real(rkind) :: Re, G_Geostrophic, G_alpha, frameAngle, dtby2, meanfact, Tref, dPfdx, dPfdy, dPfdz, ubulk, dpFdxs
         complex(rkind), dimension(:,:,:), allocatable :: GxHat, GyHat, GxHat_Edge, GyHat_Edge
         real(rkind) :: Ro = 1.d5, Fr = 1000.d0, PrandtlFluid = 1.d0, BulkRichardson = 0.d90
         logical :: assume_fplane = .true.
@@ -147,7 +147,7 @@ module IncompressibleGrid
 
         logical :: periodicInZ  = .false. 
         logical :: newTimeStep = .true., computeVorticity = .false.  
-        integer :: timeSteppingScheme = 0 
+        integer :: timeSteppingScheme = 0, RKstage = 0
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false., useMoisture = .false.
@@ -321,7 +321,7 @@ module IncompressibleGrid
             procedure          :: get_dt
             procedure          :: interpolate_cellField_to_edgeField 
             !procedure, private :: init_stats
-            procedure, private :: init_stats3D
+            !procedure, private :: init_stats3D
             procedure, private :: AdamsBashforth
             procedure, private :: TVD_RK3
             procedure, private :: SSP_RK45
@@ -339,11 +339,11 @@ module IncompressibleGrid
             procedure, private :: addForcedStratification
             procedure, private :: dumpRestartFile
             procedure, private :: readRestartFile
-            procedure, private :: compute_z_mean 
+            !procedure, private :: compute_z_mean 
             procedure, private :: compute_deltaT
             procedure, private :: dump_pointProbes
-            procedure, private :: dump_stats3D
-            procedure, private :: compute_stats3D 
+            !procedure, private :: dump_stats3D
+            !procedure, private :: compute_stats3D 
             procedure, private :: dealiasFields
             procedure, private :: dealias_rhs
             procedure, private :: ApplyCompactFilter 
@@ -355,14 +355,14 @@ module IncompressibleGrid
             procedure          :: wrapup_timestep
             procedure, private :: reset_pointers
             procedure, private :: compute_vorticity
-            procedure, private :: finalize_stats3D
+            !procedure, private :: finalize_stats3D
             procedure, private :: dump_planes
             procedure, private :: dealiasRealField_C
             procedure          :: dumpFullField 
             procedure, private :: dump_scalar_fields
             procedure, private :: dumpVisualizationInfo
-            procedure, private :: DeletePrevStats3DFiles
-            procedure, private :: Delete_file_if_present
+            !procedure, private :: DeletePrevStats3DFiles
+            !procedure, private :: Delete_file_if_present
             procedure, private :: updateProbes 
             procedure, private :: dumpProbes
             procedure, private :: correctPressureRotationalForm
@@ -518,7 +518,7 @@ contains
         this%PreProcessForKS = preprocessForKS; this%KSOutputDir = KSoutputDir;this%t_dumpKSprep = t_dumpKSprep 
         this%normByustar = normStatsByUstar; this%t_DivergenceCheck = t_DivergenceCheck
         this%t_start_pointProbe = t_start_pointProbe; this%t_stop_pointProbe = t_stop_pointProbe; 
-        this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz
+        this%t_pointProbe = t_pointProbe; this%dPfdx = dPfdx; this%dPfdy = dPfdy; this%dPfdz = dPfdz; this%dpFdxs = zero
         this%InitSpinUp = InitSpinUp; this%BulkRichardson = BulkRichardson
         this%computeDNSpressure = computeDNSpressure; this%computefringePressure = computeFringePressure
         this%zHubIndex = zHubIndex; this%angleTrigger = angleTrigger
@@ -817,6 +817,20 @@ contains
        ! STEP 9: Compute duidxj
        call this%compute_duidxj()
        if (this%isStratified) call this%compute_dTdxi() 
+
+       !! debug dudz ---
+       this%rbuffxC(1,1,:,1) = this%u(1,1,:)
+       this%rbuffxC(2,1,:,1) = this%duidxjC(1,1,:,3)
+       call transpose_x_to_y(this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+       if(nrank==0) then
+           open(unit=10,file='debugdz00.dat',status='replace')
+           do k=1, nz
+             write(10,*) this%rbuffzC(1:2,1,k,1)
+           enddo
+           close(10)
+       endif
+       !call GracefulExit("Stop and check dudz calculation.",245)
 
        ! STEP 10a: Compute Coriolis Term
        if (this%useCoriolis) then
@@ -1162,12 +1176,12 @@ contains
            call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
        end if 
 
-       ! STEP 17: Initialize Statistics
-       if (this%timeAvgFullFields) then
-           call this%init_stats3D()
-       else
-       !    call this%init_stats()
-       end if
+       !!!! STEP 17: Initialize Statistics
+       !!!if (this%timeAvgFullFields) then
+       !!!    call this%init_stats3D()
+       !!!else
+       !!!!    call this%init_stats()
+       !!!end if
       
        ! STEP 18: Set Fringe
        allocate(this%fringe_x1, this%fringe_x2)
@@ -1296,10 +1310,57 @@ contains
            end if 
        end if 
        
+           call transpose_x_to_y(this%u,this%rbuffyC(:,:,:,1),this%gpC)
+           call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),this%gpC)
+           if(nrank==0) then
+             open(unit=10,file='debug01.dat',status='replace')
+             do k=1, nz
+               write(10,*) this%rbuffzC(1,1,k,1)
+             enddo
+             close(10)
+           endif
+           !! debug dudz ---
+           this%rbuffxC(1,1,:,1) = this%u(1,1,:)
+           this%rbuffxC(2,1,:,1) = this%duidxjC(1,1,:,3)
+           call transpose_x_to_y(this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
+           call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+           if(nrank==0) then
+               open(unit=10,file='debugdz01.dat',status='replace')
+               do k=1, nz
+                 write(10,*) this%rbuffzC(1:2,1,k,1)
+               enddo
+               close(10)
+           endif
+           !call GracefulExit("Stop and check dudz calculation.",245)
+
        ! STEP 25: Compute pressure  
        if ((this%storePressure) .or. (this%fastCalcPressure)) then
            call this%ComputePressure()
        end if 
+           call transpose_x_to_y(this%u,this%rbuffyC(:,:,:,1),this%gpC)
+           call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),this%gpC)
+           if(nrank==0) then
+             open(unit=10,file='debug10.dat',status='replace')
+             do k=1, nz
+               write(10,*) this%rbuffzC(1,1,k,1)
+             enddo
+             close(10)
+           endif
+           !! debug dudz ---
+           call this%compute_duidxj()
+           this%rbuffxC(1,1,:,1) = this%u(1,1,:)
+           this%rbuffxC(2,1,:,1) = this%duidxjC(1,1,:,3)
+           call transpose_x_to_y(this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
+           call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+           if(nrank==0) then
+               open(unit=10,file='debugdz10.dat',status='replace')
+               do k=1, nz
+                 write(10,*) this%rbuffzC(1:2,1,k,1)
+               enddo
+               close(10)
+           endif
+           !call GracefulExit("Stop and check dudz calculation.",245)
+
 
        ! STEP 26: Schedule time dumps
        this%vizDump_Schedule = vizDump_Schedule
@@ -1382,6 +1443,15 @@ contains
        call message("IGRID initialized successfully!")
        call message("===========================================================")
 
+           call transpose_x_to_y(this%u,this%rbuffyC(:,:,:,1),this%gpC)
+           call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),this%gpC)
+           if(nrank==0) then
+             open(unit=10,file='debug12.dat',status='replace')
+             do k=1, nz
+               write(10,*) this%rbuffzC(1,1,k,1)
+             enddo
+             close(10)
+           endif
    end subroutine
 
    
@@ -1425,11 +1495,11 @@ contains
          call this%hitforce%destroy()
          deallocate(this%hitforce)
        endif 
-       if (this%timeAvgFullFields) then
-           call this%finalize_stats3d()
-       else
-       !    call this%finalize_stats()
-       end if 
+       !if (this%timeAvgFullFields) then
+       !    call this%finalize_stats3d()
+       !else
+       !!    call this%finalize_stats()
+       !end if 
        nullify(this%u, this%uhat, this%v, this%vhat, this%w, this%what, this%wC)
        deallocate(this%PfieldsC, this%PfieldsE, this%SfieldsC, this%SfieldsE)
        nullify(this%u_rhs, this%v_rhs, this%w_rhs)

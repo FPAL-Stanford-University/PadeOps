@@ -47,11 +47,13 @@
          call this%compute_deltaT
        endif
       
+       !if(nrank==0) print '(a,i4,1x,L2)', 'alreadyhaverhs: ', nrank, this%alreadyHaveRHS
        !!! STAGE 1
        ! First stage - everything is where it's supposed to be
        if (this%AlreadyHaveRHS) then
            this%AlreadyHaveRHS = .false.
        else
+           this%RKstage = 1
            call this%populate_rhs()
        end if
        !print '(a,e19.12)', 'rhsu: ', p_sum(abs(this%u_rhs))
@@ -98,6 +100,7 @@
        !!! STAGE 2
        ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
        ! what we want. 
+       this%RKstage = 2
        call this%populate_rhs()
        !print '(a,e19.12)', 'rhsu: ', p_sum(abs(this%u_rhs))
        !print '(a,e19.12)', 'rhsv: ', p_sum(abs(this%v_rhs))
@@ -144,6 +147,7 @@
        !!! STAGE 3 (Final Stage)
        ! Third stage - u, v, w are really pointing to u2, v2, w2 (which is what
        ! we really want. 
+       this%RKstage = 3
        call this%populate_rhs()
        !print '(a,e19.12)', 'rhsu: ', p_sum(abs(this%u_rhs))
        !print '(a,e19.12)', 'rhsv: ', p_sum(abs(this%v_rhs))
@@ -509,6 +513,7 @@
 
        ! STEP 2: Do logistical stuff
        if (this%fastCalcPressure) then
+           this%RKstage = 1
            call this%computePressure()
        else
            if ((this%storePressure)) then
@@ -534,7 +539,7 @@
                   this%AlreadyHaveRHS = .true. 
               end if 
 
-              call this%compute_stats3D()
+          !    call this%compute_stats3D()
           else
           !    call this%compute_stats()
           end if 
@@ -542,7 +547,7 @@
 
       if ((forceWrite.or.(mod(this%step,this%tid_statsDump)==0)).and.(this%tsim > this%tSimStartStats) ) then
          if (this%timeAvgFullFields) then
-              call this%dump_stats3D()
+              !call this%dump_stats3D()
               call mpi_barrier(mpi_comm_world, ierr)
               !stop
           else
