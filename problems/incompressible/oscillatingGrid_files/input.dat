@@ -219,17 +219,17 @@ Ly                    = 12.566370614359172d0          ! Domain Width  (appropria
 Lz                    = 12.566370614359172d0          ! Domain Height  (appropriate dimesions/non-dimensionalized)
 omega                 = 0.2059067076d0
 stroke                = 0.6938822035d0
-lxbar                 = 0.1387764407d0 
-lybar                 = 0.1387764407d0
+lxbar                 = 0.1387764407d0          ! Used only if gridType = 1 
+lybar                 = 0.1387764407d0          ! Used only if gridType = 1
 lzbar                 = 0.2775528814d0
 z0fact                = 0.7613478261d0
-Nbx                   = 23
-Nby                   = 23
+Nbx                   = 23                      ! Number of bars in x (Used only if gridType = 1)
+Nby                   = 23                      ! Number of bars in y (Used only if gridType = 1)
 filterMask            = .false.
 gridType              = 2                         ! 1: Homogeneous grid, 2: Fractal grid
-width1                =
-length1               = 
-widthFact             = 0.5d0
-lengthFact            = 0.5d0
-levels                = 4
+width1                = 0.7853981634d0          ! Width of grid at level 1 (Used only if gridType = 2)
+length1               = 6.2831853072d0          ! Length of grid at level 1 (Used only if gridType = 2)
+widthFact             = 0.5d0                   ! Factor of width scaling at each level (fractal grid)
+lengthFact            = 0.5d0                   ! "       " length "                                 "
+levels                = 4                       ! Number of fractal levels
 /
