@@ -1,5 +1,5 @@
 subroutine init_sigma(this, dx, dy, dz, Cs)
-   class(sgs_igrid), intent(inout) :: this
+   class(sgs_cgrid), intent(inout) :: this
    real(rkind), intent(in) :: dx, dy, dz, Cs
    real(rkind) :: deltaLES
 
@@ -21,7 +21,7 @@ subroutine init_sigma(this, dx, dy, dz, Cs)
 end subroutine
 
 subroutine destroy_sigma(this)
-   class(sgs_igrid), intent(inout) :: this
+   class(sgs_cgrid), intent(inout) :: this
 
    this%isEddyViscosityModel = .false. 
 

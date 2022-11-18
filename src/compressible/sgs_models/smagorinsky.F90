@@ -1,39 +1,29 @@
-subroutine init_smagorinsky(this,dx,dy,dz,Cs,ncWall,z0,useWallDamping, zMeshC, zMeshE)
-   class(sgs_igrid), intent(inout) :: this
-   logical, intent(in) :: useWallDamping 
-   real(rkind), intent(in) :: z0, ncWall, Cs, dx, dy, dz
-   real(rkind), intent(in), dimension(:) :: zMeshC, zMeshE
+subroutine init_smagorinsky(this,dx,dy,dz,Cs)
+   class(sgs_cgrid), intent(inout) :: this
+   real(rkind), intent(in) :: Cs, dx, dy, dz
    real(rkind) :: deltaLES
-   real(rkind), parameter :: kappa = 0.4d0
 
    ! Set the type of mnodel constant (default is wall function). 
    ! Can be reset to true via dynamic procedure initialization, 
    ! in case the global dynamic procedure is used. 
-   
-   
+      
    if (.not. this%isPeriodic) then
       deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
    else
       deltaLES =  (1.5d0*dx*1.5d0*dy*1.5d0*dz)**(1.d0/3.d0)
    end if 
-   
-   if (useWallDamping) then
-      this%useCglobal = .false. 
-      this%cmodelC = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMeshC/deltaLES + &
-          & z0/deltaLES))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))
-      this%cmodelE = ( Cs**(-real(ncWall,rkind)) + (kappa*(zMeshE/deltaLES + &
-          & z0/deltaLES))**(-real(ncWall,rkind))  )**(-one/real(ncWall,rkind))
-      this%cmodelC = (deltaLES*this%cmodelC)**2    
-      this%cmodelE = (deltaLES*this%cmodelE)**2    
-   else
-      this%useCglobal = .true. 
-      this%cmodelC = (Cs*deltaLES)**2
-      this%cmodelE = (Cs*deltaLES)**2
-      this%cmodel_global = (Cs*deltaLES)**2
-   end if
+
+   this%useCglobal = .true.
+   this%cmodel_global = (Cs*deltaLES)**2
+
    this%isEddyViscosityModel = .true. 
 
    call message(1,"Smagorinsky model initialized")
+end subroutine
+
+subroutine destroy_smagorinsky(this)
+   class(sgs_cgrid), intent(inout) :: this
+   this%isEddyViscosityModel = .false. 
 end subroutine
 
 subroutine get_smagorinsky_kernel(Sij, nuSGS, nxL, nyL, nzL)
@@ -43,7 +33,6 @@ subroutine get_smagorinsky_kernel(Sij, nuSGS, nxL, nyL, nzL)
    !real(rkind), dimension(nxL, nyL) :: S
    real(rkind) :: S
    integer :: i,j,k
-
    
    do k = 1,nzL
       do j = 1,nyL
@@ -63,13 +52,5 @@ subroutine get_smagorinsky_kernel(Sij, nuSGS, nxL, nyL, nzL)
       end do 
    end do
 
-
-end subroutine
-
-
-subroutine destroy_smagorinsky(this)
-   class(sgs_igrid), intent(inout) :: this
-   deallocate(this%cmodelC, this%cmodelE)
-   this%isEddyViscosityModel = .false. 
 
 end subroutine

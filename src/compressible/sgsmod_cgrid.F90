@@ -1,18 +1,11 @@
 module sgsmod_cgrid
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, zero !,one,two,three,half, four,eight, nine, six, kappa, piby2 
+    use constants,       only: imi, zero !,one,two,three,half, four,eight, nine, six, kappa, piby2 
     use decomp_2d
-    !use decomp_2d_io
+    use gridtools,       only: alloc_buffs, destroy_buffs
     use exits, only: GracefulExit, message
-    !use spectralMod, only: spectral  
     use mpi 
-    !use reductions, only: p_maxval, p_sum, p_minval
-    !use numerics, only: useCompactFD 
-    !!use StaggOpsMod, only: staggOps  
-    !use gaussianstuff, only: gaussian
-    !use lstsqstuff, only: lstsq
-    !use PadeDerOps, only: Pade6stagg
-    !use ibmgpmod!, only: ibmgp
+    use reductions, only: p_maxval, p_sum, p_minval
     implicit none
 
     private
@@ -24,472 +17,160 @@ module sgsmod_cgrid
     type :: sgs_cgrid
         private 
         class(decomp_info), pointer :: decomp
-        !class(spectral), pointer :: spectC, spectE
-        !class(decomp_info), pointer :: sp_gpC, sp_gpE
-        !integer :: mid, DynamicProcedureType, WallModel, DynProcFreq
-        !real(rkind), dimension(:), allocatable :: cmodelC, cmodelE
-        !
-        !real(rkind), dimension(:,:,:), allocatable :: LambdaDynProc_C
-        !real(rkind), dimension(:,:,:), allocatable :: BetaDynProc_C
-        !real(rkind), dimension(:), allocatable :: lambda_1d, beta_1d
-        !logical :: UpdateScalarDynProc = .false., usingDynamicProcedureMomentum = .false. 
-        !logical :: UseDynamicProcedureScalar = .false. 
-
-        !real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z, Cy, dx, dy, dz
-        !real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
-        !real(rkind), dimension(:,:,:), allocatable :: kappa_sgs_C, kappa_sgs_E, kappa_boundingC, kappa_boundingE
-        !logical :: isEddyViscosityModel = .false.
-        !logical :: usePrSGS = .false.
-        !real(rkind), dimension(:,:,:,:), allocatable :: tau_ij
-        !real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
-        !real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
-        !real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
-        !real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffyE, rbuffzE
-        !real(rkind), dimension(:,:,:), allocatable :: rbuffxE
-        !complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
-        !type(Pade6stagg), pointer :: PadeDer
-        !logical :: explicitCalcEdgeEddyViscosity = .false.
-        !real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3E 
-        !logical :: initspinup = .false., isPeriodic = .false., useScalarBounding = .false.  
-
-        !real(rkind) :: Tscale, lowbound_PotT, highbound_PotT, Cy_PotT, TurbPrandtlNum_PotT, lowbound, highbound
-
-        !type(gaussian) :: gaussianX, gaussianY, gaussianZ
-        !
-        !! Wall model
-        !real(rkind), dimension(:,:,:,:), allocatable :: tauijWM
-        !complex(rkind),dimension(:,:,:,:), allocatable :: tauijWMhat_inZ, tauijWMhat_inY
-        !real(rkind), dimension(:,:,:), allocatable :: filteredSpeedSq
-        !complex(rkind), dimension(:,:,:), allocatable :: Tfilhat, Tfilhatz1, Tfilhatz2
-        !logical :: useWallModel = .false.
-        !integer :: botBC_temp = 1
-        !real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0, PsiM = 0.0d0, uw_surf = 0.0d0, vw_surf = 0.0d0
-        !real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0!, wTh_surf = 0.d0
-        !real(rkind) :: z0, z0t, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
-        !real(rkind), pointer :: Tsurf, wTh_surf
-        !complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
-        !integer :: WM_matchingIndex
-
-        !! for varying z0
-        !real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, lamfact, mask_upstream, deli
-        !real(rkind) :: kaplnzfac_s, kaplnzfac_r, z0s, z0r, mask_normfac, ustar_upstream
-        !logical :: is_z0_varying = .false., filter_for_heterog = .true.
-
-        !! for dynamic procedures - all are at edges
-        !type(gaussian) :: gaussianTestFilterZ
-        !real(rkind), dimension(:,:,:,:), allocatable :: Lij, Sij_Filt
-        !real(rkind), dimension(:,:,:,:), allocatable :: ui_Filt, fiE
-        !real(rkind), dimension(:,:,:),   allocatable :: Dsgs, Dsgs_Filt
-        !real(rkind), dimension(:,:,:),   pointer     :: fxC, fyC, fzE
-        !logical :: isInviscid, isStratified,  useVerticalTfilter = .false. 
-        !real(rkind), dimension(:), allocatable :: cmodel_allZ
-        !real(rkind) :: invRe, deltaRat
-        !integer :: mstep
-        !logical :: DomainAveraged_DynProc = .false. 
+        integer :: SGSmodelID, mid, DynamicProcedureType
+        real(rkind) :: cmodel_global,csgs,turbPrandtl = 0.7_rkind
+        logical :: isEddyViscosityModel = .false., isEddyDiffmodel = .true., isTurbPrandtlconst = .true.
+        real(rkind), dimension(:,:,:,:), allocatable :: S_ij
+        real(rkind), dimension(:,:,:),   allocatable :: nusgs, kapsgs
+        logical ::  isPeriodic = .false.
 
         !! model constant values/properties
-        !real(rkind) :: camd_x, camd_y, camd_z
-        !logical :: useCglobal = .false. 
-
-        !logical :: useibm = .false. 
-        !class(ibmgp), pointer :: ibm
-
-        !integer :: BC_tau13_top = 0, BC_tau13_bot = 0, BC_tau23_top = 0, BC_tau23_bot = 0, BC_tau33_top = 0, BC_tau33_bot = 0
-        !! Buoyancy factor (needed for AMD model, set using the procedure:  setBuoyancyFact)
-        !real(rkind) :: BuoyancyFact = 0.d0 
+        real(rkind) :: camd_x, camd_y, camd_z, cmgm_x, cmgm_y, cmgm_z, c1_mgm , c2_mgm, PrCpfac
+        logical :: useCglobal = .false. 
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
-            !!procedure          :: link_pointers
-            !!procedure, private :: init_smagorinsky 
-            !!procedure, private :: init_sigma
-            !!procedure, private :: init_amd
-            !!procedure, private :: allocateMemory_EddyViscosity
-            !!procedure          :: setTauBC
-
-            !!!! ALL WALL MODEL PROCEDURE
-            !!procedure, private :: initWallModel
-            !!procedure, private :: destroyWallModel
-            !!procedure, private :: getfilteredSpeedSqAtWall
-            !!procedure, private :: computeWallStress
-            !!procedure, private :: compute_and_bcast_surface_Mn
-            !!procedure, private :: getSurfaceQuantities
-            !!procedure, private :: computeWall_PotTFlux
-            !!procedure, private :: embed_WM_stress
-            !!procedure, private :: embed_WM_PotTFlux
-            !!procedure, private :: BouZeidLocalModel
-            !!procedure, private :: compute_ustar_upstreampart
-            !!procedure, private :: getSpanAvgVelAtWall
-            !!procedure, private :: set_tauijWM
-            
-
-            !!!! ALL DYNAMIC PROCEDURE SUBROUTINES
-            !!procedure, private :: allocateMemory_DynamicProcedure
-            !!procedure, private :: destroyMemory_DynamicProcedure
-            !!procedure, private :: TestFilter_Cmplx_to_Real
-            !!procedure, private :: TestFilter_Real_to_Real
-            !!procedure, private :: TestFilter_Real_to_Real_inplace
-            !!procedure, private :: planarAverage_and_TakeRatio 
-            !!procedure, private :: DomainAverage_and_TakeRatio 
-            !!procedure, private :: DoStandardDynamicProcedure
-            !!procedure, private :: DoStandardDynamicProcedureScalar
-
             !! ALL SGS SOURCE/SINK PROCEDURES
             procedure          :: getQjSGS
             procedure          :: getTauSGS
-            !!procedure          :: getRHS_SGS
-            !!procedure          :: getRHS_SGS_Scalar
-            !!procedure, private :: get_SGS_kernel
-            !!procedure, private :: multiply_by_model_constant 
-            !!procedure          :: dumpSGSDynamicRestart
-            !!procedure, private :: readSGSDynamicRestart
-            !!procedure, private :: interpolate_eddy_viscosity
-            !!procedure, private :: interpolate_kappaSGS 
-            !!procedure, private :: compute_kappa_bounding   
-            !!procedure, private :: compute_Tscale
-
+            procedure, private :: get_SGS_kernel
+            procedure, private :: multiply_by_model_constant 
             !! ALL DESTROY PROCEDURES
             procedure          :: destroy
-            !!procedure, private :: destroy_smagorinsky 
-            !!procedure, private :: destroy_sigma
-            !!procedure, private :: destroy_amd
-            !!procedure, private :: destroyMemory_EddyViscosity
-
-            !! ACCESSORS (add these in src/incompressible/sgs_models/accessors.F90)
-            !!procedure          :: get_GlobalConstant
-            !!procedure          :: get_ustar
-            !!procedure          :: get_z0
-            !!procedure          :: get_ustar_upstream
-            !!procedure          :: get_InvOblength
-            !!procedure          :: get_umean 
-            !!procedure          :: get_vmean 
-            !!procedure          :: get_Tmean
-            !!procedure          :: get_uspeedmean 
-            !!procedure          :: get_DynamicProcedureType
-            !!procedure          :: get_wTh_surf
-            !!procedure          :: get_Tsurf
-            !!procedure          :: get_uw_surf
-            !!procedure          :: get_vw_surf
-            !!procedure          :: get_z0varstats
-            !!procedure          :: get_is_z0_varying
-            !!procedure          :: getMax_DynSmagConst
-            !!procedure          :: getMax_DynPrandtl
-            !!procedure          :: usingDynProc
-            !!procedure          :: set_BuoyancyFactor
-            !!procedure          :: populate_tauij_E_to_C 
+            procedure, private :: destroy_smagorinsky 
+            procedure, private :: destroy_sigma
+            procedure, private :: destroy_amd
+            procedure, private :: destroy_mgm
+            !! ACCESSORS 
+            procedure          :: getMax_nuSGS
+            procedure          :: getMax_kapSGS
     end type 
 
 contains
 
-!!#include "sgs_models/init_destroy_sgs_cgrid.F90"
-!!#include "sgs_models/smagorinsky.F90"
-!!#include "sgs_models/sigma.F90"
-!!#include "sgs_models/AMD.F90"
-!!#include "sgs_models/eddyViscosity.F90"
-!!#include "sgs_models/dynamicProcedure_sgs_cgrid.F90"
-!!#include "sgs_models/standardDynamicProcedure.F90"
-!!#include "sgs_models/wallmodel.F90"
-!!#include "sgs_models/accessors.F90"
-!!#include "sgs_models/scalar_bounding.F90"
+#include "sgs_models/init_destroy_sgs_cgrid.F90"
+#include "sgs_models/smagorinsky.F90"
+#include "sgs_models/sigma.F90"
+#include "sgs_models/AMD.F90"
+#include "sgs_models/MGM.F90"
+#include "sgs_models/eddyViscosity.F90"
+#include "sgs_models/accessors.F90"
 
 
-!!subroutine setTauBC(this, botwall, topwall)
-!!   class(sgs_cgrid), intent(inout) :: this
-!!   integer, intent(in) :: topwall, botwall
-!!
-!!   select case(topwall)
-!!   case(1) ! no-slip wall
-!!        this%BC_tau13_top = 0 
-!!        this%BC_tau23_top = 0
-!!        this%BC_tau33_top = -1
-!!   case(2) ! slip wall
-!!        this%BC_tau13_top = 0
-!!        this%BC_tau23_top = 0
-!!        this%BC_tau33_top = -1
-!!   case(3) ! wall model
-!!        this%BC_tau13_top = 0  
-!!        this%BC_tau23_top = 0  
-!!        this%BC_tau33_top = 0  
-!!   end select 
-!!
-!!   select case(botwall)
-!!   case(1) ! no-slip wall
-!!        this%BC_tau13_bot = 0 
-!!        this%BC_tau23_bot = 0
-!!        this%BC_tau33_bot = -1
-!!   case(2) ! slip wallbot
-!!        this%BC_tau13_bot = 0
-!!        this%BC_tau23_bot = 0
-!!        this%BC_tau33_bot = -1
-!!   case(3) ! wall modebot
-!!        this%BC_tau13_bot = 0  
-!!        this%BC_tau23_bot = 0  
-!!        this%BC_tau33_bot = 0  
-!!   end select 
-!!
-!!   print '(a,4(i4,1x))', 'In setTauBC ', topwall, this%BC_tau13_top, this%BC_tau23_top, this%BC_tau33_top
-!!
-!!end subroutine 
-
-subroutine init(this, decomp)
+subroutine init(this, decomp, Cp, Pr)
    class(sgs_cgrid), intent(inout) :: this
    class(decomp_info), intent(in), target    :: decomp
-
+   real(rkind) , intent(in) :: Cp, Pr
    this%decomp => decomp
+   this%Cp = Cp
+   this%Pr = Pr
+   allocate(  this%S_ij(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3), 6))
+   allocate( this%nusgs(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3))   )
+   allocate(this%kapsgs(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3))   )
 
 end subroutine 
 
 subroutine destroy(this)
    class(sgs_cgrid), intent(inout) :: this
 
+   if(allocated(this%kapsgs)) deallocate(this%kapsgs)
+   if(allocated(this%nusgs) ) deallocate(this%nusgs )
+   if(allocated(this%S_ij)  ) deallocate(this%S_ij  )
    nullify(this%decomp)
 
 end subroutine 
 
-subroutine getTauSGS(this, duidxj, rho, tausgs) !!duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE, embed_visc_in_sgs)
+subroutine getTauSGS(this, duidxj, rho, tausgs, nxL, nyL, nzL, dx, dy, dz) 
+   use constants, only : third, twothird 
    class(sgs_cgrid), intent(inout) :: this
-   real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), intent(in)  :: duidxj
-   real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)  ), intent(in)  :: rho
-   real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),6), intent(out) :: tausgs
-   !!real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
-   !!complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, whatC, ThatC
-   !!real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC, wC
-   !!logical, intent(in) :: newTimeStep, embed_visc_in_sgs
-   !!real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdx, dTdy, dTdz
-   !!real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdxE, dTdyE, dTdzE
-   !!real(rkind) :: TwobyRe
+   real(rkind), intent(in) :: nxL, nyL, nzL, dx, dy, dz
+   real(rkind), dimension(nxL,nyL,nzL,9), intent(in)  :: duidxj
+   real(rkind), dimension(nxL, nyL, nzL), intent(in)  :: rho
+   real(rkind), dimension(nxL,nyL,nzL,6), intent(out) :: tausgs
+   real(rkind) :: S, CI = 0.003_rkind, deltaLES
+   real(rkind), dimension(nxL,nyL,nzL)  :: modS, Sii, q
+   integer :: i,j,k
 
-   !!if (this%useWallModel) call this%computeWallStress( uC, vC, uhatC, vhatC, ThatC) 
+   if (this%isEddyViscosityModel) then
 
-   !!if (this%isEddyViscosityModel) then
+      ! Step 0: Compute Sij
+      call get_Sij_from_duidxj(duidxj, this%S_ij, nxL, nyL, nzL) 
+      
+      ! Step 1: Get nuSGS
+      call this%get_SGS_kernel(duidxj)
 
-   !!   ! Step 0: Compute Sij
-   !!   call get_Sij_from_duidxj(duidxjC, this%S_ij_C, this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)) 
-   !!   call get_Sij_from_duidxj(duidxjE, this%S_ij_E, this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)) 
-   !!   
-   !!   ! Step 1: Get nuSGS
-   !!   call this%get_SGS_kernel(duidxjC, duidxjE, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE)
+      !!! Step 2: Dynamic Procedure ?
 
-   !!   ! Step 2: Dynamic Procedure ?
-   !!   if(newTimeStep .and. this%usingDynamicProcedureMomentum) then
-   !!       !if (mod(this%mstep, this%DynProcFreq) == 0) call this%applyDynamicProcedure(uE, vE, wE, uhatE, vhatE, whatE, duidxjE, duidxjEhat)
-   !!       this%Dsgs = this%nu_sgs_C   ! Copy the SGS kernel 
-   !!       if (mod(this%mstep, this%DynProcFreq) == 0) then
-   !!         call this%DoStandardDynamicProcedure(uC, vC, wC, uhatC, vhatC, whatC, this%S_ij_C)
-   !!         this%UpdateScalarDynProc = .true. 
-   !!       end if 
-   !!   endif
-
-   !!   ! Step 3: Multiply by model constant
-   !!   call this%multiply_by_model_constant()
-
-   !!   ! Step 2: Get tau_sgs
-   !!   this%tau_11 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,1)
-   !!   this%tau_12 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,2)
-   !!   this%tau_13 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,3)
-   !!   this%tau_22 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,4)
-   !!   this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
-   !!   this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
-   !!end if
-
-
-   !!if (.not. this%isInviscid .and. embed_visc_in_sgs) then
-   !!   ! Embed viscous stress in tau_ij
-   !!   TwobyRe = 2.d0/this%Re
-   !!   this%tau_11 = this%tau_11 - TwobyRe*this%S_ij_C(:,:,:,1)
-   !!   this%tau_12 = this%tau_12 - TwobyRe*this%S_ij_C(:,:,:,2)
-   !!   this%tau_13 = this%tau_13 - TwobyRe*this%S_ij_E(:,:,:,3)
-   !!   this%tau_22 = this%tau_22 - TwobyRe*this%S_ij_C(:,:,:,4)
-   !!   this%tau_23 = this%tau_23 - TwobyRe*this%S_ij_E(:,:,:,5)
-   !!   this%tau_33 = this%tau_33 - TwobyRe*this%S_ij_C(:,:,:,6)
-   !!end if 
-
-   !!if (this%useWallModel) call this%embed_WM_stress()
- 
-   !!if(this%useibm) then
-   !!    call this%ibm%add_ibm_wallstress(this%tau_ij, this%tau_13, this%tau_23)
-   !!    !nullify(this%ibm)
-   !!endif
-
-   !!if(newTimeStep) this%mstep = this%mstep + 1
-  
-   tausgs = zero
- 
-end subroutine
-
-!!subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE, embed_visc_in_sgs)
-!!   class(sgs_cgrid), intent(inout), target :: this
-!!   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
-!!   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
-!!   !complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),9), intent(in) :: duidxjEhat
-!!   !complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: uhatE, vhatE, whatE
-!!   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: uhatC, vhatC, whatC, ThatC
-!!   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: uC, vC, wC
-!!   !real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: uE, vE, wE
-!!   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
-!!   complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
-!!   logical, intent(in) :: newTimeStep, embed_visc_in_sgs
-!!   complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffy3, cbuffz1, cbuffz2
-!!   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdx, dTdy, dTdz
-!!   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdxE, dTdyE, dTdzE
-!!
-!!
-!!   call this%getTauSGS(duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE, embed_visc_in_sgs)
-!!
-!!   cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
-!!   cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
-!!   cbuffy3 => this%cbuffyC(:,:,:,2); 
-!!
-!!   ! ddx(tau11)
-!!   call this%spectC%fft(this%tau_11, cbuffy1)
-!!   call this%spectC%mtimes_ik1_ip(cbuffy1)
-!!   urhs = urhs - cbuffy1
-!!
-!!   ! ddy(tau22)
-!!   call this%spectC%fft(this%tau_22, cbuffy1)
-!!   call this%spectC%mtimes_ik2_ip(cbuffy1)
-!!   vrhs = vrhs - cbuffy1
-!!
-!!   ! ddz(tau33)
-!!   call this%spectC%fft(this%tau_33, cbuffy1)
-!!   call transpose_y_to_z(cbuffy1, cbuffz1, this%sp_gpC)
-!!   call this%PadeDer%ddz_C2E(cbuffz1, cbuffz2, this%BC_tau33_bot, this%BC_tau33_top)
-!!   call transpose_z_to_y(cbuffz2, cbuffy2, this%sp_gpE)
-!!   wrhs = wrhs - cbuffy2
-!!
-!!   ! ddy(tau12) for urhs, and ddx(tau12) for vrhs
-!!   call this%spectC%fft(this%tau_12, cbuffy1)
-!!   call this%spectC%mtimes_ik1_oop(cbuffy1, cbuffy3)
-!!   vrhs = vrhs - cbuffy3
-!!   call this%spectC%mtimes_ik2_ip(cbuffy1)
-!!   urhs = urhs - cbuffy1
-!!
-!!   ! ddz(tau13) for urhs, ddx(tau13) for wrhs
-!!   call this%spectE%fft(this%tau_13, cbuffy2)
-!!   call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-!!   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, this%BC_tau13_bot, this%BC_tau13_top)
-!!   call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
-!!   urhs = urhs - cbuffy1
-!!   call this%spectE%mtimes_ik1_ip(cbuffy2)
-!!   wrhs = wrhs - cbuffy2
-!!
-!!   ! ddz(tau23) for vrhs, ddy(tau23) for wrhs
-!!   call this%spectE%fft(this%tau_23, cbuffy2)
-!!   call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-!!   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, this%BC_tau23_bot, this%BC_tau23_top)
-!!   call transpose_z_to_y(cbuffz1, cbuffy1, this%sp_gpC)
-!!   vrhs = vrhs - cbuffy1
-!!   call this%spectE%mtimes_ik2_ip(cbuffy2)
-!!   wrhs = wrhs - cbuffy2
-!!
-!!   !print '(a,4(i4,1x))', 'In getRHS_SGS', this%BC_tau13_top, this%BC_tau23_top, this%BC_tau33_top
-!!end subroutine
-!!
-!!subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, TurbPrandtlNum, Cy, lowbound, highbound)
-!!   class(sgs_cgrid), intent(inout), target :: this
-!!   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
-!!   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
-!!   real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdzE
-!!   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
-!!   complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
-!!   complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
-!!   real(rkind), intent(in), optional :: TurbPrandtlNum, Cy, lowbound, highbound
-!!   real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
-!!
-!!   cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
-!!   cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 
-!!
-!!
-!!   if (present(TurbPrandtlNum)) this%Pr = TurbPrandtlNum
-!!   if (present(Cy)) this%Cy = Cy 
-!!   if (present(lowbound)) this%lowbound = lowbound
-!!   if (present(highbound)) this%highbound = highbound
-!!
-!!   ! First get qj's 
-!!   call this%getQjSGS(dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
-!!
-!!   ! ddx(q1)
-!!   call this%spectC%fft(this%q1C, cbuffy1)
-!!   call this%spectC%mtimes_ik1_ip(cbuffy1)
-!!   Trhs = Trhs - cbuffy1
-!!
-!!   ! ddy(q2)
-!!   call this%spectC%fft(this%q2C, cbuffy1)
-!!   call this%spectC%mtimes_ik2_ip(cbuffy1)
-!!   Trhs = Trhs - cbuffy1
-!!
-!!   ! ddz(q3)
-!!   call this%spectE%fft(this%q3E, cbuffy2)
-!!   call transpose_y_to_z(cbuffy2, cbuffz2, this%sp_gpE)
-!!   call this%PadeDer%ddz_E2C(cbuffz2, cbuffz1, 0, 0)
-!!   call transpose_z_to_y(cbuffz1,cbuffy1,this%sp_gpC)
-!!   Trhs = Trhs - cbuffy1
-!!   
-!!   if (present(TurbPrandtlNum)) this%Pr = this%TurbPrandtlNum_PotT
-!!   if (present(Cy)) this%Cy = this%Cy_PotT
-!!   if (present(lowbound)) this%lowbound = this%lowbound_PotT
-!!   if (present(highbound)) this%highbound = this%highbound_PotT
-!!
-!!end subroutine
-
-subroutine getQjSGS(this,duidxj, rho, gradT, Qjsgs)
-   class(sgs_cgrid), intent(inout) :: this
-   real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), intent(in)  :: duidxj
-   real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)  ), intent(in)  :: rho
-   real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),3), intent(in)  :: gradT
-   real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),3), intent(out) :: Qjsgs
-   !!class(sgs_cgrid), intent(inout), target :: this
-   !!real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
-   !!real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdzE
-   !!real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
-   !!complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
-   !!real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
-
-   !!if (this%useWallModel) call this%computeWall_PotTFlux()
-
-   !!if (this%isEddyViscosityModel) then
-   !!   if ((this%mid == 2) .and. (.not. this%usePrSGS))then ! AMD model has its own formula for kappaSGS
-   !!       call get_amd_Dkernel(this%kappa_sgs_C,this%camd_x, this%camd_y, this%camd_z, duidxjC, &
-   !!                         & dTdxC, dTdyC, dTdzC, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
-   !!       call this%interpolate_kappaSGS(.true.)
-   !!   else
-   !!       if (this%UseDynamicProcedureScalar) then
-   !!          if (this%UpdateScalarDynProc) then
-   !!             call this%DoStandardDynamicProcedureScalar(u, v, w, T, That, dTdxC, dTdyC, dTdzC)     
-   !!             this%UpdateScalarDynProc = .false. 
-   !!          end if 
-   !!          this%kappa_sgs_C = this%Dsgs*this%BetaDynProc_C
-   !!          call this%interpolate_kappaSGS(.true.)
-   !!       else
-   !!          this%kappa_sgs_C = this%nu_sgs_C/this%Pr
-   !!          this%kappa_sgs_E = this%nu_sgs_E/this%Pr
-   !!       end if 
-   !!   end if 
-
-   !!   this%q1C = -this%kappa_sgs_C*dTdxC
-   !!   this%q2C = -this%kappa_sgs_C*dTdyC
-   !!   this%q3E = -this%kappa_sgs_E*dTdzE
-   !!else
-   !!   this%q1C = zero 
-   !!   this%q2C = zero 
-   !!   this%q3E = zero 
-   !!end if
-
-   !!if (this%useScalarBounding) then 
-   !!   call this%compute_Tscale(u, v, w) 
-   !!   call this%compute_kappa_bounding(T, dTdxC, dTdyC, dTdzC)
-   !!   this%q1C = this%q1C - this%kappa_boundingC*dTdxC
-   !!   this%q2C = this%q2C - this%kappa_boundingC*dTdyC
-   !!   this%q3E = this%q3E - this%kappa_boundingE*dTdzE
-   !!end if 
-
-   !!if (this%useWallModel) call this%embed_WM_PotTflux()
-
-   Qjsgs = zero
- 
-end subroutine
-
-
+      ! Step 3: Multiply by model constant
+      call this%multiply_by_model_constant()
+      
+      do k = 1,nzL
+         do j = 1,nyL
+            do i = 1,nxL
+               S = this%S_ij(i,j,k,1)*this%S_ij(i,j,k,1) ! S11*S11
+               S = S + 2.d0*(this%S_ij(i,j,k,2)*this%S_ij(i,j,k,2)) ! S12*S12 + S21*S21
+               S = S + 2.d0*(this%S_ij(i,j,k,3)*this%S_ij(i,j,k,3)) ! S13*S13 + S31*S31
+               S = S + (this%S_ij(i,j,k,4)*this%S_ij(i,j,k,4)) ! S22*S22
+               S = S + 2.d0*(this%S_ij(i,j,k,5)*this%S_ij(i,j,k,5)) ! S23*S23 + S32*S32
+               S = S + (this%S_ij(i,j,k,6)*this%S_ij(i,j,k,6)) ! S33*S33
+            ! Now do modS = sqrt(2* S_ij*S_ij)
+               S = 2.d0*S
+               modS(i,j,k) = sqrt(S)
+            end do 
+         end do 
+      end do
+     
+      if (.not. this%isPeriodic) then
+         deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
+      else
+         deltaLES =  (1.5d0*dx*1.5d0*dy*1.5d0*dz)**(1.d0/3.d0)
+      end if 
     
+      q   = twothird * CI * rho * (deltaLES**2) * (modS**2)
+      Sii = (this%S_ij(:,:,:,1) + this%S_ij(:,:,:,4) + this%S_ij(:,:,:,6)) * third
+      ! Step 2: Get tau_sgs    
+      tausgs(:,:,:,1) = -two * rho * this%nusgs * (this%S_ij(:,:,:,1)-Sii) + q
+      tausgs(:,:,:,2) = -two * rho * this%nusgs * this%S_ij(:,:,:,2) 
+      tausgs(:,:,:,3) = -two * rho * this%nusgs * this%S_ij(:,:,:,3) 
+      tausgs(:,:,:,4) = -two * rho * this%nusgs * (this%S_ij(:,:,:,4)-Sii) + q
+      tausgs(:,:,:,5) = -two * rho * this%nusgs * this%S_ij(:,:,:,5) 
+      tausgs(:,:,:,6) = -two * rho * this%nusgs * (this%S_ij(:,:,:,6)-Sii) + q
+   else
+     !! call MGM model from here
+      call get_Sij_from_duidxj(duidxj, this%S_ij, nxL, nyL, nzL) 
+      get_tausgs_mgm(this%cmgm_x, this%cmgm_y, this%cmgm_z, this%c1_mgm, rho, duidxj, this%S_ij, nxL, nyL, nzL, tausgs)      
+   end if
+
+end subroutine
+
+
+subroutine getQjSGS(this,duidxj, rho, gradT, Qjsgs, nxL, nyL, nzL, dx, dy, dz)
+   class(sgs_cgrid), intent(inout) :: this
+   real(rkind), intent(in) :: nxL, nyL, nzL, dx, dy, dz
+   real(rkind), dimension(nxL,nyL,nzL,9), intent(in)  :: duidxj
+   real(rkind), dimension(nxL, nyL, nzL), intent(in)  :: rho
+   real(rkind), dimension(nxL,nyL,nzL,3), intent(in)  :: gradT
+   real(rkind), dimension(nxL,nyL,nzL,3), intent(out) :: Qjsgs
+   real(rkind) :: k
+!! not yet completed
+   if (this%isEddyDiffModel) then
+      if (this%IsPrandtlconstant) then
+         this%kapsgs = this%nusgs/this%TurbPrandtl
+      elseif () then 
+         get_amd_Dkernel(this%kapsgs,this%camd_x,this%camd_y,this%camd_z, duidxj, gradT, nxL, nyL, nzL)
+      else
+         call message ()
+      end if
+      
+      do k=1,3
+         Qjsgs(:,:,:,k) = - rho * this%Cp * this%kapsgs * gradT(:,:,:,k)
+      end do
+      
+   else   
+      !! MGM model
+      call get_Sij_from_duidxj(duidxj, this%S_ij, nxL, nyL, nzL) 
+      get_Qjsgs_mgm(this%cmgm_x, this%cmgm_y, this%cmgm_z, this%c2_mgm, this%PrCpfac, rho, duidxj,gradT, this%S_ij, nxL, nyL, nzL,Qjsgs)
+   end if
+end subroutine
 
 end module 

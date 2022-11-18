@@ -307,13 +307,16 @@ contains
         this%fields = zero
         this%Ys(:,:,:,1) = one   ! So that all massfractions add up to unity
 
+        Cp = 3.5_rkind
+        Pr = 0.7_rkind  !!!needed to be fixed
+
         this%useSGS = useSGS
         if(this%useSGS) then
             call alloc_buffs(this%tausgs,6,'y',this%decomp)
             call alloc_buffs(this%Qjsgs, 3,'y',this%decomp)
 
             allocate(this%sgsmodel)
-            call this%sgsmodel%init(this%decomp)
+            call this%sgsmodel%init(this%decomp, Cp, Pr)
         endif
 
         ! Finally, set the local array dimensions
@@ -1267,8 +1270,8 @@ contains
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if(this%useSGS) then
-            call this%sgsmodel%getTauSGS(duidxj, this%rho, this%tausgs)
-            call this%sgsmodel%getQjSGS (duidxj, this%rho, gradT, this%Qjsgs)
+            call this%sgsmodel%getTauSGS(duidxj, this%rho,this%tausgs,this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),this%dx,this%dy,this%dz)
+            call this%sgsmodel%getQjSGS (duidxj, this%rho, gradT,this%Qjsgs,this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),this%dx,this%dy,this%dz)
         endif
 
         if (this%mix%ns .GT. 1) then
@@ -1303,12 +1306,12 @@ contains
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
 
         if(this%useSGS) then
-            tauxx = tauxx + this%tausgs(:,:,:,1)
-            tauxy = tauxy + this%tausgs(:,:,:,2)
-            tauxz = tauxz + this%tausgs(:,:,:,3)
-            tauyy = tauyy + this%tausgs(:,:,:,4)
-            tauyz = tauyz + this%tausgs(:,:,:,5)
-            tauzz = tauzz + this%tausgs(:,:,:,6)
+            tauxx = tauxx - this%tausgs(:,:,:,1)
+            tauxy = tauxy - this%tausgs(:,:,:,2)
+            tauxz = tauxz - this%tausgs(:,:,:,3)
+            tauyy = tauyy - this%tausgs(:,:,:,4)
+            tauyz = tauyz - this%tausgs(:,:,:,5)
+            tauzz = tauzz - this%tausgs(:,:,:,6)
 
             qx = qx + this%Qjsgs(:,:,:,1)
             qy = qy + this%Qjsgs(:,:,:,2)
@@ -1966,7 +1969,16 @@ contains
                 call this%viz%write_variable(this%diff(:,:,:,i), 'Diffusivity_'//adjustl(trim(charout)) )
             end do
         end if
-
+        
+        if (this%useSGS ) then
+           call this%viz%write_variable(this%tausgs(:,:,:,1) ,'t11')
+           call this%viz%write_variable(this%tausgs(:,:,:,2) ,'t12')
+           call this%viz%write_variable(this%tausgs(:,:,:,3) ,'t13')
+           call this%viz%write_variable(this%tausgs(:,:,:,4) ,'t22')
+           call this%viz%write_variable(this%tausgs(:,:,:,5) ,'t23')
+           call this%viz%write_variable(this%tausgs(:,:,:,6) ,'t33')
+        end if
+ 
         ! TODO: Add hook_viz here
 
         ! End visualization dump

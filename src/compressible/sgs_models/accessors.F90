@@ -1,3 +1,7 @@
+
+!!!!!!code for kap_sgs_max and nu_sgs_max for cgrid  !!!!!
+
+
 pure function get_GlobalConstant(this) result(val)
    class(sgs_igrid), intent(in) :: this
    real(rkind)                     :: val

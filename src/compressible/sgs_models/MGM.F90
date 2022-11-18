@@ -16,8 +16,8 @@ subroutine init_mgm(this, dx, dy, dz)
    this%cmgm_y = dy**two / 12.0d0 
    this%cmgm_z = dz**two / 12.0d0
    this%PrCpfac= this%Cp / this%Pr
-   this%c1     = eight * (deltaLES**two) * ceps_2 
-   this%c2     = two * (deltaLES**two) * cepsT_2
+   this%c1_mgm = eight * (deltaLES**two) * ceps_2 
+   this%c2_mgm = two * (deltaLES**two) * cepsT_2
    call message(1,"MGM model initialized") 
 end subroutine
 
@@ -26,10 +26,10 @@ subroutine destroy_mgm(this)
    this%isEddyViscosityModel = .false. 
 end subroutine
 
-subroutine get_tausgs_mgm(cmgm_x, cmgm_y, cmgm_z, c1, rho, duidxj, Sij, nxL, nyL, nzL, tausgs)
+subroutine get_tausgs_mgm(cmgm_x, cmgm_y, cmgm_z, c1_mgm, rho, duidxj, Sij, nxL, nyL, nzL, tausgs)
    use contants, only: eps,two, zero
    integer, intent(in) :: nxL, nyL, nzL
-   real(rkind), intent(in) :: camd_x, camd_y, camd_z, c1
+   real(rkind), intent(in) :: cmgm_x, cmgm_y, cmgm_z, c1_mgm
    real(rkind), dimension(:,:,:,:), intent(out) :: tausgs
    real(rkind), dimension(:,:,:,:), intent(in)  :: Sij , duidxj
    real(rkind), dimension(:,:,:) , intent(in)   :: rho
@@ -49,12 +49,12 @@ subroutine get_tausgs_mgm(cmgm_x, cmgm_y, cmgm_z, c1, rho, duidxj, Sij, nxL, nyL
             
             ckl=-(G11*Sij(i,j,k,1)+G22*Sij(i,j,k,4)+G33*Sij(i,j,k,6)+2*(G12*Sij(i,j,k,2)+G13*Sij(i,j,k,3)+G23*Sij(i,j,k,5)))/Gmm
             
-            tausgs(i,j,k,1) = c1 * (ckl**two) * (G11/Gmm) * rho(i,j,k)
-            tausgs(i,j,k,2) = c1 * (ckl**two) * (G12/Gmm) * rho(i,j,k)
-            tausgs(i,j,k,3) = c1 * (ckl**two) * (G13/Gmm) * rho(i,j,k)
-            tausgs(i,j,k,4) = c1 * (ckl**two) * (G22/Gmm) * rho(i,j,k)
-            tausgs(i,j,k,5) = c1 * (ckl**two) * (G23/Gmm) * rho(i,j,k)
-            tausgs(i,j,k,6) = c1 * (ckl**two) * (G33/Gmm) * rho(i,j,k)
+            tausgs(i,j,k,1) = c1_mgm * (ckl**two) * (G11/Gmm) * rho(i,j,k)
+            tausgs(i,j,k,2) = c1_mgm * (ckl**two) * (G12/Gmm) * rho(i,j,k)
+            tausgs(i,j,k,3) = c1_mgm * (ckl**two) * (G13/Gmm) * rho(i,j,k)
+            tausgs(i,j,k,4) = c1_mgm * (ckl**two) * (G22/Gmm) * rho(i,j,k)
+            tausgs(i,j,k,5) = c1_mgm * (ckl**two) * (G23/Gmm) * rho(i,j,k)
+            tausgs(i,j,k,6) = c1_mgm * (ckl**two) * (G33/Gmm) * rho(i,j,k)
  
             if (ckl .GT. zero) then
             ! tausgs(i,j,k,:)=tausgs(i,j,k,:)
@@ -68,14 +68,14 @@ subroutine get_tausgs_mgm(cmgm_x, cmgm_y, cmgm_z, c1, rho, duidxj, Sij, nxL, nyL
 end subroutine
 
 
-subroutine get_Qjsgs_mgm(cmgm_x, cmgm_y, cmgm_z, c2, PrCpfac, rho, duidxj,gradT, Sij, nxL, nyL, nzL, tausgs, Qsgs)
+subroutine get_Qjsgs_mgm(cmgm_x, cmgm_y, cmgm_z, c2_mgm, PrCpfac, rho, duidxj,gradT, Sij, nxL, nyL, nzL,Qsgs)
    use contants, only: eps,two, zero
    integer, intent(in) :: nxL, nyL, nzL
-   real(rkind), intent(in) :: camd_x, camd_y, camd_z, c2, PrCpfac
+   real(rkind), intent(in) :: cmgm_x, cmgm_y, cmgm_z, c2_mgm, PrCpfac
    real(rkind), dimension(:,:,:,:), intent(out) :: Qsgs
-   real(rkind), dimension(:,:,:,:), intent(in)  :: Sij , gradT,duidxj, tausgs
+   real(rkind), dimension(:,:,:,:), intent(in)  :: Sij , gradT,duidxj
    real(rkind), dimension(:,:,:) , intent(in)   :: rho
-   real(rkind)  :: G11, G12, G13, G22, G23, G33 , Gmm , ckl, G1T, G2T, GT3, modG
+   real(rkind)  :: G11, G12, G13, G22, G23, G33 , Gmm , ckl, cnT,G1T, G2T, GT3, modG
    integer :: i,j,k
 
    do k = 1,nzL
@@ -91,20 +91,23 @@ subroutine get_Qjsgs_mgm(cmgm_x, cmgm_y, cmgm_z, c2, PrCpfac, rho, duidxj,gradT,
             G1T=cmgm_x*duidxj(i,j,k,1)*gradT(i,j,k,1)+cmgm_y*duidxj(i,j,k,2)*gradT(i,j,k,2)+cmgm_z*duidxj(i,j,k,3)*gradT(i,j,k,3)
             G2T=cmgm_x*duidxj(i,j,k,4)*gradT(i,j,k,1)+cmgm_y*duidxj(i,j,k,5)*gradT(i,j,k,2)+cmgm_z*duidxj(i,j,k,6)*gradT(i,j,k,3)
             G3T=cmgm_x*duidxj(i,j,k,7)*gradT(i,j,k,1)+cmgm_y*duidxj(i,j,k,8)*gradT(i,j,k,2)+cmgm_z*duidxj(i,j,k,9)*gradT(i,j,k,3)
-            modG=sqrt(G1T**two + G2T**two + G3T**two)          
+            modG=sqrt(G1T**two + G2T**two + G3T**two) + eps          
             
             ckl=-(G11*Sij(i,j,k,1)+G22*Sij(i,j,k,4)+G33*Sij(i,j,k,6)+2*(G12*Sij(i,j,k,2)+G13*Sij(i,j,k,3)+G23*Sij(i,j,k,5)))/Gmm
+            cnT=-(G1T*gradT(i,j,k,1)+G2T*gradT(i,j,k,2)+G3T*gradT(i,j,k,3))/modG
             
-            Qsgs(i,j,k,1) = c2 * (ckl**two) * (G11/Gmm) * rho(i,j,k)
-            Qsgs(i,j,k,2) = c2 * (ckl**two) * (G12/Gmm) * rho(i,j,k)
-            tausgs(i,j,k,3) = c2 * (ckl**two) * (G13/Gmm) * rho(i,j,k)
+            
+            Qsgs(i,j,k,1) = c2_mgm * ckl * cnT * (G1T/modG) * rho(i,j,k) * PrCpfac
+            Qsgs(i,j,k,2) = c2_mgm * ckl * cnT * (G2T/modG) * rho(i,j,k) * PrCpfac
+            Qsgs(i,j,k,3) = c2_mgm * ckl * cnT * (G3T/modG) * rho(i,j,k) * PrCpfac
  
-            if (ckl .GT. zero) then
-            ! tausgs(i,j,k,:)=tausgs(i,j,k,:)
+            if ((ckl .GT. zero) .AND. (cnT .GT. zero)) then
+            ! Qsgs(i,j,k,:)=Qsgs(i,j,k,:)
             else
-            tausgs(i,j,k,:) = zero
+            Qsgs(i,j,k,:) = zero
             end if
 
          end do
       end do
    end do
+end subroutine

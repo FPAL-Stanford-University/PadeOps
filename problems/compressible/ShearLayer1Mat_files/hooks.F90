@@ -37,80 +37,107 @@ module ShearLayer_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 contains
-    subroutine perturb_potential_v2(gp,x,y,z,Lx,Lz,u,v,w)
+    subroutine perturb_potential_v2(gp,x,y,z,Lx,Lz,u,v,w,p,rho,fname_prefix)
         use decomp_2d,        only: nrank
         type(decomp_info), intent(in)               :: gp
         real(rkind), dimension(:,:,:), intent(in)   :: x,y,z
-        real(rkind), dimension(:,:,:), intent(inout):: u,v,w
+        real(rkind), dimension(:,:,:), intent(inout):: u,v,w,p,rho
         real(rkind), intent(in)                     :: Lx,Lz
-
-        real, dimension(:), allocatable :: A,e,x1d,y1d,z1d
-        real :: kx, kz, phx, phz, kmin, Amax, du
-        real :: sigma=10,pi = 3.14159265358
-        integer :: ni,nj,nk,i, j, k, m, mx, mz, mode_min=4, nmodes_max=4, &
-            nxmodes, nzmodes, mpi_ierr, ix1,iz1,ixn,izn
+        character(len=clen), intent(in) :: fname_prefix
+        character(len=clen) :: tempname, fname
+        real(rkind), dimension(:,:,:) :: uperturb, vperturb, wperturb,pperturb,rperturb
+       ! real, dimension(:), allocatable :: A,e,x1d,y1d,z1d
+       ! real :: kx, kz, phx, phz, kmin, Amax, du
+       ! real :: sigma=10,pi = 3.14159265358
+       ! integer :: ni,nj,nk,i, j, k, m, mx, mz, mode_min=4, nmodes_max=4, &
+       !     nxmodes, nzmodes, mpi_ierr, ix1,iz1,ixn,izn
    
         ! Global size
-        ni  = gp%xsz(1)
-        nj  = gp%ysz(2)
-        nk  = gp%zsz(3)
+       ! ni  = gp%xsz(1)
+       ! nj  = gp%ysz(2)
+       ! nk  = gp%zsz(3)
 
-        ! If base decomposition is in Y
-        ix1 = gp%yst(1); 
-        iz1 = gp%yst(3)
-        ixn = gp%yen(1); 
-        izn = gp%yen(3)
-        print '(a,5(i4,1x))', 'nrank = ', nrank, ix1, ixn, iz1, izn
+       ! ! If base decomposition is in Y
+        !ix1 = gp%yst(1); 
+        !iz1 = gp%yst(3)
+        !ixn = gp%yen(1); 
+        !izn = gp%yen(3)
+       ! print '(a,5(i4,1x))', 'nrank = ', nrank, ix1, ixn, iz1, izn
 
         ! Store radius, theta, z 
-        allocate(x1D(gp%ysz(1)),y1D(gp%ysz(2)),z1D(gp%ysz(3)))
-        x1d = x(:,1,1)
-        y1D = y(1,:,1) 
-        z1d = z(1,1,:)
+       ! allocate(x1D(gp%ysz(1)),y1D(gp%ysz(2)),z1D(gp%ysz(3)))
+       ! x1d = x(:,1,1)
+       ! y1D = y(1,:,1) 
+       ! z1d = z(1,1,:)
 
-        ! Transverse mask 
-        allocate(e(nj),A(nj))
-        e = exp(-sigma*(y1D**2));
-        du = P_MAXVAL(u)-P_MINVAL(u)
-        Amax = 0.01*(du)
-        call mpi_bcast(Amax,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-        A = Amax*e
+       ! ! Transverse mask 
+        !allocate(e(nj),A(nj))
+        !e = exp(-sigma*(y1D**2));
+        !du = P_MAXVAL(u)-P_MINVAL(u)
+        !Amax = 0.01*(du)
+        !call mpi_bcast(Amax,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+        !A = Amax*e
 
         call message(0,"Making perturbations")
         call message(2,"Maximum u", P_MAXVAL(abs(u)))
         call message(2,"Maximum v", P_MAXVAL(abs(v)))
         call message(2,"Maximum w", P_MAXVAL(abs(w)))
     
-        nxmodes = min(nmodes_max, ni/4)
-        nzmodes = min(nmodes_max, nk/4)
+        !nxmodes = min(nmodes_max, ni/4)
+        !nzmodes = min(nmodes_max, nk/4)
         
-        do mx=mode_min,mode_min+nxmodes
-        do mz=mode_min,mode_min+nzmodes
-            kx = 2.D0*pi/Lx * mx
-            kz = 2.D0*pi/Lz * mz
-            if(nrank==0) then
-                call random_number(phx)
-                call random_number(phz)
-            endif
-            call mpi_bcast(phx,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-            call mpi_bcast(phz,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
-            phx = phx*2.D0*pi
-            phz = phz*2.D0*pi
-            do i=1,gp%ysz(1) !ix1,ixn
-            do k=1,gp%ysz(3) !iz1,izn
-                !write(100+nrank,'(4(i4,1x),6(e19.12,1x))') i, k, size(x1D), size(z1D), phx, phz, x1D(i), kx*x1D(i), z1D(k), kz*z1D(k)
-                !u(i,:,k) = u(i,:,k) + A*sin(kx*x1D(i)+phx)*sin(kz*z1D(k)+phz)
-                !w(i,:,k) = w(i,:,k) + A*cos(kx*x1D(i)+phx)*cos(kz*z1D(k)+phz)
-                !v(i,:,k) = v(i,:,k) + A/kz * sin(kx*x1D(i)+phx) * &
-                !    ( (-2d0*sigma*y1d)*cos(kz*z1D(k)+phz) + kx*sin(kz*z1D(k)+phz) )
-                write(100+nrank,*) i, k
-            enddo
-            enddo
-        enddo
-        enddo
-        print '(a,6(i4,1x))', 'nrank = ', nrank, size(A), size(e), size(x1d), size(y1d), size(z1d)
-        !deallocate(A,e,x1d,y1d,z1d)
+       ! do mx=mode_min,mode_min+nxmodes
+       ! do mz=mode_min,mode_min+nzmodes
+       !     kx = 2.D0*pi/Lx * mx
+       !     kz = 2.D0*pi/Lz * mz
+       !     if(nrank==0) then
+       !         call random_number(phx)
+       !         call random_number(phz)
+       !     endif
+       !     call mpi_bcast(phx,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+       !     call mpi_bcast(phz,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
+       !     phx = phx*2.D0*pi
+       !     phz = phz*2.D0*pi
+       !     do i=1,gp%ysz(1) !ix1,ixn
+       !     do k=1,gp%ysz(3) !iz1,izn
+       !         !write(100+nrank,'(4(i4,1x),6(e19.12,1x))') i, k, size(x1D), size(z1D), phx, phz, x1D(i), kx*x1D(i), z1D(k), kz*z1D(k)
+       !         !u(i,:,k) = u(i,:,k) + A*sin(kx*x1D(i)+phx)*sin(kz*z1D(k)+phz)
+       !         !w(i,:,k) = w(i,:,k) + A*cos(kx*x1D(i)+phx)*cos(kz*z1D(k)+phz)
+       !         !v(i,:,k) = v(i,:,k) + A/kz * sin(kx*x1D(i)+phx) * &
+       !         !    ( (-2d0*sigma*y1d)*cos(kz*z1D(k)+phz) + kx*sin(kz*z1D(k)+phz) )
+       !         write(100+nrank,*) i, k
+       !     enddo
+       !     enddo
+       ! enddo
+       ! enddo
+       ! print '(a,6(i4,1x))', 'nrank = ', nrank, size(A), size(e), size(x1d), size(y1d), size(z1d)
+       ! !deallocate(A,e,x1d,y1d,z1d)
+        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_u_",nx, "_",ny,"_",nz
+        fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,this%uperturb,fname, this%gp)
         
+        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_v_",nx, "_",ny,"_",nz
+        fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,this%vperturb,fname, this%gp)
+      
+        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_w_",nx, "_",ny,"_",nz
+        fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,this%wperturb,fname, this%gp)
+
+        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_p_",nx, "_",ny,"_",nz
+        fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,this%pperturb,fname, this%gp)
+
+        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_r_",nx, "_",ny,"_",nz
+        fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,this%rperturb,fname, this%gp)
+
+        u = u + uperturb*exp(y/8.0d0)
+        v = v + vperturb*exp(y/8.0d0)
+        w = w + wperturb*exp(y/8.0d0)
+        p = p + pperturb*exp(y/8.0d0)
+        rho = rho + rperturb*exp(y/8.0d0)
+
         call message(0,"Done making perturbations")
         call message(2,"Maximum u", P_MAXVAL(abs(u)))
         call message(2,"Maximum v", P_MAXVAL(abs(v)))
@@ -298,7 +325,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         else if (no_pert) then
             call message(0,"No perturbations")
         else
-            call perturb_potential_v2(decomp,x,y,z,Lx,Lz,u,v,w)
+            call perturb_potential_v2(decomp,x,y,z,Lx,Lz,u,v,w,p,rho,fname_prefix)
         endif
 
         ! Initialize gaussian filter mygfil
