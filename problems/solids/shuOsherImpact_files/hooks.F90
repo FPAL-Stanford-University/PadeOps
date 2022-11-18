@@ -248,13 +248,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         !Set mixture velocity
         interface_init = Lx/two
+        !interface_init = Lx*0.55d0
         tmp_01 = 0.5d0 * (erf( (x-(interface_init))/(thick*dx) ) + 1.0d0) !goes from 0 -> 1
+
         u   = ( -two*u_impact ) * tmp_01 + u_impact
         v   = zero
         w   = zero
 
         !Create perturbations mask for density                
-        spng = 0.1d0
+        spng = 0.01d0
         dumL = half*(one - tanh( (x-(    spng)*Lx)/(spng/3.0d0) ))
         dumR = half*(one + tanh( (x-(one-spng)*Lx)/(spng/3.0d0) ))
         tmp_01 = one - (dumL + dumR) !0 ... 1 ... 0 
@@ -262,6 +264,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         !Impose perturbations on rho (symmetric about interface_init)
         k_perturb = two * pi * k_perturb / Lx
         rho = rho_0 * ( one + tmp_01*rho_amp*cos(k_perturb*(x-interface_init)) )
+        !rho = rho_0 * ( one + tmp_01*rho_amp*exp(-k_perturb*(x-interface_init)**2) )
+        !rho = rho_0 * ( one + tmp_01*rho_amp*cos(k_perturb*(x-interface_init) - pi ) )
 
         !Set initial values of ge to agree with density, no plastic deformation
         mix%material(1)%g11  = rho/rho_0; mix%material(1)%g12  = zero; mix%material(1)%g13  = zero
