@@ -13,6 +13,12 @@ module oscillating_grid_parameters
     real(rkind) :: z0 = 0.5d0       ! z-location of the center of the grid at t=0
     real(rkind) :: Lx = one, Ly = one, Lz = one
     logical :: filterMask = .false.
+    integer :: gridType = 1
+    
+    ! Used for fractal grid
+    real(rkind) :: width1 = 0.1d0, length1 = 1.d0
+    real(rkind) :: widthFact = 0.5d0, lengthFact = 0.5d0
+    integer :: levels = 2
     
 end module     
 
@@ -150,7 +156,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind) :: z0fact = 0.5d0
     
     namelist /PROBLEM_INPUT/ Lx, Ly, Lz, lxbar, lybar, lzbar, z0fact, omega, &
-      stroke, Nbx, Nby, filterMask
+      stroke, Nbx, Nby, filterMask, gridType, width1, length1, widthFact, &
+      lengthFact, levels
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

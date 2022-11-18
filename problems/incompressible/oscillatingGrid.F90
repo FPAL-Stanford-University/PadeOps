@@ -13,12 +13,15 @@ module gridFuncMod
     use exits,              only: gracefulExit, message
     use reductions,         only: p_maxval
     use oscillating_grid_parameters, only: omega, stroke, lxbar, lybar, lzbar, z0, &
-      Nbx, Nby, Lx, Ly, Lz, filterMask
+      Nbx, Nby, Lx, Ly, Lz, filterMask, gridType, width1, length1, &
+      widthFact, lengthFact, levels
     use gaussianstuff, only: gaussian
     implicit none 
     
     type(gaussian) :: gauss_x, gauss_y, gauss_zC, gauss_zE
     logical :: dumpInitialMask = .true.
+    integer, parameter :: homogeneous = 1
+    integer, parameter :: fractal = 2
 
 contains 
 
@@ -31,14 +34,12 @@ contains
         integer :: ist, ien, jst, jen, kst, ken 
         real(rkind) :: xmin, xmax, ymin, ymax, zmin, zmax, dxgrid, dygrid
         real(rkind) :: dx, dy, dz
+        real(rkind), dimension(2) :: center
 
         dx = x(2,1,1) - x(1,1,1)
         dy = y(1,2,1) - y(1,1,1)
         dz = z(1,1,2) - z(1,1,1)
 
-        ! dxgrid, dygrid: Size of grid gaps + bar width
-        dxgrid = Lx/real(Nbx,rkind) - lxbar 
-        dygrid = Ly/real(Nby,rkind) - lybar
         zmin = z0 - 0.5d0*lzbar + stroke*sin(omega*time)
         zmax = z0 + 0.5d0*lzbar + stroke*sin(omega*time)
         
@@ -49,46 +50,126 @@ contains
           
         kst = kst - gp%xst(3) + 1
         ken = ken - gp%xst(3) + 1
+        
+        select case (gridType)
+        case (homogeneous)
+          ! dxgrid, dygrid: Size of grid gaps + bar width
+          dxgrid = Lx/real(Nbx,rkind) - lxbar 
+          dygrid = Ly/real(Nby,rkind) - lybar
 
-        do n = 1,Nbx
-          xmin = (n-1)*(dxgrid + lxbar) 
-          xmax = xmin + lxbar - 1.d-14
-          ist = max(ceiling(xmin/dx),gp%xst(1))
-          ien = min(floor(  xmax/dx),gp%xen(1))
+          do n = 1,Nbx
+            xmin = (n-1)*(dxgrid + lxbar) 
+            xmax = xmin + lxbar - 1.d-14
+            ist = max(ceiling(xmin/dx),gp%xst(1))
+            ien = min(floor(  xmax/dx),gp%xen(1))
 
-          ist = ist - gp%xst(1) + 1
-          ien = ien - gp%xst(1) + 1
+            ist = ist - gp%xst(1) + 1
+            ien = ien - gp%xst(1) + 1
 
-          do k = kst, ken
-            do j = 1, gp%xsz(2)
-              do i = ist, ien
-                mask(i,j,k) = one 
+            do k = kst, ken
+              do j = 1, gp%xsz(2)
+                do i = ist, ien
+                  mask(i,j,k) = one 
+                end do
               end do
             end do
           end do
-        end do
-        
-        do n = 1,Nby
-          ymin = (n-1)*(dygrid + lybar) 
-          ymax = ymin + lybar - 1.d-14
-          jst = max(ceiling(ymin/dy),gp%xst(2))
-          jen = min(floor(  ymax/dy),gp%xen(2))
           
-          jst = jst - gp%xst(2) + 1
-          jen = jen - gp%xst(2) + 1
-          
-          do k = kst, ken
-            do j = jst, jen
-              mask(:,j,k) = one
+          do n = 1,Nby
+            ymin = (n-1)*(dygrid + lybar) 
+            ymax = ymin + lybar - 1.d-14
+            jst = max(ceiling(ymin/dy),gp%xst(2))
+            jen = min(floor(  ymax/dy),gp%xen(2))
+            
+            jst = jst - gp%xst(2) + 1
+            jen = jen - gp%xst(2) + 1
+            
+            do k = kst, ken
+              do j = jst, jen
+                mask(:,j,k) = one
+              end do
             end do
           end do
-        end do
+        case (fractal)
+          center = [0.5d0*Lx, 0.5d0*Lz]
+          call addBars(1,levels,width1,length1,center,dx,dy,kst,ken,gp,mask)
+        case default
+        end select
 
     end subroutine 
 
-    subroutine set_grid_position(igp, igpOp, rkStage)
+    recursive subroutine addBars(level,nLevels,D,L,center,dx,dy,kst,ken,gp,mask)
+      integer, intent(in) :: level, nLevels, kst, ken
+      real(rkind), intent(in) :: D, L, dx, dy
+      real(rkind), dimension(2), intent(in) :: center
+      type(decomp_info), intent(in) :: gp
+      real(rkind), dimension(:,:,:), intent(inout) :: mask
+      integer :: i, j, k
+      integer :: ist, ien, jst, jen
+      real(rkind) :: xmin, xmax, ymin, ymax
+      real(rkind), dimension(2) :: corner
+
+      ! Left side of square
+      xmin = center(1) - 0.5d0*L
+      xmax = xmin + D
+      ymin = center(2) - 0.5d0*L
+      ymax = center(2) + 0.5d0*L
+      include "oscillatingGrid_files/setMaskCommon.F90" 
+      
+      ! Right side of square
+      xmax = center(1) + 0.5d0*L
+      xmin = xmax - D
+      ymin = center(2) - L/2
+      ymax = center(2) + L/2
+      include "oscillatingGrid_files/setMaskCommon.F90" 
+      
+      ! Bottom of square
+      xmin = center(1) - 0.5d0*L + D
+      xmax = center(1) + 0.5d0*L - D
+      ymin = center(2) - 0.5d0*L
+      ymax = ymin + D
+      include "oscillatingGrid_files/setMaskCommon.F90" 
+      
+      ! Top of square
+      xmin = center(1) - 0.5d0*L + D
+      xmax = center(1) + 0.5d0*L - D
+      ymax = center(2) + 0.5d0*L
+      ymin = ymax - D
+      include "oscillatingGrid_files/setMaskCommon.F90"
+
+      if (level < nLevels) then
+        call getBounds(center,D,L,'NW',corner)
+        call addBars(level+1,nLevels,widthFact*D,lengthFact*L,corner,dx,dy,kst,ken,gp,mask)
+        call getBounds(center,D,L,'NE',corner)
+        call addBars(level+1,nLevels,widthFact*D,lengthFact*L,corner,dx,dy,kst,ken,gp,mask)
+        call getBounds(center,D,L,'SE',corner)
+        call addBars(level+1,nLevels,widthFact*D,lengthFact*L,corner,dx,dy,kst,ken,gp,mask)
+        call getBounds(center,D,L,'SW',corner)
+        call addBars(level+1,nLevels,widthFact*D,lengthFact*L,corner,dx,dy,kst,ken,gp,mask)
+      end if 
+    end subroutine
+ 
+    subroutine getBounds(center,D,L,cornerDesc,corner)
+      real(rkind), dimension(2), intent(in) :: center
+      real(rkind), intent(in) :: D, L
+      character(len=2), intent(in) :: cornerDesc
+      real(rkind), dimension(2), intent(out) :: corner
+
+      select case (cornerDesc)
+      case ('NW')
+        corner = [center(1) - 0.5d0*L + 0.5d0*D, center(2) + 0.5d0*L - 0.5d0*D] 
+      case ('NE')
+        corner = [center(1) + 0.5d0*L - 0.5d0*D, center(2) + 0.5d0*L - 0.5d0*D] 
+      case ('SE')
+        corner = [center(1) + 0.5d0*L - 0.5d0*D, center(2) - 0.5d0*L + 0.5d0*D] 
+      case ('SW')
+        corner = [center(1) - 0.5d0*L + 0.5d0*D, center(2) - 0.5d0*L + 0.5d0*D] 
+      end select
+    
+    end subroutine
+
+    subroutine set_grid_position(igp, rkStage)
         class(igrid), intent(inout) :: igp 
-        class(igrid_ops), intent(inout) :: igpOp 
         integer, intent(in) :: rkStage
         real(rkind) :: tnow 
         integer :: ierr
@@ -167,7 +248,6 @@ program oscillatingGrid
     implicit none
 
     type(igrid), allocatable, target :: igp
-    type(igrid_ops) :: igpOp
     character(len=clen) :: inputfile
     integer :: ierr
 
@@ -189,9 +269,6 @@ program oscillatingGrid
         stop 
     end if 
 
-    call igpOp%init(igp%nx, igp%ny, igp%nz, igp%dx, igp%dy, igp%dz, &
-      igp%inputdir, igp%outputdir, igp%runID, igp%periodicInZ, &
-      igp%numericalSchemeVert)
     if (filterMask) then
       ierr = gauss_x%init( igp%nx,  .true.)
       call assert(ierr == 0,'gauss_x initialization')
@@ -209,16 +286,16 @@ program oscillatingGrid
        call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igridWallM.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)
        
-       call set_grid_position(igp, igpOp, 1)
+       call set_grid_position(igp, 1)
        call igp%advance_RK4_Stage(stage=1)
        
-       call set_grid_position(igp, igpOp, 2)
+       call set_grid_position(igp, 2)
        call igp%advance_RK4_Stage(stage=2)
 
-       call set_grid_position(igp, igpOp, 3)
+       call set_grid_position(igp, 3)
        call igp%advance_RK4_Stage(stage=3)
 
-       call set_grid_position(igp, igpOp, 4)
+       call set_grid_position(igp, 4)
        call igp%advance_RK4_Stage(stage=4)
 
        call igp%wrapup_timestep()

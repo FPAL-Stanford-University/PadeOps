@@ -1,18 +1,18 @@
 &INPUT
-inputdir              = "/scratch/06632/ryanhass/LES/HITdecay/oscillatingGrid/OG1/output"   ! Directory for any input files
-outputdir             = "/scratch/06632/ryanhass/LES/HITdecay/oscillatingGrid/OG1/output"   ! Directory for all output files
-nx                    = 364         ! Number of points in X
-ny                    = 364          ! Number of points in Y
-nz                    = 364          ! Number of points in Z
+inputdir              = "/scratch/06632/ryanhass/LES/HITdecay/oscillatingGrid/OG5/output"   ! Directory for any input files
+outputdir             = "/scratch/06632/ryanhass/LES/HITdecay/oscillatingGrid/OG5/output"   ! Directory for all output files
+nx                    = 512         ! Number of points in X
+ny                    = 512          ! Number of points in Y
+nz                    = 512          ! Number of points in Z
 tstop                 = 12800.D6    ! Physical time to stop the simulation
-CFL                   = -0.5D0        ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL                   = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
 dt                    = 1.D-3        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999 
 prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 1000       ! TimeID of the restart file being used
-restartFile_RID       = 1            ! RunID of the restart file being used
+useRestartFile        = .true.      ! Set to false if it's a fresh simulation 
+restartFile_TID       = 0       ! TimeID of the restart file being used
+restartFile_RID       = 5            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
 /
@@ -32,7 +32,7 @@ clearRoundOffFreq     = 100
 /
 /
 &IO
-RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 5          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 1000       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 100       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
@@ -68,7 +68,7 @@ deleteInstructions    = .false.     ! Do you want to delete instruction after re
 /
 /
 &PHYSICS
-isInviscid            = .FALSE.      ! Is this an inviscid simulation?
+isInviscid            = .TRUE.      ! Is this an inviscid simulation?
 useCoriolis           = .FALSE.      ! Activate the coriolis term? 
 useExtraForcing       = .FALSE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
@@ -225,4 +225,11 @@ lzbar                 = 0.2775528814d0
 z0fact                = 0.7613478261d0
 Nbx                   = 23
 Nby                   = 23
+filterMask            = .false.
+gridType              = 2                         ! 1: Homogeneous grid, 2: Fractal grid
+width1                =
+length1               = 
+widthFact             = 0.5d0
+lengthFact            = 0.5d0
+levels                = 4
 /
