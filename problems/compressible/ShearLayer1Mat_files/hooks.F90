@@ -112,23 +112,23 @@ contains
        ! enddo
        ! print '(a,6(i4,1x))', 'nrank = ', nrank, size(A), size(e), size(x1d), size(y1d), size(z1d)
        ! !deallocate(A,e,x1d,y1d,z1d)
-        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_u_",nx, "_",ny,"_",nz
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_u_",nx, "_",ny,"_",nz
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
         call decomp_2d_read_one(1,this%uperturb,fname, this%gp)
         
-        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_v_",nx, "_",ny,"_",nz
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_v_",nx, "_",ny,"_",nz
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
         call decomp_2d_read_one(1,this%vperturb,fname, this%gp)
       
-        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_w_",nx, "_",ny,"_",nz
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_w_",nx, "_",ny,"_",nz
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
         call decomp_2d_read_one(1,this%wperturb,fname, this%gp)
 
-        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_p_",nx, "_",ny,"_",nz
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_p_",nx, "_",ny,"_",nz
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
         call decomp_2d_read_one(1,this%pperturb,fname, this%gp)
 
-        write(tempname,"(A7,A3,I4.4,A4.4,I,A4.4,I)") "perturb", "_r_",nx, "_",ny,"_",nz
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_r_",nx, "_",ny,"_",nz
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
         call decomp_2d_read_one(1,this%rperturb,fname, this%gp)
 
@@ -232,9 +232,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use decomp_2d,                   only: decomp_info,nrank
     use MixtureEOSMod,               only: mixture
     use IdealGasEOS,                 only: idealgas
-    use PowerLawViscosityMod,        only: powerLawViscosity
+    use SutherLandViscosityMod,      only: sutherlandViscosity
     use ConstRatioBulkViscosityMod,  only: constRatioBulkViscosity
-    use ConstPrandtlConductivityMod, only: constPrandtlConductivity
+    use SutherLandConductivityMod,   only:SutherLandConductivity
     use ConstSchmidtDiffusivityMod,  only: constSchmidtDiffusivity
     use reductions,                  only: P_MAXVAL,P_MINVAL
     use exits,                       only: GracefulExit, message, nancheck
@@ -252,11 +252,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
 
-    type(powerLawViscosity) :: shearvisc
+    type(sutherlandViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
-    type(constPrandtlConductivity) :: thermcond
+    type(sutherlandConductivity) :: thermcond
     !real(rkind), dimension(:,:), allocatable :: tmp2D
-    real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda,kx, kz, ph 
+    real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda,kx, kz, ph, S, Sk, T0
     integer :: i,iounit, nx, ny, nz
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
@@ -289,11 +289,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         c2 = sqrt(gam*p_ref/(rho_ref/Rgas2))
         du = Mc*(c1+c2)
         mu_ref = one/Re
+  
+        T0 =  101325.0_rkind/(287.0_rkind*1.2_rkind)
+        
+        S = 110.4_rkind/T0
+        Sk = 194.0_rkind/T0
 
         ! Set each material's transport coefficient object
-        shearvisc = powerLawViscosity( mu_ref, T_ref, 0._rkind)
+        shearvisc = sutherlandViscosity(mu_ref, T_ref, 1.5_rkind, S)
         bulkvisc  = constRatioBulkViscosity( zero )
-        thermcond = constPrandtlConductivity( Pr )
+        thermcond = sutherlandConductivity(Pr, T_ref, 1.5_rkind, Sk)
         call mix%set_material( 1, idealgas( gam, Rgas ),&
              shearvisc = shearvisc, & 
              bulkvisc  = bulkvisc, &

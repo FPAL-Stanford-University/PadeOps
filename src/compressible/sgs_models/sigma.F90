@@ -1,22 +1,16 @@
-subroutine init_sigma(this, dx, dy, dz, Cs)
+subroutine init_sigma(this)
    class(sgs_cgrid), intent(inout) :: this
-   real(rkind), intent(in) :: dx, dy, dz, Cs
    real(rkind) :: deltaLES
 
    ! Set the type of mnodel constant (default is constant global). 
    ! Can be reset to false via dynamic procedure initialization, 
    ! in case the dynamic procedure is planar averages
+
    this%useCglobal = .true. 
-   
-  
-   if (.not. this%isPeriodic) then
-      deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
-   else
-      deltaLES =  (1.5d0*dx*1.5d0*dy*1.5d0*dz)**(1.d0/3.d0)
-   end if 
-   this%cmodel_global = (Cs*deltaLES)**2
+   this%cmodel_global = (this%Csgs*this%deltaLES)**2
   
    this%isEddyViscosityModel = .true. 
+
    call message(1,"Sigma model initialized")
 end subroutine
 
@@ -27,10 +21,10 @@ subroutine destroy_sigma(this)
 
 end subroutine
 
-subroutine get_sigma_kernel(nu_sgs, duidxj, nxL, nyL, nzL)
-   integer, intent(in) :: nxL, nyL, nzL
-   real(rkind), intent(in), dimension(nxL,nyL,nzL,9):: duidxj
-   real(rkind), intent(out), dimension(nxL,nyL,nzL) :: nu_sgs
+subroutine get_sigma_kernel(duidxj)
+   class(sgs_cgrid), intent(inout) :: this
+   real(rkind), intent(in), dimension(this%nxL,this%nyL,this%nzL,9):: duidxj
+
    real(rkind) :: G11, G12, G13, G22, G23, G33
    real(rkind) :: I1, I2, I3, I1sq, I1cu
    real(rkind) :: alpha1, alpha2, alpha1sqrt
@@ -38,10 +32,10 @@ subroutine get_sigma_kernel(nu_sgs, duidxj, nxL, nyL, nzL)
    real(rkind) :: sigma1, sigma2, sigma3, sigma1sq
    integer :: i,j,k
 
-   do k = 1,nzL
-      do j = 1,nyL 
+   do k = 1, this%nzL
+      do j = 1, this%nyL 
          !$omp simd 
-         do i = 1,nxL
+         do i = 1, this%nxL
             !print '(2(i5,1x),9(e19.12,1x))', i, j, duidxj(i,j,k,:) 
             G11=duidxj(i,j,k,1)*duidxj(i,j,k,1)+duidxj(i,j,k,4)*duidxj(i,j,k,4)+duidxj(i,j,k,7)*duidxj(i,j,k,7)
             G12=duidxj(i,j,k,1)*duidxj(i,j,k,2)+duidxj(i,j,k,4)*duidxj(i,j,k,5)+duidxj(i,j,k,7)*duidxj(i,j,k,8)
@@ -92,7 +86,7 @@ subroutine get_sigma_kernel(nu_sgs, duidxj, nxL, nyL, nzL)
             sigma3 = max(sigma3,zero)
             sigma3 = sqrt(sigma3)
 
-            nu_sgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
+            this%nusgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
 
          end do 
       end do 

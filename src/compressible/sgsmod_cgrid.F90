@@ -18,11 +18,20 @@ module sgsmod_cgrid
         private 
         class(decomp_info), pointer :: decomp
         integer :: SGSmodelID, mid, DynamicProcedureType
-        real(rkind) :: cmodel_global,csgs,turbPrandtl = 0.7_rkind
-        logical :: isEddyViscosityModel = .false., isEddyDiffmodel = .true., isTurbPrandtlconst = .true.
+        real(rkind) :: cmodel_global,csgs,turbPrandtl
+        logical :: isEddyViscosityModel, isEddyDiffmodel, isTurbPrandtlconst
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij
         real(rkind), dimension(:,:,:),   allocatable :: nusgs, kapsgs
         logical ::  isPeriodic = .false.
+
+        integer :: nxL, nyL, nzL
+        real(rkind) :: dx, dy, dz, deltaLES, camd_x, camd_y, camd_z
+
+        integer :: SGSmodelID = 0, DynProcFreq = 0, DynamicProcedureType = 0
+        real(rkind) :: Csgs = 1.0_rkind, ncWall = 1.0_rkind, PrSGS = 1.0_rkind
+        logical :: useWallDamping = .false., usePrSGS = .true., useSGSDynamicRestartFile = .false. 
+        logical :: DomainAveraged_DynProc = .false., useDynamicProcedureScalar = .false.
+        character(len=clen) :: SGSDynamicRestartFile
 
         !! model constant values/properties
         real(rkind) :: camd_x, camd_y, camd_z, cmgm_x, cmgm_y, cmgm_z, c1_mgm , c2_mgm, PrCpfac
@@ -42,7 +51,7 @@ module sgsmod_cgrid
             procedure, private :: destroy_amd
             procedure, private :: destroy_mgm
             !! ACCESSORS 
-            procedure          :: getMax_nuSGS
+            procedure          :: getMax_nusgs
             procedure          :: getMax_kapSGS
     end type 
 
@@ -57,21 +66,108 @@ contains
 #include "sgs_models/accessors.F90"
 
 
-subroutine init(this, decomp, Cp, Pr)
-   class(sgs_cgrid), intent(inout) :: this
-   class(decomp_info), intent(in), target    :: decomp
-   real(rkind) , intent(in) :: Cp, Pr
+subroutine init(this, decomp, Cp, Pr, dx, dy, dz, inputfile)
+  class(sgs_cgrid), intent(inout) :: this
+  class(decomp_info), intent(in), target    :: decomp
+  real(rkind) , intent(in) :: Cp, Pr, dx, dy, dz
+  character(len=clen), intent(in) :: inputfile
+
+  integer :: SGSmodelID = 0, DynProcFreq = 0, DynamicProcedureType = 0
+  real(rkind) :: Csgs = 1.0_rkind, ncWall = 1.0_rkind, PrSGS = 1.0_rkind
+  logical :: useWallDamping = .false., usePrSGS = .true., useSGSDynamicRestartFile = .false. 
+  logical :: DomainAveraged_DynProc = .false., useDynamicProcedureScalar = .false.
+  logical :: isEddyViscosityModel = .false., isEddyDiffmodel = .true., isTurbPrandtlconst = .true.
+  character(len=clen) :: SGSDynamicRestartFile
+
    this%decomp => decomp
    this%Cp = Cp
    this%Pr = Pr
-   allocate(  this%S_ij(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3), 6))
-   allocate( this%nusgs(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3))   )
-   allocate(this%kapsgs(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3))   )
 
+   this%nxL = this%decomp%ysz(1)
+   this%nyL = this%decomp%ysz(2)
+   this%nzL = this%decomp%ysz(3)
+
+   this%dx = dx;    this%dy = dy;    this%dz = dz
+
+   if (.not. this%isPeriodic) then
+      this%deltaLES = (1.5d0*this%dx*1.5d0*this%dy*this%dz)**(1.d0/3.d0)
+   else
+      this%deltaLES =  (1.5d0*this%dx*1.5d0*this%dy*1.5d0*this%dz)**(1.d0/3.d0)
+   end if 
+    
+   allocate(  this%S_ij(this%nxL, this%nyL, this%nzL, 6))
+   allocate( this%nusgs(this%nxL, this%nyL, this%nzL)   )
+   allocate(this%kapsgs(this%nxL, this%nyL, this%nzL)   )
+
+   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID,        &
+                  useWallDamping, ncWall, Csgs, usePrSGS,        &
+                  DynProcFreq, useSGSDynamicRestart,             &
+                  DomainAveraged_DynProc, SGSDynamicRestartFile, &
+                  isEddyViscosityModel, isEddyDiffmodel, isTurbPrandtlconst, &
+                  UseDynamicProcedureScalar, PrSGS      
+
+   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+   read(unit=123, NML=SGS_MODEL)
+   close(123)
+
+   this%SGSmodelID = SGSmodelID;             this%Csgs = Csgs;
+   this%useWallDamping = useWallDamping;     this%ncWall = ncWall
+   this%usePrSGS = usePrSGS;                 this%PrSGS = PrSGS
+
+   this%DynProcFreq = DynProcFreq;                               this%useSGSDynamicRestartFile = useSGSDynamicRestartFile
+   this%DomainAveraged_DynProc = DomainAveraged_DynProc;         this%SGSDynamicRestartFile = SGSDynamicRestartFile
+   this%useDynamicProcedureScalar = useDynamicProcedureScalar;   this%DynamicProcedureType = DynamicProcedureType
+   this%isEddyViscosityModel = isEddyViscosityModel;             this%isEddyDiffModel = isEddyDiffModel
+   this%isTurbPrandtlconst = isTurbPrandtlconst
+
+   select case (this%SGSmodelID)
+   case (0)
+      call this%init_smagorinsky()
+   case (1)
+      call this%init_sigma()
+   case (2)
+      call this%init_AMD()
+   case (3)
+      call this%init_mgm()
+   case default
+      call GracefulExit("Incorrect choice for SGS model ID.", 213)
+   end select
+
+    !!!! Safeguards against wrong inputs !!!!!
+    if(this%isEddyDiffModel) then
+
+      if( (.not. this%isEddyViscosityModel) .and. ) then
+          call GracefulExit("It can be an EddyDiff Model only if it is an EddyViscosityModel", 213)
+      endif
+
+      if( (.not. this%isTurbPrandtlconst) .and. (this%SGSmodelID .ne. 2) ) then
+          call GracefulExit("To use EddyDiffModel with non-const TurbPrandtl, SGSModel must be AMD", 213)
+      endif
+
+    else
+
+      if( this%SGSmodelID .ne. 3 ) then
+          call GracefulExit("To use non-EddyDiffModel, SGSModel must be MGM", 213)
+      endif
+
+    endif
 end subroutine 
 
 subroutine destroy(this)
    class(sgs_cgrid), intent(inout) :: this
+
+   select case (this%SGSmodelID)
+   case (0)
+      call this%destroy_smagorinsky()
+   case (1)
+      call this%destroy_sigma()
+   case (2)
+      call this%destroy_AMD()
+   case (3)
+      call this%destroy_mgm()
+   case default
+      call GracefulExit("Incorrect choice for SGS model ID.", 213)
+   end select
 
    if(allocated(this%kapsgs)) deallocate(this%kapsgs)
    if(allocated(this%nusgs) ) deallocate(this%nusgs )
@@ -80,96 +176,91 @@ subroutine destroy(this)
 
 end subroutine 
 
-subroutine getTauSGS(this, duidxj, rho, tausgs, nxL, nyL, nzL, dx, dy, dz) 
+subroutine getTauSGS(this, duidxj, rho, tausgs)
    use constants, only : third, twothird 
    class(sgs_cgrid), intent(inout) :: this
-   real(rkind), intent(in) :: nxL, nyL, nzL, dx, dy, dz
-   real(rkind), dimension(nxL,nyL,nzL,9), intent(in)  :: duidxj
-   real(rkind), dimension(nxL, nyL, nzL), intent(in)  :: rho
-   real(rkind), dimension(nxL,nyL,nzL,6), intent(out) :: tausgs
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL, 9), intent(in)  :: duidxj
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL   ), intent(in)  :: rho
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL, 6), intent(out) :: tausgs
+
    real(rkind) :: S, CI = 0.003_rkind, deltaLES
-   real(rkind), dimension(nxL,nyL,nzL)  :: modS, Sii, q
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL)  :: modS_sq, q, Sii
    integer :: i,j,k
 
    if (this%isEddyViscosityModel) then
 
       ! Step 0: Compute Sij
-      call get_Sij_from_duidxj(duidxj, this%S_ij, nxL, nyL, nzL) 
+      call this%get_Sij_from_duidxj(duidxj) 
       
-      ! Step 1: Get nuSGS
-      call this%get_SGS_kernel(duidxj)
+      ! Step 1: Get mag-square and trace of S_ij
+      call this%get_modS_Sii(duidxj, modS_sq, Sii)
 
-      !!! Step 2: Dynamic Procedure ?
+      ! Step 2: Get TKE (q)
+      q = twothird * CI * (this%deltaLES**2) * rho * modS_sq
 
-      ! Step 3: Multiply by model constant
+      ! Step 4: Get nusgs
+      call this%get_SGS_kernel(duidxj, modS_sq)
+
+      !!! Step 5: Dynamic Procedure ?
+
+      ! Step 6: Multiply by model constant
       call this%multiply_by_model_constant()
-      
-      do k = 1,nzL
-         do j = 1,nyL
-            do i = 1,nxL
-               S = this%S_ij(i,j,k,1)*this%S_ij(i,j,k,1) ! S11*S11
-               S = S + 2.d0*(this%S_ij(i,j,k,2)*this%S_ij(i,j,k,2)) ! S12*S12 + S21*S21
-               S = S + 2.d0*(this%S_ij(i,j,k,3)*this%S_ij(i,j,k,3)) ! S13*S13 + S31*S31
-               S = S + (this%S_ij(i,j,k,4)*this%S_ij(i,j,k,4)) ! S22*S22
-               S = S + 2.d0*(this%S_ij(i,j,k,5)*this%S_ij(i,j,k,5)) ! S23*S23 + S32*S32
-               S = S + (this%S_ij(i,j,k,6)*this%S_ij(i,j,k,6)) ! S33*S33
-            ! Now do modS = sqrt(2* S_ij*S_ij)
-               S = 2.d0*S
-               modS(i,j,k) = sqrt(S)
-            end do 
-         end do 
-      end do
      
-      if (.not. this%isPeriodic) then
-         deltaLES = (1.5d0*dx*1.5d0*dy*dz)**(1.d0/3.d0)
-      else
-         deltaLES =  (1.5d0*dx*1.5d0*dy*1.5d0*dz)**(1.d0/3.d0)
-      end if 
-    
-      q   = twothird * CI * rho * (deltaLES**2) * (modS**2)
-      Sii = (this%S_ij(:,:,:,1) + this%S_ij(:,:,:,4) + this%S_ij(:,:,:,6)) * third
-      ! Step 2: Get tau_sgs    
+      !! Subsumed in Step 1 
+      !!do k = 1, this%nzL
+      !!   do j = 1, this%nyL
+      !!      do i = 1, this%nxL
+      !!         S = this%S_ij(i,j,k,1)*this%S_ij(i,j,k,1) ! S11*S11
+      !!         S = S + 2.d0*(this%S_ij(i,j,k,2)*this%S_ij(i,j,k,2)) ! S12*S12 + S21*S21
+      !!         S = S + 2.d0*(this%S_ij(i,j,k,3)*this%S_ij(i,j,k,3)) ! S13*S13 + S31*S31
+      !!         S = S + (this%S_ij(i,j,k,4)*this%S_ij(i,j,k,4)) ! S22*S22
+      !!         S = S + 2.d0*(this%S_ij(i,j,k,5)*this%S_ij(i,j,k,5)) ! S23*S23 + S32*S32
+      !!         S = S + (this%S_ij(i,j,k,6)*this%S_ij(i,j,k,6)) ! S33*S33
+      !!      ! Now do modS = sqrt(2* S_ij*S_ij)
+      !!         S = 2.d0*S
+      !!         modS(i,j,k) = sqrt(S)
+      !!      end do 
+      !!   end do 
+      !!end do
+
+      ! Step 7: Get tau_sgs    
       tausgs(:,:,:,1) = -two * rho * this%nusgs * (this%S_ij(:,:,:,1)-Sii) + q
-      tausgs(:,:,:,2) = -two * rho * this%nusgs * this%S_ij(:,:,:,2) 
-      tausgs(:,:,:,3) = -two * rho * this%nusgs * this%S_ij(:,:,:,3) 
+      tausgs(:,:,:,2) = -two * rho * this%nusgs * this%S_ij(:,:,:,2)
+      tausgs(:,:,:,3) = -two * rho * this%nusgs * this%S_ij(:,:,:,3)
       tausgs(:,:,:,4) = -two * rho * this%nusgs * (this%S_ij(:,:,:,4)-Sii) + q
-      tausgs(:,:,:,5) = -two * rho * this%nusgs * this%S_ij(:,:,:,5) 
+      tausgs(:,:,:,5) = -two * rho * this%nusgs * this%S_ij(:,:,:,5)
       tausgs(:,:,:,6) = -two * rho * this%nusgs * (this%S_ij(:,:,:,6)-Sii) + q
    else
      !! call MGM model from here
-      call get_Sij_from_duidxj(duidxj, this%S_ij, nxL, nyL, nzL) 
-      get_tausgs_mgm(this%cmgm_x, this%cmgm_y, this%cmgm_z, this%c1_mgm, rho, duidxj, this%S_ij, nxL, nyL, nzL, tausgs)      
+     call this%get_Sij_from_duidxj(duidxj)
+     call this%get_tausgs_mgm(rho, duidxj, tausgs)
    end if
 
 end subroutine
 
-
-subroutine getQjSGS(this,duidxj, rho, gradT, Qjsgs, nxL, nyL, nzL, dx, dy, dz)
+subroutine getQjSGS(this, duidxj, rho, gradT, Qjsgs)
    class(sgs_cgrid), intent(inout) :: this
-   real(rkind), intent(in) :: nxL, nyL, nzL, dx, dy, dz
-   real(rkind), dimension(nxL,nyL,nzL,9), intent(in)  :: duidxj
-   real(rkind), dimension(nxL, nyL, nzL), intent(in)  :: rho
-   real(rkind), dimension(nxL,nyL,nzL,3), intent(in)  :: gradT
-   real(rkind), dimension(nxL,nyL,nzL,3), intent(out) :: Qjsgs
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL,9), intent(in)  :: duidxj
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL  ), intent(in)  :: rho
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL,3), intent(in)  :: gradT
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL,3), intent(out) :: Qjsgs
    real(rkind) :: k
-!! not yet completed
+
    if (this%isEddyDiffModel) then
-      if (this%IsPrandtlconstant) then
-         this%kapsgs = this%nusgs/this%TurbPrandtl
-      elseif () then 
-         get_amd_Dkernel(this%kapsgs,this%camd_x,this%camd_y,this%camd_z, duidxj, gradT, nxL, nyL, nzL)
+      if (this%isTurbPrandtlconst) then
+          this%kapsgs = this%nusgs/this%PrSGS
       else
-         call message ()
-      end if
+          call this%get_amd_Dkernel(duidxj, gradT)
+      endif
       
-      do k=1,3
+      do k = 1, 3
          Qjsgs(:,:,:,k) = - rho * this%Cp * this%kapsgs * gradT(:,:,:,k)
       end do
       
-   else   
+   else
       !! MGM model
-      call get_Sij_from_duidxj(duidxj, this%S_ij, nxL, nyL, nzL) 
-      get_Qjsgs_mgm(this%cmgm_x, this%cmgm_y, this%cmgm_z, this%c2_mgm, this%PrCpfac, rho, duidxj,gradT, this%S_ij, nxL, nyL, nzL,Qjsgs)
+      call this%get_Sij_from_duidxj(duidxj) 
+      call this%get_Qjsgs_mgm(rho, duidxj, gradT, Qjsgs)
    end if
 end subroutine
 

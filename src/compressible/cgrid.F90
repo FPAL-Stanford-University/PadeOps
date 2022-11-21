@@ -11,7 +11,7 @@ module CompressibleGrid
     use io_hdf5_stuff,         only: io_hdf5
     use IdealGasEOS,           only: idealgas
     use MixtureEOSMod,         only: mixture
-    use PowerLawViscosityMod,  only: powerLawViscosity
+    use ShearViscosityMod,     only: shearViscosity
     use TKEBudgetMod,          only: tkeBudget
     use ScaleDecompositionMod, only: scaleDecomposition
     use sgsmod_cgrid,          only: sgs_cgrid
@@ -316,7 +316,7 @@ contains
             call alloc_buffs(this%Qjsgs, 3,'y',this%decomp)
 
             allocate(this%sgsmodel)
-            call this%sgsmodel%init(this%decomp, Cp, Pr)
+            call this%sgsmodel%init(this%decomp, Cp, Pr, this%dx, this%dy, this%dz, inputfile)
         endif
 
         ! Finally, set the local array dimensions
@@ -647,6 +647,8 @@ contains
         integer :: i
         integer :: stepramp = 0
 
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: rhs  ! RHS for conserved variables
+
         ! call this%get_dt(stability)
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
@@ -828,7 +830,7 @@ contains
         do while ( tcond .AND. stepcond )
             ! Advance time
             call tic()
-            call this%advance_RK45(vizcond)
+            call this%advance_RK45(rhs, vizcond)
             call toc(cputime)
             
             call message(1,"Time",this%tsim)
@@ -842,6 +844,7 @@ contains
             if (vizcond) then
                 call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
+                call this%getRHS(rhs)
                 call this%write_viz()
                 vizcond = .FALSE.
             end if
@@ -893,14 +896,14 @@ contains
 
     end subroutine
 
-    subroutine advance_RK45(this, vizcond)
+    subroutine advance_RK45(this, rhs, vizcond)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
         use exits,      only: message,nancheck,GracefulExit
         class(cgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv), intent(inout) :: rhs  ! RHS for conserved variables
         logical,              intent(in)    :: vizcond
 
         real(rkind)                                               :: Qtmpt
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: rhs  ! RHS for conserved variables
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp ! Temporary variable for RK45
 
         real(rkind), dimension(:,:,:,:), target, allocatable :: duidxj, tauij, gradYs
@@ -1270,8 +1273,8 @@ contains
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if(this%useSGS) then
-            call this%sgsmodel%getTauSGS(duidxj, this%rho,this%tausgs,this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),this%dx,this%dy,this%dz)
-            call this%sgsmodel%getQjSGS (duidxj, this%rho, gradT,this%Qjsgs,this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),this%dx,this%dy,this%dz)
+            call this%sgsmodel%getTauSGS(duidxj, this%rho,        this%tausgs)
+            call this%sgsmodel%getQjSGS (duidxj, this%rho, gradT, this%Qjsgs )
         endif
 
         if (this%mix%ns .GT. 1) then
