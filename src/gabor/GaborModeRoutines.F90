@@ -42,8 +42,8 @@ module GaborModeRoutines
     end function
 
     pure subroutine normalizeVec(x,y,z)
-      real(rkind), dimension(:,:,:,:,:), intent(inout) :: x, y, z
-      real(rkind), dimension(size(x,1),size(x,2),size(x,3),size(x,4),size(x,5)) :: mag
+      real(rkind), dimension(:,:), intent(inout) :: x, y, z
+      real(rkind), dimension(size(x,1),size(x,2)) :: mag
     
       mag = sqrt(x*x + y*y + z*z)
       x = x/mag

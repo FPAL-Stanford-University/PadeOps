@@ -1,6 +1,6 @@
 module enrichmentMod
   use kind_parameters,    only: rkind, clen, single_kind, castSingle, mpirkind
-  use incompressibleGrid, only: igrid, prow, pcol
+  use incompressibleGrid, only: igrid
   use QHmeshMod,          only: QHmesh
   use exits,              only: message
   use constants,          only: pi
@@ -13,6 +13,7 @@ module enrichmentMod
   use reductions,         only: p_maxval, p_minval
   implicit none
 
+  private
   integer :: nthreads
   integer, dimension(4) :: neighbour
   integer, dimension(2) :: coords, dims
@@ -20,19 +21,24 @@ module enrichmentMod
 
   real(rkind), dimension(2) :: xDom, yDom, zDom
 
+  public :: enrichmentOperator, xDom, yDom, zDom, nthreads
+
   type :: enrichmentOperator
-    real(rkind), dimension(:), allocatable :: kx, ky, kz
-    real(rkind), dimension(:), allocatable :: x, y, z
-    real(rkind), dimension(:), allocatable :: uhatR, uhatI, vhatR, vhatI, whatR, whatI
+    !private
+    real(rkind), dimension(:,:), allocatable :: modeData
+    real(rkind), dimension(:), pointer, public :: kx, ky, kz
+    real(rkind), dimension(:), pointer, public :: x, y, z
+    real(rkind), dimension(:), pointer, public :: uhatR, uhatI, vhatR, &
+      vhatI, whatR, whatI
     real(rkind) :: dt
 
     ! Halo-padded arrays
     real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj_h
 
-    integer :: nxsupp, nysupp, nzsupp
+    integer, public :: nxsupp, nysupp, nzsupp
     type(igrid), pointer :: largeScales, smallScales
-    type(QHmesh) :: QHgrid 
+    type(QHmesh), public :: QHgrid 
     real(rkind), dimension(:,:,:,:), pointer :: duidxj_LS
     real(rkind) :: kmin, kmax
     logical :: imposeNoPenetrationBC = .false.
@@ -45,14 +51,13 @@ module enrichmentMod
 
     ! Data IO
     character(len=clen) :: outputdir
-    logical :: writeIsotropicModes 
+    logical :: writeIsotropicModes
     
     ! Extra memory for velocity rendering
-    real(single_kind), dimension(:,:,:,:),   allocatable :: utmp,vtmp,wtmp
-    real(rkind), dimension(:,:), allocatable :: haloBuff ! Store info of modes
-                                                         ! on neighbor ranks 
-                                                         ! that are within the 
-                                                         ! support window "halo"
+    real(single_kind), dimension(:,:,:,:), allocatable :: utmp,vtmp,wtmp
+      ! Store info of modes on neighbor ranks that are within the support 
+      ! window "halo"
+    real(rkind), dimension(:,:), allocatable :: haloBuffY, haloBuffZ
     real(rkind), dimension(:,:), allocatable :: sendBuff
 
     ! Misc
@@ -67,19 +72,17 @@ module enrichmentMod
       procedure          :: getLargeScaleDataAtModeLocation
       procedure          :: advanceTime
       procedure          :: renderVelocity
-      procedure, private :: renderLocalVelocity
+      procedure          :: renderLocalVelocity
       procedure          :: updateLargeScales
       procedure          :: wrapupTimeStep
+      procedure          :: dumpSmallScales
       procedure          :: continueSimulation
       procedure          :: dumpData
       procedure, private :: doDebugChecks
       procedure, private :: updateSeeds
-      procedure, private :: runTests
 
       ! MPI communication stuff
-      procedure, private :: sendRecvHaloModes
-      procedure, private :: howManyHaloModes
-      procedure, private :: copyMode
+      procedure          :: sendRecvHaloModes
   end type
 
 contains
@@ -88,16 +91,13 @@ contains
   include 'enrichment_files/gaborIO.F90'
   include 'enrichment_files/debugChecks.F90'
   include 'enrichment_files/MPIstuff.F90'
-  include 'enrichment_files/tests.F90'
 
-  subroutine init(this,smallScales,largeScales,inputfile,testOnly)
+  subroutine init(this,smallScales,largeScales,inputfile)
     use GaborModeRoutines, only: computeKminKmax
     
-    class(enrichmentOperator), intent(inout) :: this 
+    class(enrichmentOperator), intent(inout), target :: this 
     class(igrid), intent(inout), target :: smallScales, largeScales
     character(len=*), intent(in) :: inputfile
-    logical, intent(in), optional :: testOnly
-    logical :: doTestOnly = .false.
     character(len=clen) :: outputdir
     integer :: ierr, ioUnit
     integer :: nk, ntheta
@@ -148,8 +148,6 @@ contains
     this%outputdir = outputdir
     this%writeIsotropicModes = writeIsotropicModes
 
-    if (present(testOnly)) doTestOnly = testOnly
-
     ! Get domain boundaries
     xDom(1) = p_minval(this%largeScales%mesh(1,1,1,1))
     xDom(2) = p_maxval(this%largeScales%mesh(this%largeScales%gpC%xsz(1),1,1,1)) &
@@ -157,9 +155,10 @@ contains
     yDom(1) = p_minval(this%largeScales%mesh(1,1,1,2))
     yDom(2) = p_maxval(this%largeScales%mesh(1,this%largeScales%gpC%xsz(2),1,2)) &
       + this%largeScales%dy
-    zDom(1) = p_minval(this%largeScales%mesh(1,1,1,3))
+    zDom(1) = p_minval(this%largeScales%mesh(1,1,1,3)) &
+      - 0.5d0*this%largeScales%dz
     zDom(2) = p_maxval(this%largeScales%mesh(1,1,this%largeScales%gpC%xsz(3),3)) &
-      + this%largeScales%dz
+      + 0.5d0*this%largeScales%dz
 
     ! STEP  0: Get filenames for u, v and w from (input file?) for initialization
     ! Use the same file-naming convention for PadeOps restart files: 
@@ -193,6 +192,23 @@ contains
       this%smallScales%nx, this%smallScales%ny, this%smallScales%nz, &
       this%kmin, this%kmax)
 
+    ! Allocate memory for mode data
+    allocate(this%modeData(this%nmodes,12))
+
+    ! Link pointers
+    this%x     => this%modeData(:,1)
+    this%y     => this%modeData(:,2)
+    this%z     => this%modeData(:,3)
+    this%kx    => this%modeData(:,4)
+    this%ky    => this%modeData(:,5)
+    this%kz    => this%modeData(:,6)
+    this%uhatR => this%modeData(:,7)
+    this%uhatI => this%modeData(:,8)
+    this%vhatR => this%modeData(:,9)
+    this%vhatI => this%modeData(:,10)
+    this%whatR => this%modeData(:,11)
+    this%whatI => this%modeData(:,12)
+    
     ! Allocate extra memory for velocity rendering
     ist = this%smallScales%gpC%xst(1) 
     ien = this%smallScales%gpC%xen(1) 
@@ -208,20 +224,19 @@ contains
 
     ! Set things up for distributed memory
     call getNeighbours(neighbour)
-    call getMPIcartCoords(coords)
-    dims = [prow,pcol]
+    call MPI_Cart_Get(DECOMP_2D_COMM_CART_X,2,dims,periodicBCs(2:3),coords,ierr)
     call this%largeScales%getPeriodicBCs(periodicBCs)
-    
-    if (doTestOnly) then
-      call this%runTests()
-    else
-      ! Initialize the Gabor modes
-      call this%generateIsotropicModes()
-      if (this%writeIsotropicModes) call this%dumpData()
-      if (this%strainInitialCondition) call this%strainModes()
 
-      call this%wrapupTimeStep()
+    ! Initialize the Gabor modes
+    call this%generateIsotropicModes()
+    if (this%writeIsotropicModes) then
+      call message(1, 'Writing modes to disk.')
+      call this%dumpData(this%x,this%y,this%z,this%kx,this%ky,this%kz, &
+        this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI)
     end if
+    if (this%strainInitialCondition) call this%strainModes()
+   
+    call this%wrapupTimeStep()
   end subroutine
 
   subroutine destroy(this)
@@ -229,18 +244,19 @@ contains
 
     if (associated(this%largeScales)) nullify(this%largeScales)
     if (associated(this%smallScales)) nullify(this%smallScales)
-    if (allocated(this%uhatR))    deallocate(this%uhatR)
-    if (allocated(this%uhatI))    deallocate(this%uhatI)
-    if (allocated(this%vhatR))    deallocate(this%vhatR)
-    if (allocated(this%vhatI))    deallocate(this%vhatI)
-    if (allocated(this%whatR))    deallocate(this%whatR)
-    if (allocated(this%whatI))    deallocate(this%whatI)
-    if (allocated(this%kx))       deallocate(this%kx)
-    if (allocated(this%ky))       deallocate(this%ky)
-    if (allocated(this%kz))       deallocate(this%kz)
-    if (allocated(this%x))        deallocate(this%x)
-    if (allocated(this%y))        deallocate(this%y)
-    if (allocated(this%z))        deallocate(this%z)
+    if (allocated(this%modeData))    deallocate(this%modeData)
+    if (associated(this%uhatR))    nullify(this%uhatR)
+    if (associated(this%uhatI))    nullify(this%uhatI)
+    if (associated(this%vhatR))    nullify(this%vhatR)
+    if (associated(this%vhatI))    nullify(this%vhatI)
+    if (associated(this%whatR))    nullify(this%whatR)
+    if (associated(this%whatI))    nullify(this%whatI)
+    if (associated(this%kx))       nullify(this%kx)
+    if (associated(this%ky))       nullify(this%ky)
+    if (associated(this%kz))       nullify(this%kz)
+    if (associated(this%x))        nullify(this%x)
+    if (associated(this%y))        nullify(this%y)
+    if (associated(this%z))        nullify(this%z)
     if (allocated(this%uh))       deallocate(this%uh)
     if (allocated(this%vh))       deallocate(this%vh)
     if (allocated(this%wh))       deallocate(this%wh)
@@ -248,7 +264,8 @@ contains
     if (allocated(this%utmp))     deallocate(this%utmp)
     if (allocated(this%vtmp))     deallocate(this%vtmp)
     if (allocated(this%wtmp))     deallocate(this%wtmp)
-    if (allocated(this%haloBuff)) deallocate(this%haloBuff)
+    if (allocated(this%haloBuffY)) deallocate(this%haloBuffY)
+    if (allocated(this%haloBuffZ)) deallocate(this%haloBuffZ)
     if (allocated(this%sendBuff)) deallocate(this%sendBuff)
 
     call this%QHgrid%destroy()
@@ -278,13 +295,17 @@ contains
   end subroutine
 
   subroutine renderVelocity(this)
-    class(enrichmentOperator), intent(inout) :: this 
+    class(enrichmentOperator), intent(inout), target :: this
+    real(rkind) :: Lx
+    integer :: lastY, lastZ
+    real(rkind), dimension(:,:), pointer :: haloBuffY, haloBuffZ 
+   
+    haloBuffY => null()
+    haloBuffZ => null()
+
+    Lx = xDom(2) - xDom(1)
     
     ! Zero the velocity arrays
-    this%utmp = 0.e0
-    this%vtmp = 0.e0
-    this%wtmp = 0.e0
-
     this%smallScales%u  = 0.d0
     this%smallScales%v  = 0.d0
     this%smallScales%wC = 0.d0
@@ -296,23 +317,19 @@ contains
 
     ! Aditya & Ryan 
     ! STEP 2: Exchange Gabor modes from neighbors that have influence on your domain 
-    call this%sendRecvHaloModes(this%haloBuff)
+    call message(2,'Exchanging halo modes')
+    call this%sendRecvHaloModes(this%modeData, 'y', this%haloBuffY,lastY)
+    call this%sendRecvHaloModes(this%modeData, 'z', this%haloBuffZ, &
+      lastZ, this%haloBuffY)
+  
+    if (lastY > 0) haloBuffY => this%haloBuffY(1:lastY,:)
+    if (lastZ > 0) haloBuffZ => this%haloBuffZ(1:lastZ,:)
 
     ! Add halo contribution
-    call this%renderLocalVelocity(this%haloBuff(:,1), this%haloBuff(:,2), &
-      this%haloBuff(:,3), this%haloBuff(:,4), this%haloBuff(:,5), &
-      this%haloBuff(:,6), this%haloBuff(:,7), this%haloBuff(:,8), &
-      this%haloBuff(:,9), this%haloBuff(:,10), this%haloBuff(:,11), &
-      this%haloBuff(:,12))
+    include "enrichment_files/renderVelocityStuff/addHaloContribution.F90"
 
-    if (periodicBCs(1)) then
-      ! TODO:
-      ! Need to make copies of modes on the periodic boundary and shift their
-      ! location by Lx (or -Lx) and then pass them back through the velocity
-      ! rendering routine. See the way this is handled for y and z in
-      ! this%sendRecvHaloModes()
-      call assert(.false.) 
-    end if
+    ! Add x-periodic contribution
+    include "enrichment_files/renderVelocityStuff/addXperiodicContribution.F90"
 
     ! TODO:
     ! Step 2.b: interpolate wC to w. Do we need to get uhat, vhat, what from u,
@@ -330,6 +347,7 @@ contains
       call this%smallScales%computePressure()
     end if 
 
+    nullify(haloBuffY,haloBuffZ)
   end subroutine  
 
   subroutine wrapupTimeStep(this)
@@ -342,15 +360,20 @@ contains
     end if 
 
     if (mod(this%tid,this%tio) == 0) then 
-      call this%smallScales%dumpFullField(this%smallScales%u,"uGab")
-      call this%smallScales%dumpFullField(this%smallScales%v,"vGab")
-      call this%smallScales%dumpFullField(this%smallScales%wC,"wGab")
+      call this%dumpSmallScales()
     end if 
 
     this%tid = this%tid + 1
 
     !call this%updateLargeScales(timeAdvance=.false.)
 
+  end subroutine
+
+  subroutine dumpSmallScales(this)
+    class(enrichmentOperator), intent(inout) :: this 
+    call this%smallScales%dumpFullField(this%smallScales%u,"uGab")
+    call this%smallScales%dumpFullField(this%smallScales%v,"vGab")
+    call this%smallScales%dumpFullField(this%smallScales%wC,"wGab")
   end subroutine
 
   function continueSimulation(this) result(doIcontinue)
