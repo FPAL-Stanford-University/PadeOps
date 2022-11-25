@@ -37,15 +37,19 @@ module ShearLayer_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 contains
-    subroutine perturb_potential_v2(gp,x,y,z,Lx,Lz,u,v,w,p,rho,fname_prefix)
+    subroutine perturb_potential_v2(gp,x,y,z,nx,ny,nz,nxl,nyl,nzl,Lx,Lz,u,v,w,p,rho,fname_prefix)
         use decomp_2d,        only: nrank
+        use decomp_2d_io
         type(decomp_info), intent(in)               :: gp
         real(rkind), dimension(:,:,:), intent(in)   :: x,y,z
         real(rkind), dimension(:,:,:), intent(inout):: u,v,w,p,rho
         real(rkind), intent(in)                     :: Lx,Lz
+        integer, intent(in)                         :: nx,ny,nz,nxl,nyl,nzl
         character(len=clen), intent(in) :: fname_prefix
+
         character(len=clen) :: tempname, fname
-        real(rkind), dimension(:,:,:) :: uperturb, vperturb, wperturb,pperturb,rperturb
+        real(rkind), dimension(:,:,:), allocatable :: uperturb, vperturb, wperturb,pperturb,rperturb
+       
        ! real, dimension(:), allocatable :: A,e,x1d,y1d,z1d
        ! real :: kx, kz, phx, phz, kmin, Amax, du
        ! real :: sigma=10,pi = 3.14159265358
@@ -78,10 +82,13 @@ contains
         !call mpi_bcast(Amax,1,mpirkind,0,MPI_COMM_WORLD,mpi_ierr)
         !A = Amax*e
 
-        call message(0,"Making perturbations")
+        call message(0,"Before adding perturbations")
         call message(2,"Maximum u", P_MAXVAL(abs(u)))
         call message(2,"Maximum v", P_MAXVAL(abs(v)))
         call message(2,"Maximum w", P_MAXVAL(abs(w)))
+        call message(2,"Minimum u", P_MINVAL(abs(u)))
+        call message(2,"Minimum v", P_MINVAL(abs(v)))
+        call message(2,"Minimum w", P_MINVAL(abs(w)))
     
         !nxmodes = min(nmodes_max, ni/4)
         !nzmodes = min(nmodes_max, nk/4)
@@ -112,36 +119,53 @@ contains
        ! enddo
        ! print '(a,6(i4,1x))', 'nrank = ', nrank, size(A), size(e), size(x1d), size(y1d), size(z1d)
        ! !deallocate(A,e,x1d,y1d,z1d)
-        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_u_",nx, "_",ny,"_",nz
-        fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%uperturb,fname, this%gp)
+
+    
+        allocate(uperturb(nxl, nyl, nzl))
+        allocate(vperturb(nxl, nyl, nzl))
+        allocate(wperturb(nxl, nyl, nzl))
+        allocate(pperturb(nxl, nyl, nzl))
+        allocate(rperturb(nxl, nyl, nzl))
         
-        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_v_",nx, "_",ny,"_",nz
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4,A4)") "perturb", "_u_",nx, "_",ny,"_",nz,".dat"
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%vperturb,fname, this%gp)
+        call decomp_2d_read_one(2,uperturb,fname, gp)
+        
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4,A4)") "perturb", "_v_",nx, "_",ny,"_",nz,".dat"
+        fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
+        call decomp_2d_read_one(2,vperturb,fname, gp)
       
-        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_w_",nx, "_",ny,"_",nz
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4,A4)") "perturb", "_w_",nx, "_",ny,"_",nz,".dat"
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%wperturb,fname, this%gp)
+        call decomp_2d_read_one(2,wperturb,fname, gp)
 
-        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_p_",nx, "_",ny,"_",nz
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4,A4)") "perturb", "_p_",nx, "_",ny,"_",nz,".dat"
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%pperturb,fname, this%gp)
+        call decomp_2d_read_one(2,pperturb,fname, gp)
 
-        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4)") "perturb", "_r_",nx, "_",ny,"_",nz
+        write(tempname,"(A7,A3,I4.4,A,I4.4,A,I4.4,A4)") "perturb", "_r_",nx, "_",ny,"_",nz,".dat"
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
-        call decomp_2d_read_one(1,this%rperturb,fname, this%gp)
+        call decomp_2d_read_one(2,rperturb,fname, gp)
 
-        u = u + uperturb*exp(y/8.0d0)
-        v = v + vperturb*exp(y/8.0d0)
-        w = w + wperturb*exp(y/8.0d0)
-        p = p + pperturb*exp(y/8.0d0)
-        rho = rho + rperturb*exp(y/8.0d0)
+        u = u + uperturb    ! * exp(-(y**2.0_rkind)/8.0_rkind)
+        v = v + vperturb    ! * exp(-(y**2.0_rkind)/8.0_rkind)
+        w = w + wperturb    ! * exp(-(y**2.0_rkind)/8.0_rkind)
+        p = p + pperturb    ! * exp(-(y**2.0_rkind)/8.0_rkind)
+        rho = rho + rperturb! * exp(-(y**2.0_rkind)/8.0_rkind)
 
-        call message(0,"Done making perturbations")
+        deallocate(uperturb)
+        deallocate(vperturb)
+        deallocate(wperturb)
+        deallocate(pperturb)
+        deallocate(rperturb)
+
+        call message(0,"After adding perturbations")
         call message(2,"Maximum u", P_MAXVAL(abs(u)))
         call message(2,"Maximum v", P_MAXVAL(abs(v)))
         call message(2,"Maximum w", P_MAXVAL(abs(w)))
+        call message(2,"Minimum u", P_MINVAL(abs(u)))
+        call message(2,"Minimum v", P_MINVAL(abs(v)))
+        call message(2,"Minimum w", P_MINVAL(abs(w)))
     end subroutine 
 
     ! KVM 2021
@@ -257,7 +281,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(sutherlandConductivity) :: thermcond
     !real(rkind), dimension(:,:), allocatable :: tmp2D
     real(rkind) :: mu_ref, c1,c2,du, Rgas1, Rgas2,lambda,kx, kz, ph, S, Sk, T0
-    integer :: i,iounit, nx, ny, nz
+    integer :: i,iounit, nx, ny, nz, nxl, nyl, nzl
     
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ratio, rho_ref, &
@@ -267,10 +291,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
+    ! Global domain sizes
+    nx = decomp%xsz(1);     ny = decomp%ysz(2);    nz = decomp%zsz(3)
+
     ! Local domain sizes
-    nx = decomp%xsz(1) 
-    ny = decomp%ysz(2) 
-    nz = decomp%zsz(3)
+    nxl = decomp%ysz(1);    nyl = decomp%ysz(2);   nzl = decomp%ysz(3)
 
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
@@ -330,7 +355,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         else if (no_pert) then
             call message(0,"No perturbations")
         else
-            call perturb_potential_v2(decomp,x,y,z,Lx,Lz,u,v,w,p,rho,fname_prefix)
+            call perturb_potential_v2(decomp,x,y,z,nx,ny,nz,nxl,nyl,nzl,Lx,Lz,u,v,w,p,rho,fname_prefix)
         endif
 
         ! Initialize gaussian filter mygfil

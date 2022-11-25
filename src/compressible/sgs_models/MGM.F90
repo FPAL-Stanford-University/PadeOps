@@ -1,5 +1,4 @@
 subroutine init_mgm(this)
-   use constants, only: two, eight
    class(sgs_cgrid), intent(inout) :: this
    real(rkind)  :: deltaLES, ceps_2 = 1.0_rkind, cepsT_2 = 1.0_rkind 
 
@@ -10,8 +9,8 @@ subroutine init_mgm(this)
    this%cmgm_y = this%dy**2 / 12.0d0 
    this%cmgm_z = this%dz**2 / 12.0d0
    this%PrCpfac= this%Cp / this%Pr
-   this%c1_mgm = eight * (this%deltaLES**two) * ceps_2 
-   this%c2_mgm = two * (this%deltaLES**two) * cepsT_2
+   this%c1_mgm = eight * (this%deltaLES**2) * ceps_2 
+   this%c2_mgm = two * (this%deltaLES**2) * cepsT_2
 
    call message(1,"MGM model initialized") 
 
@@ -24,13 +23,13 @@ subroutine destroy_mgm(this)
 
 end subroutine
 
-subroutine get_tausgs_mgm(rho, duidxj, gradT, tausgs, Qsgs)
-   use contants, only: eps,two, zero
+subroutine get_tausgs_mgm(this, rho, duidxj, tausgs)
+   class(sgs_cgrid), intent(inout) :: this
    real(rkind), dimension(this%nxL,this%nyL,this%nzL  ), intent(in)  :: rho
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,9), intent(in)  :: duidxj
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,6), intent(out) :: tausgs
 
-   real(rkind)  :: G11, G12, G13, G22, G23, G33 , Gmm , ckl, multfactor
+   real(rkind)  :: G11, G12, G13, G22, G23, G33 , Gmm , ckl, multfactor, maxrho
    integer :: i, j, k
 
    do k = 1, this%nzL
@@ -45,13 +44,14 @@ subroutine get_tausgs_mgm(rho, duidxj, gradT, tausgs, Qsgs)
             G13 = this%cmgm_x*duidxj(i,j,k,1)*duidxj(i,j,k,7) + this%cmgm_y*duidxj(i,j,k,2)*duidxj(i,j,k,8) + &
                   this%cmgm_z*duidxj(i,j,k,3)*duidxj(i,j,k,9)
 
-            G22 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,1) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,2) + &
-                  this%cmgm_z*duidxj(i,j,k,6)*duidxj(i,j,k,3)
-
-            G23 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,4) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,5) + &
+            G22 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,4) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,5) + &
                   this%cmgm_z*duidxj(i,j,k,6)*duidxj(i,j,k,6)
-            G33 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,7) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,8) + &
+
+            G23 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,7) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,8) + &
                   this%cmgm_z*duidxj(i,j,k,6)*duidxj(i,j,k,9)
+
+            G33 = this%cmgm_x*duidxj(i,j,k,7)*duidxj(i,j,k,7) + this%cmgm_y*duidxj(i,j,k,8)*duidxj(i,j,k,8) + &
+                  this%cmgm_z*duidxj(i,j,k,9)*duidxj(i,j,k,9)
 
             Gmm = G11 + G22 + G33 + eps
             
@@ -66,8 +66,8 @@ subroutine get_tausgs_mgm(rho, duidxj, gradT, tausgs, Qsgs)
             tausgs(i,j,k,4) = multfactor * G22
             tausgs(i,j,k,5) = multfactor * G23
             tausgs(i,j,k,6) = multfactor * G33
- 
-            if (ckl .GT. zero) then
+           
+            if (ckl .GE. zero) then
             ! tausgs(i,j,k,:)=tausgs(i,j,k,:)
             else
             tausgs(i,j,k,:) = zero
@@ -76,17 +76,18 @@ subroutine get_tausgs_mgm(rho, duidxj, gradT, tausgs, Qsgs)
          end do
       end do
    end do
+
 end subroutine
 
 
-subroutine get_Qjsgs_mgm(rho, duidxj, gradT, Qjsgs)
-   use contants, only: eps,two, zero
+subroutine get_Qjsgs_mgm(this, rho, duidxj, gradT, Qjsgs)
+   class(sgs_cgrid), intent(inout) :: this
    real(rkind), dimension(this%nxL,this%nyL,this%nzL  ), intent(in)  :: rho
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,9), intent(in)  :: duidxj
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(in)  :: gradT
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(out) :: Qjsgs
 
-   real(rkind)  :: G11, G12, G13, G22, G23, G33, Gmm, ckl, cnT, G1T, G2T, GT3, modG, multfactor
+   real(rkind)  :: G11, G12, G13, G22, G23, G33, Gmm, ckl, cnT, G1T, G2T, G3T, modG, multfactor
    integer :: i, j, k
 
    do k = 1, this%nzL
@@ -101,14 +102,14 @@ subroutine get_Qjsgs_mgm(rho, duidxj, gradT, Qjsgs)
             G13 = this%cmgm_x*duidxj(i,j,k,1)*duidxj(i,j,k,7) + this%cmgm_y*duidxj(i,j,k,2)*duidxj(i,j,k,8) + &
                   this%cmgm_z*duidxj(i,j,k,3)*duidxj(i,j,k,9)
 
-            G22 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,1) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,2) + &
-                  this%cmgm_z*duidxj(i,j,k,6)*duidxj(i,j,k,3)
-
-            G23 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,4) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,5) + &
+            G22 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,4) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,5) + &
                   this%cmgm_z*duidxj(i,j,k,6)*duidxj(i,j,k,6)
 
-            G33 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,7) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,8) + &
+            G23 = this%cmgm_x*duidxj(i,j,k,4)*duidxj(i,j,k,7) + this%cmgm_y*duidxj(i,j,k,5)*duidxj(i,j,k,8) + &
                   this%cmgm_z*duidxj(i,j,k,6)*duidxj(i,j,k,9)
+
+            G33 = this%cmgm_x*duidxj(i,j,k,7)*duidxj(i,j,k,7) + this%cmgm_y*duidxj(i,j,k,8)*duidxj(i,j,k,8) + &
+                  this%cmgm_z*duidxj(i,j,k,9)*duidxj(i,j,k,9)
 
             Gmm = G11 + G22 + G33 + eps
 
@@ -134,7 +135,9 @@ subroutine get_Qjsgs_mgm(rho, duidxj, gradT, Qjsgs)
             Qjsgs(i,j,k,2) = multfactor * G2T
             Qjsgs(i,j,k,3) = multfactor * G3T
  
-            if ((ckl .GT. zero) .AND. (cnT .GT. zero)) then
+            
+
+            if ((ckl .GE. zero) .AND. (cnT .GE. zero)) then
                 ! Qjsgs(i,j,k,:)=Qjsgs(i,j,k,:)
             else
                 Qjsgs(i,j,k,:) = zero
@@ -143,4 +146,5 @@ subroutine get_Qjsgs_mgm(rho, duidxj, gradT, Qjsgs)
          end do
       end do
    end do
+   !print*, sum(abs(Qjsgs(:,:,:,1))), sum(abs(Qjsgs(:,:,:,2))), sum(abs(Qjsgs(:,:,:,3)))
 end subroutine

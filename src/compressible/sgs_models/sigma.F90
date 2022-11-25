@@ -21,7 +21,7 @@ subroutine destroy_sigma(this)
 
 end subroutine
 
-subroutine get_sigma_kernel(duidxj)
+subroutine get_sigma_kernel(this, duidxj)
    class(sgs_cgrid), intent(inout) :: this
    real(rkind), intent(in), dimension(this%nxL,this%nyL,this%nzL,9):: duidxj
 
@@ -93,7 +93,7 @@ subroutine get_sigma_kernel(duidxj)
    end do
 
    !print*, duidxj(5,6,3,:)
-   !print*, sum(abs(nu_sgs(:,:,:)))
+   !print*, sum(abs(this%nusgs(:,:,:)))
    !print*, sum(abs(duidxj(:,:,:,1))), sum(abs(duidxj(:,:,:,2))), sum(abs(duidxj(:,:,:,3)))
    !print*, sum(abs(duidxj(:,:,:,4))), sum(abs(duidxj(:,:,:,5))), sum(abs(duidxj(:,:,:,6)))
    !print*, sum(abs(duidxj(:,:,:,7))), sum(abs(duidxj(:,:,:,8))), sum(abs(duidxj(:,:,:,9)))

@@ -34,21 +34,39 @@ pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 
 /
 
 &CINPUT
-gam   = 1.4D0          ! Ratio of specific heats
-Rgas  = 1.D0           ! Gas constant
-Cmu   = 0.D0              ! LAD coeff  
-Cbeta = 0.D0              ! LAD coeff 
-Ckap  = 0.D0              ! LAD coeff 
-Cdiff = 0.D0              ! LAD coeff 
-Cy    = 0.D0              ! LAD coeff 
-inviscid = .false.        ! Inviscid simulation?
-ns       = 1              ! Number of species + passive tracers
-nrestart = 5000          ! Number of steps between restart dumps
-compute_tke_budget = .false. ! Compute TKE budgets?
-y_bc1    = 1              ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
-y_bcn    = 1              ! Right Y BC (0 => general, 1 => symmetric). Not used if periodic
+gam   = 1.4D0                        ! Ratio of specific heats
+Rgas  = 1.D0                         ! Gas constant
+Cmu   = 0.D0                         ! LAD coeff  
+Cbeta = 0.D0                         ! LAD coeff 
+Ckap  = 0.D0                         ! LAD coeff 
+Cdiff = 0.D0                         ! LAD coeff 
+Cy    = 0.D0                         ! LAD coeff 
+inviscid = .false.                   ! Inviscid simulation?
+ns       = 1                         ! Number of species + passive tracers
+nrestart = 5000                      ! Number of steps between restart dumps
+compute_tke_budget = .false.         ! Compute TKE budgets?
+useSGS   = .false.                   ! SGS Model
+y_bc1    = 1                         ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
+y_bcn    = 1                         ! Right Y BC (0 => general, 1 => symmetric). Not used if periodic
 /
 
+&SGS_MODEL
+DynamicProcedureType     =  0
+SGSmodelID               =  1        !0=Smagorinsky  1=sigma 2=AMD 3=MGM
+useWallDamping           =  .false. 
+ncWall                   =  1.0D0
+Csgs                     =  1.3D0
+DynProcFreq              =  1
+useSGSDynamicRestartFile =  .false.
+DomainAveraged_DynProc   =  .false.
+SGSDynamicRestartFile    =  .false.
+isEddyViscosityModel     =  .true.
+isEddyDiffmodel          =  .true.
+isTurbPrandtlconst       =  .true.
+useDynamicProcedureScalar=  .false.
+PrSGS
+/
+                    =   0.7D0
 &PROBINPUT
 Lx      = 68.D0         ! Pantano 2002        
 Ly      = 59.D0         ! Pantano 2002

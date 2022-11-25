@@ -1,6 +1,6 @@
 module sgsmod_cgrid
     use kind_parameters, only: rkind, clen
-    use constants,       only: imi, zero !,one,two,three,half, four,eight, nine, six, kappa, piby2 
+    use constants,       only: imi, zero, two, eight, eps, third, one, two, three, half, four,eight, nine, six, kappa, pi
     use decomp_2d
     use gridtools,       only: alloc_buffs, destroy_buffs
     use exits, only: GracefulExit, message
@@ -17,20 +17,19 @@ module sgsmod_cgrid
     type :: sgs_cgrid
         private 
         class(decomp_info), pointer :: decomp
-        integer :: SGSmodelID, mid, DynamicProcedureType
-        real(rkind) :: cmodel_global,csgs,turbPrandtl
+        integer :: SGSmodelID, mid, DynamicProcedureType, DynProcFreq
+        real(rkind) :: cmodel_global
         logical :: isEddyViscosityModel, isEddyDiffmodel, isTurbPrandtlconst
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij
         real(rkind), dimension(:,:,:),   allocatable :: nusgs, kapsgs
         logical ::  isPeriodic = .false.
 
         integer :: nxL, nyL, nzL
-        real(rkind) :: dx, dy, dz, deltaLES, camd_x, camd_y, camd_z
+        real(rkind) :: dx, dy, dz, deltaLES
 
-        integer :: SGSmodelID = 0, DynProcFreq = 0, DynamicProcedureType = 0
-        real(rkind) :: Csgs = 1.0_rkind, ncWall = 1.0_rkind, PrSGS = 1.0_rkind
-        logical :: useWallDamping = .false., usePrSGS = .true., useSGSDynamicRestartFile = .false. 
-        logical :: DomainAveraged_DynProc = .false., useDynamicProcedureScalar = .false.
+        real(rkind) :: Csgs, ncWall, PrSGS, Cp, Pr
+        logical :: useWallDamping, useSGSDynamicRestartFile
+        logical :: DomainAveraged_DynProc, useDynamicProcedureScalar
         character(len=clen) :: SGSDynamicRestartFile
 
         !! model constant values/properties
@@ -39,11 +38,23 @@ module sgsmod_cgrid
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
+            procedure, private :: init_smagorinsky
+            procedure, private :: init_sigma
+            procedure, private :: init_amd
+            procedure, private :: init_mgm
             !! ALL SGS SOURCE/SINK PROCEDURES
             procedure          :: getQjSGS
             procedure          :: getTauSGS
             procedure, private :: get_SGS_kernel
+            procedure, private :: get_smagorinsky_kernel
+            procedure, private :: get_sigma_kernel
+            procedure, private :: get_amd_kernel
+            procedure, private :: get_amd_Dkernel
+            procedure, private :: get_tausgs_mgm
+            procedure, private :: get_Qjsgs_mgm
             procedure, private :: multiply_by_model_constant 
+            procedure, private :: get_Sij_from_duidxj
+            procedure, private :: get_modS_Sii
             !! ALL DESTROY PROCEDURES
             procedure          :: destroy
             procedure, private :: destroy_smagorinsky 
@@ -52,12 +63,12 @@ module sgsmod_cgrid
             procedure, private :: destroy_mgm
             !! ACCESSORS 
             procedure          :: getMax_nusgs
-            procedure          :: getMax_kapSGS
+            procedure          :: getMax_kapsgs
     end type 
 
 contains
 
-#include "sgs_models/init_destroy_sgs_cgrid.F90"
+!!!#include "sgs_models/init_destroy_sgs_cgrid.F90"
 #include "sgs_models/smagorinsky.F90"
 #include "sgs_models/sigma.F90"
 #include "sgs_models/AMD.F90"
@@ -72,12 +83,23 @@ subroutine init(this, decomp, Cp, Pr, dx, dy, dz, inputfile)
   real(rkind) , intent(in) :: Cp, Pr, dx, dy, dz
   character(len=clen), intent(in) :: inputfile
 
-  integer :: SGSmodelID = 0, DynProcFreq = 0, DynamicProcedureType = 0
+  integer :: SGSmodelID = 0, DynProcFreq = 1, DynamicProcedureType = 0, ierr
   real(rkind) :: Csgs = 1.0_rkind, ncWall = 1.0_rkind, PrSGS = 1.0_rkind
-  logical :: useWallDamping = .false., usePrSGS = .true., useSGSDynamicRestartFile = .false. 
+  logical :: useWallDamping = .false., useSGSDynamicRestartFile = .false. 
   logical :: DomainAveraged_DynProc = .false., useDynamicProcedureScalar = .false.
   logical :: isEddyViscosityModel = .false., isEddyDiffmodel = .true., isTurbPrandtlconst = .true.
   character(len=clen) :: SGSDynamicRestartFile
+
+   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID,        &
+                  useWallDamping, ncWall, Csgs, DynProcFreq,     &
+                  useSGSDynamicRestartFile,                      &
+                  DomainAveraged_DynProc, SGSDynamicRestartFile, &
+                  useDynamicProcedureScalar, PrSGS,              &
+                  isEddyViscosityModel, isEddyDiffmodel, isTurbPrandtlconst
+
+   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+   read(unit=123, NML=SGS_MODEL)
+   close(123)
 
    this%decomp => decomp
    this%Cp = Cp
@@ -99,20 +121,9 @@ subroutine init(this, decomp, Cp, Pr, dx, dy, dz, inputfile)
    allocate( this%nusgs(this%nxL, this%nyL, this%nzL)   )
    allocate(this%kapsgs(this%nxL, this%nyL, this%nzL)   )
 
-   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID,        &
-                  useWallDamping, ncWall, Csgs, usePrSGS,        &
-                  DynProcFreq, useSGSDynamicRestart,             &
-                  DomainAveraged_DynProc, SGSDynamicRestartFile, &
-                  isEddyViscosityModel, isEddyDiffmodel, isTurbPrandtlconst, &
-                  UseDynamicProcedureScalar, PrSGS      
-
-   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
-   read(unit=123, NML=SGS_MODEL)
-   close(123)
-
    this%SGSmodelID = SGSmodelID;             this%Csgs = Csgs;
    this%useWallDamping = useWallDamping;     this%ncWall = ncWall
-   this%usePrSGS = usePrSGS;                 this%PrSGS = PrSGS
+   this%PrSGS = PrSGS
 
    this%DynProcFreq = DynProcFreq;                               this%useSGSDynamicRestartFile = useSGSDynamicRestartFile
    this%DomainAveraged_DynProc = DomainAveraged_DynProc;         this%SGSDynamicRestartFile = SGSDynamicRestartFile
@@ -136,7 +147,7 @@ subroutine init(this, decomp, Cp, Pr, dx, dy, dz, inputfile)
     !!!! Safeguards against wrong inputs !!!!!
     if(this%isEddyDiffModel) then
 
-      if( (.not. this%isEddyViscosityModel) .and. ) then
+      if( (.not. this%isEddyViscosityModel) ) then
           call GracefulExit("It can be an EddyDiff Model only if it is an EddyViscosityModel", 213)
       endif
 
@@ -193,7 +204,7 @@ subroutine getTauSGS(this, duidxj, rho, tausgs)
       call this%get_Sij_from_duidxj(duidxj) 
       
       ! Step 1: Get mag-square and trace of S_ij
-      call this%get_modS_Sii(duidxj, modS_sq, Sii)
+      call this%get_modS_Sii(modS_sq, Sii)
 
       ! Step 2: Get TKE (q)
       q = twothird * CI * (this%deltaLES**2) * rho * modS_sq
@@ -230,10 +241,13 @@ subroutine getTauSGS(this, duidxj, rho, tausgs)
       tausgs(:,:,:,4) = -two * rho * this%nusgs * (this%S_ij(:,:,:,4)-Sii) + q
       tausgs(:,:,:,5) = -two * rho * this%nusgs * this%S_ij(:,:,:,5)
       tausgs(:,:,:,6) = -two * rho * this%nusgs * (this%S_ij(:,:,:,6)-Sii) + q
+  
    else
      !! call MGM model from here
      call this%get_Sij_from_duidxj(duidxj)
      call this%get_tausgs_mgm(rho, duidxj, tausgs)
+    
+     
    end if
 
 end subroutine
@@ -244,7 +258,8 @@ subroutine getQjSGS(this, duidxj, rho, gradT, Qjsgs)
    real(rkind), dimension(this%nxL, this%nyL, this%nzL  ), intent(in)  :: rho
    real(rkind), dimension(this%nxL, this%nyL, this%nzL,3), intent(in)  :: gradT
    real(rkind), dimension(this%nxL, this%nyL, this%nzL,3), intent(out) :: Qjsgs
-   real(rkind) :: k
+
+   integer :: k
 
    if (this%isEddyDiffModel) then
       if (this%isTurbPrandtlconst) then

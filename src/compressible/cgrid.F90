@@ -141,7 +141,7 @@ contains
         character(len=clen) :: inputdir
         character(len=clen) :: vizprefix = "cgrid"
         logical :: reduce_precision = .true.
-        real(rkind) :: tviz = zero
+        real(rkind) :: tviz = zero, Pr, Cp !! -- Pr, Cp need to be fixed
         character(len=clen), dimension(:), allocatable :: varnames
         logical :: periodicx = .true. 
         logical :: periodicy = .true. 
@@ -309,14 +309,17 @@ contains
 
         Cp = 3.5_rkind
         Pr = 0.7_rkind  !!!needed to be fixed
-
+        
         this%useSGS = useSGS
+
         if(this%useSGS) then
             call alloc_buffs(this%tausgs,6,'y',this%decomp)
             call alloc_buffs(this%Qjsgs, 3,'y',this%decomp)
-
+           
             allocate(this%sgsmodel)
+            
             call this%sgsmodel%init(this%decomp, Cp, Pr, this%dx, this%dy, this%dz, inputfile)
+         
         endif
 
         ! Finally, set the local array dimensions
