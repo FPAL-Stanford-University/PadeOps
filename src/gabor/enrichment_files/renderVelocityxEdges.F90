@@ -1,4 +1,4 @@
-subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
+subroutine renderLocalVelocityEdges(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     use exits,     only: message
     use omp_lib,   only: omp_get_thread_num, omp_get_num_threads
     use decomp_2d, only: nrank

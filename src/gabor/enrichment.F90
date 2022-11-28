@@ -306,6 +306,10 @@ contains
       this%haloBuff(:,12))
 
     if (periodicBCs(1)) then
+        call this%renderLocalVelocity(this%x+Lx,this%y,this%z,this%kx,this%ky,this%kz,&
+          this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI)
+        call this%renderLocalVelocity(this%x-Lx,this%y,this%z,this%kx,this%ky,this%kz,&
+          this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI)
       ! TODO:
       ! Need to make copies of modes on the periodic boundary and shift their
       ! location by Lx (or -Lx) and then pass them back through the velocity
