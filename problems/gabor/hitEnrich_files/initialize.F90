@@ -254,6 +254,15 @@ subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
     real(rkind),                     intent(in)    :: tsim, Re
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:),   intent(inout) :: urhs, vrhs, wrhs
+    real(rkind) :: dx, t, R
+
+    R = Re
+    t = tsim
+    dx = mesh(2,1,1,1) - mesh(1,1,1,1)
+
+    urhs = urhs + 0.d0
+    vrhs = vrhs + 0.d0
+    wrhs = wrhs + 0.d0
 
 end subroutine
 
@@ -262,7 +271,9 @@ subroutine getLargeScaleParams(KE,L,LES)
   use incompressibleGrid, only: igrid
   real(rkind), dimension(:,:,:), intent(out) :: KE, L
   type(igrid), intent(in) :: LES
+  real(rkind) :: dx
 
+  dx = LES%dx
   KE = 1.d0
   L = 1.d0
 

@@ -1,249 +1,265 @@
-subroutine sendRecvHaloModes(this,recvBuff)
-  class(enrichmentOperator), intent(inout) :: this
-  real(rkind), dimension(:,:), allocatable, intent(inout) :: recvBuff
-  integer :: Nhalo
-
-  call this%howManyHaloModes(Nhalo)
-
-  if (allocated(recvBuff)) then
-    if (size(recvBuff,1) < Nhalo) then
-      deallocate(recvBuff)
-      allocate(recvBuff(Nhalo + 100,12))
-    end if
-  else
-    allocate(recvBuff(Nhalo+100,12))
-  end if
-
-
-
-end subroutine
-
-subroutine howManyHaloModes(this,Nhalo)
-  use decomp_2d, only: DECOMP_2D_COMM_CART_X
+subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff,last,extraModeData)
+  ! Send and recieve Gabor modes in the halo region of the MPI ranks
+  ! Inputs:
+  !     modeData --> all mode attributes, i.e. physical location, wave-vecotr
+  !                  components, and vector component amplitudes
+  !     coordinate --> "y" or "z" specifying which component of the halo is
+  !                    being transferred
+  !     extraModeData (optional) --> same info as modeData, but for addtional
+  !                                  modes not native to the MPI rank
+  ! In/Out:
+  !     haloBuff --> buffer array to store the halo mode info
+  !
+  ! Outputs:
+  !     last --> The last index of haloBuff with relevant mode data. This is 
+  !              because the input haloBuff may be larger than required for the
+  !              output data and so any data beyond index "last" is erroneous
+  !              and should not be used when rendering the velocity field
   class(enrichmentOperator), intent(inout), target :: this
-  integer, intent(out) :: Nhalo
+  real(rkind), dimension(:,:), intent(in), target :: modeData
+  character(len=1), intent(in) :: coordinate
+  real(rkind), dimension(:,:), allocatable, target, intent(inout) :: haloBuff
+  integer, intent(out) :: last
+  real(rkind), dimension(:,:), intent(in), target, optional :: extraModeData
+
+  integer :: coordID
+  real(rkind), dimension(:), pointer :: loc
   integer :: n
-  real(rkind) :: yhaloMin, yhaloMax, zhaloMin, zhaloMax
-  real(rkind), dimension(:,:), pointer :: ySendBuff1,  ySendBuff2, &
-    zSendBuff1, zSendBuff2, yRecvBuff1, yRecvBuff2, zRecvBuff1, zRecvBuff2
-  logical, dimension(3) :: periodic
-  integer :: y1SendCount, y2SendCount, z1SendCount, z2SendCount
-  integer :: y1RecvCount, y2RecvCount, z1RecvCount, z2RecvCount
-  integer :: y1idx, y2idx, z1idx, z2idx
+  real(rkind) :: haloMin, haloMax
+  real(rkind), dimension(:,:), pointer :: sendBuff1,  sendBuff2, &
+    recvBuff1, recvBuff2
+  integer :: sendCount1, sendCount2, recvCount1, recvCount2
+  integer :: idx1, idx2
   integer :: st, en, ierr
-  integer :: tagY1, tagY2, tagZ1, tagZ2
-  integer, dimension(96) :: sendReq, recvReq
+  integer :: tag1, tag2
+  integer :: sendID, recvID
+  integer, dimension(48) :: sendReq, recvReq
   real(rkind) :: Ly, Lz
-  real(rkind) :: tol = 1.d-12
-  real(rkind) :: PEymin, PEymax, PEzmin, PEzmax
+  real(rkind) :: PEmin, PEmax
+  real(rkind), dimension(3) :: periodicCorrection
+  real(rkind), dimension(2) :: Dom
+
+  ! The following are a subset of the MPI cartesion communicator attributes
+  real(rkind) :: coord, dim
+  logical :: periodic
+  integer, dimension(2) :: neigh
+
+  call assert(coordinate == 'y' .or. coordinate == 'z','Must select'//&
+    ' coordinate to be "y" or "z"')
+
+  sendBuff1 => null(); sendBuff2 => null()
+  recvBuff1 => null(); recvBuff2 => null()
 
   Ly = yDom(2) - yDom(1)
   Lz = zDom(2) - zDom(1)
+    
+  ! Periodic correction if using periodic boundaries
+  periodicCorrection = 0.d0
 
-  PEymin = this%QHgrid%yE(1)
-  PEymax = this%QHgrid%yE(this%QHgrid%gpC%xsz(2)+1)
-  PEzmin = this%QHgrid%zE(1)
-  PEzmax = this%QHgrid%zE(this%QHgrid%gpC%xsz(3)+1)
+  select case (coordinate)
+  case ('y')
+    coordID = 2
 
-  ! Define the cutoff location for halo modes
-  yhaloMin = this%Qhgrid%yE(1) + &
-    & real(this%nysupp/2,rkind)*this%smallScales%dy
-  yhaloMax = this%Qhgrid%yE(this%QHgrid%gpC%xsz(2)+1) - &
-    & real(this%nysupp/2,rkind)*this%smallScales%dy
+    PEmin = this%QHgrid%yE(1)
+    PEmax = this%QHgrid%yE(this%QHgrid%gpC%xsz(2)+1)
   
-  zhaloMin = this%Qhgrid%zE(1) + &
-    & real(this%nzsupp/2,rkind)*this%smallScales%dz
-  zhaloMax = this%Qhgrid%zE(this%QHgrid%gpC%xsz(3)+1) - &
-    & real(this%nzsupp/2,rkind)*this%smallScales%dz
+    ! Define the cutoff location for halo modes
+    haloMin = this%Qhgrid%yE(1) + &
+      & real(this%nysupp/2,rkind)*this%smallScales%dy
+    haloMax = this%Qhgrid%yE(this%QHgrid%gpC%xsz(2)+1) - &
+      & real(this%nysupp/2,rkind)*this%smallScales%dy
+    
+    if (periodicBCs(2)) periodicCorrection  = [0.d0, Ly, 0.d0]
+    
+    Dom      = yDom
+    coord    = coords(1)
+    dim      = dims(1)
+    periodic = periodicBCs(2)
+    neigh    = [neighbour(1), neighbour(2)]
+    loc      => modeData(:,2)
+  case ('z')
+    coordID = 3
+
+    PEmin = this%QHgrid%zE(1)
+    PEmax = this%QHgrid%zE(this%QHgrid%gpC%xsz(3)+1)
+  
+    ! Define the cutoff location for halo modes
+    haloMin = this%Qhgrid%zE(1) + &
+      & real(this%nzsupp/2,rkind)*this%smallScales%dz
+    haloMax = this%Qhgrid%zE(this%QHgrid%gpC%xsz(3)+1) - &
+      & real(this%nzsupp/2,rkind)*this%smallScales%dz
+
+    if (periodicBCs(3)) periodicCorrection  = [0.d0, 0.d0, Lz]
+    
+    Dom      = zDom
+    coord    = coords(2)
+    dim      = dims(2)
+    periodic = periodicBCs(3)
+    neigh    = [neighbour(3), neighbour(4)]
+    loc      => modeData(:,3)
+  end select
 
   ! Find all modes inside halo regions
-  do n = 1,this%nmodes
-    if (this%y(n) < yhaloMin) then
-      y1SendCount = y1SendCount + 1
-    else if (this%y(n) > yhaloMax) then
-      y2SendCount = y2SendCount + 1
-    end if
-
-    if (this%z(n) < zhaloMin) then
-      z1SendCount = z1SendCount + 1
-    else if (this%z(n) > zhaloMax) then
-      z2SendCount = z2SendCount + 1
-    end if
-  end do
-
-  if (allocated(this%sendBuff)) then
-    if (size(this%sendBuff,1) < y1SendCount + y2SendCount + z1SendCount + &
-      z2SendCount) then
-      deallocate(this%sendBuff)
-      allocate(this%sendBuff(y1SendCount + y2SendCount + z1SendCount + &
-        z2SendCount + 100,12))
-    end if
-  else
-    allocate(this%sendBuff(y1SendCount + y2SendCount + z1SendCount + &
-      z2SendCount + 100,12))
+  sendCount1 = 0
+  sendCount2 = 0
+  call getSendCount(loc,haloMin,haloMax,sendCount1,sendCount2)
+  if (present(extraModeData)) then
+    loc => extraModeData(:,coordID)
+    call getSendCount(loc,haloMin,haloMax,sendCount1,sendCount2)
+    loc => modeData(:,coordID)
   end if
 
-  st = 1
-  en = y1SendCount
-  ySendBuff1 => this%sendBuff(st:en,:)
+  if (allocated(this%sendBuff)) then
+    if (size(this%sendBuff,1) < sendCount1 + sendCount2) then
+      deallocate(this%sendBuff)
+      allocate(this%sendBuff(sendCount1 + sendCount2,12))
+    end if
+  else
+    allocate(this%sendBuff(sendCount1 + sendCount2,12))
+  end if
+
+  en = 0
+  if (sendCount1 > 0) then
+    st = en + 1
+    en = en + sendCount1
+    sendBuff1 => this%sendBuff(st:en,:)
+  end if
   
-  st = en + 1
-  en = en + y2SendCount
-  ySendBuff2 => this%sendBuff(st:en,:)
-  
-  st = en + 1
-  en = en + z1SendCount
-  zSendBuff1 => this%sendBuff(st:en,:)
-  
-  st = en + 1
-  en = en + z2SendCount
-  zSendBuff2 => this%sendBuff(st:en,:)
+  if (sendCount2 > 0) then
+    st = en + 1
+    en = en + sendCount2
+    sendBuff2 => this%sendBuff(st:en,:)
+  end if
 
   ! Pack the send buffers
   ! We must check for two different cases:
-  ! --> Cases 1: is the mode within the halo region?
-  ! --> Cases 2: If so, does the halo-region correspond to a periodic
-  !              boundary?
+  ! --> Case 1: is the mode within the halo region?
+  ! --> Case 2: If so, does the halo-region correspond to a periodic
+  !             boundary?
   ! If Case 2 is true then we must shift the mode location by one
   ! domain length for the velocity rendering routine to work
-  y1idx = 1; y2idx = 1; z1idx = 1; z2idx = 1
-  do n = 1,this%nmodes
-    if (this%y(n) < yhaloMin .and. abs(PEymin - yDom(1)) < tol) then
-      
-      call this%copyMode(ySendBuff1(y1idx,:),n,[0.d0,Ly,0.d0])
-      y1idx = y1idx + 1
-    else if (this%y(n) < yhaloMin) then
-      call this%copyMode(ySendBuff1(y1idx,:),n)
-      y1idx = y1idx + 1
-    else if (this%y(n) > yhaloMax .and. abs(PEymax - yDom(2)) < tol) then
-      call this%copyMode(ySendBuff2(y2idx,:),n,[0.d0,-Ly,0.d0])
-      y2idx = y2idx + 1
-    else if (this%y(n) > yhaloMax) then
-      call this%copyMode(ySendBuff2(y2idx,:),n)
-      y2idx = y2idx + 1
-    end if
-
-    if (this%z(n) < zhaloMin .and. abs(PEzmin - zDom(1)) < tol) then
-      call this%copyMode(zSendBuff1(z1idx,:),n,[0.d0,0.d0,Lz])
-      z1idx = z1idx + 1
-    else if (this%z(n) < zhaloMin) then
-      call this%copyMode(zSendBuff1(z1idx,:),n)
-      z1idx = z1idx + 1
-    else if (this%z(n) > zhaloMax .and. abs(PEzmax - zDom(2)) < tol) then
-      call this%copyMode(zSendBuff2(z2idx,:),n,[0.d0,0.d0,-Lz])
-      z2idx = z2idx + 1
-    else if (this%z(n) > zhaloMax) then
-      call this%copyMode(zSendBuff2(z2idx,:),n)
-      z2idx = z2idx + 1
-    end if
-  end do
-
+  idx1 = 1
+  idx2 = 1
+  call packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,modeData,&
+    periodicCorrection,sendBuff1,sendBuff2,idx1,idx2)
+  if (present(extraModeData)) then
+    loc => extraModeData(:,coordID)
+    call packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,extraModeData,&
+      periodicCorrection,sendBuff1,sendBuff2,idx1,idx2)
+    loc => modeData(:,coordID)
+  end if
+  
   ! Let your neighbors know how much data you will be sending
-  tagY1 = coords(1)
-  if (coords(1) == dims(1)-1 .and. periodicBCs(2)) then
-    tagY2 = 0
+  tag1 = coord
+  if (coord == dim - 1 .and. periodic) then
+    tag2 = 0
   else
-    tagY2 = coords(1) + 1
+    tag2 = coord + 1
   end if
   
-  tagZ1 = coords(2)
-  if (coords(2) == dims(2)-1 .and. periodicBCs(3)) then
-    tagZ2 = 0
-  else
-    tagZ2 = coords(2) + 1
-  end if
-  
-  ! Receive from lower y-rank
-  call MPI_IRecv(y1RecvCount,1,MPI_INTEGER,neighbour(1),tagY1,&
+  ! Receive from lower rank
+  call MPI_IRecv(recvCount1,1,MPI_INTEGER,neigh(1),tag1,&
     DECOMP_2D_COMM_CART_X,recvReq(1),ierr)
-  ! Receive from higher y-rank
-  call MPI_IRecv(y2RecvCount,1,MPI_INTEGER,neighbour(2),tagY2,&
+  ! Receive from higher rank
+  call MPI_IRecv(recvCount2,1,MPI_INTEGER,neigh(2),tag2,&
     DECOMP_2D_COMM_CART_X,recvReq(2),ierr)
-  ! Receive from lower z-rank
-  call MPI_IRecv(z1RecvCount,1,MPI_INTEGER,neighbour(3),tagZ1,&
-    DECOMP_2D_COMM_CART_X,recvReq(3),ierr)
-  ! Receive from higher z-rank
-  call MPI_IRecv(z2RecvCount,1,MPI_INTEGER,neighbour(4),tagZ2,&
-    DECOMP_2D_COMM_CART_X,recvReq(4),ierr)
   
-  ! Send to lower y-rank
-  call MPI_ISend(y1SendCount,1,MPI_INTEGER,neighbour(1),tagY1,&
+  ! Send to lower rank
+  call MPI_ISend(sendCount1,1,MPI_INTEGER,neigh(1),tag1,&
     DECOMP_2D_COMM_CART_X,sendReq(1),ierr)
-  ! Send to higher y-rank
-  call MPI_ISend(y2SendCount,1,MPI_INTEGER,neighbour(2),tagY2,&
+  ! Send to higher rank
+  call MPI_ISend(sendCount2,1,MPI_INTEGER,neigh(2),tag2,&
     DECOMP_2D_COMM_CART_X,sendReq(2),ierr)
-  ! Send to lower z-rank
-  call MPI_ISend(z1SendCount,1,MPI_INTEGER,neighbour(3),tagZ1,&
-    DECOMP_2D_COMM_CART_X,sendReq(3),ierr)
-  ! Send to higher z-rank
-  call MPI_ISend(z2SendCount,1,MPI_INTEGER,neighbour(4),tagZ2,&
-    DECOMP_2D_COMM_CART_X,sendReq(4),ierr)
 
-  call MPI_WaitAll(8,[recvReq(1:4), sendReq(1:4)],MPI_STATUSES_IGNORE,ierr)
+  call MPI_WaitAll(4,[recvReq(1:2), sendReq(1:2)],MPI_STATUSES_IGNORE,ierr)
 
-  st = 1
-  en = y1RecvCount
-  yRecvBuff1 => this%haloBuff(st:en,:)
+  ! Allocate memory for the recieve buffers
+  if (allocated(haloBuff)) then
+    if (size(haloBuff,1) < recvCount1 + recvCount2) then
+      deallocate(haloBuff)
+    end if
+  end if
+  if (.not. allocated(haloBuff)) then
+    if (recvCount1 + recvCount2 > 0) then
+      allocate(haloBuff(recvCount1 + recvCount2,12))
+    end if
+  end if
+  if (allocated(haloBuff)) halobuff = 0.d0
 
-  st = en + 1
-  en = en + y2RecvCount
-  yRecvBuff2 => this%haloBuff(st:en,:)
+  en = 0
+  if (recvCount1 > 0) then
+    st = en + 1
+    en = en + recvCount1
+    recvBuff1 => haloBuff(st:en,:)
+  end if
 
-  st = en + 1
-  en = en + z1RecvCount
-  zRecvBuff1 => this%haloBuff(st:en,:)
+  if (recvCount2 > 0) then
+    st = en + 1
+    en = en + recvCount2
+    recvBuff2 => haloBuff(st:en,:)
+    last = en
+  end if
 
-  st = en + 1
-  en = en + z2RecvCount
-  zRecvBuff2 => this%haloBuff(st:en,:)
-  
-  ! Send the mode info to neighbors
+  call message(3,'Sending/Receiving modes')
+  sendID = 1
+  recvID = 1
   do n = 1,12
-    call MPI_IRecv(yRecvBuff1(:,n),y1RecvCount,mpirkind,neighbour(1),tagY1,&
-      DECOMP_2D_COMM_CART_X,recvReq(n),ierr)
-    call MPI_IRecv(yRecvBuff2(:,n),y2RecvCount,mpirkind,neighbour(2),tagY2,&
-      DECOMP_2D_COMM_CART_X,recvReq(n+12*1),ierr)
-    call MPI_IRecv(zRecvBuff1(:,n),z1RecvCount,mpirkind,neighbour(3),tagZ1,&
-      DECOMP_2D_COMM_CART_X,recvReq(n+12*2),ierr)
-    call MPI_IRecv(zRecvBuff2(:,n),z2RecvCount,mpirkind,neighbour(4),tagZ2,&
-      DECOMP_2D_COMM_CART_X,recvReq(n+12*3),ierr)
-  
-    call MPI_ISend(ySendBuff1(:,n),y1SendCount,mpirkind,neighbour(1),tagY1,&
-     DECOMP_2D_COMM_CART_X,sendReq(n),ierr) 
-    call MPI_ISend(ySendBuff2(:,n),y2SendCount,mpirkind,neighbour(2),tagY2,&
-      DECOMP_2D_COMM_CART_X,sendReq(n+12*1),ierr)
-    call MPI_ISend(zSendBuff1(:,n),z1SendCount,mpirkind,neighbour(3),tagZ1,&
-      DECOMP_2D_COMM_CART_X,sendReq(n+12*2),ierr)
-    call MPI_ISend(zSendBuff2(:,n),z2SendCount,mpirkind,neighbour(4),tagZ2,&
-      DECOMP_2D_COMM_CART_X,sendReq(n+12*3),ierr)
+    if (sendCount1 > 0) then
+      call MPI_ISend(sendBuff1(:,n),sendCount1,mpirkind,neigh(1),tag1,&
+        DECOMP_2D_COMM_CART_X,sendReq(sendID),ierr) 
+      sendID = sendID + 1
+    end if
+    if (recvCount2 > 0) then
+      call MPI_IRecv(recvBuff2(:,n),recvCount2,mpirkind,neigh(2),tag2,&
+        DECOMP_2D_COMM_CART_X,recvReq(recvID),ierr)
+      recvID = recvID + 1
+    end if
+
+    if (sendCount2 > 0) then
+      call MPI_ISend(sendBuff2(:,n),sendCount2,mpirkind,neigh(2),tag2,&
+        DECOMP_2D_COMM_CART_X,sendReq(sendID),ierr)
+      sendID = sendID + 1
+    end if
+    if (recvCount1 > 0) then
+      call MPI_IRecv(recvBuff1(:,n),recvCount1,mpirkind,neigh(1),tag1,&
+        DECOMP_2D_COMM_CART_X,recvReq(recvID),ierr)
+      recvID = recvID + 1
+    end if
   end do
-  call MPI_WaitAll(96,[recvReq, sendReq],MPI_STATUSES_IGNORE,ierr)
+  call MPI_WaitAll(recvID + sendID - 2,[recvReq(1:recvID-1), sendReq(1:sendID-1)], &
+    MPI_STATUSES_IGNORE,ierr)
+  
+  call message(3,'All modes sent/received!')
+  
+  nullify(sendBuff1, sendBuff2)
+  nullify(recvBuff1, recvBuff2)
+  nullify(loc)
 end subroutine
 
-subroutine copyMode(this,cpyArr,modeID,periodicCorrection)
-  class(enrichmentOperator), intent(inout) :: this
-  real(rkind), dimension(12), intent(inout) :: cpyArr
+subroutine copyMode(modeData, cpyArr, periodicCorrection)
+  real(rkind), dimension(:), intent(in) :: modeData
+  real(rkind), dimension(:), intent(inout) :: cpyArr
   real(rkind), dimension(3), intent(in), optional :: periodicCorrection
   real(rkind), dimension(3) :: PC
-  integer, intent(in) :: modeID
 
   PC = 0.d0
   if (present(periodicCorrection)) PC = periodicCorrection
 
-  cpyArr(1)  = this%x(modeID) + PC(1)
-  cpyArr(2)  = this%y(modeID) + PC(2)
-  cpyArr(3)  = this%z(modeID) + PC(3)
+  cpyArr(1)  = modeData(1)  + PC(1)
+  cpyArr(2)  = modeData(2)  + PC(2)
+  cpyArr(3)  = modeData(3)  + PC(3)
   
-  cpyArr(4)  = this%kx(modeID)
-  cpyArr(5)  = this%ky(modeID)
-  cpyArr(6)  = this%kz(modeID)
-  
-  cpyArr(7)  = this%uhatR(modeID)
-  cpyArr(8)  = this%uhatI(modeID)
-  cpyArr(9)  = this%vhatR(modeID)
-  cpyArr(10) = this%vhatI(modeID)
-  cpyArr(11) = this%whatR(modeID)
-  cpyArr(12) = this%whatI(modeID)
+  cpyArr(4)  = modeData(4) 
+  cpyArr(5)  = modeData(5) 
+  cpyArr(6)  = modeData(6) 
+
+  cpyArr(7)  = modeData(7) 
+  cpyArr(8)  = modeData(8) 
+  cpyArr(9)  = modeData(9) 
+  cpyArr(10) = modeData(10) 
+  cpyArr(11) = modeData(11) 
+  cpyArr(12) = modeData(12)
+
 end subroutine
   
 subroutine getNeighbours(neighbour)
@@ -318,7 +334,7 @@ subroutine testMPIsendRecv()
   call MPI_ISend(nrank,1,MPI_INTEGER,neighbour(4),tagZ2,&
     DECOMP_2D_COMM_CART_X,sendReq(4),ierr)
 
-  call MPI_WaitAll(8,[recvReq, sendReq],MPI_STATUSES_IGNORE,ierr)
+  call MPI_WaitAll(8,[recvReq(1:4), sendReq(1:4)],MPI_STATUSES_IGNORE,ierr)
 
   do n = 1,nproc
     if (nrank == n-1) then
@@ -336,3 +352,48 @@ subroutine testMPIsendRecv()
   call message('Test PASSED!')
 end subroutine
 
+subroutine getSendCount(loc,haloMin,haloMax,sendCount1,sendCount2)
+  real(rkind), dimension(:), intent(in) :: loc
+  real(rkind), intent(in) :: haloMin, haloMax
+  integer, intent(inout) :: sendCount1, sendCount2
+  integer :: n
+
+  do n = 1,size(loc)
+    if (loc(n) < haloMin) then
+      sendCount1 = sendCount1 + 1
+    else if (loc(n) > haloMax) then
+      sendCount2 = sendCount2 + 1
+    end if
+  end do
+end subroutine
+
+subroutine packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,modeData,&
+    periodicCorrection,sendBuff1,sendBuff2,idx1,idx2)
+  real(rkind), dimension(:), intent(in) :: loc
+  real(rkind), intent(in) :: haloMin, haloMax, PEmin, PEmax
+  real(rkind), dimension(2), intent(in) :: Dom
+  real(rkind), dimension(:,:), intent(in) :: modeData
+  real(rkind), dimension(3), intent(in) :: periodicCorrection
+  real(rkind), dimension(:,:), intent(inout) :: sendBuff1, sendBuff2
+  integer, intent(inout) :: idx1, idx2
+  real(rkind) :: tol = 1.d-12
+  integer :: n
+
+  do n = 1,size(loc)
+    if (loc(n) < haloMin .and. abs(PEmin - Dom(1)) < tol .and. &
+      periodicBCs(2)) then
+      call copyMode(modeData(n,:), sendBuff1(idx1,:), periodicCorrection)
+      idx1 = idx1 + 1
+    else if (loc(n) < haloMin .and. abs(PEmin - Dom(1)) >= tol) then
+      call copyMode(modeData(n,:), sendBuff1(idx1,:))
+      idx1 = idx1 + 1
+    else if (loc(n) > haloMax .and. abs(PEmax - Dom(2)) < tol .and. &
+      periodicBCs(2)) then
+      call copyMode(modeData(n,:), sendBuff2(idx2,:), -periodicCorrection)
+      idx2 = idx2 + 1
+    else if (loc(n) > haloMax .and. abs(PEmax - Dom(2)) >= tol) then
+      call copyMode(modeData(n,:), sendBuff2(idx2,:))
+      idx2 = idx2 + 1
+    end if
+  end do
+end subroutine

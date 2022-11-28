@@ -12,11 +12,10 @@ subroutine generateIsotropicModes(this)
   integer :: isz, jsz, ksz
   real(rkind), dimension(:),         allocatable :: kedge, kmag, dk, rand1, &
                                                     theta, kztemp, r, E
-  real(rkind), dimension(:,:,:,:,:), allocatable :: umag, thetaVel, &
-                                                    uRmag, uImag, rand2, &
-                                                    p1x, p1y, p1z, &
-                                                    p2x, p2y, p2z, &
-                                                    orientationX, orientationY, orientationZ
+  real(rkind), dimension(:,:), allocatable :: orientationX, orientationY, &
+                                              orientationZ, p1x, p1y, p1z, &
+                                              p2x, p2y, p2z, rand2, uRmag, uImag, &
+                                              umag, thetaVel
   
   ! Physical location of Gabor modes
   real(rkind), dimension(:,:,:,:), allocatable :: gmx, gmy, gmz
@@ -58,13 +57,12 @@ subroutine generateIsotropicModes(this)
   allocate(kmag(nk),dk(nk),E(nk))
   allocate(rand1(nk*ntheta))
   allocate(theta(ntheta),kztemp(ntheta),r(ntheta))
-  allocate(umag(isz,jsz,ksz,nk,ntheta), thetaVel(isz,jsz,ksz,nk,ntheta), &
-           uRmag(isz,jsz,ksz,nk,ntheta), uImag(isz,jsz,ksz,nk,ntheta),&
-           rand2(isz,jsz,ksz,nk,ntheta), p1x(isz,jsz,ksz,nk,ntheta), &
-           p1y(isz,jsz,ksz,nk,ntheta), p1z(isz,jsz,ksz,nk,ntheta), &
-           p2x(isz,jsz,ksz,nk,ntheta), p2y(isz,jsz,ksz,nk,ntheta), &
-           p2z(isz,jsz,ksz,nk,ntheta), orientationX(isz,jsz,ksz,nk,ntheta), &
-           orientationY(isz,jsz,ksz,nk,ntheta), orientationZ(isz,jsz,ksz,nk,ntheta))
+  allocate(umag(nk,ntheta), thetaVel(nk,ntheta), &
+           uRmag(nk,ntheta), uImag(nk,ntheta),&
+           rand2(nk,ntheta), p1x(nk,ntheta), &
+           p1y(nk,ntheta), p1z(nk,ntheta), p2x(nk,ntheta), p2y(nk,ntheta), &
+           p2z(nk,ntheta), orientationX(nk,ntheta), &
+           orientationY(nk,ntheta), orientationZ(nk,ntheta))
 
   ! Allocate memory for ND attribute arrays
   allocate(gmx(isz,jsz,ksz,nk*ntheta), gmy(isz,jsz,ksz,nk*ntheta), &
@@ -75,7 +73,8 @@ subroutine generateIsotropicModes(this)
   allocate(k1(isz,jsz,ksz,nk,ntheta),k2(isz,jsz,ksz,nk,ntheta),&
            k3(isz,jsz,ksz,nk,ntheta))
 
-  ! Assign wave-vector magnitudes based on logarithmically spaced shells
+  
+    ! Assign wave-vector magnitudes based on logarithmically spaced shells
   ! (non-dimensionalized with L)
   !kedge = logspace(kmin,kmax,nk+1)
   kedge = logspace(log10(this%kmin),log10(this%kmax),nk+1)
@@ -89,8 +88,7 @@ subroutine generateIsotropicModes(this)
       do i = 1,this%QHgrid%gpC%xsz(1)
         xmin = this%QHgrid%xE(i)
 
-        !TODO: Need better seed selection
-        call this%updateSeeds(seed1,seed2,seed3,seed4,seed5,&
+        call this%updateSeeds(seed1,seed2,seed3,seed4,seed5,seed6,seed7,&
           this%QHgrid%gpC%xst(1)+i-1,&
           this%QHgrid%gpC%xst(2)+j-1,&
           this%QHgrid%gpC%xst(3)+k-1)
@@ -123,51 +121,53 @@ subroutine generateIsotropicModes(this)
 
         ! Amplitude of each mode such that the sum of mode energies gives
         ! the correct kinetic energy
-        umag(i,j,k,:,1) = sqrt(2*E*dk/ntheta)
+        umag(:,1) = sqrt(2*E*dk/ntheta)
+        do thetaID = 2,ntheta
+          umag(:,thetaID) = umag(:,1)
+        end do
   
+        ! Get velocity vector orientations
+        ! Generate basis of tangent plane to wavenumber shell
+        p1x = 0.d0
+        p1y = -k3(i,j,k,:,:)
+        p1z = k2(i,j,k,:,:)
+
+        p2x = k2(i,j,k,:,:)**2 + k3(i,j,k,:,:)**2
+        p2y = -k1(i,j,k,:,:)*k2(i,j,k,:,:)
+        p2z = -k1(i,j,k,:,:)*k3(i,j,k,:,:)
+
+        call normalizeVec(p1x,p1y,p1z)
+        call normalizeVec(p2x,p2y,p2z)
+
+        ! Assign orientation of the velocity vectors
+        call uniform_random(thetaVel,0.d0,2.d0*pi,seed6)
+        orientationX = cos(thetaVel)*p1x + sin(thetaVel)*p2x
+        orientationY = cos(thetaVel)*p1y + sin(thetaVel)*p2y
+        orientationZ = cos(thetaVel)*p1z + sin(thetaVel)*p2z
+
+        ! We have the modulus and orientation of the complex-valued amplitudes.
+        ! Now assigng the real and imaginary components
+        call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),seed7)
+        uRmag = rand2*umag
+        uImag = sqrt(umag*umag/3.d0 - uRmag*uRmag)
+
+        uR(i,j,k,:,:) = uRmag*orientationX
+        uI(i,j,k,:,:) = uImag*orientationX
+
+        vR(i,j,k,:,:) = uRmag*orientationY
+        vI(i,j,k,:,:) = uImag*orientationY
+
+        wR(i,j,k,:,:) = uRmag*orientationZ
+        wI(i,j,k,:,:) = uImag*orientationZ
       end do
     end do
   end do
 
   ! Replicate array to match array dimensions for multiplication below
-  do thetaID = 2,ntheta
-    umag(:,:,:,:,thetaID) = umag(:,:,:,:,1)
-  end do
+  !do thetaID = 2,ntheta
+  !  umag(:,:,:,:,thetaID) = umag(:,:,:,:,1)
+  !end do
 
-  ! Get velocity vector orientations
-    ! Generate basis of tangent plane to wavenumber shell
-    p1x = 0.d0
-    p1y = -k3
-    p1z = k2
-
-    p2x = k2*k2 + k3*k3
-    p2y = -k1*k2
-    p2z = -k1*k3
-
-    call normalizeVec(p1x,p1y,p1z)
-    call normalizeVec(p2x,p2y,p2z)
-
-    ! Assign orientation of the velocity vectors
-    call uniform_random(thetaVel,0.d0,2.d0*pi,seed6)
-    orientationX = cos(thetaVel)*p1x + sin(thetaVel)*p2x
-    orientationY = cos(thetaVel)*p1y + sin(thetaVel)*p2y
-    orientationZ = cos(thetaVel)*p1z + sin(thetaVel)*p2z
-
-  ! We have the modulus and orientation of the complex-valued amplitudes.
-  ! Now assing the real and imaginary components
-    call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),seed7)
-    uRmag = rand2*umag
-    uImag = sqrt(umag*umag/3.d0 - uRmag*uRmag)
-
-    uR = uRmag*orientationX
-    uI = uImag*orientationX
-
-    vR = uRmag*orientationY
-    vI = uImag*orientationY
-
-    wR = uRmag*orientationZ
-    wI = uImag*orientationZ
-  
   ! Collapse the Gabor mode data into a 1D vector
   nmodes = this%nmodes 
   this%uhatR = this%scalefact*reshape(uR,(/nmodes/))
@@ -208,7 +208,7 @@ subroutine generateIsotropicModes(this)
              orientationZ, uR, uI, vR, vI, wR, wI, k1, k2, k3, gmx, gmy, gmz)
   
   ! Acknowledge that isotropic modes are initialized
-  call message('Finished generating isotropic modes')
+  call message(1,'Finished generating isotropic modes')
 
 end subroutine
 
@@ -272,7 +272,7 @@ subroutine strainModes(this)
   !$OMP END DO
   !$OMP END PARALLEL
 
-  call message('Finished straining isotropic modes')
+  call message(1,'Finished straining isotropic modes')
 end subroutine
 
 subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
@@ -314,14 +314,22 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   KE = this%QHgrid%KE(QHx,QHy,QHz)
 end subroutine
 
-subroutine updateSeeds(this,seed1,seed2,seed3,seed4,seed5,QHi,QHj,QHk)
+subroutine updateSeeds(this,seed1,seed2,seed3,seed4,seed5,seed6,seed7,&
+    QHi,QHj,QHk)
   class(enrichmentOperator), intent(inout) :: this
-  integer, intent(inout) :: seed1, seed2, seed3, seed4, seed5
-  integer :: QHi, QHj, QHk
+  integer, intent(inout) :: seed1, seed2, seed3, seed4, seed5, seed6, seed7
+  integer, intent(in) :: QHi, QHj, QHk
+  integer :: nxQH, nyQH, QHidx
 
-  seed1 = 1000 + QHi + QHj + QHk
-  seed2 = 2000 + QHi + QHj + QHk
-  seed3 = 3000 + QHi + QHj + QHk
-  seed4 = 4000 + QHi + QHj + QHk
-  seed5 = 5000 + QHi + QHj + QHk
+  nxQH = this%QHgrid%gpC%xsz(1)
+  nyQH = this%QHgrid%gpC%ysz(2)
+  QHidx = (QHk-1)*nxQH*nyQH + (QHj-1)*nxQH + QHi
+  
+  seed1 = 1000*QHidx
+  seed2 = 2000*QHidx
+  seed3 = 3000*QHidx
+  seed4 = 4000*QHidx
+  seed5 = 5000*QHidx
+  seed6 = 6000*QHidx
+  seed7 = 7000*QHidx
 end subroutine

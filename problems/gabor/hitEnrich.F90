@@ -4,14 +4,12 @@ program hitEnrich
   use kind_parameters,         only: clen
   use enrichmentMod,           only: enrichmentOperator, nthreads
   use IncompressibleGrid,      only: igrid
-  use HIT_Periodic_parameters, only: Lx, Ly, Lz
   use auxiliary_openmp_subs,   only: GetArguments
   use mpi
   implicit none
 
   character(len=clen) :: inputfileLS, inputfileSS, inputfileGM 
-  character(len=clen) :: datadir, fname, outputdir
-  integer :: ioUnit, ierr, provided
+  integer :: ierr, provided
   type(igrid) :: largeScales, smallScales
   type(enrichmentOperator) :: enrich
       
