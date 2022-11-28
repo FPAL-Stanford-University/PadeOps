@@ -58,15 +58,12 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
       ! accounted for here, nor is the periodic contribution for periodic
       ! directions whose data resides exlusively on the process (e.g. in x)
       iist = max(ceiling((x(n)+small)/this%smallScales%dx) - this%nxsupp/2, ist)
-      !iien = min(ceiling((x(n)+small)/this%smallScales%dx) + this%nxsupp/2, ien)
       iien = min(floor(  (x(n)+small)/this%smallScales%dx) + this%nxsupp/2, ien)
 
       jjst = max(ceiling((y(n)+small)/this%smallScales%dy) - this%nysupp/2, jst)
-      !jjen = min(ceiling((y(n)+small)/this%smallScales%dy) + this%nysupp/2, jen)
       jjen = min(floor(  (y(n)+small)/this%smallScales%dy) + this%nysupp/2, jen)
 
       kkst = max(ceiling((z(n)+small)/this%smallScales%dz) - this%nzsupp/2, kst)
-      !kken = min(ceiling((z(n)+small)/this%smallScales%dz) + this%nzsupp/2, ken)
       kken = min(floor(  (z(n)+small)/this%smallScales%dz) + this%nzsupp/2, ken)
 
       if (iien < iist .or. jjen < jjst .or. kken < kkst) then
@@ -112,7 +109,11 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
 
               this%utmp(i,j,k,tid+1) = this%utmp(i,j,k,tid+1) + du 
               this%vtmp(i,j,k,tid+1) = this%vtmp(i,j,k,tid+1) + dv 
-              this%wtmp(i,j,k,tid+1) = this%wtmp(i,j,k,tid+1) + dw 
+              this%wtmp(i,j,k,tid+1) = this%wtmp(i,j,k,tid+1) + dw
+              
+              !if (i == 11 .and. j == 13 .and. k == 16) then
+              !  print*, this%utmp(i,j,k,tid+1), xs, ys, zs
+              !end if
             end do
           end do
         end do
@@ -122,8 +123,6 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
         call message(trim(mssg))
       end if
     end do
-
-
 
     !$OMP END DO
     !$OMP CRITICAL

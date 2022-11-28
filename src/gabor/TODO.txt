@@ -1,0 +1,4 @@
+- Halo exchange (Aditya)
+- Landing gear stuff (when we meet)
+- add user safeguards (Ryan)
+- verify higher resolution HIT case (Ryan)

@@ -1,43 +1,31 @@
-subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff,last,extraModeData)
+subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff)
   ! Send and recieve Gabor modes in the halo region of the MPI ranks
   ! Inputs:
   !     modeData --> all mode attributes, i.e. physical location, wave-vecotr
   !                  components, and vector component amplitudes
   !     coordinate --> "y" or "z" specifying which component of the halo is
   !                    being transferred
-  !     extraModeData (optional) --> same info as modeData, but for addtional
   !                                  modes not native to the MPI rank
   ! In/Out:
   !     haloBuff --> buffer array to store the halo mode info
   !
-  ! Outputs:
-  !     last --> The last index of haloBuff with relevant mode data. This is 
-  !              because the input haloBuff may be larger than required for the
-  !              output data and so any data beyond index "last" is erroneous
-  !              and should not be used when rendering the velocity field
-  class(enrichmentOperator), intent(inout), target :: this
-  real(rkind), dimension(:,:), intent(in), target :: modeData
+  class(enrichmentOperator), intent(inout) :: this
+  real(rkind), dimension(:,:), intent(inout), allocatable, target :: modeData
   character(len=1), intent(in) :: coordinate
-  real(rkind), dimension(:,:), allocatable, target, intent(inout) :: haloBuff
-  integer, intent(out) :: last
-  real(rkind), dimension(:,:), intent(in), target, optional :: extraModeData
+  real(rkind), dimension(:,:), allocatable, intent(inout), optional :: haloBuff
 
   integer :: coordID
   real(rkind), dimension(:), pointer :: loc
-  integer :: n
   real(rkind) :: haloMin, haloMax
-  real(rkind), dimension(:,:), pointer :: sendBuff1,  sendBuff2, &
-    recvBuff1, recvBuff2
   integer :: sendCount1, sendCount2, recvCount1, recvCount2
-  integer :: idx1, idx2
-  integer :: st, en, ierr
+  integer :: ierr
   integer :: tag1, tag2
-  integer :: sendID, recvID
-  integer, dimension(48) :: sendReq, recvReq
+  integer, dimension(2) :: sendReq, recvReq
   real(rkind) :: Ly, Lz
   real(rkind) :: PEmin, PEmax
   real(rkind), dimension(3) :: periodicCorrection
   real(rkind), dimension(2) :: Dom
+  real(rkind), dimension(:,:), allocatable :: sendBuff1, sendBuff2, recvBuff1, recvBuff2, tmpData
 
   ! The following are a subset of the MPI cartesion communicator attributes
   real(rkind) :: coord, dim
@@ -46,9 +34,6 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff,last,extraModeDat
 
   call assert(coordinate == 'y' .or. coordinate == 'z','Must select'//&
     ' coordinate to be "y" or "z"')
-
-  sendBuff1 => null(); sendBuff2 => null()
-  recvBuff1 => null(); recvBuff2 => null()
 
   Ly = yDom(2) - yDom(1)
   Lz = zDom(2) - zDom(1)
@@ -103,33 +88,9 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff,last,extraModeDat
   sendCount1 = 0
   sendCount2 = 0
   call getSendCount(loc,haloMin,haloMax,sendCount1,sendCount2)
-  if (present(extraModeData)) then
-    loc => extraModeData(:,coordID)
-    call getSendCount(loc,haloMin,haloMax,sendCount1,sendCount2)
-    loc => modeData(:,coordID)
-  end if
 
-  if (allocated(this%sendBuff)) then
-    if (size(this%sendBuff,1) < sendCount1 + sendCount2) then
-      deallocate(this%sendBuff)
-      allocate(this%sendBuff(sendCount1 + sendCount2,12))
-    end if
-  else
-    allocate(this%sendBuff(sendCount1 + sendCount2,12))
-  end if
-
-  en = 0
-  if (sendCount1 > 0) then
-    st = en + 1
-    en = en + sendCount1
-    sendBuff1 => this%sendBuff(st:en,:)
-  end if
-  
-  if (sendCount2 > 0) then
-    st = en + 1
-    en = en + sendCount2
-    sendBuff2 => this%sendBuff(st:en,:)
-  end if
+  allocate(sendBuff1(sendCount1,12))
+  allocate(sendBuff2(sendCount2,12))
 
   ! Pack the send buffers
   ! We must check for two different cases:
@@ -138,24 +99,12 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff,last,extraModeDat
   !             boundary?
   ! If Case 2 is true then we must shift the mode location by one
   ! domain length for the velocity rendering routine to work
-  idx1 = 1
-  idx2 = 1
   call packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,modeData,&
-    periodicCorrection,sendBuff1,sendBuff2,idx1,idx2)
-  if (present(extraModeData)) then
-    loc => extraModeData(:,coordID)
-    call packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,extraModeData,&
-      periodicCorrection,sendBuff1,sendBuff2,idx1,idx2)
-    loc => modeData(:,coordID)
-  end if
+    periodicCorrection,sendBuff1,sendBuff2)
   
   ! Let your neighbors know how much data you will be sending
-  tag1 = coord
-  if (coord == dim - 1 .and. periodic) then
-    tag2 = 0
-  else
-    tag2 = coord + 1
-  end if
+  tag1 = 0
+  tag2 = 0
   
   ! Receive from lower rank
   call MPI_IRecv(recvCount1,1,MPI_INTEGER,neigh(1),tag1,&
@@ -171,70 +120,55 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff,last,extraModeDat
   call MPI_ISend(sendCount2,1,MPI_INTEGER,neigh(2),tag2,&
     DECOMP_2D_COMM_CART_X,sendReq(2),ierr)
 
-  call MPI_WaitAll(4,[recvReq(1:2), sendReq(1:2)],MPI_STATUSES_IGNORE,ierr)
+  call MPI_WaitAll(4,[recvReq, sendReq],MPI_STATUSES_IGNORE,ierr)
 
   ! Allocate memory for the recieve buffers
-  if (allocated(haloBuff)) then
-    if (size(haloBuff,1) < recvCount1 + recvCount2) then
-      deallocate(haloBuff)
-    end if
-  end if
-  if (.not. allocated(haloBuff)) then
-    if (recvCount1 + recvCount2 > 0) then
-      allocate(haloBuff(recvCount1 + recvCount2,12))
-    end if
-  end if
-  if (allocated(haloBuff)) halobuff = 0.d0
+  allocate(recvBuff1(recvCount1,12))
+  allocate(recvBuff2(recvCount2,12))
+  recvBuff1 = 0.d0
+  recvBuff2 = 0.d0
 
-  en = 0
-  if (recvCount1 > 0) then
-    st = en + 1
-    en = en + recvCount1
-    recvBuff1 => haloBuff(st:en,:)
-  end if
+  call MPI_IRecv(recvBuff1,size(recvBuff1),mpirkind,neigh(1),tag1,&
+    DECOMP_2D_COMM_CART_X,recvReq(1),ierr)
+  call MPI_IRecv(recvBuff2,size(recvBuff2),mpirkind,neigh(2),tag2,&
+    DECOMP_2D_COMM_CART_X,recvReq(2),ierr)
+  call MPI_ISend(sendBuff1,size(sendBuff1),mpirkind,neigh(1),tag1,&
+      DECOMP_2D_COMM_CART_X,sendReq(1),ierr) 
+  call MPI_ISend(sendBuff2,size(sendBuff2),mpirkind,neigh(2),tag2,&
+      DECOMP_2D_COMM_CART_X,sendReq(2),ierr) 
 
-  if (recvCount2 > 0) then
-    st = en + 1
-    en = en + recvCount2
-    recvBuff2 => haloBuff(st:en,:)
-  end if
-  last = en
+  call MPI_WaitAll(4,[recvReq, sendReq], MPI_STATUSES_IGNORE,ierr)
 
-  call message(3,'Sending/Receiving modes')
-  sendID = 1
-  recvID = 1
-  do n = 1,12
-    if (sendCount1 > 0) then
-      call MPI_ISend(sendBuff1(:,n),sendCount1,mpirkind,neigh(1),tag1,&
-        DECOMP_2D_COMM_CART_X,sendReq(sendID),ierr) 
-      sendID = sendID + 1
-    end if
-    if (recvCount2 > 0) then
-      call MPI_IRecv(recvBuff2(:,n),recvCount2,mpirkind,neigh(2),tag2,&
-        DECOMP_2D_COMM_CART_X,recvReq(recvID),ierr)
-      recvID = recvID + 1
-    end if
+  if (present(haloBuff)) then 
+    if (allocated(haloBuff)) deallocate(haloBuff) 
+    call mergeModes(modeData, recvBuff1, recvBuff2, haloBuff) 
+  else ! We will append modeData
+    allocate(tmpData(size(modeData,1),12))
+    tmpData = modeData
+    deallocate(modeData)
+    call mergeModes(tmpData, recvBuff1, recvBuff2, modeData)
+  end if 
 
-    if (sendCount2 > 0) then
-      call MPI_ISend(sendBuff2(:,n),sendCount2,mpirkind,neigh(2),tag2,&
-        DECOMP_2D_COMM_CART_X,sendReq(sendID),ierr)
-      sendID = sendID + 1
-    end if
-    if (recvCount1 > 0) then
-      call MPI_IRecv(recvBuff1(:,n),recvCount1,mpirkind,neigh(1),tag1,&
-        DECOMP_2D_COMM_CART_X,recvReq(recvID),ierr)
-      recvID = recvID + 1
-    end if
-  end do
-  call MPI_WaitAll(recvID + sendID - 2,[recvReq(1:recvID-1), sendReq(1:sendID-1)], &
-    MPI_STATUSES_IGNORE,ierr)
-  
-  call message(3,'All modes sent/received!')
-  
-  nullify(sendBuff1, sendBuff2)
-  nullify(recvBuff1, recvBuff2)
+  deallocate(recvBuff1,recvBuff2,sendBuff1,sendBuff2)
   nullify(loc)
 end subroutine
+
+subroutine mergeModes(Modes1, Modes2, Modes3, MergedModes)
+  real(rkind), dimension(:,:), intent(in) :: Modes1, Modes2, Modes3
+  real(rkind), dimension(:,:), allocatable, intent(out) :: MergedModes
+  integer :: n1, n2, n3 
+
+  n1 = size(Modes1,1)
+  n2 = size(Modes2,1)
+  n3 = size(Modes3,1)
+
+  allocate(MergedModes(n1 + n2 + n3,12))
+  MergedModes(1:n1,            :) = Modes1
+  MergedModes(n1+1:n1+n2,      :) = Modes2
+  MergedModes(n1+n2+1:n1+n2+n3,:) = Modes3
+
+end subroutine 
+
 
 subroutine copyMode(modeData, cpyArr, periodicCorrection)
   real(rkind), dimension(:), intent(in) :: modeData
@@ -368,32 +302,36 @@ subroutine getSendCount(loc,haloMin,haloMax,sendCount1,sendCount2)
 end subroutine
 
 subroutine packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,modeData,&
-    periodicCorrection,sendBuff1,sendBuff2,idx1,idx2)
+    periodicCorrection,sendBuff1,sendBuff2)
   real(rkind), dimension(:), intent(in) :: loc
   real(rkind), intent(in) :: haloMin, haloMax, PEmin, PEmax
   real(rkind), dimension(2), intent(in) :: Dom
   real(rkind), dimension(:,:), intent(in) :: modeData
   real(rkind), dimension(3), intent(in) :: periodicCorrection
   real(rkind), dimension(:,:), intent(inout) :: sendBuff1, sendBuff2
-  integer, intent(inout) :: idx1, idx2
+  integer :: idx1, idx2
   real(rkind) :: tol = 1.d-12
   integer :: n
 
+  idx1 = 1
+  idx2 = 1
   do n = 1,size(loc)
-    if (loc(n) < haloMin .and. abs(PEmin - Dom(1)) < tol .and. &
-      periodicBCs(2)) then
-      call copyMode(modeData(n,:), sendBuff1(idx1,:), periodicCorrection)
-      idx1 = idx1 + 1
-    else if (loc(n) < haloMin .and. abs(PEmin - Dom(1)) >= tol) then
-      call copyMode(modeData(n,:), sendBuff1(idx1,:))
-      idx1 = idx1 + 1
-    else if (loc(n) > haloMax .and. abs(PEmax - Dom(2)) < tol .and. &
-      periodicBCs(2)) then
-      call copyMode(modeData(n,:), sendBuff2(idx2,:), -periodicCorrection)
-      idx2 = idx2 + 1
-    else if (loc(n) > haloMax .and. abs(PEmax - Dom(2)) >= tol) then
-      call copyMode(modeData(n,:), sendBuff2(idx2,:))
-      idx2 = idx2 + 1
+    if (loc(n) < haloMin) then
+      if (abs(PEmin - Dom(1)) < tol .and. periodicBCs(2)) then
+        call copyMode(modeData(n,:), sendBuff1(idx1,:), periodicCorrection)
+        idx1 = idx1 + 1
+      else
+        call copyMode(modeData(n,:), sendBuff1(idx1,:))
+        idx1 = idx1 + 1
+      end if
+    else if (loc(n) > haloMax) then
+      if (abs(PEmax - Dom(2)) < tol .and. periodicBCs(2)) then
+        call copyMode(modeData(n,:), sendBuff2(idx2,:), -periodicCorrection)
+        idx2 = idx2 + 1
+      else
+        call copyMode(modeData(n,:), sendBuff2(idx2,:))
+        idx2 = idx2 + 1
+      end if
     end if
   end do
 end subroutine

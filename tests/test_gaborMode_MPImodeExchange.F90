@@ -36,7 +36,7 @@ program test_gaborMode_MPImodeExchange
   enrich%whatR = 0.d0
   enrich%whatI = 0.d0
 
-  enrich%kx = 0.d0
+  enrich%kx = real(nrank,rkind)
   enrich%ky = 0.d0
   enrich%kz = 0.d0
 
