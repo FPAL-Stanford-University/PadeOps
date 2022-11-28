@@ -118,7 +118,7 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
         end do
       end if
       if (mod(n,100000) == 0 .and. tid == 0) then
-        write(mssg,'(F7.4,A10)')real(n,rkind)/real(this%nmodes,rkind)*100.d0,'% Complete'
+        write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
         call message(trim(mssg))
       end if
     end do

@@ -197,8 +197,8 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff,last,extraModeDat
     st = en + 1
     en = en + recvCount2
     recvBuff2 => haloBuff(st:en,:)
-    last = en
   end if
+  last = en
 
   call message(3,'Sending/Receiving modes')
   sendID = 1
