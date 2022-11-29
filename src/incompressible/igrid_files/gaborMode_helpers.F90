@@ -21,29 +21,32 @@ subroutine initLargeScales(this, tid, rid)
 end subroutine
 
 
-subroutine HaloUpdateVelocities(this, uh, vh, wh, duidxj_h)
-    use decomp_2d, only: update_halo
+subroutine HaloUpdateField(this, u, uh)
+    use procgrid_mod, only: num_pad 
     class(igrid), intent(inout) :: this 
-    real(rkind), dimension(:,:,:), allocatable, intent(out) :: uh, vh, wh
-    real(rkind), dimension(:,:,:,:), allocatable, intent(out) :: duidxj_h
-    real(rkind), dimension(:,:,:), allocatable :: buff
+    real(rkind), dimension(1:this%gpC%xsz(1), 1:this%gpC%xsz(2), 1:this%gpC%xsz(3)), intent(in) :: u 
+    real(rkind), dimension(-num_pad+1:, -num_pad+1:, -num_pad+1:), intent(out) :: uh 
+
+    uh(1:this%gpC%xsz(1), 1:this%gpC%xsz(2), 1:this%gpC%xsz(3)) = u
+
+    call this%pg%halo_exchange(uh)
+end subroutine 
+
+subroutine HaloUpdateVelocities(this, uh, vh, wh, duidxj_h)
+    use procgrid_mod, only: num_pad 
+    class(igrid), intent(inout) :: this 
+    real(rkind), dimension(-num_pad+1:, -num_pad+1:, -num_pad+1:), intent(out) :: uh, vh, wh
+    real(rkind), dimension(-num_pad+1:, -num_pad+1:, -num_pad+1:,:), intent(out) :: duidxj_h
     integer :: idx
 
-    if (allocated(uh)) deallocate(uh) 
-    if (allocated(vh)) deallocate(vh) 
-    if (allocated(wh)) deallocate(wh) 
-    if (allocated(duidxj_h)) deallocate(duidxj_h)
+    call this%HaloUpdateField(this%u, uh)
+    call this%HaloUpdateField(this%v, vh)
+    call this%HaloUpdateField(this%w, wh)
 
-    call update_halo(this%u, uh, 1, this%gpC)
-    call update_halo(this%v, vh, 1, this%gpC)
-    call update_halo(this%w, wh, 1, this%gpC)
+    do idx = 1,size(duidxj_h,4)
+        call this%HaloUpdateField(this%duidxjC(:,:,:,idx), duidxj_h(:,:,:,idx))
+    end do 
 
-    allocate(duidxj_h(size(uh,1),size(uh,2),size(uh,3),9))
-    do idx = 1,9
-      call update_halo(this%duidxjC(:,:,:,idx), buff, 1, this%gpC)
-      duidxj_h(:,:,:,idx) = buff
-    end do
-    deallocate(buff)
 end subroutine
 
 

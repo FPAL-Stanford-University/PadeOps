@@ -26,6 +26,7 @@ module IncompressibleGrid
     use scalar_igridMod, only: scalar_igrid 
     use io_hdf5_stuff, only: io_hdf5 
     use PoissonPeriodicMod, only: PoissonPeriodic
+    use procgrid_mod, only: procgrid
 
     implicit none
 
@@ -71,6 +72,7 @@ module IncompressibleGrid
         character(clen) :: inputDir
         integer :: headerfid = 12345   
         integer :: clearRoundOffFreq
+        type(procgrid) :: pg
 
         ! Variables common to grid
         integer :: nx, ny, nz, t_datadump, t_restartdump
@@ -393,6 +395,7 @@ module IncompressibleGrid
             ! Gabor mode specific procedures (ignored for normal igrid runs)
             procedure          :: initLargeScales 
             procedure          :: HaloUpdateVelocities
+            procedure, private :: HaloUpdateField
             procedure          :: ProjectToFixBC
             procedure, private :: readLargeScales
    end type
@@ -566,7 +569,10 @@ contains
         end if
 
        call decomp_info_init(nx,ny,nz+1,this%gpE)
-       
+
+       ! Initialize MPI processor grid
+       call this%pg%init(prow,pcol,this%nx,this%ny,this%nz)
+
        if (this%useSystemInteractions) then
            if ((trim(controlDir) .eq. "null") .or.(trim(ControlDir) .eq. "NULL")) then
                this%controlDir = this%outputDir

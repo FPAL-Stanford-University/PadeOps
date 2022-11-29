@@ -290,6 +290,10 @@ contains
 
     ! Aditya: 
     ! STEP 2: Generate halo'd velocities
+    if(.not. allocated(this%uh))       call this%largeScales%pg%alloc_array(this%uh)
+    if(.not. allocated(this%vh))       call this%largeScales%pg%alloc_array(this%vh)
+    if(.not. allocated(this%wh))       call this%largeScales%pg%alloc_array(this%wh)
+    if(.not. allocated(this%duidxj_h)) call this%largeScales%pg%alloc_array(this%duidxj_h,9)
     call this%largeScales%HaloUpdateVelocities(this%uh, this%vh, this%wh, &
       this%duidxj_h)
 

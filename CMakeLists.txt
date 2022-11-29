@@ -71,7 +71,7 @@ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
 	endif()
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Wall -Wconversion -Wextra -Waliasing -ffree-form -ffree-line-length-none -ffast-math ${OPTFLAG} -funroll-loops -fno-protect-parens -fopenmp")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
-        set(CMAKE_Fortran_FLAGS "-Og -g -fbacktrace -pg -llapack -ffree-form -ffree-line-length-none -fcheck=all -fbounds-check -ffpe-trap=zero,overflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising")
+        set(CMAKE_Fortran_FLAGS "-Og -g -fbacktrace -pg -llapack -ffree-form -ffree-line-length-none -fcheck=all -fbounds-check -ffpe-trap=zero,overflow -Wall -Wconversion -Wextra -Waliasing -Wsurprising -fopenmp")
     endif()
 
  elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
