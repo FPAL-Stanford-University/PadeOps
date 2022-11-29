@@ -6,6 +6,7 @@ program hitEnrich
   use IncompressibleGrid,      only: igrid
   use auxiliary_openmp_subs,   only: GetArguments
   use mpi
+  use reductions
   implicit none
 
   character(len=clen) :: inputfileLS, inputfileSS, inputfileGM 
@@ -24,6 +25,8 @@ program hitEnrich
   call smallScales%init(inputfileSS, .false.)
 
   call enrich%init(smallScales,largeScales,inputfileGM)
+
+  print*, p_maxval(maxval(smallScales%u)) - p_minval(minval(smallScales%u))
 
   do while (enrich%continueSimulation())
     call enrich%updateLargeScales(timeAdvance=.true.)

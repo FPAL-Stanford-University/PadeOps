@@ -57,8 +57,7 @@ module enrichmentMod
     real(single_kind), dimension(:,:,:,:), allocatable :: utmp,vtmp,wtmp
       ! Store info of modes on neighbor ranks that are within the support 
       ! window "halo"
-    real(rkind), dimension(:,:), allocatable :: haloBuffY, haloBuffZ
-    real(rkind), dimension(:,:), allocatable :: sendBuff
+    real(rkind), dimension(:,:), allocatable :: renderModeData
 
     ! Misc
     logical :: debugChecks = .false.
@@ -181,6 +180,16 @@ contains
     this%nzsupp = 2 * this%smallScales%nz/this%largeScales%nz * &
       nint(this%QHgrid%dz / this%largeScales%dz)
 
+    ! User safegaurds -- make sure the mode supports don't span more than two
+    ! MPI ranks
+    call assert(p_minval(this%smallScales%gpC%xsz(2)) >= this%nysupp,&
+      'The mode support widths span more than one MPI rank. Use fewer ranks'//&
+      ' or adjust the topology -- xsz(2) >= nysupp')
+    call assert(p_minval(this%smallScales%gpC%xsz(3)) >= this%nzsupp,&
+      'The mode support widths span more than one MPI rank. Use fewer ranks'//&
+      ' or adjust the topology -- xsz(3) >= nzsupp')
+
+    ! Compute the number of modes
     this%nmodes = this%nk*this%ntheta * &
       this%QHgrid%gpC%xsz(1)*this%QHgrid%gpC%xsz(2)*this%QHgrid%gpC%xsz(3)
     this%nmodesGlobal = this%nk*this%ntheta * &
@@ -264,9 +273,6 @@ contains
     if (allocated(this%utmp))     deallocate(this%utmp)
     if (allocated(this%vtmp))     deallocate(this%vtmp)
     if (allocated(this%wtmp))     deallocate(this%wtmp)
-    if (allocated(this%haloBuffY)) deallocate(this%haloBuffY)
-    if (allocated(this%haloBuffZ)) deallocate(this%haloBuffZ)
-    if (allocated(this%sendBuff)) deallocate(this%sendBuff)
 
     call this%QHgrid%destroy()
   end subroutine 
@@ -297,7 +303,6 @@ contains
   subroutine renderVelocity(this)
     class(enrichmentOperator), intent(inout), target :: this
     real(rkind) :: Lx
-    integer :: lastY, lastZ
     real(rkind), dimension(:,:), pointer :: haloBuffY, haloBuffZ 
    
     haloBuffY => null()
@@ -309,27 +314,38 @@ contains
     this%smallScales%u  = 0.d0
     this%smallScales%v  = 0.d0
     this%smallScales%wC = 0.d0
-    
-    ! Ryan
-    ! STEP 1: Render local velocity
-    call this%renderLocalVelocity(this%x,this%y,this%z,this%kx,this%ky,this%kz,&
-      this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI)
-
-    ! Aditya & Ryan 
-    ! STEP 2: Exchange Gabor modes from neighbors that have influence on your domain 
+     
+    ! STEP 1: Exchange Gabor modes from neighbors that have influence on your domain 
     call message(2,'Exchanging halo modes')
-    call this%sendRecvHaloModes(this%modeData, 'y', this%haloBuffY,lastY)
-    call this%sendRecvHaloModes(this%modeData, 'z', this%haloBuffZ, &
-      lastZ, this%haloBuffY)
-  
-    if (lastY > 0) haloBuffY => this%haloBuffY(1:lastY,:)
-    if (lastZ > 0) haloBuffZ => this%haloBuffZ(1:lastZ,:)
+    call this%sendRecvHaloModes(this%modeData, 'y', this%renderModeData)
+    call this%sendRecvHaloModes(this%renderModeData, 'z')
 
-    ! Add halo contribution
-    include "enrichment_files/renderVelocityStuff/addHaloContribution.F90"
+    ! Step 2: Render velocity 
+      call this%renderLocalVelocity(this%renderModeData(:,1), &
+        this%renderModeData(:,2),  this%renderModeData(:,3), &
+        this%renderModeData(:,4),  this%renderModeData(:,5), &
+        this%renderModeData(:,6),  this%renderModeData(:,7), &
+        this%renderModeData(:,8),  this%renderModeData(:,9), &
+        this%renderModeData(:,10), this%renderModeData(:,11), &
+        this%renderModeData(:,12))
 
-    ! Add x-periodic contribution
-    include "enrichment_files/renderVelocityStuff/addXperiodicContribution.F90"
+    ! Step 3: Add x-periodic contribution
+    if (periodicBCs(1)) then
+      call this%renderLocalVelocity(this%renderModeData(:,1) + Lx, &
+        this%renderModeData(:,2),  this%renderModeData(:,3), &
+        this%renderModeData(:,4),  this%renderModeData(:,5), &
+        this%renderModeData(:,6),  this%renderModeData(:,7), &
+        this%renderModeData(:,8),  this%renderModeData(:,9), &
+        this%renderModeData(:,10), this%renderModeData(:,11), &
+        this%renderModeData(:,12))
+      call this%renderLocalVelocity(this%renderModeData(:,1) - Lx, &
+        this%renderModeData(:,2),  this%renderModeData(:,3), &
+        this%renderModeData(:,4),  this%renderModeData(:,5), &
+        this%renderModeData(:,6),  this%renderModeData(:,7), &
+        this%renderModeData(:,8),  this%renderModeData(:,9), &
+        this%renderModeData(:,10), this%renderModeData(:,11), &
+        this%renderModeData(:,12))
+    end if
 
     ! TODO:
     ! Step 2.b: interpolate wC to w. Do we need to get uhat, vhat, what from u,
@@ -384,5 +400,5 @@ contains
     if (this%tid < this%tidStop) doIContinue = .true. 
 
   end function  
-      
+   
 end module

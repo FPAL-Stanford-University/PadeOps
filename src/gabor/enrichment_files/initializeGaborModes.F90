@@ -29,7 +29,6 @@ subroutine generateIsotropicModes(this)
   ! Misc
   integer :: ierr
 
-
   call message("                                                                ")
   call message("================================================================")
   call message("============== Initializing isotropic Gabor modes ==============")
