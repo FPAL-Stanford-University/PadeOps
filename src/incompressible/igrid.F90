@@ -27,6 +27,7 @@ module IncompressibleGrid
     use io_hdf5_stuff, only: io_hdf5 
     use PoissonPeriodicMod, only: PoissonPeriodic
     use procgrid_mod, only: procgrid
+    use cd06stuff, only: cd06
 
     implicit none
 
@@ -96,6 +97,7 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:,:), allocatable :: PfieldsE
         !type(cd06stagg), allocatable :: derW, derWW, derSO, derSE, derT
         type(Pade6Stagg), allocatable :: Pade6opZ
+        type(cd06), allocatable :: cd6opX, cd6opY, cd6opZ 
         type(cf90),      allocatable :: filzE, filzC
 
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC
@@ -398,6 +400,9 @@ module IncompressibleGrid
             procedure, private :: HaloUpdateField
             procedure          :: ProjectToFixBC
             procedure, private :: readLargeScales
+            procedure          :: fixGradientsForPeriodicity
+            procedure, private :: dfdyC2CinX
+            procedure, private :: dfdzC2CinX
    end type
 
 contains 

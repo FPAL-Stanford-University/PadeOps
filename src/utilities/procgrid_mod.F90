@@ -99,8 +99,7 @@ contains
 
         ! Set all BCs to true (will handle non-periodicity separately)
         periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = .true.
-        call decomp_2d_init(this%nx, this%ny, this%nz, nrow, ncol, periodicbcs)
-        call get_decomp_info(this%decomp)
+        call decomp_info_init(this%nx, this%ny, this%nz, this%decomp)
         this%xsz = this%decomp%xsz
         this%xst = this%decomp%xst
         this%xen = this%decomp%xen

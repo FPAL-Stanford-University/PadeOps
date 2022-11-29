@@ -283,23 +283,42 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   real(rkind), intent(out) :: L, KE, U, V, W
   integer :: i, j, idx, QHx, QHy, QHz
 
-  call interpToLocation(this%uh, U, this%largeScales%gpC,&
+  call interpToLocation(this%uh, U,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
-    this%x(gmID), this%y(gmID), this%z(gmID), periodicBCs)
-  call interpToLocation(this%vh, V, this%largeScales%gpC,&
+    this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
+    this%largeScales%mesh(1,1,1,3), &
+    this%x(gmID), this%y(gmID), this%z(gmID))
+  call interpToLocation(this%vh, V,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
-    this%x(gmID), this%y(gmID), this%z(gmID), periodicBCs)
-  call interpToLocation(this%wh, W, this%largeScales%gpC,&
+    this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
+    this%largeScales%mesh(1,1,1,3), &
+    this%x(gmID), this%y(gmID), this%z(gmID))
+  call interpToLocation(this%wh, W,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
-    this%x(gmID), this%y(gmID), this%z(gmID), periodicBCs)
+    this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
+    this%largeScales%mesh(1,1,1,3), &
+    this%x(gmID), this%y(gmID), this%z(gmID))
   
   idx = 1
   do i = 1,3
     do j = 1,3
-      call getNearestNeighborValue(this%duidxj_h(:,:,:,idx),dudx(i,j),this%largeScales%gpC, &
+      call interpToLocation(this%duidxj_h(:,:,:,idx), dudx(i,j),&
         this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
+        this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
+        this%largeScales%mesh(1,1,1,3), &
         this%x(gmID), this%y(gmID), this%z(gmID))
       idx = idx + 1
+      ! dudx(1,1) = dudx = duidxj_h(:,:,:,1) see compute_duidxj() in igrid
+      ! dudx(1,2) = dudy = duidxj_h(:,:,:,2) see compute_duidxj() in igrid
+      ! dudx(1,3) = dudz = duidxj_h(:,:,:,3) see compute_duidxj() in igrid
+      
+      ! dudx(2,1) = dvdx = duidxj_h(:,:,:,4) see compute_duidxj() in igrid
+      ! dudx(2,2) = dvdy = duidxj_h(:,:,:,5) see compute_duidxj() in igrid
+      ! dudx(2,3) = dvdz = duidxj_h(:,:,:,6) see compute_duidxj() in igrid
+      
+      ! dudx(3,1) = dwdx = duidxj_h(:,:,:,7) see compute_duidxj() in igrid
+      ! dudx(3,2) = dwdy = duidxj_h(:,:,:,8) see compute_duidxj() in igrid
+      ! dudx(3,3) = dwdz = duidxj_h(:,:,:,9) see compute_duidxj() in igrid
     end do
   end do
 

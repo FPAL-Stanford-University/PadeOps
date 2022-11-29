@@ -1,62 +1,42 @@
-subroutine interpToLocation(datIn,datOut,gp,dx,dy,dz,x,y,z,periodicBCs)
+subroutine interpToLocation(f,datOut,dx,dy,dz,xgrid1,ygrid1,zgrid1,x,y,z)
+  use procgrid_mod, only: num_pad
+  use constants, only: one
   ! Tri-linear interpolation to a given location (x,y,z)
   ! Inputs:
-  !     datIn    --> 3D array of input data
-  !     gp       --> Grid partition corresponding to datIn
-  !     dx,dy,dz --> Mesh spacing corresponding to datIn
+  !     f    --> 3D array of input data
+  !     dx,dy,dz --> Mesh spacing corresponding to f
+  !     xgrid1,ygrid1,zgrid1 --> Coordinate at index 1 for dataIn
   !     x,y,z    --> Coordinates of interpolation location
   ! Output:
   !     datOut --> Scalar value of interpolated data at (x,y,z)
-  use decomp_2d, only: decomp_info
-  real(rkind), dimension(:,:,:), intent(in) :: datIn
+  real(rkind), dimension(-num_pad+1:,-num_pad+1:,-num_pad+1:), intent(in) :: f
   real(rkind), intent(out) :: datOut
-  type(decomp_info), intent(in) :: gp
-  real(rkind), intent(in) :: dx, dy, dz, x, y, z
-  logical, dimension(3), intent(in) :: periodicBCs
-  integer :: xlo, xhi, ylo, yhi, zlo, zhi
-  real(rkind), dimension(8) :: weights
-  integer, dimension(8) :: xid, yid, zid
-  integer :: ist, jst, kst
-  real(rkind) :: xst, yst, zst
-  integer :: nx, ny, nz
+  real(rkind), intent(in) :: dx, dy, dz, x, y, z, xgrid1, ygrid1, zgrid1
+  integer :: i, j, k
+  real(rkind) :: x1, y1, z1, xd, yd, zd, c00, c10, c01, c11, c0, c1
 
-  ! Global array indices
-  ist = gp%xst(1)
-  jst = gp%xst(2)
-  kst = gp%xst(3)
+  i = floor((x - xgrid1)/dx) + 1
+  j = floor((y - ygrid1)/dy) + 1
+  k = floor((z - zgrid1)/dz) + 1
 
-  ! Global array sizes
-  nx = gp%xsz(1)
-  ny = gp%ysz(2)
-  nz = gp%zsz(3)
+  x1 = (i-1)*dx + xgrid1
+  y1 = (j-1)*dy + ygrid1
+  z1 = (k-1)*dz + zgrid1
 
-  call getXYZneighbors(x,y,z,ist,jst,kst,dx,dy,dz,xlo,xhi,ylo,yhi,zlo,zhi)
+  xd = (x - x1)/dx
+  yd = (y - y1)/dy
+  zd = (z - z1)/dz
 
-  ! Adjust hi index if full dimension is available on the process and the
-  ! boundary conditions are periodic
-  call assert(periodicBCs(1),'Code assumes x-periodicity -- interpolation.F90')
-  call assert(periodicBCs(2),'Code assumes y-periodicity -- interpolation.F90')
-  call assert(periodicBCs(3),'Code assumes z-periodicity -- interpolation.F90')
-  if (xhi == nx + 1 .and. size(datIn,1) == nx) xhi = 1
-  if (yhi == ny + 1 .and. size(datIn,2) == ny) yhi = 1
-  if (zhi == nz + 1 .and. size(datIn,3) == nz) zhi = 1
-  
-  ! For the dimensions that are decomposed across MPI ranks, the computed lo and
-  ! hi indices need to be shifted up 1 since datIn is assumed to be 1-indexed.
-  ! In reality we are passing halo-padded arrays that are 0-indexed, but since
-  ! we don't know a priori whether decomp2d used a slab or pencil decomposition
-  ! we can't declare the appropriate indexing in the intent(in) variable datIn
-  if (gp%xsz(2) .ne. ny) ylo = ylo + 1; yhi = yhi + 1
-  if (gp%xsz(3) .ne. nz) zlo = zlo + 1; zhi = zhi + 1
+  c00 = f(i,j,k)     * (one - xd) + f(i+1,j,k)     * xd
+  c10 = f(i,j+1,k)   * (one - xd) + f(i+1,j+1,k)   * xd
+  c01 = f(i,j,k+1)   * (one - xd) + f(i+1,j,k+1)   * xd
+  c11 = f(i,j+1,k+1) * (one - xd) + f(i+1,j+1,k+1) * xd 
 
-  xst = (real(ist,rkind)-1.d0)*dx
-  yst = (real(jst,rkind)-1.d0)*dy
-  zst = (real(kst,rkind)-1.d0)*dz
+  c0  = c00 * (one - yd) + c10 * yd
+  c1  = c01 * (one - yd) + c11 * yd
 
-  call getWeightsForLinInterp(x,y,z,xlo,xhi,ylo,yhi,zlo,zhi,&
-    xst,yst,zst,dx,dy,dz,weights,xid,yid,zid)
+  datOut = c0  * (one - zd) + c1  * zd
 
-  call interpDat(datOut,datIn,weights,xid,yid,zid)
 end subroutine
 
 subroutine interpDat(datOut, datIn, weights, xid, yid, zid)

@@ -108,10 +108,11 @@ contains
     real(rkind) :: dt
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
+    logical :: xPeriodic = .true., yPeriodic = .true., zPeriodic = .true.
     
     namelist /IO/      outputdir, writeIsotropicModes
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
-      strainInitialCondition
+      strainInitialCondition, xPeriodic, yPeriodic, zPeriodic
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
 
@@ -234,7 +235,10 @@ contains
     ! Set things up for distributed memory
     call getNeighbours(neighbour)
     call MPI_Cart_Get(DECOMP_2D_COMM_CART_X,2,dims,periodicBCs(2:3),coords,ierr)
-    call this%largeScales%getPeriodicBCs(periodicBCs)
+    !call this%largeScales%getPeriodicBCs(periodicBCs)
+    periodicBCs(1) = xPeriodic
+    periodicBCs(2) = yPeriodic
+    periodicBCs(3) = zPeriodic
 
     ! Initialize the Gabor modes
     call this%generateIsotropicModes()
@@ -280,6 +284,7 @@ contains
   subroutine updateLargeScales(this,timeAdvance)
     class(enrichmentOperator), intent(inout) :: this 
     logical, intent(in) :: timeAdvance
+    integer :: i
 
     ! Ryan: 
     ! STEP 1: Figure out how you want to advance the large-scales
@@ -287,6 +292,8 @@ contains
     ! If you read in from a file, you would want to avoid doing this repeatedly. 
     ! Perhaps read in 20 snapshots at a time and so on..
     if (timeAdvance) call this%largeScales%timeAdvance(this%dt)
+
+    call this%largeScales%fixGradientsForPeriodicity(periodicBCs)
 
     ! Aditya: 
     ! STEP 2: Generate halo'd velocities
@@ -296,6 +303,42 @@ contains
     if(.not. allocated(this%duidxj_h)) call this%largeScales%pg%alloc_array(this%duidxj_h,9)
     call this%largeScales%HaloUpdateVelocities(this%uh, this%vh, this%wh, &
       this%duidxj_h)
+
+    call removePeriodicityFromGhost(this%uh,this%largeScales%gpC)
+    call removePeriodicityFromGhost(this%vh,this%largeScales%gpC)
+    call removePeriodicityFromGhost(this%wh,this%largeScales%gpC)
+    do i = 1,9
+      call removePeriodicityFromGhost(this%duidxj_h(:,:,:,i),this%largeScales%gpC)
+    end do
+  end subroutine
+
+  subroutine removePeriodicityFromGhost(f,gp)
+    use decomp_2d, only: decomp_info
+    use procgrid_mod, only: num_pad
+    real(rkind), dimension(-num_pad+1:,-num_pad+1:,-num_pad+1:), intent(inout) :: f
+    type(decomp_info), intent(in) :: gp
+    if (.not. periodicBCs(1)) then
+      f(0,:,:) = 2*f(1,:,:) - f(2,:,:)
+      f(gp%xsz(1)+1,:,:) = 2*f(gp%xsz(1),:,:) - f(gp%xsz(1)-1,:,:)
+    end if
+
+    if (.not. periodicBCs(2)) then
+      if (gp%xst(2) == 1) then
+        f(:,0,:) = 2*f(:,1,:) - f(:,2,:)
+      end if
+      if (gp%xen(2) == gp%ysz(2)) then
+        f(:,gp%xsz(2)+1,:) = 2*f(:,gp%xsz(2),:) - f(:,gp%xsz(2)-1,:)
+      end if
+    end if
+
+    if (.not. periodicBCs(3)) then
+      if (gp%xst(3) == 1) then
+        f(:,:,0) = 2*f(:,:,1) - f(:,:,2)
+      end if
+      if (gp%xen(3) == gp%zsz(3)) then
+        f(:,:,gp%xsz(3)+1) = 2*f(:,:,gp%xsz(3)) - f(:,:,gp%xsz(3)-1)
+      end if
+    end if
 
   end subroutine 
 

@@ -1,4 +1,2 @@
-- Halo exchange (Aditya)
-- Landing gear stuff (when we meet)
-- add user safeguards (Ryan)
-- verify higher resolution HIT case (Ryan)
+[_] Landing gear stuff (when we meet)
+[X] Verify dudx(i,j) and duidxj_h(idx) are consistent (Ryan)
