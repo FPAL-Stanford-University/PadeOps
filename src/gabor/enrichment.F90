@@ -30,6 +30,7 @@ module enrichmentMod
     real(rkind), dimension(:), pointer, public :: x, y, z
     real(rkind), dimension(:), pointer, public :: uhatR, uhatI, vhatR, &
       vhatI, whatR, whatI
+    real(rkind), dimension(:), allocatable :: QHi, QHj, QHk
     real(rkind) :: dt
 
     ! Halo-padded arrays
@@ -79,6 +80,7 @@ module enrichmentMod
       procedure          :: dumpData
       procedure, private :: doDebugChecks
       procedure, private :: updateSeeds
+      procedure, private :: rescaleAmplitudesUsingLocalParameters
 
       ! MPI communication stuff
       procedure          :: sendRecvHaloModes
@@ -218,7 +220,10 @@ contains
     this%vhatI => this%modeData(:,10)
     this%whatR => this%modeData(:,11)
     this%whatI => this%modeData(:,12)
-    
+   
+    ! Allocate memory for QH region indices 
+    allocate(this%QHi(this%nmodes), this%QHj(this%nmodes), this%QHk(this%nmodes))
+
     ! Allocate extra memory for velocity rendering
     ist = this%smallScales%gpC%xst(1) 
     ien = this%smallScales%gpC%xen(1) 

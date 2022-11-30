@@ -25,6 +25,9 @@ subroutine generateIsotropicModes(this)
 
   ! Velocity-vector amplitudes
   real(rkind), dimension(:,:,:,:,:), allocatable :: uR, uI, vR, vI, wR, wI
+  
+  ! QHmesh indices of each mode
+  real(rkind), dimension(:,:,:,:,:), allocatable :: QHi, QHj, QHk
 
   ! Misc
   integer :: ierr
@@ -71,6 +74,8 @@ subroutine generateIsotropicModes(this)
            wR(isz,jsz,ksz,nk,ntheta),wI(isz,jsz,ksz,nk,ntheta))
   allocate(k1(isz,jsz,ksz,nk,ntheta),k2(isz,jsz,ksz,nk,ntheta),&
            k3(isz,jsz,ksz,nk,ntheta))
+  allocate(QHi(isz,jsz,ksz,nk,ntheta), QHj(isz,jsz,ksz,nk,ntheta), &
+           QHk(isz,jsz,ksz,nk,ntheta))
 
   
     ! Assign wave-vector magnitudes based on logarithmically spaced shells
@@ -158,6 +163,11 @@ subroutine generateIsotropicModes(this)
 
         wR(i,j,k,:,:) = uRmag*orientationZ
         wI(i,j,k,:,:) = uImag*orientationZ
+
+        ! Mark the QH region in which these modes were initialized
+        QHi(i,j,k,:,:) = i
+        QHj(i,j,k,:,:) = j
+        QHk(i,j,k,:,:) = k
       end do
     end do
   end do
@@ -178,6 +188,9 @@ subroutine generateIsotropicModes(this)
   this%whatR = this%scalefact*reshape(wR,(/nmodes/))
   this%whatI = this%scalefact*reshape(wI,(/nmodes/))
 
+  ! Rescale amplitudes using interpolated values of KE and L
+  call this%rescaleAmplitudesUsingLocalParameters()
+
   this%kx = reshape(k1,(/nmodes/))
   this%ky = reshape(k2,(/nmodes/))
   this%kz = reshape(k3,(/nmodes/))
@@ -185,6 +198,10 @@ subroutine generateIsotropicModes(this)
   this%x = reshape(gmx,(/nmodes/))
   this%y = reshape(gmy,(/nmodes/))
   this%z = reshape(gmz,(/nmodes/))
+
+  this%QHi = reshape(QHi,(/nmodes/))
+  this%QHj = reshape(QHj,(/nmodes/))
+  this%QHk = reshape(QHk,(/nmodes/))
 
   ! Confirm modes are divergence free
   call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&
@@ -204,11 +221,70 @@ subroutine generateIsotropicModes(this)
   ! Deallocate temporary arrays
   deallocate(kedge,kmag,dk,E,rand1,theta,kztemp,r,umag,thetaVel,uRmag,uImag,&
              rand2, p1x, p1y, p2x, p2y, p2z, orientationX, orientationY, &
-             orientationZ, uR, uI, vR, vI, wR, wI, k1, k2, k3, gmx, gmy, gmz)
+             orientationZ, uR, uI, vR, vI, wR, wI, k1, k2, k3, gmx, gmy, gmz, &
+             QHi, QHj, QHk)
   
   ! Acknowledge that isotropic modes are initialized
   call message(1,'Finished generating isotropic modes')
 
+end subroutine
+
+subroutine rescaleAmplitudesUsingLocalParameters(this)
+  use GaborModeRoutines, only: interpToLocation
+  class(enrichmentOperator), intent(inout), target :: this
+  real(rkind), dimension(:,:,:), allocatable :: KE_h, L_h
+  real(rkind), dimension(:,:,:), pointer :: KE_local, L_local
+  real(rkind) :: KE_mode, L_mode, kmag, alpha
+  integer :: n, QHi, QHj, QHk
+
+  ! Get halo-padded arrays for KE and L
+  call this%largeScales%pg%alloc_array(KE_h)
+  call this%largeScales%pg%alloc_array(L_h)
+ 
+  ! Compute local large scale kinetic energy
+  KE_local => this%largeScales%rbuffxC(:,:,:,1)
+  L_local  => this%largeScales%rbuffxC(:,:,:,2)
+
+  KE_local = 0.5d0*(this%largeScales%u**2 + this%largeScales%v**2 + this%largeScales%wC**2)
+  ! L_local = ???
+
+  call this%largeScales%haloUpdateField(KE_local, KE_h)
+  call this%largeScales%haloUpdateField(L_local, L_h)
+
+  do n = 1,this%nmodes
+    QHi = this%QHi(n)
+    QHj = this%QHj(n)
+    QHk = this%QHk(n)
+    
+    ! Interoplate KE and L to mode location
+    call interpToLocation(KE_h,KE_mode,this%largeScales%dx, this%largeScales%dy, &
+      this%largeScales%dz, this%largeScales%mesh(1,1,1,1), &
+      this%largeScales%mesh(1,1,1,2), this%largeScales%mesh(1,1,1,3), &
+      this%x(n), this%y(n), this%z(n))
+    call interpToLocation(L_h,L_mode,this%largeScales%dx, this%largeScales%dy, &
+      this%largeScales%dz, this%largeScales%mesh(1,1,1,1), &
+      this%largeScales%mesh(1,1,1,2), this%largeScales%mesh(1,1,1,3), &
+      this%x(n), this%y(n), this%z(n))
+
+    kmag = sqrt(this%kx(n)**2 + this%ky(n)**2 + this%kz(n)**2)
+
+    ! Compute the local scaling parameter based on QH-region quantities and local
+    ! LES quantites
+    alpha = 2*this%QHgrid%KE(QHi,QHj,QHk)*this%QHgrid%L(QHi,QHj,QHk)**5/&
+      (2*KE_mode*L_mode**5)*&
+      ((1.d0 + (kmag*this%QHgrid%L(QHi,QHj,QHk))**2)/&
+      (1.d0 + (kmag*L_mode)**2))**(17.d0/6.d0)
+     
+    this%uhatR(n) = alpha*this%uhatR(n)
+    this%uhatI(n) = alpha*this%uhatI(n)
+    this%vhatR(n) = alpha*this%vhatR(n)
+    this%vhatI(n) = alpha*this%vhatI(n)
+    this%whatR(n) = alpha*this%whatR(n)
+    this%whatI(n) = alpha*this%whatI(n)
+  end do
+
+  deallocate(KE_h, L_h)
+  nullify(KE_local, L_local)
 end subroutine
 
 subroutine strainModes(this)
@@ -275,7 +351,7 @@ subroutine strainModes(this)
 end subroutine
 
 subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
-  use GaborModeRoutines, only: interpToLocation, findMeshIdx, getNearestNeighborValue
+  use GaborModeRoutines, only: interpToLocation, getNearestNeighborValue!, findMeshIdx
 
   class(enrichmentOperator), intent(inout) :: this
   integer, intent(in) :: gmID
@@ -323,9 +399,9 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   end do
 
   ! Find the index of the mode's QH region
-  QHx = findMeshIdx(this%x(gmID),this%QHgrid%xE)
-  QHy = findMeshIdx(this%y(gmID),this%QHgrid%yE)
-  QHz = findMeshIdx(this%z(gmID),this%QHgrid%zE)
+  QHx = this%QHi(gmID)!findMeshIdx(this%x(gmID),this%QHgrid%xE)
+  QHy = this%QHj(gmID)!findMeshIdx(this%y(gmID),this%QHgrid%yE)
+  QHz = this%QHk(gmID)!findMeshIdx(this%z(gmID),this%QHgrid%zE)
   
   ! Use L and KE for the QH region that the mode resides in
   L = this%QHgrid%L(QHx,QHy,QHz)

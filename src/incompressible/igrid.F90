@@ -397,7 +397,7 @@ module IncompressibleGrid
             ! Gabor mode specific procedures (ignored for normal igrid runs)
             procedure          :: initLargeScales 
             procedure          :: HaloUpdateVelocities
-            procedure, private :: HaloUpdateField
+            procedure          :: HaloUpdateField
             procedure          :: ProjectToFixBC
             procedure, private :: readLargeScales
             procedure          :: fixGradientsForPeriodicity
