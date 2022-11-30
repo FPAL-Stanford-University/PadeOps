@@ -1,7 +1,7 @@
-subroutine generateIsotropicModes(this)
+subroutine generateIsotropicModesOld(this)
   use gridtools, only: logspace
   use random,    only: uniform_random
-  use GaborModeRoutines, only: normalizeVec, isOrthogonal, getModelSpectrum, &
+  use GaborModeRoutines, only: normalizeVec2, isOrthogonal, getModelSpectrumOld, &
                                doWarning, small
   use mpi
   class(enrichmentOperator), intent(inout) :: this
@@ -25,9 +25,6 @@ subroutine generateIsotropicModes(this)
 
   ! Velocity-vector amplitudes
   real(rkind), dimension(:,:,:,:,:), allocatable :: uR, uI, vR, vI, wR, wI
-  
-  ! QHmesh indices of each mode
-  real(rkind), dimension(:,:,:,:,:), allocatable :: QHi, QHj, QHk
 
   ! Misc
   integer :: ierr
@@ -74,8 +71,6 @@ subroutine generateIsotropicModes(this)
            wR(isz,jsz,ksz,nk,ntheta),wI(isz,jsz,ksz,nk,ntheta))
   allocate(k1(isz,jsz,ksz,nk,ntheta),k2(isz,jsz,ksz,nk,ntheta),&
            k3(isz,jsz,ksz,nk,ntheta))
-  allocate(QHi(isz,jsz,ksz,nk,ntheta), QHj(isz,jsz,ksz,nk,ntheta), &
-           QHk(isz,jsz,ksz,nk,ntheta))
 
   
     ! Assign wave-vector magnitudes based on logarithmically spaced shells
@@ -120,7 +115,7 @@ subroutine generateIsotropicModes(this)
         end do
 
         ! Non-dimensional model energy spectrum
-        E = getModelSpectrum(kmag,this%QHgrid%KE(i,j,k),&
+        E = getModelSpectrumOld(kmag,this%QHgrid%KE(i,j,k),&
           this%QHgrid%L(i,j,k),nk)
 
         ! Amplitude of each mode such that the sum of mode energies gives
@@ -140,8 +135,8 @@ subroutine generateIsotropicModes(this)
         p2y = -k1(i,j,k,:,:)*k2(i,j,k,:,:)
         p2z = -k1(i,j,k,:,:)*k3(i,j,k,:,:)
 
-        call normalizeVec(p1x,p1y,p1z)
-        call normalizeVec(p2x,p2y,p2z)
+        call normalizeVec2(p1x,p1y,p1z)
+        call normalizeVec2(p2x,p2y,p2z)
 
         ! Assign orientation of the velocity vectors
         call uniform_random(thetaVel,0.d0,2.d0*pi,seed6)
@@ -163,11 +158,6 @@ subroutine generateIsotropicModes(this)
 
         wR(i,j,k,:,:) = uRmag*orientationZ
         wI(i,j,k,:,:) = uImag*orientationZ
-
-        ! Mark the QH region in which these modes were initialized
-        QHi(i,j,k,:,:) = i
-        QHj(i,j,k,:,:) = j
-        QHk(i,j,k,:,:) = k
       end do
     end do
   end do
@@ -195,13 +185,9 @@ subroutine generateIsotropicModes(this)
   this%x = reshape(gmx,(/nmodes/))
   this%y = reshape(gmy,(/nmodes/))
   this%z = reshape(gmz,(/nmodes/))
-
-  this%QHi = reshape(QHi,(/nmodes/))
-  this%QHj = reshape(QHj,(/nmodes/))
-  this%QHk = reshape(QHk,(/nmodes/))
   
   ! Rescale amplitudes using interpolated values of KE and L
-  call this%rescaleAmplitudesUsingLocalParameters()
+  !call this%rescaleAmplitudesUsingLocalParameters()
 
   ! Confirm modes are divergence free
   call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&
@@ -221,70 +207,235 @@ subroutine generateIsotropicModes(this)
   ! Deallocate temporary arrays
   deallocate(kedge,kmag,dk,E,rand1,theta,kztemp,r,umag,thetaVel,uRmag,uImag,&
              rand2, p1x, p1y, p2x, p2y, p2z, orientationX, orientationY, &
-             orientationZ, uR, uI, vR, vI, wR, wI, k1, k2, k3, gmx, gmy, gmz, &
-             QHi, QHj, QHk)
+             orientationZ, uR, uI, vR, vI, wR, wI, k1, k2, k3, gmx, gmy, gmz)
   
   ! Acknowledge that isotropic modes are initialized
   call message(1,'Finished generating isotropic modes')
 
 end subroutine
 
-subroutine rescaleAmplitudesUsingLocalParameters(this)
-  use GaborModeRoutines, only: interpToLocation
-  class(enrichmentOperator), intent(inout), target :: this
-  real(rkind), dimension(:,:,:), allocatable :: KE_h, L_h
-  real(rkind), dimension(:,:,:), pointer :: KE_local, L_local
-  real(rkind) :: KE_mode, L_mode, kmag, alpha
-  integer :: n, QHi, QHj, QHk
+subroutine generateIsotropicModes(this)
+  use gridtools, only: logspace
+  use random,    only: uniform_random
+  use GaborModeRoutines, only: normalizeVec, isOrthogonal, getModelSpectrum, &
+                               doWarning, interpToLocation
+  use mpi
+  class(enrichmentOperator), intent(inout) :: this
+  character(len=clen) :: mssg1, mssg2, mssg3, mssg4
+  real(rkind) :: xmin, ymin, zmin
+  integer :: i, j, k, kid, thetaID, nk, ntheta, nmodes
+  integer :: seed1=1, seed2=2, seed3=3, seed4=4, seed5=5, seed6=6, seed7=7
+  integer :: isz, jsz, ksz
+  real(rkind), dimension(:), allocatable :: kedge, kmag, dk, dkmodes, rand1, &
+                                            theta, kztemp, r, rand2, thetaVel
+  real(rkind) :: orientationX, orientationY, &
+                 orientationZ, p1x, p1y, p1z, &
+                 p2x, p2y, p2z, uRmag, uImag, &
+                 umag, E
+  
+  ! Physical location of Gabor modes
+  real(rkind), dimension(:,:,:,:), allocatable :: gmx, gmy, gmz
 
-  ! Get halo-padded arrays for KE and L
-  call this%largeScales%pg%alloc_array(KE_h)
-  call this%largeScales%pg%alloc_array(L_h)
+  ! Wave-vector components
+  real(rkind), dimension(:,:,:,:), allocatable :: k1, k2, k3
+  real(rkind) :: myKmag
+
+  ! Velocity-vector amplitudes
+  real(rkind), dimension(:,:,:,:), allocatable :: uR, uI, vR, vI, wR, wI
+
+  ! Large scale quantities
+  real(rkind) :: KE_loc, L_loc
+
+  ! Misc
+  integer :: ierr, kst, ken, n, thetaSt, thetaEn
+
+  call message("                                                                ")
+  call message("================================================================")
+  call message("============== Initializing isotropic Gabor modes ==============")
+  write(mssg1,'(A)') 'Total modes to initialize:'
+  write(mssg2,'(A,I2,A,I2,A)') '(', this%nk,' shells per QH region) X (',&
+    this%ntheta, ' modes per shell) X ...'
+  write(mssg3,'(A,I2,A,I2,A,I2,A)') &
+    '(', this%QHgrid%nx,' QH regions in x) X (', &
+    this%QHgrid%ny,' QH regions in y) X (', this%QHgrid%nz, ' QH regions in z) = ...'
+  write(mssg4,'(I8,A)') this%nmodesGlobal, ' modes'
+  call message(                          trim(mssg1)                             )
+  call message(                          trim(mssg2)                             )
+  call message(                          trim(mssg3)                             )
+  call message(                          trim(mssg4)                             )
+  call message("                                                                ")
+  
+  ! Allocate memory
+  nk = this%nk
+  ntheta = this%ntheta 
+  isz = this%QHgrid%gpC%xsz(1) 
+  jsz = this%QHgrid%gpC%xsz(2)
+  ksz = this%QHgrid%gpC%xsz(3)
+
+  allocate(kedge(nk+1))
+  allocate(kmag(nk),dk(nk),dkmodes(nk*ntheta))
+  allocate(rand1(nk*ntheta))
+  allocate(theta(ntheta),kztemp(ntheta),r(ntheta))
+  allocate(thetaVel(nk*ntheta))
+  allocate(rand2(nk*ntheta))
+
+  ! Allocate memory for ND attribute arrays
+  allocate(gmx(nk*ntheta,isz,jsz,ksz), gmy(nk*ntheta,isz,jsz,ksz), &
+           gmz(nk*ntheta,isz,jsz,ksz))
+  allocate(uR(nk*ntheta,isz,jsz,ksz),uI(nk*ntheta,isz,jsz,ksz),&
+           vR(nk*ntheta,isz,jsz,ksz),vI(nk*ntheta,isz,jsz,ksz),&
+           wR(nk*ntheta,isz,jsz,ksz),wI(nk*ntheta,isz,jsz,ksz))
+  allocate(k1(nk*ntheta,isz,jsz,ksz),k2(nk*ntheta,isz,jsz,ksz),&
+           k3(nk*ntheta,isz,jsz,ksz))
+
+  
+    ! Assign wave-vector magnitudes based on logarithmically spaced shells
+  ! (non-dimensionalized with L)
+  !kedge = logspace(kmin,kmax,nk+1)
  
-  ! Compute local large scale kinetic energy
-  KE_local => this%largeScales%rbuffxC(:,:,:,1)
-  L_local  => this%largeScales%rbuffxC(:,:,:,2)
+  do k = 1,this%QHgrid%gpC%xsz(3)
+    zmin = this%QHgrid%zE(k)
+    do j = 1,this%QHgrid%gpC%xsz(2)
+      ymin = this%QHgrid%yE(j)
+      do i = 1,this%QHgrid%gpC%xsz(1)
+        xmin = this%QHgrid%xE(i)
 
-  KE_local = 1.d0!0.5d0*(this%largeScales%u**2 + this%largeScales%v**2 + this%largeScales%wC**2)
-  L_local = 1.d0
+        call this%updateSeeds(seed1,seed2,seed3,seed4,seed5,seed6,seed7,&
+          this%QHgrid%gpC%xst(1)+i-1,&
+          this%QHgrid%gpC%xst(2)+j-1,&
+          this%QHgrid%gpC%xst(3)+k-1)
+          
+        ! Uniformily distribute modes in QH region
+        call uniform_random(rand1,0.d0,1.d0,seed1)
+        gmx(:,i,j,k) = xmin + this%QHgrid%dx*rand1
+        
+        call uniform_random(rand1,0.d0,1.d0,seed2)
+        gmy(:,i,j,k) = ymin + this%QHgrid%dy*rand1
 
-  call this%largeScales%haloUpdateField(KE_local, KE_h)
-  call this%largeScales%haloUpdateField(L_local, L_h)
+        call uniform_random(rand1,0.d0,1.d0,seed3)
+        gmz(:,i,j,k) = zmin + this%QHgrid%dz*rand1
+          
+        call uniform_random(thetaVel,0.d0,2.d0*pi,seed6)
+          
+        call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),seed7)
+  
+        kedge = logspace(log10(this%kmin),log10(this%kmax),nk+1)
+        kmag = 0.5d0*(kedge(1:nk) + kedge(2:nk+1))
+        dk = kedge(2:nk+1) - kedge(1:nk)
+          
+        do kid = 1,nk
+          kst = (kid - 1)*ntheta + 1
+          ken = kst + ntheta - 1
 
-  do n = 1,this%nmodes
-    QHi = this%QHi(n)
-    QHj = this%QHj(n)
-    QHk = this%QHk(n)
-    
-    ! Interoplate KE and L to mode location
-    call interpToLocation(KE_h,KE_mode,this%largeScales%dx, this%largeScales%dy, &
-      this%largeScales%dz, this%largeScales%mesh(1,1,1,1), &
-      this%largeScales%mesh(1,1,1,2), this%largeScales%mesh(1,1,1,3), &
-      this%x(n), this%y(n), this%z(n))
-    call interpToLocation(L_h,L_mode,this%largeScales%dx, this%largeScales%dy, &
-      this%largeScales%dz, this%largeScales%mesh(1,1,1,1), &
-      this%largeScales%mesh(1,1,1,2), this%largeScales%mesh(1,1,1,3), &
-      this%x(n), this%y(n), this%z(n))
+          ! Isotropically sample wave-vector components
+          call uniform_random(theta,0.d0,2.d0*pi,seed4)
+          call uniform_random(kztemp,-1.d0,1.d0,seed5)
 
-    kmag = sqrt(this%kx(n)**2 + this%ky(n)**2 + this%kz(n)**2)
+          ! Assign wave-vector components
+          k3(kst:ken,i,j,k) = kmag(kid)*kztemp
+          r = sqrt(1.d0 - kztemp*kztemp)
+          k1(kst:ken,i,j,k) = kmag(kid)*r*cos(theta)
+          k2(kst:ken,i,j,k) = kmag(kid)*r*sin(theta)
+          dkmodes(kst:ken) = dk(kid)
+        end do
 
-    ! Compute the local scaling parameter based on QH-region quantities and local
-    ! LES quantites
-    alpha = this%QHgrid%KE(QHi,QHj,QHk)*this%QHgrid%L(QHi,QHj,QHk)**5/&
-      (KE_mode*L_mode**5)!*&
-      !((1.d0 + (kmag*this%QHgrid%L(QHi,QHj,QHk))**2)/&
-      !(1.d0 + (kmag*L_mode)**2))**(17.d0/6.d0)
-    
-    this%uhatR(n) = alpha*this%uhatR(n)
-    this%uhatI(n) = alpha*this%uhatI(n)
-    this%vhatR(n) = alpha*this%vhatR(n)
-    this%vhatI(n) = alpha*this%vhatI(n)
-    this%whatR(n) = alpha*this%whatR(n)
-    this%whatI(n) = alpha*this%whatI(n)
+        do n = 1,this%nk*this%ntheta
+
+          ! get KE_loc and L_loc
+          call interpToLocation(this%KEh,KE_loc,this%largeScales%dx,this%largeScales%dy,&
+            this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
+            this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&
+            gmx(n,i,j,k),gmy(n,i,j,k),gmz(n,i,j,k))
+          call interpToLocation(this%Lh,L_loc,this%largeScales%dx,this%largeScales%dy,&
+            this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
+            this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&
+            gmx(n,i,j,k),gmy(n,i,j,k),gmz(n,i,j,k))
+          
+          myKmag = sqrt(k1(n,i,j,k)**2 + k2(n,i,j,k)**2 + k3(n,i,j,k)**2)
+          
+          E = getModelSpectrum(myKmag,KE_loc,L_loc)
+
+          ! Amplitude of each mode such that the sum of mode energies gives
+          ! the correct kinetic energy
+          umag = sqrt(2*E*dkmodes(n)/ntheta)
+  
+          ! Get velocity vector orientations
+          ! Generate basis of tangent plane to wavenumber shell
+          p1x = 0.d0
+          p1y = -k3(n,i,j,k)
+          p1z =  k2(n,i,j,k)
+
+          p2x =  k2(n,i,j,k)**2 + k3(n,i,j,k)**2
+          p2y = -k1(n,i,j,k)*k2(n,i,j,k)
+          p2z = -k1(n,i,j,k)*k3(n,i,j,k)
+
+          call normalizeVec(p1x,p1y,p1z)
+          call normalizeVec(p2x,p2y,p2z)
+
+          ! Assign orientation of the velocity vectors
+          orientationX = cos(thetaVel(n))*p1x + sin(thetaVel(n))*p2x
+          orientationY = cos(thetaVel(n))*p1y + sin(thetaVel(n))*p2y
+          orientationZ = cos(thetaVel(n))*p1z + sin(thetaVel(n))*p2z
+
+          ! We have the modulus and orientation of the complex-valued amplitudes.
+          ! Now assigng the real and imaginary components
+          uRmag = rand2(n)*umag
+          uImag = sqrt(umag*umag/3.d0 - uRmag*uRmag)
+
+          uR(n,i,j,k) = uRmag*orientationX
+          uI(n,i,j,k) = uImag*orientationX
+              
+          vR(n,i,j,k) = uRmag*orientationY
+          vI(n,i,j,k) = uImag*orientationY
+              
+          wR(n,i,j,k) = uRmag*orientationZ
+          wI(n,i,j,k) = uImag*orientationZ
+        end do
+      end do
+    end do
   end do
 
-  deallocate(KE_h, L_h)
-  nullify(KE_local, L_local)
+  ! Collapse the Gabor mode data into a 1D vector
+  nmodes = this%nmodes 
+  this%uhatR = this%scalefact*reshape(uR,(/nmodes/))
+  this%uhatI = this%scalefact*reshape(uI,(/nmodes/))
+  
+  this%vhatR = this%scalefact*reshape(vR,(/nmodes/))
+  this%vhatI = this%scalefact*reshape(vI,(/nmodes/))
+  
+  this%whatR = this%scalefact*reshape(wR,(/nmodes/))
+  this%whatI = this%scalefact*reshape(wI,(/nmodes/))
+
+  this%kx = reshape(k1,(/nmodes/))
+  this%ky = reshape(k2,(/nmodes/))
+  this%kz = reshape(k3,(/nmodes/))
+
+  this%x = reshape(gmx,(/nmodes/))
+  this%y = reshape(gmy,(/nmodes/))
+  this%z = reshape(gmz,(/nmodes/))
+
+  ! Confirm modes are divergence free
+  call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&
+    this%kx,this%ky,this%kz),'Velocity not divergence free (R)')
+  call assert(isOrthogonal(this%uhatI,this%vhatI,this%whatI,&
+    this%kx,this%ky,this%kz),'Velocity not divergence free (I)')
+
+  ! Debug checks
+  if (this%debugChecks) then
+    call this%doDebugChecks()
+    call MPI_Barrier(MPI_COMM_WORLD,ierr)
+  end if
+  
+  ! Reset warning trigger
+  doWarning = .true.
+
+  ! Deallocate temporary arrays
+  deallocate(kedge,kmag,dk,rand1,theta,kztemp,r,thetaVel,rand2,&
+             uR, uI, vR, vI, wR, wI, k1, k2, k3, gmx, gmy, gmz)
+  
+  ! Acknowledge that isotropic modes are initialized
+  call message(1,'Finished generating isotropic modes')
+
 end subroutine
 
 subroutine strainModes(this)
@@ -357,7 +508,7 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
   integer, intent(in) :: gmID
   real(rkind), dimension(3,3), intent(out) :: dudx
   real(rkind), intent(out) :: L, KE, U, V, W
-  integer :: i, j, idx, QHx, QHy, QHz
+  integer :: i, j, idx
 
   call interpToLocation(this%uh, U,&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
@@ -398,14 +549,15 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
     end do
   end do
 
-  ! Find the index of the mode's QH region
-  QHx = this%QHi(gmID)!findMeshIdx(this%x(gmID),this%QHgrid%xE)
-  QHy = this%QHj(gmID)!findMeshIdx(this%y(gmID),this%QHgrid%yE)
-  QHz = this%QHk(gmID)!findMeshIdx(this%z(gmID),this%QHgrid%zE)
-  
   ! Use L and KE for the QH region that the mode resides in
-  L = this%QHgrid%L(QHx,QHy,QHz)
-  KE = this%QHgrid%KE(QHx,QHy,QHz)
+  call interpToLocation(this%KEh,KE,this%largeScales%dx,this%largeScales%dy,&
+    this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
+    this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&
+    this%x(gmID),this%y(gmID),this%z(gmID))
+  call interpToLocation(this%Lh,L,this%largeScales%dx,this%largeScales%dy,&
+    this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
+    this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&
+    this%x(gmID),this%y(gmID),this%z(gmID))
 end subroutine
 
 subroutine updateSeeds(this,seed1,seed2,seed3,seed4,seed5,seed6,seed7,&

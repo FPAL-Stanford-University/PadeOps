@@ -11,6 +11,7 @@ module enrichmentMod
   use decomp_2d,          only: DECOMP_2D_COMM_CART_X, nrank, nproc
   use mpi
   use reductions,         only: p_maxval, p_minval
+  use timer,              only: tic, toc
   implicit none
 
   private
@@ -30,11 +31,11 @@ module enrichmentMod
     real(rkind), dimension(:), pointer, public :: x, y, z
     real(rkind), dimension(:), pointer, public :: uhatR, uhatI, vhatR, &
       vhatI, whatR, whatI
-    real(rkind), dimension(:), allocatable :: QHi, QHj, QHk
     real(rkind) :: dt
 
     ! Halo-padded arrays
     real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh
+    real(rkind), dimension(:,:,:), allocatable :: KE, L, KEh, Lh
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj_h
 
     integer, public :: nxsupp, nysupp, nzsupp
@@ -67,6 +68,7 @@ module enrichmentMod
     contains
       procedure          :: init
       procedure          :: destroy
+      procedure          :: generateIsotropicModesOld
       procedure          :: generateIsotropicModes
       procedure          :: strainModes
       procedure          :: getLargeScaleDataAtModeLocation
@@ -80,7 +82,6 @@ module enrichmentMod
       procedure          :: dumpData
       procedure, private :: doDebugChecks
       procedure, private :: updateSeeds
-      procedure, private :: rescaleAmplitudesUsingLocalParameters
 
       ! MPI communication stuff
       procedure          :: sendRecvHaloModes
@@ -111,6 +112,7 @@ contains
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
     logical :: xPeriodic = .true., yPeriodic = .true., zPeriodic = .true.
+    integer :: n
     
     namelist /IO/      outputdir, writeIsotropicModes
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
@@ -169,12 +171,16 @@ contains
     this%duidxj_LS => largeScales%duidxjC
 
     ! Get halo-padded velocity arrays
+    allocate(this%KE(this%largeScales%gpC%xsz(1),this%largeScales%gpC%xsz(2),&
+      this%largeScales%gpC%xsz(3)))
+    allocate(this%L(this%largeScales%gpC%xsz(1),this%largeScales%gpC%xsz(2),&
+      this%largeScales%gpC%xsz(3)))
+    call getLargeScaleParams(this%KE,this%L,this%largeScales)
     call this%updateLargeScales(timeAdvance=.false.) 
 
     ! Ryan 
     ! STEP 1: Finish the QH region code to fill Gabor Modes (kx, ky, kz, x, y, z, uhat, ...)
     call this%QHgrid%init(inputfile,this%largeScales)
-    call getLargeScaleParams(this%QHgrid%KE,this%QHgrid%L,this%largeScales)
 
     this%nxsupp = 2 * this%smallScales%nx/this%largeScales%nx * &
       nint(this%QHgrid%dx / this%largeScales%dx)
@@ -221,9 +227,6 @@ contains
     this%whatR => this%modeData(:,11)
     this%whatI => this%modeData(:,12)
    
-    ! Allocate memory for QH region indices 
-    allocate(this%QHi(this%nmodes), this%QHj(this%nmodes), this%QHk(this%nmodes))
-
     ! Allocate extra memory for velocity rendering
     ist = this%smallScales%gpC%xst(1) 
     ien = this%smallScales%gpC%xen(1) 
@@ -246,7 +249,9 @@ contains
     periodicBCs(3) = zPeriodic
 
     ! Initialize the Gabor modes
-    call this%generateIsotropicModes()
+    call this%generateIsotropicModesOld()
+    !call this%generateIsotropicModes()
+
     if (this%writeIsotropicModes) then
       call message(1, 'Writing modes to disk.')
       call this%dumpData(this%x,this%y,this%z,this%kx,this%ky,this%kz, &
@@ -306,8 +311,13 @@ contains
     if(.not. allocated(this%vh))       call this%largeScales%pg%alloc_array(this%vh)
     if(.not. allocated(this%wh))       call this%largeScales%pg%alloc_array(this%wh)
     if(.not. allocated(this%duidxj_h)) call this%largeScales%pg%alloc_array(this%duidxj_h,9)
+    if(.not. allocated(this%KEh)) call this%largeScales%pg%alloc_array(this%KEh)
+    if(.not. allocated(this%Lh)) call this%largeScales%pg%alloc_array(this%Lh)
     call this%largeScales%HaloUpdateVelocities(this%uh, this%vh, this%wh, &
       this%duidxj_h)
+
+    call this%largeScales%haloUpdateField(this%KE,this%KEh)
+    call this%largeScales%haloUpdateField(this%L, this%Lh)
 
     call removePeriodicityFromGhost(this%uh,this%largeScales%gpC)
     call removePeriodicityFromGhost(this%vh,this%largeScales%gpC)

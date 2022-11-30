@@ -12,7 +12,36 @@ module GaborModeRoutines
   include "GaborModeRoutines_files/timeSteppingStuff.F90"
   include "GaborModeRoutines_files/interpolation.F90"
     
-    function getModelSpectrum(k,KE,L,nk) result(E) 
+    function getModelSpectrum(k,KE,L) result(E) 
+      use exits, only: warning
+      real(rkind), intent(in) :: k
+      real(rkind) :: kL, fL, feta
+      real(rkind), intent(in) :: KE, L
+      real(rkind) :: C
+      real(rkind) :: E
+
+      ! Non-dimensional wavenumber
+      kL = k*L
+
+      ! Model coefficient chosen such that the integrated spectrum equals total
+      ! kinetic energy
+      C = 0.4843d0
+
+      ! Energetic scalse
+      fL = kL**4.d0/(1.d0 + kL*kL)**(17.d0/6.d0)
+
+      ! TODO: Dissipative scales
+      feta = 1.d0
+      if (doWarning) then
+        call warning("WARNING: Finite Re model spectrum is not implemented")
+        doWarning = .false.
+      end if
+
+      ! Model spectrum
+      E = C*2.d0*KE*L*fL*feta
+    end function
+    
+    function getModelSpectrumOld(k,KE,L,nk) result(E) 
       use exits, only: warning
       real(rkind), dimension(:), intent(in) :: k
       integer, intent(in) :: nk
@@ -41,8 +70,18 @@ module GaborModeRoutines
       ! Model spectrum
       E = C*2.d0*KE*L*fL*feta
     end function
-
+    
     pure subroutine normalizeVec(x,y,z)
+      real(rkind), intent(inout) :: x, y, z
+      real(rkind) :: mag
+    
+      mag = sqrt(x*x + y*y + z*z)
+      x = x/mag
+      y = y/mag
+      z = z/mag
+    end subroutine
+    
+    pure subroutine normalizeVec2(x,y,z)
       real(rkind), dimension(:,:), intent(inout) :: x, y, z
       real(rkind), dimension(size(x,1),size(x,2)) :: mag
     
@@ -51,7 +90,7 @@ module GaborModeRoutines
       y = y/mag
       z = z/mag
     end subroutine
-
+    
     pure function isOrthogonal(a1,a2,a3,b1,b2,b3) result(TF)
       real(rkind), dimension(:), intent(in) :: a1, a2, a3, b1, b2, b3
       logical :: TF
