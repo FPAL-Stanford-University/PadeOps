@@ -270,10 +270,10 @@ subroutine rescaleAmplitudesUsingLocalParameters(this)
 
     ! Compute the local scaling parameter based on QH-region quantities and local
     ! LES quantites
-    alpha = 2*this%QHgrid%KE(QHi,QHj,QHk)*this%QHgrid%L(QHi,QHj,QHk)**5/&
-      (2*KE_mode*L_mode**5)*&
-      ((1.d0 + (kmag*this%QHgrid%L(QHi,QHj,QHk))**2)/&
-      (1.d0 + (kmag*L_mode)**2))**(17.d0/6.d0)
+    alpha = this%QHgrid%KE(QHi,QHj,QHk)*this%QHgrid%L(QHi,QHj,QHk)**5/&
+      (KE_mode*L_mode**5)!*&
+      !((1.d0 + (kmag*this%QHgrid%L(QHi,QHj,QHk))**2)/&
+      !(1.d0 + (kmag*L_mode)**2))**(17.d0/6.d0)
     
     this%uhatR(n) = alpha*this%uhatR(n)
     this%uhatI(n) = alpha*this%uhatI(n)
