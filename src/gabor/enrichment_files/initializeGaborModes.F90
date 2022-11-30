@@ -188,9 +188,6 @@ subroutine generateIsotropicModes(this)
   this%whatR = this%scalefact*reshape(wR,(/nmodes/))
   this%whatI = this%scalefact*reshape(wI,(/nmodes/))
 
-  ! Rescale amplitudes using interpolated values of KE and L
-  call this%rescaleAmplitudesUsingLocalParameters()
-
   this%kx = reshape(k1,(/nmodes/))
   this%ky = reshape(k2,(/nmodes/))
   this%kz = reshape(k3,(/nmodes/))
@@ -202,6 +199,9 @@ subroutine generateIsotropicModes(this)
   this%QHi = reshape(QHi,(/nmodes/))
   this%QHj = reshape(QHj,(/nmodes/))
   this%QHk = reshape(QHk,(/nmodes/))
+  
+  ! Rescale amplitudes using interpolated values of KE and L
+  call this%rescaleAmplitudesUsingLocalParameters()
 
   ! Confirm modes are divergence free
   call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&
@@ -245,8 +245,8 @@ subroutine rescaleAmplitudesUsingLocalParameters(this)
   KE_local => this%largeScales%rbuffxC(:,:,:,1)
   L_local  => this%largeScales%rbuffxC(:,:,:,2)
 
-  KE_local = 0.5d0*(this%largeScales%u**2 + this%largeScales%v**2 + this%largeScales%wC**2)
-  ! L_local = ???
+  KE_local = 1.d0!0.5d0*(this%largeScales%u**2 + this%largeScales%v**2 + this%largeScales%wC**2)
+  L_local = 1.d0
 
   call this%largeScales%haloUpdateField(KE_local, KE_h)
   call this%largeScales%haloUpdateField(L_local, L_h)
@@ -274,7 +274,7 @@ subroutine rescaleAmplitudesUsingLocalParameters(this)
       (2*KE_mode*L_mode**5)*&
       ((1.d0 + (kmag*this%QHgrid%L(QHi,QHj,QHk))**2)/&
       (1.d0 + (kmag*L_mode)**2))**(17.d0/6.d0)
-     
+    
     this%uhatR(n) = alpha*this%uhatR(n)
     this%uhatI(n) = alpha*this%uhatI(n)
     this%vhatR(n) = alpha*this%vhatR(n)
