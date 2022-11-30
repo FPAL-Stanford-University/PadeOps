@@ -91,8 +91,14 @@ subroutine getDtMax(dt,uhatR,uhatI,S,kmag)
   umax = sqrt(uhatR(1)*uhatR(1) + uhatI(1)*uhatI(1) + &
               uhatR(2)*uhatR(2) + uhatI(2)*uhatI(2) + &
               uhatR(3)*uhatR(3) + uhatI(3)*uhatI(3))
-  
-  tau1 = 1.d0/(kmag*umax)
+
+  call assert(kmag > small,'kmag > small -- getDtMax()') 
+  if (umax > small) then
+    tau1 = 1.d0/(kmag*umax)
+  else
+    tau1 = big
+  end if
+
   if (S > small) then 
     tau2 = 1.d0/S
   else

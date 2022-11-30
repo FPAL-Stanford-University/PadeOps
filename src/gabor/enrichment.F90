@@ -68,7 +68,6 @@ module enrichmentMod
     contains
       procedure          :: init
       procedure          :: destroy
-      procedure          :: generateIsotropicModesOld
       procedure          :: generateIsotropicModes
       procedure          :: strainModes
       procedure          :: getLargeScaleDataAtModeLocation
@@ -112,7 +111,6 @@ contains
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
     logical :: xPeriodic = .true., yPeriodic = .true., zPeriodic = .true.
-    integer :: n
     
     namelist /IO/      outputdir, writeIsotropicModes
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
@@ -181,6 +179,7 @@ contains
     ! Ryan 
     ! STEP 1: Finish the QH region code to fill Gabor Modes (kx, ky, kz, x, y, z, uhat, ...)
     call this%QHgrid%init(inputfile,this%largeScales)
+    call getLargeScaleParams(this%QHgrid%KE,this%QHgrid%L,this%largeScales)
 
     this%nxsupp = 2 * this%smallScales%nx/this%largeScales%nx * &
       nint(this%QHgrid%dx / this%largeScales%dx)
@@ -249,8 +248,7 @@ contains
     periodicBCs(3) = zPeriodic
 
     ! Initialize the Gabor modes
-    call this%generateIsotropicModesOld()
-    !call this%generateIsotropicModes()
+    call this%generateIsotropicModes()
 
     if (this%writeIsotropicModes) then
       call message(1, 'Writing modes to disk.')
