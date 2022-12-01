@@ -1,26 +1,17 @@
 module HIT_Periodic_parameters
-
-    use exits, only: message
+    use exits,            only: message
     use kind_parameters,  only: rkind
-    use constants, only: kappa 
+    use constants,        only: two, pi
     implicit none
-    integer :: seedu = 321341
-    integer :: seedv = 423424
-    integer :: seedw = 131344
-    real(rkind) :: randomScaleFact = 0.002_rkind ! 0.2% of the mean value
-    integer :: nxg, nyg, nzg
- 
-    logical :: useBandpassFilter = .false. 
-    real(rkind) :: k_bp_left, k_bp_right, uadvect = 10.0, x_shift 
-    real(rkind), dimension(:,:,:), allocatable :: uTarget, vTarget, wTarget
 
-    logical :: useRealSpaceLinearForcing = .false.
+    real(rkind) :: Lx = two*pi, Ly = two*pi, Lz = two*pi
+
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use HIT_Periodic_parameters    
     use kind_parameters,  only: rkind, clen
-    use constants,        only: one,two, pi
+    use constants,        only: one
     use decomp_2d,        only: decomp_info
     implicit none
 
@@ -29,15 +20,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
-    integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = two*pi, Ly = two*pi, Lz = two*pi
-    character(len=clen)  :: dir_init_files
-    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, TI = 0.1d0
-    character(len=clen)  :: ufname, vfname, wfname
-    integer :: init_type = 0
-    logical :: BandpassFilterFields = .false. 
-    integer :: initType = 0
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
+    integer :: ix1, ixn, iy1, iyn, iz1, izn, nxg, nyg, nzg
+    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11
@@ -75,18 +59,6 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 
     end associate
 
-    k_bp_left = kleft
-    k_bp_right = kright
-    uadvect = uadv
-    useBandPassFilter = BandpassFilterFields
-    if (useBandPassFilter) then
-      allocate(uTarget(size(mesh,1), size(mesh,2), size(mesh,3)))
-      allocate(vTarget(size(mesh,1), size(mesh,2), size(mesh,3)))
-      allocate(wTarget(size(mesh,1), size(mesh,2), size(mesh,3)))
-      uTarget = 0.d0
-      vTarget = 0.d0
-      wTarget = 0.d0
-    end if 
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
@@ -95,13 +67,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
-    use random,             only: gaussian_random
     use decomp_2d          
     use decomp_2d_io
-    use reductions,         only: p_maxval, p_minval, p_sum
     use cd06staggstuff,     only: cd06stagg
     use exits,              only: gracefulExit,message_min_max
-    use reductions,         only: p_sum
     use random
 
     implicit none
@@ -113,15 +82,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    real(rkind) :: dz
-    real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
-    type(cd06stagg), allocatable :: der
-    integer :: nz, nzE, k
-    character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: uadv = 0.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz, TI = 0.1d0
-    logical :: BandpassFilterFields = .false.
-    integer :: initType = 0, seed = 23455
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
+    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -137,62 +98,14 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
-    
-    if (initType == 0) then
-        
-       dz = z(1,1,2) - z(1,1,1)
 
-       
-       call decomp_2d_read_one(1,u ,ufname, decompC)
-       call decomp_2d_read_one(1,v ,vfname, decompC)
-       call decomp_2d_read_one(1,wC,wfname, decompC)
-  
-       call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
-       call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
-       call message_min_max(1,"Bounds for w:", p_minval(minval(wC)), p_maxval(maxval(wC)))
-       
-       !u = one!1.6d0*z*(2.d0 - z) 
-       !v = zero;
-       !w = zero;
-
-    else
-
-        call uniform_random(u ,-5.d0,5.d0,seed+1234*nrank+54321)
-        call uniform_random(v ,-5.d0,5.d0,seed+25634*nrank+54321)
-        call uniform_random(wC,-5.d0,5.d0,seed+32454*nrank+54321)
-        
-        u = u - p_sum(u)/(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3))
-        v = v - p_sum(v)/(decompC%xsz(1)*decompC%ysz(2)*decompC%zsz(3))
-        wC = wC - p_sum(wC)/(decompE%xsz(1)*decompE%ysz(2)*decompE%zsz(3))
-    
-    end if 
-    ! Interpolate wC to w
-    allocate(ybuffC(decompC%ysz(1),decompC%ysz(2), decompC%ysz(3)))
-    allocate(ybuffE(decompE%ysz(1),decompE%ysz(2), decompE%ysz(3)))
-
-    allocate(zbuffC(decompC%zsz(1),decompC%zsz(2), decompC%zsz(3)))
-    allocate(zbuffE(decompE%zsz(1),decompE%zsz(2), decompE%zsz(3)))
-    
-    nz = decompC%zsz(3)
-    nzE = nz + 1
-
-    call transpose_x_to_y(wC,ybuffC,decompC)
-    call transpose_y_to_z(ybuffC,zbuffC,decompC)
-    zbuffE = zero
-    allocate(der)
-    call der%init(decompC%zsz(3), dz, isTopEven = .false., isBotEven = .false., &
-                             isTopSided = .false., isBotSided = .false.)
-    call der%interpZ_C2E(zbuffC,zbuffE,size(zbuffC,1),size(zbuffC,2))                         
-    deallocate(der)
-    call transpose_z_to_y(zbuffE,ybuffE,decompE)
-    call transpose_y_to_x(ybuffE,w,decompE) 
-    
-
-    deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
+    u  = one 
+    v  = one
+    wC = one 
+    w  = one 
       
     nullify(u,v,w,x,y,z)
    
-    call message(0,"Velocity Field Initialized")
 
 end subroutine
 
@@ -233,16 +146,14 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     character(len=clen),                intent(in)    :: inputfile
     integer :: ioUnit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: TI = 0.1, uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz
-    logical :: BandpassFilterFields = .false. 
-    integer :: initType = 0
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
+    namelist /HIT_PeriodicINPUT/  Lx, Ly, Lz
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=HIT_PeriodicINPUT)
     close(ioUnit)    
 
+    wTh_surf = zero 
     ! Do nothing really since this is an unstratified simulation
 end subroutine
 
@@ -257,10 +168,7 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind) :: ThetaRef
     integer :: iounit 
     character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz, TI = 0.1d0
-    logical :: BandpassFilterFields = .false. 
-    integer :: initType = 0
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
+    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -281,11 +189,7 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
     integer :: iounit
-    character(len=clen)  :: ufname, vfname, wfname 
-    real(rkind) :: uadv = 1.d0, kleft = 10.d0, kright = 64.d0, Lx, Ly, Lz, TI = 0.1d0
-    logical :: BandpassFilterFields = .false. 
-    integer :: initType = 0
-    namelist /HIT_PeriodicINPUT/ ufname, vfname, wfname, TI, uadv, kleft, kright, BandpassFilterFields, Lx, Ly, Lz, initType, useRealSpaceLinearForcing
+    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -344,3 +248,33 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
 
     scalarSource = 0.d0
 end subroutine 
+
+subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
+    use kind_parameters, only: rkind
+    real(rkind),                     intent(in)    :: tsim, Re
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:),   intent(inout) :: urhs, vrhs, wrhs
+    real(rkind) :: dx, t, R
+
+    R = Re
+    t = tsim
+    dx = mesh(2,1,1,1) - mesh(1,1,1,1)
+
+    urhs = urhs + 0.d0
+    vrhs = vrhs + 0.d0
+    wrhs = wrhs + 0.d0
+
+end subroutine
+
+subroutine getLargeScaleParams(KE,L,LES)
+  use kind_parameters,    only: rkind
+  use incompressibleGrid, only: igrid
+  real(rkind), dimension(:,:,:), intent(out) :: KE, L
+  type(igrid), intent(in) :: LES
+  real(rkind) :: dx
+
+  dx = LES%dx
+  KE = 1.d0
+  L = 1.d0
+
+end subroutine

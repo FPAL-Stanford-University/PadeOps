@@ -1,0 +1,27 @@
+&INPUT
+  dt         = 1.d-3
+/
+/
+&IO
+  outputdir           = '/anvil/projects/x-atm170028/ryanhass/Enrichment/HIT/HIT1/rawData' 
+  writeIsotropicModes = .true.
+/
+/
+&GABOR
+  nk         = 32                    ! Number of wavenumber shells spanned by Gabor modes
+  ntheta     = 16                    ! Number of modes per wavenumber shell
+  scalefact  = 0.670820393249937d0   ! A tuneable parameters to get correct energy spectrum 
+  ctauGlobal = 7.d0                  ! Model parameter for mode straining
+/
+/
+&CONTROL
+  tidStop   = 1
+  tidRender = 1 
+  tio       = 1
+/
+/
+&QHMESH
+  nxLESperQH = 2
+  nyLESperQH = 2
+  nzLESperQH = 2
+/
