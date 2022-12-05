@@ -1,0 +1,16 @@
+    this%activeIndex = mod(this%activeIndex + 1,2)
+    
+    ! Link pointers
+    this%modeData => this%rawModeData(:,:,this%activeIndex)
+    this%x     => this%rawModeData(:,  1, this%activeIndex)
+    this%y     => this%rawModeData(:,  2, this%activeIndex)
+    this%z     => this%rawModeData(:,  3, this%activeIndex)
+    this%kx    => this%rawModeData(:,  4, this%activeIndex)
+    this%ky    => this%rawModeData(:,  5, this%activeIndex)
+    this%kz    => this%rawModeData(:,  6, this%activeIndex)
+    this%uhatR => this%rawModeData(:,  7, this%activeIndex)
+    this%uhatI => this%rawModeData(:,  8, this%activeIndex)
+    this%vhatR => this%rawModeData(:,  9, this%activeIndex)
+    this%vhatI => this%rawModeData(:, 10, this%activeIndex)
+    this%whatR => this%rawModeData(:, 11, this%activeIndex)
+    this%whatI => this%rawModeData(:, 12, this%activeIndex)

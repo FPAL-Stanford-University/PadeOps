@@ -251,7 +251,7 @@ subroutine strainModes(this)
   x     = 0.d0
  
   !$OMP PARALLEL SHARED(input) &
-  !$OMP PRIVATE(n, output, dudx, L, KE, U, V, W, S, k, uRtmp, uItmp, tauEddy) &
+  !$OMP PRIVATE(n, output, dudx, L, KE, Ui, S, k, uRtmp, uItmp, tauEddy) &
   !$OMP PRIVATE(dt)
   !$OMP DO
   do n = 1,this%nmodes

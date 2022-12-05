@@ -16,7 +16,7 @@ module enrichmentMod
 
   private
   integer :: nthreads
-  integer, dimension(4) :: neighbour
+  integer, dimension(4) :: neighbor
   integer, dimension(2) :: coords, dims
   logical, dimension(3) :: periodicBCs
 
@@ -26,7 +26,8 @@ module enrichmentMod
 
   type :: enrichmentOperator
     !private
-    real(rkind), dimension(:,:), allocatable :: modeData
+    real(rkind), dimension(:,:), pointer :: modeData
+    real(rkind), dimension(:,:,:), allocatable :: rawModeData
     real(rkind), dimension(:), pointer, public :: kx, ky, kz
     real(rkind), dimension(:), pointer, public :: x, y, z
     real(rkind), dimension(:), pointer, public :: uhatR, uhatI, vhatR, &
@@ -65,6 +66,7 @@ module enrichmentMod
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
 
+    integer :: activeIndex 
     contains
       procedure          :: init
       procedure          :: destroy
@@ -83,7 +85,7 @@ module enrichmentMod
 
       ! MPI communication stuff
       procedure, private :: sendRecvHaloModes
-      procedure, private :: sendRecvNewModes
+      procedure, private :: sortAndExchangeModes 
   end type
 
 contains
@@ -211,21 +213,10 @@ contains
       this%kmin, this%kmax)
 
     ! Allocate memory for mode data
-    allocate(this%modeData(this%nmodes,12))
-
-    ! Link pointers
-    this%x     => this%modeData(:,1)
-    this%y     => this%modeData(:,2)
-    this%z     => this%modeData(:,3)
-    this%kx    => this%modeData(:,4)
-    this%ky    => this%modeData(:,5)
-    this%kz    => this%modeData(:,6)
-    this%uhatR => this%modeData(:,7)
-    this%uhatI => this%modeData(:,8)
-    this%vhatR => this%modeData(:,9)
-    this%vhatI => this%modeData(:,10)
-    this%whatR => this%modeData(:,11)
-    this%whatI => this%modeData(:,12)
+    !allocate(this%rawData(this%nmodes,12))
+    allocate(this%rawModeData(this%nmodes,12,0:1))
+    this%activeIndex = 0
+#include "enrichment_files/togglePointer.F90"
    
     ! Allocate extra memory for velocity rendering
     ist = this%smallScales%gpC%xst(1) 
@@ -241,7 +232,7 @@ contains
     allocate(this%wtmp(ist:ien,jst:jen,kst:ken,nthreads))
 
     ! Set things up for distributed memory
-    call getNeighbours(neighbour)
+    call getneighbors(neighbor)
     call MPI_Cart_Get(DECOMP_2D_COMM_CART_X,2,dims,periodicBCs(2:3),coords,ierr)
     !call this%largeScales%getPeriodicBCs(periodicBCs)
     periodicBCs(1) = xPeriodic
@@ -266,7 +257,7 @@ contains
 
     if (associated(this%largeScales)) nullify(this%largeScales)
     if (associated(this%smallScales)) nullify(this%smallScales)
-    if (allocated(this%modeData))    deallocate(this%modeData)
+    if (allocated(this%rawmodeData))    deallocate(this%rawmodeData)
     if (associated(this%uhatR))    nullify(this%uhatR)
     if (associated(this%uhatI))    nullify(this%uhatI)
     if (associated(this%vhatR))    nullify(this%vhatR)
@@ -389,8 +380,84 @@ contains
       this%z(n)     = x(3)
     end do
 
-    call this%sendRecvNewModes()
+    call this%sortAndExchangeModes(this%y, this%QHgrid%ye(1), & 
+            this%QHgrid%ye(this%QHgrid%gpC%xsz(2)+1), neighbor(1), neighbor(2))    
+    call this%sortAndExchangeModes(this%z, this%QHgrid%ze(1), & 
+            this%QHgrid%ze(this%QHgrid%gpC%xsz(3)+1), neighbor(3), neighbor(4))    
+
   end subroutine
+
+  subroutine sortAndExchangeModes(this, coor, coorMin, coorMax, neighLo, neighHi)
+    class(enrichmentOperator), intent(inout), target :: this
+    integer :: n, inactiveIndex, iterSelf, iterLo, iterHi
+    integer :: howmanyLo, howmanyHi
+    real(rkind), dimension(:), intent(in) :: coor
+    real(rkind), intent(in) :: coorMin, coorMax
+    integer, intent(in) :: neighLo, neighHi 
+    real(rkind), dimension(:,:), allocatable :: sendBufferLo, sendBufferHi
+    real(rkind), dimension(:,:), allocatable :: recvBufferLo, recvBufferHi
+
+    inactiveIndex = mod(this%activeIndex+1,2)
+    
+    allocate(sendBufferLo(this%nmodes,12))
+    allocate(sendBufferHi(this%nmodes,12))
+
+    iterSelf = 0
+    iterLo = 0
+    iterHi = 0
+
+    do n = 1,this%nModes
+        
+        if ((coor(n) < coorMax) .and. (coor(n) > coorMin)) then 
+            iterSelf = iterSelf + 1
+            this%rawModedata(iterSelf,:,inactiveIndex) = this%rawModedata(n,:,this%activeIndex) 
+        else
+            if (coor(n) > coorMax) then 
+                iterHi = iterHi + 1
+                sendBufferHi(iterHi,:) = this%rawModedata(n,:,this%activeIndex) 
+
+            else if (coor(n) < coorMin) then 
+                iterLo = iterLo + 1
+                sendBufferLo(iterLo,:) = this%rawModedata(n,:,this%activeIndex) 
+            
+            else
+                print*, "This should not happen"
+                stop 
+            end if 
+        end if 
+
+    end do
+
+    ! isend howmany to hi
+    ! isend howmany to lo 
+
+    ! irecv howmany from lo
+    ! irecv howmany from hi
+
+
+    ! isend data to lo
+    ! isend data to hi 
+
+    allocate(recvBufferLo(howmanyLo,12))
+    allocate(recvBufferHi(howmanyHi,12))
+
+    ! irecv data from lo
+    ! irecv data from hi 
+
+    if (size(this%rawModedata,1) < iterSelf+howmanyLo+howmanyHi) then 
+        print*, "Size issue for rawModedata detected."
+        stop 
+    end if 
+
+    this%rawModedata(iterSelf+1:iterSelf+howmanyLo,:,inactiveIndex) = recvBufferLo 
+    this%rawModedata(iterSelf+howmanyLo+1:iterSelf+howmanyLo+howmanyHi,:,inactiveIndex) = recvBufferHi 
+
+    this%nModes = iterSelf+howmanyLo+howmanyHi
+#include "enrichment_files/togglePointer.F90"
+
+    deallocate(sendBufferLo, sendBufferHi, recvBufferLo, recvBufferHi)
+
+  end subroutine 
 
   subroutine renderVelocity(this)
     class(enrichmentOperator), intent(inout), target :: this
@@ -409,7 +476,12 @@ contains
      
     ! STEP 1: Exchange Gabor modes from neighbors that have influence on your domain 
     call message(2,'Exchanging halo modes')
-    call this%sendRecvHaloModes(this%modeData, 'y', this%renderModeData)
+    !call this%sendRecvHaloModes(this%modeData, 'y', this%renderModeData)
+    
+    if (allocated(this%renderModeData)) deallocate(this%renderModedata)
+    allocate(this%renderModeData(size(this%modeData,1), size(this%ModeData,2)))
+    this%renderModeData = this%modeData
+    call this%sendRecvHaloModes(this%renderModeData, 'y')
     call this%sendRecvHaloModes(this%renderModeData, 'z')
 
     ! Step 2: Render velocity 

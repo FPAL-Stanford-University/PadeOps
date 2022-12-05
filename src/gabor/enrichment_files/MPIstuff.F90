@@ -60,7 +60,7 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff)
     coord    = coords(1)
     dim      = dims(1)
     periodic = periodicBCs(2)
-    neigh    = [neighbour(1), neighbour(2)]
+    neigh    = [neighbor(1), neighbor(2)]
     loc      => modeData(:,2)
   case ('z')
     coordID = 3
@@ -80,7 +80,7 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff)
     coord    = coords(2)
     dim      = dims(2)
     periodic = periodicBCs(3)
-    neigh    = [neighbour(3), neighbour(4)]
+    neigh    = [neighbor(3), neighbor(4)]
     loc      => modeData(:,3)
   end select
 
@@ -196,15 +196,15 @@ subroutine copyMode(modeData, cpyArr, periodicCorrection)
 
 end subroutine
   
-subroutine getNeighbours(neighbour)
-  integer, dimension(4), intent(out) :: neighbour
+subroutine getneighbors(neighbor)
+  integer, dimension(4), intent(out) :: neighbor
   integer :: ierr
 
   ! For X-pencil
   call MPI_CART_SHIFT(DECOMP_2D_COMM_CART_X, 0, 1, &
-       neighbour(1), neighbour(2), ierr) ! north & south
+       neighbor(1), neighbor(2), ierr) ! north & south
   call MPI_CART_SHIFT(DECOMP_2D_COMM_CART_X, 1, 1, &
-       neighbour(3), neighbour(4), ierr) ! top & bottom
+       neighbor(3), neighbor(4), ierr) ! top & bottom
 
 end subroutine
 
@@ -243,44 +243,44 @@ subroutine testMPIsendRecv()
   end if
   
   ! Receive from lower y-rank
-  call MPI_IRecv(rankY1,1,MPI_INTEGER,neighbour(1),tagY1,&
+  call MPI_IRecv(rankY1,1,MPI_INTEGER,neighbor(1),tagY1,&
     DECOMP_2D_COMM_CART_X,recvReq(1),ierr)
   ! Receive from higher y-rank
-  call MPI_IRecv(rankY2,1,MPI_INTEGER,neighbour(2),tagY2,&
+  call MPI_IRecv(rankY2,1,MPI_INTEGER,neighbor(2),tagY2,&
     DECOMP_2D_COMM_CART_X,recvReq(2),ierr)
   ! Receive from lower z-rank
-  call MPI_IRecv(rankZ1,1,MPI_INTEGER,neighbour(3),tagZ1,&
+  call MPI_IRecv(rankZ1,1,MPI_INTEGER,neighbor(3),tagZ1,&
     DECOMP_2D_COMM_CART_X,recvReq(3),ierr)
   ! Receive from higher z-rank
-  call MPI_IRecv(rankZ2,1,MPI_INTEGER,neighbour(4),tagZ2,&
+  call MPI_IRecv(rankZ2,1,MPI_INTEGER,neighbor(4),tagZ2,&
     DECOMP_2D_COMM_CART_X,recvReq(4),ierr)
   
   ! Send to lower y-rank
-  call MPI_ISend(nrank,1,MPI_INTEGER,neighbour(1),tagY1,&
+  call MPI_ISend(nrank,1,MPI_INTEGER,neighbor(1),tagY1,&
     DECOMP_2D_COMM_CART_X,sendReq(1),ierr)
   ! Send to higher y-rank
-  call MPI_ISend(nrank,1,MPI_INTEGER,neighbour(2),tagY2,&
+  call MPI_ISend(nrank,1,MPI_INTEGER,neighbor(2),tagY2,&
     DECOMP_2D_COMM_CART_X,sendReq(2),ierr)
   ! Send to lower z-rank
-  call MPI_ISend(nrank,1,MPI_INTEGER,neighbour(3),tagZ1,&
+  call MPI_ISend(nrank,1,MPI_INTEGER,neighbor(3),tagZ1,&
     DECOMP_2D_COMM_CART_X,sendReq(3),ierr)
   ! Send to higher z-rank
-  call MPI_ISend(nrank,1,MPI_INTEGER,neighbour(4),tagZ2,&
+  call MPI_ISend(nrank,1,MPI_INTEGER,neighbor(4),tagZ2,&
     DECOMP_2D_COMM_CART_X,sendReq(4),ierr)
 
   call MPI_WaitAll(8,[recvReq(1:4), sendReq(1:4)],MPI_STATUSES_IGNORE,ierr)
 
   do n = 1,nproc
     if (nrank == n-1) then
-      print*, "Rank", nrank, ". Y neighbours:", rankY1, rankY2
-      print*, "Rank", nrank, ". Z neighbours:", rankZ1, rankZ2
+      print*, "Rank", nrank, ". Y neighbors:", rankY1, rankY2
+      print*, "Rank", nrank, ". Z neighbors:", rankZ1, rankZ2
     end if
     call MPI_Barrier(DECOMP_2D_COMM_CART_X,ierr)
   end do
-  call assert(rankY1 == neighbour(1),'rankY1 == neighbour(1)')
-  call assert(rankY2 == neighbour(2),'rankY2 == neighbour(2)')
-  call assert(rankZ1 == neighbour(3),'rankZ1 == neighbour(3)')
-  call assert(rankZ2 == neighbour(4),'rankZ2 == neighbour(4)')
+  call assert(rankY1 == neighbor(1),'rankY1 == neighbor(1)')
+  call assert(rankY2 == neighbor(2),'rankY2 == neighbor(2)')
+  call assert(rankZ1 == neighbor(3),'rankZ1 == neighbor(3)')
+  call assert(rankZ2 == neighbor(4),'rankZ2 == neighbor(4)')
 
   call MPI_Barrier(DECOMP_2D_COMM_CART_X,ierr)
   call message('Test PASSED!')
@@ -336,36 +336,3 @@ subroutine packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,modeData,&
   end do
 end subroutine
 
-subroutine sendRecvNewModes(this)
-  class(enrichmentOperator), intent(inout), target :: this
-  integer :: n
-
-  ! Nullify pointers since modeData is about to change
-  nullify(this%x,this%y,this%z)
-  nullify(this%kx,this%ky,this%kz)
-  nullify(this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI)
-
-  !TODO: see what modes need to be sent
-  do n = 1,this%nmodes
-  end do
-
-  ! TODO: Send modes
-
-  ! TODO: Recieve modes
-
-  ! TODO: Recompute this%nmodes
-
-  ! Re-link pointers
-  this%x     => this%modeData(:,1)
-  this%y     => this%modeData(:,2)
-  this%z     => this%modeData(:,3)
-  this%kx    => this%modeData(:,4)
-  this%ky    => this%modeData(:,5)
-  this%kz    => this%modeData(:,6)
-  this%uhatR => this%modeData(:,7)
-  this%uhatI => this%modeData(:,8)
-  this%vhatR => this%modeData(:,9)
-  this%vhatI => this%modeData(:,10)
-  this%whatR => this%modeData(:,11)
-  this%whatI => this%modeData(:,12)
-end subroutine

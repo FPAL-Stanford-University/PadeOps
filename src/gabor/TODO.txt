@@ -1,2 +1,9 @@
-[_] Landing gear stuff (when we meet)
-[X] Verify dudx(i,j) and duidxj_h(idx) are consistent (Ryan)
+Ryan: 
+1. Finish mpi-calls insude sortAndExhange (PRIORITY 1) 
+2. Periodic offsets as needed.  (PRIORITY 2) 
+3. Update neighbor ranks to mpi_proc_null if periodicity is not present (LOWEST PRIORITY)
+4. Fix the spectral gap - play with kmin and nk (PRIORITY 3) 
+5. Run HIT - small scale with uniform velocity for large scale - ensure that mode advance works. (PRIORITY 4) 
+
+Aditya: 
+1. LG inputs 
