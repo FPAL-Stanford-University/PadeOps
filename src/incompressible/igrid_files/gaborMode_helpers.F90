@@ -87,7 +87,6 @@ subroutine readLargeScales(this,tid, rid)
     class(igrid), intent(inout) :: this
     integer, intent(in) :: rid, tid
     character(len=clen) :: tempname, fname
-    
    call readField3D(rid, tid, this%inputDir, "uVel", this%u , this%gpC)
    call readField3D(rid, tid, this%inputDir, "vVel", this%v , this%gpC)
    call readField3D(rid, tid, this%inputDir, "wVel", this%wC, this%gpC)

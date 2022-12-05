@@ -1,14 +1,17 @@
 subroutine generateIsotropicModes(this)
+  use constants, only: rmaxInt
   use gridtools, only: logspace
+  use arrayTools, only: sub2idx
   use random,    only: uniform_random
   use GaborModeRoutines, only: normalizeVec, isOrthogonal, getModelSpectrum, &
-                               doWarning, interpToLocation
+                               doWarning, interpToLocation, initializeSeeds, &
+                               updateSeeds
   use mpi
   class(enrichmentOperator), intent(inout) :: this
   character(len=clen) :: mssg1, mssg2, mssg3, mssg4
   real(rkind) :: xmin, ymin, zmin
   integer :: i, j, k, kid, thetaID, nk, ntheta, nmodes
-  integer :: seed1=1, seed2=2, seed3=3, seed4=4, seed5=5, seed6=6, seed7=7
+  real(rkind), dimension(7) :: seedFact
   integer :: isz, jsz, ksz
   real(rkind), dimension(:), allocatable :: kedge, kmag, dk, dkmodes, rand1, &
                                             theta, kztemp, r, rand2, thetaVel
@@ -32,6 +35,7 @@ subroutine generateIsotropicModes(this)
 
   ! Misc
   integer :: ierr, kst, ken, n, thetaSt, thetaEn
+  integer :: nxQH, nyQH, istQH, jstQH, kstQH, idxOld, idxCurrent
 
   call message("                                                                ")
   call message("================================================================")
@@ -39,10 +43,10 @@ subroutine generateIsotropicModes(this)
   write(mssg1,'(A)') 'Total modes to initialize:'
   write(mssg2,'(A,I2,A,I2,A)') '(', this%nk,' shells per QH region) X (',&
     this%ntheta, ' modes per shell) X ...'
-  write(mssg3,'(A,I2,A,I2,A,I2,A)') &
+  write(mssg3,'(A,I3,A,I3,A,I3,A)') &
     '(', this%QHgrid%nx,' QH regions in x) X (', &
     this%QHgrid%ny,' QH regions in y) X (', this%QHgrid%nz, ' QH regions in z) = ...'
-  write(mssg4,'(I8,A)') this%nmodesGlobal, ' modes'
+  write(mssg4,'(I12,A)') this%nmodesGlobal, ' modes'
   call message(                          trim(mssg1)                             )
   call message(                          trim(mssg2)                             )
   call message(                          trim(mssg3)                             )
@@ -72,36 +76,41 @@ subroutine generateIsotropicModes(this)
   allocate(k1(nk*ntheta,isz,jsz,ksz),k2(nk*ntheta,isz,jsz,ksz),&
            k3(nk*ntheta,isz,jsz,ksz))
 
+  nxQH = this%QHgrid%gpC%xsz(1)
+  nyQH = this%QHgrid%gpC%ysz(2)
+
+  istQH = this%QHgrid%gpC%xst(1)
+  jstQH = this%QHgrid%gpC%xst(2)
+  kstQH = this%QHgrid%gpC%xst(3)
   
-    ! Assign wave-vector magnitudes based on logarithmically spaced shells
-  ! (non-dimensionalized with L)
-  !kedge = logspace(kmin,kmax,nk+1)
- 
+  call initializeSeeds(seedFact, istQH, jstQH, kstQH, nxQH, nyQH)
+
+  idxOld = sub2idx(istQH, jstQH, kstQH, nxQH, nyQH) - 1
   do k = 1,this%QHgrid%gpC%xsz(3)
     zmin = this%QHgrid%zE(k)
     do j = 1,this%QHgrid%gpC%xsz(2)
       ymin = this%QHgrid%yE(j)
       do i = 1,this%QHgrid%gpC%xsz(1)
         xmin = this%QHgrid%xE(i)
-
-        call this%updateSeeds(seed1,seed2,seed3,seed4,seed5,seed6,seed7,&
-          this%QHgrid%gpC%xst(1)+i-1,&
-          this%QHgrid%gpC%xst(2)+j-1,&
-          this%QHgrid%gpC%xst(3)+k-1)
-          
+        
+        idxCurrent = sub2idx(istQH + i - 1, jstQH + j - 1, kstQH + k - 1, nxQH, nyQH) 
+        call updateSeeds(seedFact,idxOld,idxCurrent)
+        idxOld = idxCurrent
+!print*, (istQH + i - 1), (jstQH + j - 1), (kstQH + k - 1), nint(seedFact(1)*rmaxInt)
+         
         ! Uniformily distribute modes in QH region
-        call uniform_random(rand1,0.d0,1.d0,seed1)
+        call uniform_random(rand1,0.d0,1.d0,nint(seedFact(1)*rmaxInt))
         gmx(:,i,j,k) = xmin + this%QHgrid%dx*rand1
         
-        call uniform_random(rand1,0.d0,1.d0,seed2)
+        call uniform_random(rand1,0.d0,1.d0,nint(seedFact(2)*rmaxInt))
         gmy(:,i,j,k) = ymin + this%QHgrid%dy*rand1
 
-        call uniform_random(rand1,0.d0,1.d0,seed3)
+        call uniform_random(rand1,0.d0,1.d0,nint(seedFact(3)*rmaxInt))
         gmz(:,i,j,k) = zmin + this%QHgrid%dz*rand1
           
-        call uniform_random(thetaVel,0.d0,2.d0*pi,seed6)
+        call uniform_random(thetaVel,0.d0,2.d0*pi,nint(seedFact(6)*rmaxInt))
           
-        call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),seed7)
+        call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),nint(seedFact(7)*rmaxInt))
         
         ! TODO: kmin and kmax should be functions of space
         ! call this%getKminKmax(i,j,k)
@@ -114,8 +123,8 @@ subroutine generateIsotropicModes(this)
           ken = kst + ntheta - 1
 
           ! Isotropically sample wave-vector components
-          call uniform_random(theta,0.d0,2.d0*pi,seed4)
-          call uniform_random(kztemp,-1.d0,1.d0,seed5)
+          call uniform_random(theta,0.d0,2.d0*pi,nint(seedFact(4)*rmaxInt))
+          call uniform_random(kztemp,-1.d0,1.d0,nint(seedFact(5)))
 
           ! Assign wave-vector components
           k3(kst:ken,i,j,k) = kmag(kid)*kztemp
@@ -162,7 +171,6 @@ subroutine generateIsotropicModes(this)
           orientationX = cos(thetaVel(n))*p1x + sin(thetaVel(n))*p2x
           orientationY = cos(thetaVel(n))*p1y + sin(thetaVel(n))*p2y
           orientationZ = cos(thetaVel(n))*p1z + sin(thetaVel(n))*p2z
-
           ! We have the modulus and orientation of the complex-valued amplitudes.
           ! Now assigning the real and imaginary components
           uRmag = rand2(n)*umag
@@ -230,15 +238,17 @@ subroutine strainModes(this)
   use decomp_2D,         only: nrank
   class(enrichmentOperator), intent(inout) :: this 
   real(rkind), dimension(this%nmodes) :: kabs, input
-  real(rkind) :: output, tauEddy, S, L, KE, U, V, W
+  real(rkind) :: output, tauEddy, S, L, KE
+  real(rkind), dimension(3) :: Ui
   real(rkind), dimension(3,3) :: dudx
   integer :: n, tid
   real(rkind) :: dt
-  real(rkind), dimension(3) :: k, uRtmp, uItmp
+  real(rkind), dimension(3) :: k, uRtmp, uItmp, x
   character(len=clen) :: mssg
 
   kabs = sqrt(this%kx*this%kx + this%ky*this%ky + this%kz*this%kz)
   input = -(kabs)**(-2.0_rkind)
+  x     = 0.d0
  
   !$OMP PARALLEL SHARED(input) &
   !$OMP PRIVATE(n, output, dudx, L, KE, U, V, W, S, k, uRtmp, uItmp, tauEddy) &
@@ -246,7 +256,7 @@ subroutine strainModes(this)
   !$OMP DO
   do n = 1,this%nmodes
     CALL PFQ(input(n),output)
-    call this%getLargeScaleDataAtModeLocation(n,dudx,L,KE,U,V,W)
+    call this%getLargeScaleDataAtModeLocation(n,dudx,L,KE,Ui)
     S = sqrt(dudx(1,1)*dudx(1,1) + dudx(1,2)*dudx(1,2) + dudx(1,3)*dudx(1,3) + &
              dudx(2,1)*dudx(2,1) + dudx(2,2)*dudx(2,2) + dudx(2,3)*dudx(2,3) + &
              dudx(3,1)*dudx(3,1) + dudx(3,2)*dudx(3,2) + dudx(3,3)*dudx(3,3))
@@ -269,7 +279,7 @@ subroutine strainModes(this)
     end if  
 
     do tid = 1,nint(tauEddy/dt)
-      call rk4Step(uRtmp,uItmp,k,dt,this%Anu,KE,L,this%numolec,dudx)
+      call rk4Step(uRtmp,uItmp,k,x,dt,this%Anu,KE,L,this%numolec,dudx,Ui)
     end do
     this%kx(n) = k(1)
     this%ky(n) = k(2)
@@ -292,26 +302,27 @@ subroutine strainModes(this)
   call message(1,'Finished straining isotropic modes')
 end subroutine
 
-subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
+subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,Ui)
   use GaborModeRoutines, only: interpToLocation, getNearestNeighborValue!, findMeshIdx
 
   class(enrichmentOperator), intent(inout) :: this
   integer, intent(in) :: gmID
   real(rkind), dimension(3,3), intent(out) :: dudx
-  real(rkind), intent(out) :: L, KE, U, V, W
+  real(rkind), intent(out) :: L, KE
+  real(rkind), dimension(3), intent(out) :: Ui
   integer :: i, j, idx
 
-  call interpToLocation(this%uh, U,&
+  call interpToLocation(this%uh, Ui(1),&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
     this%largeScales%mesh(1,1,1,3), &
     this%x(gmID), this%y(gmID), this%z(gmID))
-  call interpToLocation(this%vh, V,&
+  call interpToLocation(this%vh, Ui(2),&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
     this%largeScales%mesh(1,1,1,3), &
     this%x(gmID), this%y(gmID), this%z(gmID))
-  call interpToLocation(this%wh, W,&
+  call interpToLocation(this%wh, Ui(3),&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
     this%largeScales%mesh(1,1,1,3), &
@@ -349,24 +360,4 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,U,V,W)
     this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
     this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&
     this%x(gmID),this%y(gmID),this%z(gmID))
-end subroutine
-
-subroutine updateSeeds(this,seed1,seed2,seed3,seed4,seed5,seed6,seed7,&
-    QHi,QHj,QHk)
-  class(enrichmentOperator), intent(inout) :: this
-  integer, intent(inout) :: seed1, seed2, seed3, seed4, seed5, seed6, seed7
-  integer, intent(in) :: QHi, QHj, QHk
-  integer :: nxQH, nyQH, QHidx
-
-  nxQH = this%QHgrid%gpC%xsz(1)
-  nyQH = this%QHgrid%gpC%ysz(2)
-  QHidx = (QHk-1)*nxQH*nyQH + (QHj-1)*nxQH + QHi
-  
-  seed1 = 1000*QHidx
-  seed2 = 2000*QHidx
-  seed3 = 3000*QHidx
-  seed4 = 4000*QHidx
-  seed5 = 5000*QHidx
-  seed6 = 6000*QHidx
-  seed7 = 7000*QHidx
 end subroutine

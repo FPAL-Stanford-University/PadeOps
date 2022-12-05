@@ -335,3 +335,37 @@ subroutine packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,modeData,&
     end if
   end do
 end subroutine
+
+subroutine sendRecvNewModes(this)
+  class(enrichmentOperator), intent(inout), target :: this
+  integer :: n
+
+  ! Nullify pointers since modeData is about to change
+  nullify(this%x,this%y,this%z)
+  nullify(this%kx,this%ky,this%kz)
+  nullify(this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI)
+
+  !TODO: see what modes need to be sent
+  do n = 1,this%nmodes
+  end do
+
+  ! TODO: Send modes
+
+  ! TODO: Recieve modes
+
+  ! TODO: Recompute this%nmodes
+
+  ! Re-link pointers
+  this%x     => this%modeData(:,1)
+  this%y     => this%modeData(:,2)
+  this%z     => this%modeData(:,3)
+  this%kx    => this%modeData(:,4)
+  this%ky    => this%modeData(:,5)
+  this%kz    => this%modeData(:,6)
+  this%uhatR => this%modeData(:,7)
+  this%uhatI => this%modeData(:,8)
+  this%vhatR => this%modeData(:,9)
+  this%vhatI => this%modeData(:,10)
+  this%whatR => this%modeData(:,11)
+  this%whatI => this%modeData(:,12)
+end subroutine

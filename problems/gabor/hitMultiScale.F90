@@ -18,16 +18,16 @@ program hitMultiScale
   call GETARG(1,inputS1)
   call GETARG(2,inputS2)
   call GETARG(3,inputS3)
-  call GETARG(3,inputG12)
-  call GETARG(3,inputG23)
-  call GetArguments(nthreads)
-  
+  call GETARG(4,inputG12)
+  call GETARG(5,inputG23)
+  call GetArguments(nthreads,6)
+
   call S1%init(inputS1, .true.) 
   call S2%init(inputS2, .false.)
   call S3%init(inputS3, .false.)
 
-  call enrich12%init(S1,S2,inputG12)
-  call enrich23%init(S2,S3,inputG23)
+  call enrich12%init(S2,S1,inputG12)
+  call enrich23%init(S3,S2,inputG23)
 
 
   call enrich12%destroy()

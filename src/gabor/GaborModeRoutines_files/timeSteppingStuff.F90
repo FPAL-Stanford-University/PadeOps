@@ -1,7 +1,8 @@
-subroutine rk4Step(uRtmp,uItmp,ktmp,dt,nuMod,KE,L,nu,dudx)
-  real(rkind), dimension(3), intent(inout) :: uRtmp, uItmp, ktmp
+subroutine rk4Step(uR,uI,k,x,dt,nuMod,KE,L,nu,dudx,U)
+  real(rkind), dimension(3), intent(inout) :: uR, uI, k, x
   real(rkind), intent(in) :: dt, nuMod, KE, L, nu
   real(rkind), dimension(3,3), intent(in) :: dudx
+  real(rkind), dimension(3), intent(in) :: U
   real(rkind), dimension(4) :: a, b
   real(rkind), dimension(3) :: duR, duI, dk, rhsR, rhsI, rhsK, uRstar, uIStar, &
     kstar
@@ -19,9 +20,9 @@ subroutine rk4Step(uRtmp,uItmp,ktmp,dt,nuMod,KE,L,nu,dudx)
   rhsK = 0.d0
 
   do rk = 1,4
-    uRstar = uRtmp + dt*a(rk)*rhsR
-    uIstar = uItmp + dt*a(rk)*rhsI
-    kstar  = ktmp  + dt*a(rk)*rhsK
+    uRstar = uR + dt*a(rk)*rhsR
+    uIstar = uI + dt*a(rk)*rhsI
+    kstar  = k  + dt*a(rk)*rhsK
 
     call getUrhs(rhsR,uRstar,dudx,kstar,nuMod,KE,L,nu)
     call getUrhs(rhsI,uIstar,dudx,kstar,nuMod,KE,L,nu)
@@ -31,14 +32,15 @@ subroutine rk4Step(uRtmp,uItmp,ktmp,dt,nuMod,KE,L,nu,dudx)
     duI = duI + dt*b(rk)*rhsI
     dk  = dk  + dt*b(rk)*rhsK
   end do
-  uRtmp = uRtmp + duR
-  uItmp = uItmp + duI
-  ktmp  = ktmp  + dk
+  uR = uR + duR
+  uI = uI + duI
+  k  = k  + dk
+  x = x + dt*U
 end subroutine
 
 subroutine getUrhs(rhs,u,dudx,k,nuMod,KE,L,nu)
   real(rkind), dimension(3), intent(out) :: rhs
-  real(rkind), dimension(3), intent(inout) :: u
+  real(rkind), dimension(3), intent(in) :: u
   real(rkind), dimension(3,3), intent(in) :: dudx
   real(rkind), dimension(3), intent(in) :: k
   real(rkind), intent(in) :: nuMod, KE, L, nu

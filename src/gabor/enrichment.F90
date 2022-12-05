@@ -80,10 +80,10 @@ module enrichmentMod
       procedure          :: continueSimulation
       procedure          :: dumpData
       procedure, private :: doDebugChecks
-      procedure, private :: updateSeeds
 
       ! MPI communication stuff
-      procedure          :: sendRecvHaloModes
+      procedure, private :: sendRecvHaloModes
+      procedure, private :: sendRecvNewModes
   end type
 
 contains
@@ -110,11 +110,12 @@ contains
     real(rkind) :: dt
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
+    logical :: doNotRenderInitialCondition = .false.
     logical :: xPeriodic = .true., yPeriodic = .true., zPeriodic = .true.
     
     namelist /IO/      outputdir, writeIsotropicModes
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
-      strainInitialCondition, xPeriodic, yPeriodic, zPeriodic
+      strainInitialCondition, doNotRenderInitialCondition, xPeriodic, yPeriodic, zPeriodic
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
 
@@ -257,7 +258,7 @@ contains
     end if
     if (this%strainInitialCondition) call this%strainModes()
    
-    call this%wrapupTimeStep()
+    call this%wrapupTimeStep(doNotRender = doNotRenderInitialCondition)
   end subroutine
 
   subroutine destroy(this)
@@ -356,8 +357,39 @@ contains
   end subroutine 
 
   subroutine advanceTime(this)
+    use GaborModeRoutines, only: rk4Step
     class(enrichmentOperator), intent(inout) :: this 
+    real(rkind), dimension(3) :: k, uRtmp, uItmp, x, Ui
+    real(rkind) :: L, KE
+    real(rkind), dimension(3,3) :: duidxj
+    integer :: n
 
+    do n = 1,this%nmodes
+      call this%getLargeScaleDataAtModeLocation(n,duidxj,L,KE,Ui)
+      k     = [this%kx(n)   , this%ky(n)   , this%kz(n)   ]
+      uRtmp = [this%uhatR(n), this%vhatR(n), this%whatR(n)]
+      uItmp = [this%uhatI(n), this%vhatI(n), this%whatI(n)]
+      x     = [this%x(n)    , this%y(n)    , this%z(n)    ]
+      
+      call rk4Step(uRtmp,uItmp,k,x,this%dt,this%Anu,KE,L,this%numolec,duidxj,Ui)
+      
+      this%kx(n)    = k(1)
+      this%ky(n)    = k(2)
+      this%kz(n)    = k(3)
+
+      this%uhatR(n) = uRtmp(1)
+      this%uhatI(n) = uItmp(1)
+      this%vhatR(n) = uRtmp(2)
+      this%vhatI(n) = uItmp(2)
+      this%whatR(n) = uRtmp(3)
+      this%whatI(n) = uItmp(3)
+      
+      this%x(n)     = x(1)
+      this%y(n)     = x(2)
+      this%z(n)     = x(3)
+    end do
+
+    call this%sendRecvNewModes()
   end subroutine
 
   subroutine renderVelocity(this)
@@ -426,13 +458,24 @@ contains
     nullify(haloBuffY,haloBuffZ)
   end subroutine  
 
-  subroutine wrapupTimeStep(this)
-    class(enrichmentOperator), intent(inout) :: this 
+  subroutine wrapupTimeStep(this,doNotRender)
+    class(enrichmentOperator), intent(inout) :: this
+    logical, intent(in), optional :: doNotRender
 
     if (mod(this%tid,this%tidRender) == 0) then 
-      call tic()
-      call this%renderVelocity()
-      call toc('Velocity rendering took')
+      if (present(doNotRender)) then
+        if (doNotRender) then
+          continue
+        else
+          call tic()
+          call this%renderVelocity()
+          call toc('Velocity rendering took')
+        end if
+      else
+        call tic()
+        call this%renderVelocity()
+        call toc('Velocity rendering took')
+      end if
     end if 
 
     if (mod(this%tid,this%tio) == 0) then 
@@ -447,9 +490,9 @@ contains
 
   subroutine dumpSmallScales(this)
     class(enrichmentOperator), intent(inout) :: this 
-    call this%smallScales%dumpFullField(this%smallScales%u,"uGab")
-    call this%smallScales%dumpFullField(this%smallScales%v,"vGab")
-    call this%smallScales%dumpFullField(this%smallScales%wC,"wGab")
+    call this%smallScales%dumpFullField(this%smallScales%u,"uVel")
+    call this%smallScales%dumpFullField(this%smallScales%v,"vVel")
+    call this%smallScales%dumpFullField(this%smallScales%wC,"wVel")
   end subroutine
 
   function continueSimulation(this) result(doIcontinue)

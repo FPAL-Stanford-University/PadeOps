@@ -1,16 +1,24 @@
 module GaborModeRoutines
   use kind_parameters, only: rkind
-  use constants,       only: pi
+  use constants,       only: pi, half
   use fortran_assert,  only: assert
   implicit none
   
   logical :: doWarning = .true.
   real(rkind), parameter :: small = 1.d-10, big = 1.d12
 
+  ! Parameters used for seed update routine using logistic map.
+  ! Do not change unless you know what you are doing. The choice of initFact and
+  ! the coefficient (logMapFact) determines whether a chaotic sequence is
+  ! generated or not
+  real(rkind), parameter :: logMapFact = 4.d0
+  real(rkind), parameter :: initFact = 8.145d0
+  
   contains
   
   include "GaborModeRoutines_files/timeSteppingStuff.F90"
   include "GaborModeRoutines_files/interpolation.F90"
+  include "GaborModeRoutines_files/updateSeeds.F90"
     
     function getModelSpectrum(k,KE,L) result(E) 
       use exits, only: warning
@@ -126,7 +134,7 @@ module GaborModeRoutines
       kyNyqF = getNyquist(Ly,nySS)
       kzNyqF = getNyquist(Lz,nzSS)
 
-      kmin = minval([kxNyqLES, kyNyqLES, kzNyqLES])
+      kmin = half*minval([kxNyqLES, kyNyqLES, kzNyqLES])
       kmax = minval([kxNyqF,   kyNyqF,   kzNyqF])
     end subroutine
 
