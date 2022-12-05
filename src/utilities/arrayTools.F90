@@ -126,4 +126,21 @@ contains
     B(j) = A(i)
     A = B
   end subroutine 
+
+  pure function sub2idx(i,j,k,nx,ny) result(idx)
+    integer, intent(in) :: i, j, k, nx, ny
+    integer :: idx
+  
+    idx = (k-1)*nx*ny + (j-1)*nx + i
+  end function
+
+  subroutine pop(arr,idx)
+    real(rkind), dimension(:,:), intent(inout) :: arr
+    integer, intent(in) :: idx
+
+  end subroutine
+
+  subroutine append(arr)
+    real(rkind), dimension(:,:), intent(inout) :: arr
+  end subroutine
 end module

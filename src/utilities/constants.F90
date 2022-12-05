@@ -40,4 +40,7 @@ module constants
     real(rkind), parameter :: rpm_to_radpersec = twopi/60.0_rkind
     
     complex(rkind), parameter :: ieps = (eps,eps)
+  
+    integer, parameter :: maxInt = huge(1)
+    real(rkind), parameter :: rmaxInt = real(huge(1),rkind)
 end module
