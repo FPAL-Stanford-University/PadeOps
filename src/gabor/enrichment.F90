@@ -19,6 +19,7 @@ module enrichmentMod
   integer, dimension(4) :: neighbor
   integer, dimension(2) :: coords, dims
   logical, dimension(3) :: periodicBCs
+  real(rkind), parameter :: tol = 1.d-13
 
   real(rkind), dimension(2) :: xDom, yDom, zDom
 
@@ -32,16 +33,21 @@ module enrichmentMod
     real(rkind), dimension(:), pointer, public :: x, y, z
     real(rkind), dimension(:), pointer, public :: uhatR, uhatI, vhatR, &
       vhatI, whatR, whatI
+    real(rkind), dimension(:), pointer, public :: T
     real(rkind) :: dt
+    integer :: nvars
+    logical :: isStratified = .false.
 
     ! Halo-padded arrays
     real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh
+    real(rkind), dimension(:,:,:), allocatable :: Th
     real(rkind), dimension(:,:,:), allocatable :: KE, L, KEh, Lh
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj_h
 
     integer, public :: nxsupp, nysupp, nzsupp
     type(igrid), pointer :: largeScales, smallScales
     type(QHmesh), public :: QHgrid 
+    real(rkind), dimension(2) :: PExbound, PEybound, PEzbound ! MPI rank boundaries
     real(rkind), dimension(:,:,:,:), pointer :: duidxj_LS
     real(rkind) :: kmin, kmax
     logical :: imposeNoPenetrationBC = .false.
@@ -50,7 +56,8 @@ module enrichmentMod
     integer     :: nk, ntheta, nmodes, nmodesGlobal
     real(rkind) :: scalefact, Anu, numolec, ctauGlobal
     logical     :: renderPressure = .false.
-    integer     :: tidRender, tio , tid, tidStop, tidsim
+    integer     :: tidRender, tio , tidStop, tidsim
+    integer, pointer :: tid
 
     ! Data IO
     character(len=clen) :: outputdir
@@ -82,6 +89,7 @@ module enrichmentMod
       procedure          :: continueSimulation
       procedure          :: dumpData
       procedure, private :: doDebugChecks
+      procedure, private :: applyPeriodicOffsets
 
       ! MPI communication stuff
       procedure, private :: sendRecvHaloModes
@@ -112,12 +120,14 @@ contains
     real(rkind) :: dt
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
-    logical :: doNotRenderInitialCondition = .false.
+    logical :: doNotRenderInitialCondition = .true.
     logical :: xPeriodic = .true., yPeriodic = .true., zPeriodic = .true.
+    real(rkind) :: kminFact = 1.d0
     
     namelist /IO/      outputdir, writeIsotropicModes
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
-      strainInitialCondition, doNotRenderInitialCondition, xPeriodic, yPeriodic, zPeriodic
+      strainInitialCondition, doNotRenderInitialCondition, &
+      xPeriodic, yPeriodic, zPeriodic, kminFact
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
 
@@ -137,6 +147,7 @@ contains
     this%tidRender = tidRender 
     this%tio = tio
     this%tidStop = tidStop
+    this%tid => this%smallScales%step 
     this%tid = tidInit
     this%dt = dt 
     this%debugChecks = debugChecks
@@ -170,6 +181,12 @@ contains
     ! RESTART_Run00_u.000000
     call this%largeScales%initLargeScales(tidInit,this%largeScales%runID)
     this%duidxj_LS => largeScales%duidxjC
+    this%isStratified = this%largeScales%isStratified
+    if (this%isStratified) then
+      this%nvars = 13
+    else
+      this%nvars = 12
+    end if
 
     ! Get halo-padded velocity arrays
     allocate(this%KE(this%largeScales%gpC%xsz(1),this%largeScales%gpC%xsz(2),&
@@ -177,19 +194,16 @@ contains
     allocate(this%L(this%largeScales%gpC%xsz(1),this%largeScales%gpC%xsz(2),&
       this%largeScales%gpC%xsz(3)))
     call getLargeScaleParams(this%KE,this%L,this%largeScales)
-    call this%updateLargeScales(timeAdvance=.false.) 
+    call this%updateLargeScales(timeAdvance=.false.,initializing=.true.) 
 
     ! Ryan 
     ! STEP 1: Finish the QH region code to fill Gabor Modes (kx, ky, kz, x, y, z, uhat, ...)
     call this%QHgrid%init(inputfile,this%largeScales)
     call getLargeScaleParams(this%QHgrid%KE,this%QHgrid%L,this%largeScales)
 
-    this%nxsupp = 2 * this%smallScales%nx/this%largeScales%nx * &
-      nint(this%QHgrid%dx / this%largeScales%dx)
-    this%nysupp = 2 * this%smallScales%ny/this%largeScales%ny * &
-      nint(this%QHgrid%dy / this%largeScales%dy)
-    this%nzsupp = 2 * this%smallScales%nz/this%largeScales%nz * &
-      nint(this%QHgrid%dz / this%largeScales%dz)
+    this%nxsupp = nint(2*this%QHgrid%dx/this%smallScales%dx)
+    this%nysupp = nint(2*this%QHgrid%dy/this%smallScales%dy)
+    this%nzsupp = nint(2*this%QHgrid%dz/this%smallScales%dz)
 
     ! User safegaurds -- make sure the mode supports don't span more than two
     ! MPI ranks
@@ -211,10 +225,11 @@ contains
       this%largeScales%nx, this%largeScales%ny, this%largeScales%nz, &
       this%smallScales%nx, this%smallScales%ny, this%smallScales%nz, &
       this%kmin, this%kmax)
+    this%kmin = kminFact*this%kmin
 
     ! Allocate memory for mode data
-    !allocate(this%rawData(this%nmodes,12))
-    allocate(this%rawModeData(this%nmodes,12,0:1))
+    !allocate(this%rawData(this%nmodes,this%nvars))
+    allocate(this%rawModeData(this%nmodes,this%nvars,0:1))
     this%activeIndex = 0
 #include "enrichment_files/togglePointer.F90"
    
@@ -238,6 +253,9 @@ contains
     periodicBCs(1) = xPeriodic
     periodicBCs(2) = yPeriodic
     periodicBCs(3) = zPeriodic
+    this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%gpC%xsz(1) + 1)]
+    this%PEybound = [this%QHgrid%yE(1), this%QHgrid%yE(this%QHgrid%gpC%xsz(2) + 1)]
+    this%PEzbound = [this%QHgrid%zE(1), this%QHgrid%zE(this%QHgrid%gpC%xsz(3) + 1)]
 
     ! Initialize the Gabor modes
     call this%generateIsotropicModes()
@@ -258,6 +276,7 @@ contains
     if (associated(this%largeScales)) nullify(this%largeScales)
     if (associated(this%smallScales)) nullify(this%smallScales)
     if (allocated(this%rawmodeData))    deallocate(this%rawmodeData)
+    if (associated(this%modeData))    nullify(this%modeData)
     if (associated(this%uhatR))    nullify(this%uhatR)
     if (associated(this%uhatI))    nullify(this%uhatI)
     if (associated(this%vhatR))    nullify(this%vhatR)
@@ -273,19 +292,28 @@ contains
     if (allocated(this%uh))       deallocate(this%uh)
     if (allocated(this%vh))       deallocate(this%vh)
     if (allocated(this%wh))       deallocate(this%wh)
+    if (allocated(this%KEh))       deallocate(this%KEh)
+    if (allocated(this%KE))       deallocate(this%KE)
+    if (allocated(this%Lh))       deallocate(this%Lh)
+    if (allocated(this%L))       deallocate(this%L)
+    if (allocated(this%Th))       deallocate(this%Th)
     if (allocated(this%duidxj_h)) deallocate(this%duidxj_h)
     if (allocated(this%utmp))     deallocate(this%utmp)
     if (allocated(this%vtmp))     deallocate(this%vtmp)
     if (allocated(this%wtmp))     deallocate(this%wtmp)
+    if (allocated(this%renderModeData)) deallocate(this%renderModeData)
 
     call this%QHgrid%destroy()
   end subroutine 
 
-  subroutine updateLargeScales(this,timeAdvance)
+  subroutine updateLargeScales(this,timeAdvance,initializing)
     class(enrichmentOperator), intent(inout) :: this 
     logical, intent(in) :: timeAdvance
     integer :: i
+    logical, intent(in), optional :: initializing
+    logical :: init = .false.
 
+    if (present(initializing)) init = initializing
     ! Ryan: 
     ! STEP 1: Figure out how you want to advance the large-scales
     ! Either run a PadeOps time-step or, read in from a file 
@@ -301,23 +329,34 @@ contains
     if(.not. allocated(this%vh))       call this%largeScales%pg%alloc_array(this%vh)
     if(.not. allocated(this%wh))       call this%largeScales%pg%alloc_array(this%wh)
     if(.not. allocated(this%duidxj_h)) call this%largeScales%pg%alloc_array(this%duidxj_h,9)
-    if(.not. allocated(this%KEh)) call this%largeScales%pg%alloc_array(this%KEh)
-    if(.not. allocated(this%Lh)) call this%largeScales%pg%alloc_array(this%Lh)
     call this%largeScales%HaloUpdateVelocities(this%uh, this%vh, this%wh, &
       this%duidxj_h)
 
-    call this%largeScales%haloUpdateField(this%KE,this%KEh)
-    call this%largeScales%haloUpdateField(this%L, this%Lh)
+    ! The halo'ed KE and L only matter if initializing the modes
+    if (init) then
+      if(.not. allocated(this%KEh))      call this%largeScales%pg%alloc_array(this%KEh)
+      if(.not. allocated(this%Lh))       call this%largeScales%pg%alloc_array(this%Lh)
+      call this%largeScales%haloUpdateField(this%KE,this%KEh)
+      call this%largeScales%haloUpdateField(this%L, this%Lh)
+      call fixGhostIfNonPeriodic(this%KEh,this%largeScales%gpC)
+      call fixGhostIfNonPeriodic(this%Lh,this%largeScales%gpC)
+    end if
 
-    call removePeriodicityFromGhost(this%uh,this%largeScales%gpC)
-    call removePeriodicityFromGhost(this%vh,this%largeScales%gpC)
-    call removePeriodicityFromGhost(this%wh,this%largeScales%gpC)
+    if (this%isStratified) then
+      if(.not. allocated(this%Th))       call this%largeScales%pg%alloc_array(this%Th)
+      call this%largeScales%haloUpdateField(this%largeScales%T,this%Th)
+      call fixGhostIfNonPeriodic(this%Th,this%largeScales%gpC)
+    end if
+
+    call fixGhostIfNonPeriodic(this%uh,this%largeScales%gpC)
+    call fixGhostIfNonPeriodic(this%vh,this%largeScales%gpC)
+    call fixGhostIfNonPeriodic(this%wh,this%largeScales%gpC)
     do i = 1,9
-      call removePeriodicityFromGhost(this%duidxj_h(:,:,:,i),this%largeScales%gpC)
+      call fixGhostIfNonPeriodic(this%duidxj_h(:,:,:,i),this%largeScales%gpC)
     end do
   end subroutine
 
-  subroutine removePeriodicityFromGhost(f,gp)
+  subroutine fixGhostIfNonPeriodic(f,gp)
     use decomp_2d, only: decomp_info
     use procgrid_mod, only: num_pad
     real(rkind), dimension(-num_pad+1:,-num_pad+1:,-num_pad+1:), intent(inout) :: f
@@ -379,12 +418,85 @@ contains
       this%y(n)     = x(2)
       this%z(n)     = x(3)
     end do
+    call this%sortAndExchangeModes(this%y, this%PEybound(1), this%PEybound(2), &
+            neighbor(1), neighbor(2))    
+    call this%sortAndExchangeModes(this%z, this%PEzbound(1), this%PEzbound(2), & 
+            neighbor(3), neighbor(4))
+   
+    !if ((periodicBCs(1) .or. periodicBCs(2) .or. periodicBCs(3)) .and. &
+    !  (abs(xDom(1) - this%PExbound(1)) < tol .or. abs(xDom(2) - this%PExbound(2)) < tol .or. &
+    !   abs(yDom(1) - this%PEybound(1)) < tol .or. abs(yDom(2) - this%PEybound(2)) < tol .or. &
+    !   abs(zDom(1) - this%PEzbound(1)) < tol .or. abs(zDom(2) - this%PEzbound(2)) < tol )) then
+    !  call this%applyPeriodicOffsets()
+    !end if
+    if ((periodicBCs(1) .and. (abs(xDom(1) - this%PExbound(1)) < tol .or. &
+                               abs(xDom(2) - this%PExbound(2)) < tol)) .or. &
+        (periodicBCs(2) .and. (abs(yDom(1) - this%PEybound(1)) < tol .or. &
+                               abs(yDom(2) - this%PEybound(2)) < tol)) .or. &
+        (periodicBCs(3) .and. (abs(zDom(1) - this%PEzbound(1)) < tol .or. &
+                               abs(zDom(2) - this%PEzbound(2)) < tol)) ) then
+      call this%applyPeriodicOffsets()
+    end if
 
-    call this%sortAndExchangeModes(this%y, this%QHgrid%ye(1), & 
-            this%QHgrid%ye(this%QHgrid%gpC%xsz(2)+1), neighbor(1), neighbor(2))    
-    call this%sortAndExchangeModes(this%z, this%QHgrid%ze(1), & 
-            this%QHgrid%ze(this%QHgrid%gpC%xsz(3)+1), neighbor(3), neighbor(4))    
+    if (this%debugChecks) call this%doDebugChecks()
+  end subroutine
 
+  subroutine applyPeriodicOffsets(this)
+    class(enrichmentOperator), intent(inout) :: this
+    real(rkind) :: Lx, Ly, Lz
+    integer :: n
+
+    Lx = xDom(2) - xDom(1)
+    Ly = yDom(2) - yDom(1)
+    Lz = zDom(2) - zDom(1)
+
+    do n = 1,this%nmodes
+      ! X
+      if (this%x(n) < xDom(1)) then
+        call assert(periodicBCs(1),'periodicBCs(1)')
+        call assert(abs(this%QHgrid%xE(this%QHgrid%gpC%xsz(1)+1) - xDom(2)) < tol,&
+          'abs(this%QHgrid%xE(this%QHgrid%gpC%xsz(1)+1) - xDom(2)) < tol')
+        this%x(n) = this%x(n) + Lx
+      end if
+
+      if (this%x(n) > xDom(2)) then
+        call assert(periodicBCs(1),'periodicBCs(1)')
+        call assert(abs(this%QHgrid%xE(1) - xDom(1)) < tol,&
+          'abs(this%QHgrid%xE(1) - xDom(1)) < tol')
+        this%x(n) = this%x(n) - Lx
+      end if
+      
+      ! Y
+      if (this%y(n) < yDom(1)) then
+        call assert(periodicBCs(2),'periodicBCs(2)')
+        call assert(abs(this%QHgrid%yE(this%QHgrid%gpC%xsz(2)+1) - yDom(2)) < tol,&
+          'abs(this%QHgrid%yE(this%QHgrid%gpC%xsz(2)+1) - yDom(2)) < tol')
+        this%y(n) = this%y(n) + Ly
+      end if
+
+      if (this%y(n) > yDom(2)) then
+        call assert(periodicBCs(2),'periodicBCs(2)')
+        call assert(abs(this%QHgrid%yE(1) - yDom(1)) < tol,&
+          'abs(this%QHgrid%yE(1) - yDom(1)) < tol')
+        this%y(n) = this%y(n) - Ly
+      end if
+      
+      ! Z
+      if (this%z(n) < zDom(1)) then
+        call assert(periodicBCs(3),'periodicBCs(3)')
+        call assert(abs(this%QHgrid%zE(this%QHgrid%gpC%xsz(3)+1) - zDom(2)) < tol,&
+          'abs(this%QHgrid%zE(this%QHgrid%gpC%xsz(3)+1) - zDom(2)) < tol')
+        this%z(n) = this%z(n) + Lz
+      end if
+
+      if (this%z(n) > zDom(2)) then
+        call assert(periodicBCs(3),'periodicBCs(3)')
+        call assert(abs(this%QHgrid%zE(1) - zDom(1)) < tol,&
+          'abs(this%QHgrid%zE(1) - zDom(1)) < tol')
+        this%z(n) = this%z(n) - Lz
+      end if
+      
+    end do
   end subroutine
 
   subroutine sortAndExchangeModes(this, coor, coorMin, coorMax, neighLo, neighHi)
@@ -393,14 +505,17 @@ contains
     integer :: howmanyLo, howmanyHi
     real(rkind), dimension(:), intent(in) :: coor
     real(rkind), intent(in) :: coorMin, coorMax
-    integer, intent(in) :: neighLo, neighHi 
+    integer, intent(in) :: neighLo, neighHi
     real(rkind), dimension(:,:), allocatable :: sendBufferLo, sendBufferHi
     real(rkind), dimension(:,:), allocatable :: recvBufferLo, recvBufferHi
+    real(rkind), dimension(:,:,:), allocatable :: tmp
+    integer, dimension(4) :: sendReq, recvReq
+    integer :: tag, ierr, sz1
 
     inactiveIndex = mod(this%activeIndex+1,2)
     
-    allocate(sendBufferLo(this%nmodes,12))
-    allocate(sendBufferHi(this%nmodes,12))
+    allocate(sendBufferLo(this%nmodes,this%nvars))
+    allocate(sendBufferHi(this%nmodes,this%nvars))
 
     iterSelf = 0
     iterLo = 0
@@ -408,7 +523,7 @@ contains
 
     do n = 1,this%nModes
         
-        if ((coor(n) < coorMax) .and. (coor(n) > coorMin)) then 
+        if ((coor(n) <= coorMax) .and. (coor(n) > coorMin)) then 
             iterSelf = iterSelf + 1
             this%rawModedata(iterSelf,:,inactiveIndex) = this%rawModedata(n,:,this%activeIndex) 
         else
@@ -416,11 +531,12 @@ contains
                 iterHi = iterHi + 1
                 sendBufferHi(iterHi,:) = this%rawModedata(n,:,this%activeIndex) 
 
-            else if (coor(n) < coorMin) then 
+            else if (coor(n) <= coorMin) then 
                 iterLo = iterLo + 1
                 sendBufferLo(iterLo,:) = this%rawModedata(n,:,this%activeIndex) 
             
             else
+                print*, coor(n), coorMax, coorMin
                 print*, "This should not happen"
                 stop 
             end if 
@@ -428,31 +544,69 @@ contains
 
     end do
 
-    ! isend howmany to hi
-    ! isend howmany to lo 
 
+    ! isend howmany to hi
+    ! isend howmany to lo
+    tag = 0 
+    ! Send to lower rank
+    call MPI_ISend(iterLo,1,MPI_INTEGER,neighLo,tag,&
+      DECOMP_2D_COMM_CART_X,sendReq(1),ierr)
+    ! Send to higher rank
+    call MPI_ISend(iterHi,1,MPI_INTEGER,neighHi,tag,&
+      DECOMP_2D_COMM_CART_X,sendReq(2),ierr)
+    
     ! irecv howmany from lo
     ! irecv howmany from hi
-
-
+    call MPI_IRecv(howManyLo,1,MPI_INTEGER,neighLo,tag,&
+      DECOMP_2D_COMM_CART_X,recvReq(1),ierr)
+    ! Receive from higher rank
+    call MPI_IRecv(howManyHi,1,MPI_INTEGER,neighHi,tag,&
+      DECOMP_2D_COMM_CART_X,recvReq(2),ierr)
+    
     ! isend data to lo
     ! isend data to hi 
+    call MPI_ISend(sendBufferLo(1:iterLo,:),this%nvars*iterLo,mpirkind,neighLo,tag,&
+        DECOMP_2D_COMM_CART_X,sendReq(3),ierr) 
+    call MPI_ISend(sendBufferHi(1:iterHi,:),this%nvars*iterHi,mpirkind,neighHi,tag,&
+        DECOMP_2D_COMM_CART_X,sendReq(4),ierr) 
+    
+    call MPI_WaitAll(4,[recvReq(1:2), sendReq(1:2)],MPI_STATUSES_IGNORE,ierr)
 
-    allocate(recvBufferLo(howmanyLo,12))
-    allocate(recvBufferHi(howmanyHi,12))
+    allocate(recvBufferLo(howmanyLo,this%nvars))
+    allocate(recvBufferHi(howmanyHi,this%nvars))
 
     ! irecv data from lo
     ! irecv data from hi 
+    call MPI_IRecv(recvBufferLo,size(recvBufferLo),mpirkind,neighLo,tag,&
+      DECOMP_2D_COMM_CART_X,recvReq(3),ierr)
+    call MPI_IRecv(recvBufferHi,size(recvBufferHi),mpirkind,neighHi,tag,&
+      DECOMP_2D_COMM_CART_X,recvReq(4),ierr)
+  
+    call MPI_WaitAll(4,[recvReq(3:4), sendReq(3:4)], MPI_STATUSES_IGNORE,ierr)
 
-    if (size(this%rawModedata,1) < iterSelf+howmanyLo+howmanyHi) then 
-        print*, "Size issue for rawModedata detected."
-        stop 
+    if (size(this%rawModedata,1) < iterSelf+howmanyLo+howmanyHi) then
+        sz1 = size(this%rawModeData,1)
+        
+        ! Temporarily copy rawModeData to tmp array
+        allocate(tmp(sz1,size(this%rawModeData,2),size(this%rawModeData,3)))
+        tmp = this%rawModeData
+
+        ! Deallocate and reallocate rawModeData
+        deallocate(this%rawModeData)
+        allocate(this%rawModeData(iterSelf+howManyLo+howManyHi,this%nvars,0:1))
+
+        ! Copy tmp data back to rawModeData
+        this%rawModeData(1:sz1,:,:) = tmp
+
+        ! Clear memory
+        deallocate(tmp)
     end if 
 
     this%rawModedata(iterSelf+1:iterSelf+howmanyLo,:,inactiveIndex) = recvBufferLo 
     this%rawModedata(iterSelf+howmanyLo+1:iterSelf+howmanyLo+howmanyHi,:,inactiveIndex) = recvBufferHi 
 
     this%nModes = iterSelf+howmanyLo+howmanyHi
+
 #include "enrichment_files/togglePointer.F90"
 
     deallocate(sendBufferLo, sendBufferHi, recvBufferLo, recvBufferHi)
@@ -463,6 +617,8 @@ contains
     class(enrichmentOperator), intent(inout), target :: this
     real(rkind) :: Lx
     real(rkind), dimension(:,:), pointer :: haloBuffY, haloBuffZ 
+    
+    call message(1,"Rendering the Gabor-induced velocity field")
    
     haloBuffY => null()
     haloBuffZ => null()
@@ -475,15 +631,13 @@ contains
     this%smallScales%wC = 0.d0
      
     ! STEP 1: Exchange Gabor modes from neighbors that have influence on your domain 
-    call message(2,'Exchanging halo modes')
-    !call this%sendRecvHaloModes(this%modeData, 'y', this%renderModeData)
-    
     if (allocated(this%renderModeData)) deallocate(this%renderModedata)
-    allocate(this%renderModeData(size(this%modeData,1), size(this%ModeData,2)))
+    allocate(this%renderModeData(this%nmodes, size(this%ModeData,2)))
+    !allocate(this%renderModeData(size(this%modeData,1), size(this%ModeData,2)))
     this%renderModeData = this%modeData
     call this%sendRecvHaloModes(this%renderModeData, 'y')
     call this%sendRecvHaloModes(this%renderModeData, 'z')
-
+    
     ! Step 2: Render velocity 
       call this%renderLocalVelocity(this%renderModeData(:,1), &
         this%renderModeData(:,2),  this%renderModeData(:,3), &
@@ -532,31 +686,28 @@ contains
 
   subroutine wrapupTimeStep(this,doNotRender)
     class(enrichmentOperator), intent(inout) :: this
+    logical :: noRender
     logical, intent(in), optional :: doNotRender
 
-    if (mod(this%tid,this%tidRender) == 0) then 
-      if (present(doNotRender)) then
-        if (doNotRender) then
-          continue
-        else
+    noRender = .false.
+    if (present(doNotRender)) noRender = doNotRender
+    if (noRender) then
+      continue
+    else
+      if (mod(this%tid,this%tidRender) == 0 .or. this%tid == this%tidStop-1) then
           call tic()
           call this%renderVelocity()
           call toc('Velocity rendering took')
-        end if
-      else
-        call tic()
-        call this%renderVelocity()
-        call toc('Velocity rendering took')
+      end if 
+
+      if (mod(this%tid,this%tio) == 0 .or. this%tid == this%tidStop-1) then
+        call this%dumpSmallScales()
       end if
     end if 
-
-    if (mod(this%tid,this%tio) == 0) then 
-      call this%dumpSmallScales()
-    end if 
-
+    
     this%tid = this%tid + 1
 
-    !call this%updateLargeScales(timeAdvance=.false.)
+    !call this%updateLargeScales(timeAdvance=.false.,initializing=.false.)
 
   end subroutine
 

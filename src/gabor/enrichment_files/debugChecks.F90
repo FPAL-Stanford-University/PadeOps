@@ -15,5 +15,13 @@ subroutine doDebugChecks(this)
     call assert(this%y(n) <= Ly,   'Mode y-location greater than Ly')
     call assert(this%z(n) >= 0.d0, 'Mode z-location less than 0')
     call assert(this%z(n) <= Lz,   'Mode z-location greater than Lz')
+
+    ! Confirm the mode locations are within process boundaries
+    call assert(this%x(n) >= this%PExbound(1), "Mode x-location less than process boundary")
+    call assert(this%x(n) <= this%PExbound(2), "Mode x-location greater than process boundary")
+    call assert(this%y(n) >= this%PEybound(1), "Mode y-location less than process boundary")
+    call assert(this%y(n) <= this%PEybound(2), "Mode y-location greater than process boundary")
+    call assert(this%z(n) >= this%PEzbound(1), "Mode z-location less than process boundary")
+    call assert(this%z(n) <= this%PEzbound(2), "Mode z-location greater than process boundary")
   end do
 end subroutine

@@ -10,7 +10,7 @@ subroutine generateIsotropicModes(this)
   class(enrichmentOperator), intent(inout) :: this
   character(len=clen) :: mssg1, mssg2, mssg3, mssg4
   real(rkind) :: xmin, ymin, zmin
-  integer :: i, j, k, kid, thetaID, nk, ntheta, nmodes
+  integer :: i, j, k, kid, nk, ntheta, nmodes
   real(rkind), dimension(7) :: seedFact
   integer :: isz, jsz, ksz
   real(rkind), dimension(:), allocatable :: kedge, kmag, dk, dkmodes, rand1, &
@@ -34,7 +34,7 @@ subroutine generateIsotropicModes(this)
   real(rkind) :: KE_loc, L_loc
 
   ! Misc
-  integer :: ierr, kst, ken, n, thetaSt, thetaEn
+  integer :: ierr, kst, ken, n
   integer :: nxQH, nyQH, istQH, jstQH, kstQH, idxOld, idxCurrent
 
   call message("                                                                ")
@@ -96,7 +96,6 @@ subroutine generateIsotropicModes(this)
         idxCurrent = sub2idx(istQH + i - 1, jstQH + j - 1, kstQH + k - 1, nxQH, nyQH) 
         call updateSeeds(seedFact,idxOld,idxCurrent)
         idxOld = idxCurrent
-!print*, (istQH + i - 1), (jstQH + j - 1), (kstQH + k - 1), nint(seedFact(1)*rmaxInt)
          
         ! Uniformily distribute modes in QH region
         call uniform_random(rand1,0.d0,1.d0,nint(seedFact(1)*rmaxInt))
@@ -312,6 +311,7 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,Ui)
   real(rkind), dimension(3), intent(out) :: Ui
   integer :: i, j, idx
 
+  ! Velocity components
   call interpToLocation(this%uh, Ui(1),&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
@@ -328,6 +328,7 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,Ui)
     this%largeScales%mesh(1,1,1,3), &
     this%x(gmID), this%y(gmID), this%z(gmID))
   
+  ! Velocity gradient
   idx = 1
   do i = 1,3
     do j = 1,3
@@ -351,7 +352,7 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,Ui)
     end do
   end do
 
-  ! Use L and KE for the QH region that the mode resides in
+  ! Large scale kinetic energy and length scale
   call interpToLocation(this%KEh,KE,this%largeScales%dx,this%largeScales%dy,&
     this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
     this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&

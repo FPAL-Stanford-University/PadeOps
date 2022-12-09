@@ -29,16 +29,7 @@ program hitEnrich
   call enrich%init(smallScales,largeScales,inputfileGM)
 
   print*, p_maxval(maxval(smallScales%u)) - p_minval(minval(smallScales%u))
-! DEBUG
-!do n = 1,nproc
-!  if (nrank == n-1) then
-!    print*, "PE", nrank
-!    print*, enrich%QHgrid%gpC%xsz(1), enrich%QHgrid%gpC%xsz(2), enrich%QHgrid%gpC%xsz(3)
-!    print*, enrich%QHgrid%gpC%xst(1), enrich%QHgrid%gpC%xst(2), enrich%QHgrid%gpC%xst(3)
-!  end if
-!  call MPI_Barrier(MPI_COMM_WORLD,ierr)
-!end do
-! END DEBUG
+  
   do while (enrich%continueSimulation())
     call enrich%updateLargeScales(timeAdvance=.true.)
     call enrich%advanceTime()

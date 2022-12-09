@@ -10,7 +10,8 @@ module exits
         
     interface message
         module procedure message_char, message_char_double, message_char_int, &
-          message_level_char, message_level_char_double, message_level_char_int
+          message_level_char, message_level_char_double, message_level_char_int, &
+          message_char_int_char_int 
     end interface
 
     interface message_min_max
@@ -63,6 +64,12 @@ contains
         character(len=*), intent(in) :: mess
         integer, intent(in) :: val
         if (nrank == 0) write(stdout,'(A,A,I0)') mess, " = ", val
+    end subroutine
+    
+    subroutine message_char_int_char_int(mess1,val1,mess2,val2)
+        character(len=*), intent(in) :: mess1, mess2
+        integer, intent(in) :: val1, val2
+        if (nrank == 0) write(stdout,'(A,I0,A,I0)') mess1, val1, mess2, val2
     end subroutine
     
     subroutine message_level_char(level,mess)

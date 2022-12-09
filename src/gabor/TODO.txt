@@ -1,9 +1,9 @@
 Ryan: 
-1. Finish mpi-calls insude sortAndExhange (PRIORITY 1) 
-2. Periodic offsets as needed.  (PRIORITY 2) 
-3. Update neighbor ranks to mpi_proc_null if periodicity is not present (LOWEST PRIORITY)
-4. Fix the spectral gap - play with kmin and nk (PRIORITY 3) 
-5. Run HIT - small scale with uniform velocity for large scale - ensure that mode advance works. (PRIORITY 4) 
+[x] 1. Finish mpi-calls inside sortAndExhange (PRIORITY 1) 
+[x] 2. Periodic offsets as needed.  (PRIORITY 2) 
+[x] 3. Fix the spectral gap - play with kmin and nk (PRIORITY 3) 
+[_] 4. Run HIT - small scale with uniform velocity for large scale - ensure that mode advance works. (PRIORITY 4) 
+[_] 5. Update neighbor ranks to mpi_proc_null if periodicity is not present (LOWEST PRIORITY)
 
 Aditya: 
 1. LG inputs 

@@ -1,6 +1,6 @@
 module GaborModeRoutines
   use kind_parameters, only: rkind
-  use constants,       only: pi, half
+  use constants,       only: pi
   use fortran_assert,  only: assert
   implicit none
   
@@ -134,7 +134,7 @@ module GaborModeRoutines
       kyNyqF = getNyquist(Ly,nySS)
       kzNyqF = getNyquist(Lz,nzSS)
 
-      kmin = half*minval([kxNyqLES, kyNyqLES, kzNyqLES])
+      kmin = minval([kxNyqLES, kyNyqLES, kzNyqLES])
       kmax = minval([kxNyqF,   kyNyqF,   kzNyqF])
     end subroutine
 

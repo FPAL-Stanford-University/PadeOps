@@ -1,5 +1,4 @@
 subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
-    use exits,     only: message
     use omp_lib,   only: omp_get_thread_num, omp_get_num_threads
     use decomp_2d, only: nrank
     ! Render the velocity local to the MPI rank
@@ -12,7 +11,6 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     real(rkind), dimension(:), intent(in) :: uR, uI, vR, vI, wR, wI, x, y, z, &
       kx, ky, kz
     integer :: n
-    real(rkind) :: small = 1.d-14
     character(len=clen) :: mssg
     real(single_kind) :: kdotx, kdotx2, kdotx3
     integer :: i, j, k, iist, iien, jjst, jjen, kkst, kken
@@ -22,8 +20,6 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     real(single_kind) :: wxSupport, wySupport, wzSupport, du, dv, dw
     integer :: tid
     real(single_kind), parameter :: pi_single = 4.0*atan(1.0)
-
-    call message(1,"Rendering the Gabor-induced velocity field")
     
     this%utmp = 0.e0
     this%vtmp = 0.e0
@@ -34,9 +30,9 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     dy = castSingle(this%smallScales%dy) 
     dz = castSingle(this%smallScales%dz) 
 
-    wxSupport = castSingle(this%nxsupp+1)*dx
-    wySupport = castSingle(this%nysupp+1)*dy
-    wzSupport = castSingle(this%nzsupp+1)*dz
+    wxSupport = castSingle(this%nxsupp)*dx
+    wySupport = castSingle(this%nysupp)*dy
+    wzSupport = castSingle(this%nzsupp)*dz
      
     ! Allocate velocity arrays for each thread 
     ist = this%smallScales%gpC%xst(1) 
@@ -50,22 +46,30 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     !$OMP PRIVATE(tid,n,i,j,k,kdotx,kdotx3,kdotx2,fx,fy,fz,f) &
     !$OMP PRIVATE(cs,ss,iist,iien,jjst,jjen,kkst,kken)
     tid = omp_get_thread_num()
-    if (tid == 0 .and. nrank == 0) print*, "# of threads spawned:", omp_get_num_threads()
     !$OMP DO
     do n = 1,size(x) 
       ! NOTE: These are global indices of the physical domain
       ! NOTE: The contribution of Gabor modes on neighboring processes is not
       ! accounted for here, nor is the periodic contribution for periodic
       ! directions whose data resides exlusively on the process (e.g. in x)
-      iist = max(ceiling((x(n)+small)/this%smallScales%dx) - this%nxsupp/2, ist)
-      iien = min(floor(  (x(n)+small)/this%smallScales%dx) + this%nxsupp/2, ien)
+      iist = max(ceiling(x(n)/this%smallScales%dx) - this%nxsupp/2 + 1, ist)
+      iien = min(floor(  x(n)/this%smallScales%dx) + this%nxsupp/2 - 1, ien)
 
-      jjst = max(ceiling((y(n)+small)/this%smallScales%dy) - this%nysupp/2, jst)
-      jjen = min(floor(  (y(n)+small)/this%smallScales%dy) + this%nysupp/2, jen)
+      jjst = max(ceiling(y(n)/this%smallScales%dy) - this%nysupp/2 - 1, jst)
+      jjen = min(floor(  y(n)/this%smallScales%dy) + this%nysupp/2 + 1, jen)
 
-      kkst = max(ceiling((z(n)+small)/this%smallScales%dz) - this%nzsupp/2, kst)
-      kken = min(floor(  (z(n)+small)/this%smallScales%dz) + this%nzsupp/2, ken)
+      kkst = max(ceiling(z(n)/this%smallScales%dz) - this%nzsupp/2 - 1, kst)
+      kken = min(floor(  z(n)/this%smallScales%dz) + this%nzsupp/2 + 1, ken)
+      
+      !iist = max(floor(  x(n)/this%smallScales%dx) - this%nxsupp/2, ist)
+      !iien = min(ceiling(x(n)/this%smallScales%dx) + this%nxsupp/2, ien)
 
+      !jjst = max(floor(  y(n)/this%smallScales%dy) - this%nysupp/2, jst)
+      !jjen = min(ceiling(y(n)/this%smallScales%dy) + this%nysupp/2, jen)
+      !
+      !kkst = max(floor(  z(n)/this%smallScales%dz) - this%nzsupp/2, kst)
+      !kken = min(ceiling(z(n)/this%smallScales%dz) + this%nzsupp/2, ken)
+!if (n == 1) print*, jjst, jjen
       if (iien < iist .or. jjen < jjst .or. kken < kkst) then
         continue
       else
@@ -88,11 +92,18 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
         do k = kkst,kken
           zF = dz*castSingle(k - 1)
           kdotx3 = kzs*(zF - zs)
-          fz = cos(pi_single*(zF - zs)/wzSupport)
+          fz = max(cos(pi_single*(zF - zs)/wzSupport), 0.e0)
           do j = jjst,jjen
             yF = dy*castSingle(j - 1)
             kdotx2 = kys*(yF - ys)
-            fy = cos(pi_single*(yF - ys)/wySupport)
+            fy = max(cos(pi_single*(yF - ys)/wySupport), 0.e0)
+            if (fy < 0.e0) then
+              print*, yF, ys, wySupport, pi_single
+              yF = dy*castSingle(jjen-1)
+              print*, cos(pi_single*(yF - ys)/wySupport)
+              print*, fy, jjst, jjen, j
+              stop
+            end if
             do i = iist,iien
               xF = dx*castSingle(i - 1)
               kdotx = kdotx2 + kdotx3 + kxs*(xF - xs)
@@ -100,7 +111,7 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
               cs = cos(kdotx)
               ss = sin(kdotx)
 
-              fx = cos(pi_single*(xF - xs)/wxSupport)
+              fx = max(cos(pi_single*(xF - xs)/wxSupport), 0.e0)
               f = fx*fy*fz
 
               du = 2*f*(uRs*cs - uIs*ss)

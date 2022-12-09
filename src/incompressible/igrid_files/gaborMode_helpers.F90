@@ -39,9 +39,9 @@ subroutine HaloUpdateVelocities(this, uh, vh, wh, duidxj_h)
     real(rkind), dimension(-num_pad+1:, -num_pad+1:, -num_pad+1:,:), intent(out) :: duidxj_h
     integer :: idx
 
-    call this%HaloUpdateField(this%u, uh)
-    call this%HaloUpdateField(this%v, vh)
-    call this%HaloUpdateField(this%w, wh)
+    call this%HaloUpdateField(this%u , uh)
+    call this%HaloUpdateField(this%v , vh)
+    call this%HaloUpdateField(this%wC, wh)
 
     do idx = 1,size(duidxj_h,4)
         call this%HaloUpdateField(this%duidxjC(:,:,:,idx), duidxj_h(:,:,:,idx))
@@ -126,9 +126,9 @@ subroutine fixGradientsForPeriodicity(this,periodicBCs)
     call this%dfdyC2CinX(this%v,this%duidxjC(:,:,:,5))
     call this%dfdzC2CinX(this%v,this%duidxjC(:,:,:,6))
     
-    call this%cd6opX%dd1(this%w,this%duidxjC(:,:,:,7),this%gpC%xsz(2),this%gpC%xsz(3))
-    call this%dfdyC2CinX(this%w,this%duidxjC(:,:,:,8))
-    call this%dfdzC2CinX(this%w,this%duidxjC(:,:,:,9))
+    call this%cd6opX%dd1(this%wC,this%duidxjC(:,:,:,7),this%gpC%xsz(2),this%gpC%xsz(3))
+    call this%dfdyC2CinX(this%wC,this%duidxjC(:,:,:,8))
+    call this%dfdzC2CinX(this%wC,this%duidxjC(:,:,:,9))
     
   end if
 
