@@ -15,7 +15,11 @@ module gaborHooks
     end subroutine
   end interface
 
-  interface getDomainBounds
-    subroutine getDomainBounds()
+  interface getDomainBoundaries
+    subroutine getDomainBoundaries(xDom,yDom,zDom,mesh)
+      import ::  rkind
+      real(rkind), dimension(2), intent(out) :: xDom, yDom, zDom
+      real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+    end subroutine
   end interface
 end module gaborHooks

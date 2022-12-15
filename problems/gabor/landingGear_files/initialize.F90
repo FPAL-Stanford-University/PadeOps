@@ -268,3 +268,29 @@ subroutine getLargeScaleParams(KE,L,LES)
   where(KE > 2.5d3) KE = 2.5d3
 
 end subroutine
+
+subroutine getDomainBoundaries(xDom,yDom,zDom,mesh)
+  use kind_parameters, only: rkind
+  use reductions,      only: p_minval, p_maxval
+  real(rkind), dimension(2), intent(out) :: xDom, yDom, zDom
+  real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+  integer :: nx, ny, nz
+  real(rkind) :: dx, dy, dz
+  
+  nx = size(mesh,1)
+  ny = size(mesh,2)
+  nz = size(mesh,3)
+
+  dx = mesh(2,1,1,1) - mesh(1,1,1,1)
+  dy = mesh(1,2,1,2) - mesh(1,1,1,2)
+  dz = mesh(1,1,2,3) - mesh(1,1,1,3)
+
+  xDom(1) = p_minval(mesh(1 ,1 ,1 ,1)) - dx/2
+  xDom(2) = p_maxval(mesh(nx,1 ,1 ,1)) + dx/2
+  
+  yDom(1) = p_minval(mesh(1 ,1 ,1 ,2)) - dy/2 
+  yDom(2) = p_maxval(mesh(1 ,ny,1 ,2)) + dy/2
+  
+  zDom(1) = p_minval(mesh(1 ,1 ,1 ,3)) - dz/2 
+  zDom(2) = p_maxval(mesh(1 ,1 ,nz,3)) + dz/2
+end subroutine

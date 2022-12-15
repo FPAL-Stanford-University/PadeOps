@@ -170,7 +170,7 @@ contains
     this%writeIsotropicModes = writeIsotropicModes
 
     ! Get domain boundaries
-    call getDomainBoundaries(xDom,yDom,zDom)
+    call getDomainBoundaries(xDom,yDom,zDom,largeScales%mesh)
 
     ! STEP  0: Get filenames for u, v and w from (input file?) for initialization
     ! Use the same file-naming convention for PadeOps restart files: 

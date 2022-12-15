@@ -20,12 +20,7 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     real(single_kind) :: wxSupport, wySupport, wzSupport, du, dv, dw
     integer :: tid
     real(single_kind), parameter :: pi_single = 4.0*atan(1.0)
-    real(single_kind) :: xdebug, ydebug, zdebug, distance
     
-    xdebug = 0.293750000000000
-    ydebug = 4.375000000000005E-002
-    zdebug = -6.250000000000000E-003    
-
     this%utmp = 0.e0
     this%vtmp = 0.e0
     this%wtmp = 0.e0
@@ -127,14 +122,6 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
             end do
           end do
         end do
-        !distance = sqrt((xs - xdebug)**2 + (ys - ydebug)**2 + (zs - zdebug)**2)
-        !if (distance < wxsupport/2.e0) then
-        !  print*, xs, ys, zs, distance
-        !  print*, this%utmp(idebug, jdebug, kdebug) 
-        !  print*, iist, iien, jjst, jjen, kkst, kken
-        !  print*, xdebug, ydebug, zdebug
-        !  print*, "----------------------------"
-        !end if
       end if
       if (mod(n,100000) == 0 .and. tid == 0) then
         write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
