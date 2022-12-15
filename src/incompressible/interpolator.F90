@@ -33,26 +33,26 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
     this%gpDest => gpDest
 
     ! Safeguards
-    if (xSource(1) > xDest(1)) then
-        call GracefulExit("Low bound of x-axis in out of bounds (interpolator)",34)
-    end if
-    if (xSource(size(xSource)) < xDest(size(xDest))) then
-        print*, xSource(size(xSource)), xDest(size(xDest))
-        call GracefulExit("High bound of x-axis in out of bounds (interpolator)",34)
-    end if  
-    if (ySource(1) > yDest(1)) then
-        call GracefulExit("Low bound of y-axis in out of bounds (interpolator)",34)
-    end if
-    if (ySource(size(ySource)) < yDest(size(yDest))) then
-        print*, ySource(size(ySource)),yDest(size(yDest)) 
-        call GracefulExit("High bound of y-axis in out of bounds (interpolator)",34)
-    end if  
-    if (zSource(1) > zDest(1)) then
-        call GracefulExit("Low bound of z-axis in out of bounds (interpolator)",34)
-    end if
-    if (zSource(size(zSource)) < zDest(size(zDest))) then
-        call GracefulExit("High bound of z-axis in out of bounds (interpolator)",34)
-    end if  
+    !if (xSource(1) > xDest(1)) then
+    !    call GracefulExit("Low bound of x-axis in out of bounds (interpolator)",34)
+    !end if
+    !if (xSource(size(xSource)) < xDest(size(xDest))) then
+    !    print*, xSource(size(xSource)), xDest(size(xDest))
+    !    call GracefulExit("High bound of x-axis in out of bounds (interpolator)",34)
+    !end if  
+    !if (ySource(1) > yDest(1)) then
+    !    call GracefulExit("Low bound of y-axis in out of bounds (interpolator)",34)
+    !end if
+    !if (ySource(size(ySource)) < yDest(size(yDest))) then
+    !    print*, ySource(size(ySource)),yDest(size(yDest)) 
+    !    call GracefulExit("High bound of y-axis in out of bounds (interpolator)",34)
+    !end if  
+    !if (zSource(1) > zDest(1)) then
+    !    call GracefulExit("Low bound of z-axis in out of bounds (interpolator)",34)
+    !end if
+    !if (zSource(size(zSource)) < zDest(size(zDest))) then
+    !    call GracefulExit("High bound of z-axis in out of bounds (interpolator)",34)
+    !end if  
 
     allocate(this%xInd(size(xDest)))
     allocate(this%wx(size(xDest)))
@@ -77,21 +77,45 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
     start = xSource(1)
     do idx = 1,size(this%wx)
         this%xInd(idx) = ceiling((xDest(idx) - start)/delta)
-        this%wx(idx) = (xSource(this%xInd(idx) + 1) - xDest(idx))/delta 
+        if (this%xInd(idx) < 1) then 
+            this%wx(idx) = 1.d0
+            this%xInd(idx) = 1
+        elseif (this%xInd(idx) > size(xSource) - 1) then
+            this%wx(idx) = 0.d0
+            this%xInd(idx) = size(xSource) - 1 
+        else
+            this%wx(idx) = (xSource(this%xInd(idx) + 1) - xDest(idx))/delta 
+        endif  
     end do 
 
     delta = ySource(2) - ySource(1)
     start = ySource(1)
     do idx = 1,size(this%wy)
         this%yInd(idx) = ceiling((yDest(idx) - start)/delta)
-        this%wy(idx) = (ySource(this%yInd(idx) + 1) - yDest(idx))/delta 
+        if (this%yInd(idx) < 1) then 
+            this%wy(idx) = 1.d0
+            this%yInd(idx) = 1
+        elseif (this%yInd(idx) > size(ySource) - 1) then
+            this%wy(idx) = 0.d0
+            this%yInd(idx) = size(ySource) - 1 
+        else
+            this%wy(idx) = (ySource(this%yInd(idx) + 1) - yDest(idx))/delta 
+        end if 
     end do 
 
     delta = zSource(2) - zSource(1)
     start = zSource(1)
     do idx = 1,size(this%wz)
         this%zInd(idx) = ceiling((zDest(idx) - start)/delta)
-        this%wz(idx) = (zSource(this%zInd(idx) + 1) - zDest(idx))/delta 
+        if (this%zInd(idx) < 1) then 
+            this%wz(idx) = 1.d0
+            this%zInd(idx) = 1
+        elseif (this%zInd(idx) > size(zSource) - 1) then
+            this%wz(idx) = 0.d0
+            this%zInd(idx) = size(zSource) - 1 
+        else
+            this%wz(idx) = (zSource(this%zInd(idx) + 1) - zDest(idx))/delta 
+        end if 
     end do 
 
     ! Create 2 intermediate transposers and buffer arrays    

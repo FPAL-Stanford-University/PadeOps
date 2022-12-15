@@ -399,7 +399,7 @@ module IncompressibleGrid
             procedure          :: HaloUpdateField
             procedure          :: ProjectToFixBC
             procedure, private :: readLargeScales
-            procedure          :: fixGradientsForPeriodicity
+            procedure          :: ComputeCD06Gradients 
             procedure, private :: dfdyC2CinX
             procedure, private :: dfdzC2CinX
    end type

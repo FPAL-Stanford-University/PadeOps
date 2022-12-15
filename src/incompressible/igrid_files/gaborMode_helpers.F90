@@ -1,25 +1,25 @@
-subroutine initLargeScales(this, tid, rid, readGradients)
+subroutine initLargeScales(this, tid, readGradients)
     class(igrid), intent(inout) :: this
-    integer, intent(in) :: tid, rid
+    integer, intent(in) :: tid
     logical, intent(in) ::  readGradients
 
     ! Fill u, v and w 
-    call this%readLargeScales(tid, rid)
+    call this%readLargeScales(tid, this%runid)
     !call this%readRestartFile(tid, rid)
 
     ! Compute gradients 
     if (readGradients) then
-      call readField3D(rid, tid, this%inputDir, "dudx", this%duidxjC(:,:,:,1) , this%gpC)
-      call readField3D(rid, tid, this%inputDir, "dudy", this%duidxjC(:,:,:,2) , this%gpC)
-      call readField3D(rid, tid, this%inputDir, "dudz", this%duidxjC(:,:,:,3) , this%gpC)
+      call readField3D(this%runid, tid, this%inputDir, "dudx", this%duidxjC(:,:,:,1) , this%gpC)
+      call readField3D(this%runid, tid, this%inputDir, "dudy", this%duidxjC(:,:,:,2) , this%gpC)
+      call readField3D(this%runid, tid, this%inputDir, "dudz", this%duidxjC(:,:,:,3) , this%gpC)
       
-      call readField3D(rid, tid, this%inputDir, "dvdx", this%duidxjC(:,:,:,4) , this%gpC)
-      call readField3D(rid, tid, this%inputDir, "dvdy", this%duidxjC(:,:,:,5) , this%gpC)
-      call readField3D(rid, tid, this%inputDir, "dvdz", this%duidxjC(:,:,:,6) , this%gpC)
+      call readField3D(this%runid, tid, this%inputDir, "dvdx", this%duidxjC(:,:,:,4) , this%gpC)
+      call readField3D(this%runid, tid, this%inputDir, "dvdy", this%duidxjC(:,:,:,5) , this%gpC)
+      call readField3D(this%runid, tid, this%inputDir, "dvdz", this%duidxjC(:,:,:,6) , this%gpC)
       
-      call readField3D(rid, tid, this%inputDir, "dwdx", this%duidxjC(:,:,:,7) , this%gpC)
-      call readField3D(rid, tid, this%inputDir, "dwdy", this%duidxjC(:,:,:,8) , this%gpC)
-      call readField3D(rid, tid, this%inputDir, "dwdz", this%duidxjC(:,:,:,9) , this%gpC)
+      call readField3D(this%runid, tid, this%inputDir, "dwdx", this%duidxjC(:,:,:,7) , this%gpC)
+      call readField3D(this%runid, tid, this%inputDir, "dwdy", this%duidxjC(:,:,:,8) , this%gpC)
+      call readField3D(this%runid, tid, this%inputDir, "dwdz", this%duidxjC(:,:,:,9) , this%gpC)
     else
 
       ! Compute uhat, vhat and what 
@@ -113,39 +113,37 @@ subroutine readLargeScales(this,tid, rid)
    call this%spectE%ifft(this%what, this%w)
 end subroutine
 
-subroutine fixGradientsForPeriodicity(this,periodicBCs)
+subroutine ComputeCD06Gradients(this,periodicBCs)
   class(igrid), intent(inout) :: this
   logical, dimension(3), intent(in) :: periodicBCs
 
-  if ((.not. periodicBCs(1)) .or. (.not. periodicBCs(2))) then
-    if (.not. allocated(this%cd6opX)) then
-      allocate(this%cd6opX)
-      ierr = this%cd6opX%init(this%nx, this%dx, periodicBCs(1), 0, 0)
-    end if
-    if (.not. allocated(this%cd6opY)) then
-      allocate(this%cd6opY)
-      ierr = this%cd6opY%init(this%ny, this%dy, periodicBCs(2), 0, 0)
-    end if
-    if (.not. allocated(this%cd6opZ)) then
-      allocate(this%cd6opZ)
-      ierr = this%cd6opZ%init(this%nz, this%dz, periodicBCs(3), 0, 0)
-    end if
-
-    ! x - derivatives
-  
-    call this%cd6opX%dd1(this%u,this%duidxjC(:,:,:,1),this%gpC%xsz(2),this%gpC%xsz(3))
-    call this%dfdyC2CinX(this%u,this%duidxjC(:,:,:,2))
-    call this%dfdzC2CinX(this%u,this%duidxjC(:,:,:,3))
-    
-    call this%cd6opX%dd1(this%v,this%duidxjC(:,:,:,4),this%gpC%xsz(2),this%gpC%xsz(3))
-    call this%dfdyC2CinX(this%v,this%duidxjC(:,:,:,5))
-    call this%dfdzC2CinX(this%v,this%duidxjC(:,:,:,6))
-    
-    call this%cd6opX%dd1(this%wC,this%duidxjC(:,:,:,7),this%gpC%xsz(2),this%gpC%xsz(3))
-    call this%dfdyC2CinX(this%wC,this%duidxjC(:,:,:,8))
-    call this%dfdzC2CinX(this%wC,this%duidxjC(:,:,:,9))
-    
+  if (.not. allocated(this%cd6opX)) then
+    allocate(this%cd6opX)
+    ierr = this%cd6opX%init(this%nx, this%dx, periodicBCs(1), 0, 0)
   end if
+  if (.not. allocated(this%cd6opY)) then
+    allocate(this%cd6opY)
+    ierr = this%cd6opY%init(this%ny, this%dy, periodicBCs(2), 0, 0)
+  end if
+  if (.not. allocated(this%cd6opZ)) then
+    allocate(this%cd6opZ)
+    ierr = this%cd6opZ%init(this%nz, this%dz, periodicBCs(3), 0, 0)
+  end if
+
+  ! x - derivatives
+  
+  call this%cd6opX%dd1(this%u,this%duidxjC(:,:,:,1),this%gpC%xsz(2),this%gpC%xsz(3))
+  call this%dfdyC2CinX(this%u,this%duidxjC(:,:,:,2))
+  call this%dfdzC2CinX(this%u,this%duidxjC(:,:,:,3))
+  
+  call this%cd6opX%dd1(this%v,this%duidxjC(:,:,:,4),this%gpC%xsz(2),this%gpC%xsz(3))
+  call this%dfdyC2CinX(this%v,this%duidxjC(:,:,:,5))
+  call this%dfdzC2CinX(this%v,this%duidxjC(:,:,:,6))
+  
+  call this%cd6opX%dd1(this%wC,this%duidxjC(:,:,:,7),this%gpC%xsz(2),this%gpC%xsz(3))
+  call this%dfdyC2CinX(this%wC,this%duidxjC(:,:,:,8))
+  call this%dfdzC2CinX(this%wC,this%duidxjC(:,:,:,9))
+    
 
 
 end subroutine

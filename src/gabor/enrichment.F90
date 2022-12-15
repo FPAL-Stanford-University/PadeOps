@@ -12,6 +12,7 @@ module enrichmentMod
   use mpi
   use reductions,         only: p_maxval, p_minval
   use timer,              only: tic, toc
+  use interpolatorMod,         only: interpolator
   implicit none
 
   private
@@ -23,7 +24,7 @@ module enrichmentMod
 
   real(rkind), dimension(2) :: xDom, yDom, zDom
 
-  public :: enrichmentOperator, xDom, yDom, zDom, nthreads
+  public :: enrichmentOperator, xDom, yDom, zDom, nthreads, interpAndAddGrids 
 
   type :: enrichmentOperator
     !private
@@ -87,11 +88,12 @@ module enrichmentMod
       procedure          :: advanceTime
       procedure          :: renderVelocity
       procedure          :: renderLocalVelocity
-      procedure          :: updateLargeScales
+      procedure          :: updateLargeScaleHaloes
       procedure          :: wrapupTimeStep
       procedure          :: dumpSmallScales
       procedure          :: continueSimulation
       procedure          :: dumpData
+      procedure          :: generateModes  
       procedure, private :: doDebugChecks
       procedure, private :: applyPeriodicOffsets
 
@@ -172,10 +174,6 @@ contains
     ! Get domain boundaries
     call getDomainBoundaries(xDom,yDom,zDom,largeScales%mesh)
 
-    ! STEP  0: Get filenames for u, v and w from (input file?) for initialization
-    ! Use the same file-naming convention for PadeOps restart files: 
-    ! RESTART_Run00_u.000000
-    call this%largeScales%initLargeScales(tidInit,this%largeScales%runID,readGradients)
     this%duidxj_LS => largeScales%duidxjC
     this%isStratified = this%largeScales%isStratified
     if (this%isStratified) then
@@ -189,7 +187,8 @@ contains
     allocate(this%L(this%smallScales%gpC%xsz(1),this%smallScales%gpC%xsz(2),&
       this%smallScales%gpC%xsz(3)))
     call getLargeScaleParams(this%KE,this%L,this%smallScales)
-    call this%updateLargeScales(timeAdvance=.false.,initializing=.true.) 
+
+    call this%QHgrid%init(inputfile, this%largeScales)
 
     this%nxsupp = nint(2*this%QHgrid%dx/this%smallScales%dx)
     this%nysupp = nint(2*this%QHgrid%dy/this%smallScales%dy)
@@ -239,14 +238,21 @@ contains
     ! Set things up for distributed memory
     call getneighbors(neighbor)
     call MPI_Cart_Get(DECOMP_2D_COMM_CART_X,2,dims,periodicBCs(2:3),coords,ierr)
-    !call this%largeScales%getPeriodicBCs(periodicBCs)
     periodicBCs(1) = xPeriodic
     periodicBCs(2) = yPeriodic
     periodicBCs(3) = zPeriodic
     this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%gpC%xsz(1) + 1)]
     this%PEybound = [this%QHgrid%yE(1), this%QHgrid%yE(this%QHgrid%gpC%xsz(2) + 1)]
     this%PEzbound = [this%QHgrid%zE(1), this%QHgrid%zE(this%QHgrid%gpC%xsz(3) + 1)]
+   
+  end subroutine
 
+  subroutine generateModes(this) 
+    class(enrichmentOperator), intent(inout) :: this 
+
+    ! Get halo'ed large scales
+    call this%updateLargeScaleHaloes(initializing=.true.) 
+    
     ! Initialize the Gabor modes
     call this%generateIsotropicModes()
 
@@ -257,16 +263,13 @@ contains
         this%KE_loc, this%L_loc)
     end if
     if (this%strainInitialCondition) call this%strainModes()
-   
-    !call this%wrapupTimeStep(doNotRender = doNotRenderInitialCondition)
-    this%tid = this%tid + 1
-  end subroutine
+  end subroutine 
 
   subroutine reinit(this)
     class(enrichmentOperator), intent(inout), target :: this 
     
     call getLargeScaleParams(this%KE,this%L,this%largeScales)
-    call this%updateLargeScales(timeAdvance=.false.,initializing=.true.) 
+    !call this%updateLargeScales(timeAdvance=.false.,initializing=.true.) 
 
     ! Compute the number of modes
     this%nmodes = this%nk*this%ntheta * &
@@ -329,22 +332,21 @@ contains
     call this%QHgrid%destroy()
   end subroutine 
 
-  subroutine updateLargeScales(this,timeAdvance,initializing)
+  subroutine updateLargeScaleHaloes(this,initializing)
     class(enrichmentOperator), intent(inout) :: this 
-    logical, intent(in) :: timeAdvance
     integer :: i
     logical, intent(in), optional :: initializing
-    logical :: init = .false.
+    logical :: init 
 
+    init = .false. 
     if (present(initializing)) init = initializing
     ! Ryan: 
     ! STEP 1: Figure out how you want to advance the large-scales
     ! Either run a PadeOps time-step or, read in from a file 
     ! If you read in from a file, you would want to avoid doing this repeatedly. 
     ! Perhaps read in 20 snapshots at a time and so on..
-    if (timeAdvance) call this%largeScales%timeAdvance(this%dt)
 
-    call this%largeScales%fixGradientsForPeriodicity(periodicBCs)
+    !call this%largeScales%fixGradientsForPeriodicity(periodicBCs)
 
     ! Aditya: 
     ! STEP 2: Generate halo'd velocities
@@ -743,7 +745,6 @@ contains
     
     this%tid = this%tid + 1
 
-    !call this%updateLargeScales(timeAdvance=.false.,initializing=.false.)
 
   end subroutine
 
@@ -762,5 +763,27 @@ contains
     if (this%tid < this%tidStop) doIContinue = .true. 
 
   end function  
-   
+
+  subroutine interpAndAddGrids(sourceGrid, destGrid, interp)
+    class(igrid), intent(in) :: sourceGrid
+    class(igrid), intent(inout) :: destGrid
+    class(interpolator) :: interp 
+    integer :: iter 
+     
+    call interp%LinInterp3D(sourceGrid%u ,destGrid%rbuffxC(:,:,:,1))
+    destGrid%u = destGrid%u + destGrid%rbuffxC(:,:,:,1)
+
+    call interp%LinInterp3D(sourceGrid%v ,destGrid%rbuffxC(:,:,:,1))
+    destGrid%v = destGrid%v + destGrid%rbuffxC(:,:,:,1)
+
+    call interp%LinInterp3D(sourceGrid%wC ,destGrid%rbuffxC(:,:,:,1))
+    destGrid%wC = destGrid%wC + destGrid%rbuffxC(:,:,:,1)
+
+    do iter = 1,9
+        call interp%LinInterp3D(sourceGrid%duidxjC(:,:,:,iter) ,destGrid%rbuffxC(:,:,:,1))
+        destGrid%duidxjC(:,:,:,iter) = destGrid%duidxjC(:,:,:,iter) + destGrid%rbuffxC(:,:,:,1)
+    end do 
+
+  end subroutine 
+
 end module
