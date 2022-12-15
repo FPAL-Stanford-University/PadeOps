@@ -284,11 +284,8 @@ subroutine strainModes(this)
 
  print*, maxval(abs(this%uhatR)), maxval(abs(this%vhatR)), maxval(abs(this%whatR)) 
  print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI)) 
-  !$OMP PARALLEL SHARED(input) &
-  !$OMP PRIVATE(n, output, dudx, L, KE, Ui, S, k, uRtmp, uItmp, tauEddy) &
-  !$OMP PRIVATE(dt)
-  !$OMP DO
-  do n = 1,this%nmodes
+ 
+ do n = 1,this%nmodes
     CALL PFQ(input(n),output)
     call this%getLargeScaleDataAtModeLocation(n,dudx,Ui)
     S = sqrt(dudx(1,1)*dudx(1,1) + dudx(1,2)*dudx(1,2) + dudx(1,3)*dudx(1,3) + &
@@ -301,21 +298,24 @@ subroutine strainModes(this)
     
     if (S < small) then
       tauEddy = 0.d0
+    !    print*, "Zero strain rate at:", n, S, this%x(n), this%y(n), this%z(n)  
     else
       tauEddy = this%ctauGlobal/S*((this%L_loc(n)*kabs(n))**(-2.0_rkind/3.0_rkind))/sqrt(output) 
     end if
 
-    tauMean = 1/(S*sqrt(0.18))
+    tauMean = 1/(S*sqrt(0.18) + 1E-10)
     if (tauEddy > tauMean) tauEddy = tauMean
     
     call getDtMax(dt,[this%uhatR(n), this%vhatR(n), this%whatR(n)],&
                      [this%uhatI(n), this%vhatI(n), this%whatI(n)],&
-                     S,kabs(n),this%KE_loc(n),this%L_loc(n),this%Anu, tauEddy)
+                     S+1D-12,kabs(n),this%KE_loc(n),this%L_loc(n),this%Anu, tauEddy)
     
-  
-    do tid = 1,nint(tauEddy/dt)
+    
+    do tid = 1,nint(tauEddy/(dt + 1E-12))
       call rk4Step(uRtmp,uItmp,k,x,dt,this%Anu,this%KE_loc(n),this%L_loc(n),this%numolec,dudx,Ui)
     end do
+
+    
     this%kx(n) = k(1)
     this%ky(n) = k(2)
     this%kz(n) = k(3)
@@ -331,8 +331,6 @@ subroutine strainModes(this)
       print*, trim(mssg)
     end if
   end do
-  !$OMP END DO
-  !$OMP END PARALLEL
   print*, "--------------------------------------------------"
  print*, maxval(abs(this%uhatR)), maxval(abs(this%vhatR)), maxval(abs(this%whatR)) 
  print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI)) 

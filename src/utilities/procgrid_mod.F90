@@ -7,7 +7,7 @@ module procgrid_mod
     private
     public :: procgrid, PAD_SPURIOUS, num_pad
 
-    integer , parameter :: num_pad = 1 
+    integer , parameter :: num_pad = 4 
     logical, parameter :: PAD_SPURIOUS = .false.
     
     type :: procgrid

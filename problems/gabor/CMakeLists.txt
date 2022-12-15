@@ -17,7 +17,7 @@ foreach ( GaborProblemFile ${GaborProblems_source_files} )
   
     add_executable( ${GaborProblemexec} ${GaborProblemFile} )
     
-    target_link_libraries( ${GaborProblemexec} GaborOps IncompressibleOps 2decomp_fft fftw3)
+    target_link_libraries( ${GaborProblemexec} GaborOps 2decomp_fft fftw3)
 
     if (MPI_Fortran_COMPILER_FLAGS)
         set_target_properties(${GaborProblemexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")

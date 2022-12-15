@@ -30,16 +30,16 @@ program landingGear
   call S1%init(inputS1, .true.) 
   
   call S2%init(inputS2, .false.)
-  call S3%init(inputS3, .false.)
+  !call S3%init(inputS3, .false.)
     
   call interpS1ToS2%init(S1%gpC, S2%gpC, S1%mesh(:,1,1,1), S1%mesh(1,:,1,2), &
     S1%mesh(1,1,:,3), S2%mesh(:,1,1,1), S2%mesh(1,:,1,2), S2%mesh(1,1,:,3)) 
   
-  call interpS2ToS3%init(S2%gpC, S3%gpC, S2%mesh(:,1,1,1), S2%mesh(1,:,1,2), &
-    S2%mesh(1,1,:,3), S3%mesh(:,1,1,1), S3%mesh(1,:,1,2), S3%mesh(1,1,:,3)) 
+  !call interpS2ToS3%init(S2%gpC, S3%gpC, S2%mesh(:,1,1,1), S2%mesh(1,:,1,2), &
+  !  S2%mesh(1,1,:,3), S3%mesh(:,1,1,1), S3%mesh(1,:,1,2), S3%mesh(1,1,:,3)) 
 
   call enrich12%init(S2,S1,inputG12)
-  call enrich23%init(S3,S2,inputG23)
+  !call enrich23%init(S3,S2,inputG23)
  
   ! Scale 1 : read from disk 
   call S1%initLargeScales(tid,readGradients=.true.) 
@@ -50,24 +50,24 @@ program landingGear
   call S2%ComputeCD06Gradients([.false.,.false.,.false.])
   if (dumpIndividualScales) call enrich12%dumpSmallScales()
   
-  ! Update Scale 2 for Scale 3
-  call interpAndAddGrids(S1, S2, interpS1ToS2)
+  !! Update Scale 2 for Scale 3
+  !call interpAndAddGrids(S1, S2, interpS1ToS2)
 
 
-  ! Scale 3: Generate Using modes 
-  call enrich23%generateModes()
-  call enrich23%renderVelocity()
-  call S3%ComputeCD06Gradients([.false.,.false.,.false.])
-  if (dumpIndividualScales) call enrich23%dumpSmallScales()
+  !! Scale 3: Generate Using modes 
+  !call enrich23%generateModes()
+  !call enrich23%renderVelocity()
+  !call S3%ComputeCD06Gradients([.false.,.false.,.false.])
+  !if (dumpIndividualScales) call enrich23%dumpSmallScales()
 
 
   call enrich12%destroy()
-  call enrich23%destroy()
+  !call enrich23%destroy()
   call S1%destroy()
   call S2%destroy()
-  call S3%destroy()
+  
+  !call S3%destroy()
 
-  deallocate(u,v,w)
 
   call MPI_Finalize(ierr)
 
