@@ -13,8 +13,6 @@ module budgets_vol_avg_mod
    private
    public :: budgets_vol_avg
 
-   external :: MPI_REDUCE, MPI_BCAST
-
    ! BUDGET TYPE: 
    ! BUDGET_0: 6 Reynolds stress terms + 3 temp fluxes + meanU + meanV + meanT
    ! BUDGET_1: momentum equation terms (Budget0 also computed) 

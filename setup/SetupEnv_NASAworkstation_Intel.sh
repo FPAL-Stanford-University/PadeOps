@@ -3,7 +3,7 @@
 CWD=`pwd`
 export COMPILER_ID=Intel
 export FC=mpif90 
-export CC=mpicc
+export CC="icc -lmpi"
 export CXX=mpicxx
 export FFTW_PATH=/u/wk/aghate/fftw-3.3.8
 export DECOMP_PATH=/u/wk/aghate/PadeOps/dependencies/2decomp_fft

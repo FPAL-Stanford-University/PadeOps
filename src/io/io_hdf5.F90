@@ -6,7 +6,6 @@ module io_hdf5_stuff
     use exits,           only: GracefulExit
     implicit none
 
-    external :: MPI_ALLREDUCE, MPI_BCAST
 
 
     type :: io_hdf5

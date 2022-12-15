@@ -16,9 +16,6 @@ module PadePoissonMod
 
     public :: Padepoisson
     
-    external :: MPI_CART_GET, DFFTW_PLAN_MANY_DFT_R2C, DFFTW_PLAN_MANY_DFT_C2R, & 
-      DFFTW_PLAN_MANY_DFT, DFFTW_DESTROY_PLAN, DFFTW_EXECUTE, DFFTW_EXECUTE_DFT, & 
-      DFFTW_EXECUTE_DFT_C2R,  DFFTW_EXECUTE_DFT_R2C
     
     include "fftw3.f"
 

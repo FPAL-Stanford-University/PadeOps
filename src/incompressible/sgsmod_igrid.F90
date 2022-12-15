@@ -13,8 +13,6 @@ module sgsmod_igrid
     use PadeDerOps, only: Pade6stagg
     implicit none
 
-    external :: MPI_BCAST, MPI_REDUCE
-
     private
     public :: sgs_igrid, getRotationTensor, getInverseRotationTensor, &
               contract_Rik_Skl_invRlj 

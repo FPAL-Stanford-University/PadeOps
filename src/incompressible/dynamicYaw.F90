@@ -13,7 +13,6 @@ module dynamicYawMod
 
     implicit none
 
-    external :: DGEQRF
 
     private
     public :: dynamicYaw
