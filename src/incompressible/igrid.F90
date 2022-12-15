@@ -34,7 +34,7 @@ module IncompressibleGrid
     external :: MPI_BCAST, MPI_RECV, MPI_SEND, MPI_REDUCE
 
     private
-    public :: igrid, wBC_bottom, wBC_top, prow, pcol
+    public :: igrid, wBC_bottom, wBC_top, prow, pcol, readField3D
 
     logical, dimension(3) :: periodicBCs
     complex(rkind), parameter :: zeroC = zero + imi*zero 

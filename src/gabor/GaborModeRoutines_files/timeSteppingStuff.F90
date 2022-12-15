@@ -5,8 +5,9 @@ subroutine rk4Step(uR,uI,k,x,dt,nuMod,KE,L,nu,dudx,U)
   real(rkind), dimension(3), intent(in) :: U
   real(rkind), dimension(4) :: a, b
   real(rkind), dimension(3) :: duR, duI, dk, rhsR, rhsI, rhsK, uRstar, uIStar, &
-    kstar
+    kstar, uold
   integer :: rk
+  real(rkind) :: ksq
 
   ! RK4 coefficients
   a = [0.d0, 0.5d0, 0.5d0, 1.d0]
@@ -36,6 +37,18 @@ subroutine rk4Step(uR,uI,k,x,dt,nuMod,KE,L,nu,dudx,U)
   uI = uI + duI
   k  = k  + dk
   x = x + dt*U
+
+  ! Project divergence free for numerical error
+  uold = uR
+  ksq = k(1)*k(1) + k(2)*k(2) + k(3)*k(3)
+  uR(1) = (1 - k(1)*k(1)/ksq)*uold(1) + (0 - k(1)*k(2)/ksq)*uold(2) + (0 - k(1)*k(3)/ksq)*uold(3)
+  uR(2) = (0 - k(2)*k(1)/ksq)*uold(1) + (1 - k(2)*k(2)/ksq)*uold(2) + (0 - k(2)*k(3)/ksq)*uold(3)
+  uR(3) = (0 - k(3)*k(1)/ksq)*uold(1) + (0 - k(3)*k(2)/ksq)*uold(2) + (1 - k(3)*k(3)/ksq)*uold(3)
+  
+  uold = uI
+  uI(1) = (1 - k(1)*k(1)/ksq)*uold(1) + (0 - k(1)*k(2)/ksq)*uold(2) + (0 - k(1)*k(3)/ksq)*uold(3)
+  uI(2) = (0 - k(2)*k(1)/ksq)*uold(1) + (1 - k(2)*k(2)/ksq)*uold(2) + (0 - k(2)*k(3)/ksq)*uold(3)
+  uI(3) = (0 - k(3)*k(1)/ksq)*uold(1) + (0 - k(3)*k(2)/ksq)*uold(2) + (1 - k(3)*k(3)/ksq)*uold(3)
 end subroutine
 
 subroutine getUrhs(rhs,u,dudx,k,nuMod,KE,L,nu)
@@ -62,7 +75,7 @@ subroutine getUrhs(rhs,u,dudx,k,nuMod,KE,L,nu)
   end do
   
   ! Spectral eddy viscosity. Eqn (3.22) in Aditya's thesis
-  nuk = sqrt(nu*nu + nuMod*KE*L*3.d0/8.d0*ksq**(-4.d0/3.d0)) - nu
+  nuk = sqrt(nu*nu + nuMod*2.d0*KE*L*L*(3.d0/8.d0)*(L*L*ksq)**(-4.d0/3.d0)) - nu
  
   rhs = rhs - nuk*ksq*u
 end subroutine
@@ -77,7 +90,7 @@ subroutine getKrhs(rhs,k,dudx)
   rhs(3) = -(k(1)*dudx(1,3) + k(2)*dudx(2,3) + k(3)*dudx(3,3))
 end subroutine
     
-subroutine getDtMax(dt,uhatR,uhatI,S,kmag)
+subroutine getDtMax(dt,uhatR,uhatI,S,kmag,KE,L,nuMod,tauEddy)
   ! Compute the maximum stable time step size
   ! Inputs:
   !     uhatR, uhatI --> vector of complex velocity amplitudes
@@ -86,15 +99,16 @@ subroutine getDtMax(dt,uhatR,uhatI,S,kmag)
   !     dt --> Maximum stable time step based on time-scales of the problem
 
   real(rkind), dimension(3) :: uhatR, uhatI
-  real(rkind), intent(in) :: S, kmag
+  real(rkind), intent(in) :: S, kmag, KE, L, nuMod, tauEddy
   real(rkind), intent(out) :: dt
-  real(rkind) :: umax, tau1, tau2
+  real(rkind) :: umax, tau1, tau2, tau3
 
   umax = sqrt(uhatR(1)*uhatR(1) + uhatI(1)*uhatI(1) + &
               uhatR(2)*uhatR(2) + uhatI(2)*uhatI(2) + &
               uhatR(3)*uhatR(3) + uhatI(3)*uhatI(3))
 
-  call assert(kmag > small,'kmag > small -- getDtMax()') 
+  call assert(kmag > small,'kmag > small -- getDtMax()')
+  tau3 = 1.d0/(kmag*sqrt(nuMod*2.d0*KE*L*L*(3.d0/8.d0)*(L*L*kmag*kmag)**(-4.d0/3.d0)) + 1.d-12)
   if (umax > small) then
     tau1 = 1.d0/(kmag*umax)
   else
@@ -107,5 +121,7 @@ subroutine getDtMax(dt,uhatR,uhatI,S,kmag)
     tau2 = big
   end if
 
-  dt = minval([tau1,tau2])/3.d0
+  dt = minval([tau1/4.d0,tau2/4.d0])*0.02d0!,tau3/1000.d0])
+  
+  if (nint(tauEddy/dt) < 500) dt = tauEddy/500.d0
 end subroutine

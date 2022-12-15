@@ -14,7 +14,8 @@ subroutine generateIsotropicModes(this)
   real(rkind), dimension(7) :: seedFact
   integer :: isz, jsz, ksz
   real(rkind), dimension(:), allocatable :: kedge, kmag, dk, dkmodes, rand1, &
-                                            theta, kztemp, r, rand2, thetaVel
+                                            r, rand2, thetaVel
+  real(rkind), dimension(:,:), allocatable :: theta, kztemp
   real(rkind) :: orientationX, orientationY, &
                  orientationZ, p1x, p1y, p1z, &
                  p2x, p2y, p2z, uRmag, uImag, &
@@ -31,11 +32,13 @@ subroutine generateIsotropicModes(this)
   real(rkind), dimension(:,:,:,:), allocatable :: uR, uI, vR, vI, wR, wI
 
   ! Large scale quantities
-  real(rkind) :: KE_loc, L_loc
+  real(rkind), dimension(:,:,:,:), allocatable :: KE_loc, L_loc
 
   ! Misc
   integer :: ierr, kst, ken, n
   integer :: nxQH, nyQH, istQH, jstQH, kstQH, idxOld, idxCurrent
+  integer :: ii, jj, kk, nside, iter
+  real(rkind) :: dxsub, dysub, dzsub
 
   call message("                                                                ")
   call message("================================================================")
@@ -63,7 +66,7 @@ subroutine generateIsotropicModes(this)
   allocate(kedge(nk+1))
   allocate(kmag(nk),dk(nk),dkmodes(nk*ntheta))
   allocate(rand1(nk*ntheta))
-  allocate(theta(ntheta),kztemp(ntheta),r(ntheta))
+  allocate(theta(ntheta,nk),kztemp(ntheta,nk),r(ntheta))
   allocate(thetaVel(nk*ntheta))
   allocate(rand2(nk*ntheta))
 
@@ -75,6 +78,10 @@ subroutine generateIsotropicModes(this)
            wR(nk*ntheta,isz,jsz,ksz),wI(nk*ntheta,isz,jsz,ksz))
   allocate(k1(nk*ntheta,isz,jsz,ksz),k2(nk*ntheta,isz,jsz,ksz),&
            k3(nk*ntheta,isz,jsz,ksz))
+
+  ! Large scale quantities
+  allocate(KE_loc(nk*ntheta,isz,jsz,ksz))
+  allocate( L_loc(nk*ntheta,isz,jsz,ksz))
 
   nxQH = this%QHgrid%gpC%xsz(1)
   nyQH = this%QHgrid%gpC%ysz(2)
@@ -106,9 +113,26 @@ subroutine generateIsotropicModes(this)
 
         call uniform_random(rand1,0.d0,1.d0,nint(seedFact(3)*rmaxInt))
         gmz(:,i,j,k) = zmin + this%QHgrid%dz*rand1
+
+        nside = nint(real(this%nk*this%ntheta,rkind)**(1.d0/3.d0))
+        call assert(nside**3 == this%nk*this%ntheta)
+        iter = 0
+        dxsub = this%QHgrid%dx/nside
+        dysub = this%QHgrid%dy/nside
+        dzsub = this%QHgrid%dz/nside
+        do kk = 1,nside
+          do jj = 1,nside
+            do ii = 1,nside
+              iter = iter + 1
+              gmx(iter,i,j,k) = xmin + dxsub*(ii - 1) + dxsub/2.d0
+              gmy(iter,i,j,k) = ymin + dysub*(jj - 1) + dysub/2.d0
+              gmz(iter,i,j,k) = zmin + dzsub*(kk - 1) + dzsub/2.d0
+            end do
+          end do
+        end do
           
         call uniform_random(thetaVel,0.d0,2.d0*pi,nint(seedFact(6)*rmaxInt))
-          
+
         call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),nint(seedFact(7)*rmaxInt))
         
         ! TODO: kmin and kmax should be functions of space
@@ -117,38 +141,43 @@ subroutine generateIsotropicModes(this)
         kmag = 0.5d0*(kedge(1:nk) + kedge(2:nk+1))
         dk = kedge(2:nk+1) - kedge(1:nk)
           
+        call uniform_random(theta,0.d0,2.d0*pi,nint(seedFact(4)*rmaxInt))
+        call uniform_random(kztemp,-1.d0,1.d0,nint(seedFact(5)*rmaxInt))
+          
         do kid = 1,nk
           kst = (kid - 1)*ntheta + 1
           ken = kst + ntheta - 1
 
           ! Isotropically sample wave-vector components
-          call uniform_random(theta,0.d0,2.d0*pi,nint(seedFact(4)*rmaxInt))
-          call uniform_random(kztemp,-1.d0,1.d0,nint(seedFact(5)))
-
           ! Assign wave-vector components
-          k3(kst:ken,i,j,k) = kmag(kid)*kztemp
-          r = sqrt(1.d0 - kztemp*kztemp)
-          k1(kst:ken,i,j,k) = kmag(kid)*r*cos(theta)
-          k2(kst:ken,i,j,k) = kmag(kid)*r*sin(theta)
+          k3(kst:ken,i,j,k) = kmag(kid)*kztemp(:,kid)
+          r = sqrt(1.d0 - kztemp(:,kid)*kztemp(:,kid))
+          k1(kst:ken,i,j,k) = kmag(kid)*r*cos(theta(:,kid))
+          k2(kst:ken,i,j,k) = kmag(kid)*r*sin(theta(:,kid))
           dkmodes(kst:ken) = dk(kid)
         end do
 
         do n = 1,this%nk*this%ntheta
 
           ! get KE_loc and L_loc
-          call interpToLocation(this%KEh,KE_loc,this%largeScales%dx,this%largeScales%dy,&
-            this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
-            this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&
+          call interpToLocation(this%KEh,KE_loc(n,i,j,k),this%smallScales%dx,this%smallScales%dy,&
+            this%smallScales%dz,this%smallScales%mesh(1,1,1,1),&
+            this%smallScales%mesh(1,1,1,2),this%smallScales%mesh(1,1,1,3),&
             gmx(n,i,j,k),gmy(n,i,j,k),gmz(n,i,j,k))
-          call interpToLocation(this%Lh,L_loc,this%largeScales%dx,this%largeScales%dy,&
-            this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
-            this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&
+          call interpToLocation(this%Lh,L_loc(n,i,j,k),this%smallScales%dx,this%smallScales%dy,&
+            this%smallScales%dz,this%smallScales%mesh(1,1,1,1),&
+            this%smallScales%mesh(1,1,1,2),this%smallScales%mesh(1,1,1,3),&
             gmx(n,i,j,k),gmy(n,i,j,k),gmz(n,i,j,k))
+          
+          if (L_loc(n,i,j,k) < 1.d-8) then
+            L_loc(n,i,j,k) = 1.d0
+            KE_loc(n,i,j,k) = 0.d0
+          end if
           
           myKmag = sqrt(k1(n,i,j,k)**2 + k2(n,i,j,k)**2 + k3(n,i,j,k)**2)
           
-          E = getModelSpectrum(myKmag,KE_loc,L_loc)
-
+          E = getModelSpectrum(myKmag,KE_loc(n,i,j,k),L_loc(n,i,j,k))
+          
           ! Amplitude of each mode such that the sum of mode energies gives
           ! the correct kinetic energy
           umag = sqrt(2*E*dkmodes(n)/ntheta)
@@ -208,11 +237,14 @@ subroutine generateIsotropicModes(this)
   this%y = reshape(gmy,(/nmodes/))
   this%z = reshape(gmz,(/nmodes/))
 
+  this%KE_loc = reshape(KE_loc,(/nmodes/))
+  this%L_loc = reshape(L_loc,(/nmodes/))
+
   ! Confirm modes are divergence free
   call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&
-    this%kx,this%ky,this%kz),'Velocity not divergence free (R)')
+    this%kx,this%ky,this%kz),'Velocity not divergence free (R) - Isotropic')
   call assert(isOrthogonal(this%uhatI,this%vhatI,this%whatI,&
-    this%kx,this%ky,this%kz),'Velocity not divergence free (I)')
+    this%kx,this%ky,this%kz),'Velocity not divergence free (I) - Isotropic')
 
   ! Debug checks
   if (this%debugChecks) then
@@ -225,7 +257,8 @@ subroutine generateIsotropicModes(this)
 
   ! Deallocate temporary arrays
   deallocate(kedge,kmag,dk,rand1,theta,kztemp,r,thetaVel,rand2,&
-             uR, uI, vR, vI, wR, wI, k1, k2, k3, gmx, gmy, gmz)
+             uR, uI, vR, vI, wR, wI, k1, k2, k3, gmx, gmy, gmz,&
+             KE_loc, L_loc)
   
   ! Acknowledge that isotropic modes are initialized
   call message(1,'Finished generating isotropic modes')
@@ -233,11 +266,11 @@ subroutine generateIsotropicModes(this)
 end subroutine
 
 subroutine strainModes(this)
-  use GaborModeRoutines, only: PFQ, getDtMax, rk4Step, small
+  use GaborModeRoutines, only: PFQ, getDtMax, rk4Step, small, isOrthogonal
   use decomp_2D,         only: nrank
   class(enrichmentOperator), intent(inout) :: this 
   real(rkind), dimension(this%nmodes) :: kabs, input
-  real(rkind) :: output, tauEddy, S, L, KE
+  real(rkind) :: output, tauEddy, S, L, KE, tauMean
   real(rkind), dimension(3) :: Ui
   real(rkind), dimension(3,3) :: dudx
   integer :: n, tid
@@ -246,22 +279,21 @@ subroutine strainModes(this)
   character(len=clen) :: mssg
 
   kabs = sqrt(this%kx*this%kx + this%ky*this%ky + this%kz*this%kz)
-  input = -(kabs)**(-2.0_rkind)
+  input = -(this%L_loc*kabs)**(-2.0_rkind)
   x     = 0.d0
- 
+
+ print*, maxval(abs(this%uhatR)), maxval(abs(this%vhatR)), maxval(abs(this%whatR)) 
+ print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI)) 
   !$OMP PARALLEL SHARED(input) &
   !$OMP PRIVATE(n, output, dudx, L, KE, Ui, S, k, uRtmp, uItmp, tauEddy) &
   !$OMP PRIVATE(dt)
   !$OMP DO
   do n = 1,this%nmodes
     CALL PFQ(input(n),output)
-    call this%getLargeScaleDataAtModeLocation(n,dudx,L,KE,Ui)
+    call this%getLargeScaleDataAtModeLocation(n,dudx,Ui)
     S = sqrt(dudx(1,1)*dudx(1,1) + dudx(1,2)*dudx(1,2) + dudx(1,3)*dudx(1,3) + &
              dudx(2,1)*dudx(2,1) + dudx(2,2)*dudx(2,2) + dudx(2,3)*dudx(2,3) + &
              dudx(3,1)*dudx(3,1) + dudx(3,2)*dudx(3,2) + dudx(3,3)*dudx(3,3))
-    call getDtMax(dt,[this%uhatR(n), this%vhatR(n), this%whatR(n)],&
-                     [this%uhatI(n), this%vhatI(n), this%whatI(n)],&
-                     S,kabs(n))
     
     k     = [this%kx(n),    this%ky(n),    this%kz(n)]
     uRtmp = [this%uhatR(n), this%vhatR(n), this%whatR(n)]
@@ -270,15 +302,19 @@ subroutine strainModes(this)
     if (S < small) then
       tauEddy = 0.d0
     else
-      tauEddy = this%ctauGlobal/S*((kabs(n))**(-2.0_rkind/3.0_rkind))/sqrt(output) 
+      tauEddy = this%ctauGlobal/S*((this%L_loc(n)*kabs(n))**(-2.0_rkind/3.0_rkind))/sqrt(output) 
     end if
-  
-    if (nint(tauEddy/dt) < 50) then
-      dt = tauEddy/50.d0
-    end if  
 
+    tauMean = 1/(S*sqrt(0.18))
+    if (tauEddy > tauMean) tauEddy = tauMean
+    
+    call getDtMax(dt,[this%uhatR(n), this%vhatR(n), this%whatR(n)],&
+                     [this%uhatI(n), this%vhatI(n), this%whatI(n)],&
+                     S,kabs(n),this%KE_loc(n),this%L_loc(n),this%Anu, tauEddy)
+    
+  
     do tid = 1,nint(tauEddy/dt)
-      call rk4Step(uRtmp,uItmp,k,x,dt,this%Anu,KE,L,this%numolec,dudx,Ui)
+      call rk4Step(uRtmp,uItmp,k,x,dt,this%Anu,this%KE_loc(n),this%L_loc(n),this%numolec,dudx,Ui)
     end do
     this%kx(n) = k(1)
     this%ky(n) = k(2)
@@ -297,17 +333,24 @@ subroutine strainModes(this)
   end do
   !$OMP END DO
   !$OMP END PARALLEL
+  print*, "--------------------------------------------------"
+ print*, maxval(abs(this%uhatR)), maxval(abs(this%vhatR)), maxval(abs(this%whatR)) 
+ print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI)) 
+  ! Confirm modes are divergence free
+  call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&
+    this%kx,this%ky,this%kz),'Velocity not divergence free (R) - Strained')
+  call assert(isOrthogonal(this%uhatI,this%vhatI,this%whatI,&
+    this%kx,this%ky,this%kz),'Velocity not divergence free (I) - Strained')
 
   call message(1,'Finished straining isotropic modes')
 end subroutine
 
-subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,Ui)
+subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,Ui)
   use GaborModeRoutines, only: interpToLocation, getNearestNeighborValue!, findMeshIdx
 
   class(enrichmentOperator), intent(inout) :: this
   integer, intent(in) :: gmID
   real(rkind), dimension(3,3), intent(out) :: dudx
-  real(rkind), intent(out) :: L, KE
   real(rkind), dimension(3), intent(out) :: Ui
   integer :: i, j, idx
 
@@ -351,14 +394,4 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,L,KE,Ui)
       ! dudx(3,3) = dwdz = duidxj_h(:,:,:,9) see compute_duidxj() in igrid
     end do
   end do
-
-  ! Large scale kinetic energy and length scale
-  call interpToLocation(this%KEh,KE,this%largeScales%dx,this%largeScales%dy,&
-    this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
-    this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&
-    this%x(gmID),this%y(gmID),this%z(gmID))
-  call interpToLocation(this%Lh,L,this%largeScales%dx,this%largeScales%dy,&
-    this%largeScales%dz,this%largeScales%mesh(1,1,1,1),&
-    this%largeScales%mesh(1,1,1,2),this%largeScales%mesh(1,1,1,3),&
-    this%x(gmID),this%y(gmID),this%z(gmID))
 end subroutine

@@ -99,16 +99,23 @@ module GaborModeRoutines
       z = z/mag
     end subroutine
     
-    pure function isOrthogonal(a1,a2,a3,b1,b2,b3) result(TF)
+    function isOrthogonal(a1,a2,a3,b1,b2,b3) result(TF)
       real(rkind), dimension(:), intent(in) :: a1, a2, a3, b1, b2, b3
       logical :: TF
       real(rkind) :: maxDiv, small
 
-      small = 1.d-14
+      small = 1.d-10
     
       maxDiv = maxval(a1*b1 + a2*b2 + a3*b3)
       TF = .false.
-      if (maxDiv < small) TF = .true.
+      if (maxDiv < small) then
+        TF = .true.
+      else
+        print*, "umag:", maxval(sqrt(a1*a1 + a2*a2 + a3*a3))
+        print*, "kmag max:", maxval(sqrt(b1*b1 + b2*b2 + b3*b3))
+        print*, "kmag min:", minval(sqrt(b1*b1 + b2*b2 + b3*b3))
+        print*, "maxDiv:", maxDiv
+      end if
     end function
       
     pure function getNyquist(L,n) result(kNyq)

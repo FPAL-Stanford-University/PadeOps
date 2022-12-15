@@ -19,7 +19,7 @@ program test_gaborMode_renderVelMPI
   real(rkind), dimension(2,2) :: xpos, ypos, zpos, kx, ky, kz, uhatR, uhatI, vhatR, vhatI, whatR, whatI
   real(rkind) :: tol = 1.d-13
   integer :: id1, id2, id3
-  character(len=1) :: id1str, id2str, id3str
+  character(len=200) :: id1str, id2str, id3str
       
   call MPI_Init_thread(MPI_THREAD_FUNNELED,provided,ierr)
   
@@ -31,9 +31,10 @@ program test_gaborMode_renderVelMPI
   call GETARG(6,id3str)
   call GetArguments(nthreads,4)
 
-  read(id1str,'(I1)') id1
-  read(id2str,'(I1)') id2
-  read(id3str,'(I1)') id3
+  read(id1str,*) id1
+  read(id2str,*) id2
+  read(id3str,*) id3
+
   
   call largeScales%init(inputfileLS, .true.) 
   call smallScales%init(inputfileSS, .false.)
@@ -90,6 +91,7 @@ program test_gaborMode_renderVelMPI
   w1 = enrich%smallScales%wC
   print*, maxval(abs(u1))
 
+  enrich%modeData(:,7:12) = 0.d0
   enrich%x(    id1) =    3.11347110697574d0     
   enrich%y(    id1) =   0.846489344291156d0     
   enrich%z(    id1) =    1.50084108828105d0     
@@ -131,6 +133,7 @@ program test_gaborMode_renderVelMPI
  
   call enrich%wrapupTimeStep()
 
+  print*, id1, id2, id3
   print*, maxval(abs(enrich%smallScales%u))
   print*, "max u difference:", p_maxval(maxval(abs(enrich%smallScales%u - u1)))
   print*, "max v difference:", p_maxval(maxval(abs(enrich%smallScales%v - v1)))

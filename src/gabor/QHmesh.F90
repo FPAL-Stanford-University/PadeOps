@@ -14,7 +14,6 @@ module QHmeshMod
     real(rkind) :: dx, dy, dz 
     integer :: nx, ny, nz
     type(igrid), pointer :: LES
-    real(rkind), dimension(:,:,:), allocatable :: KE, L 
     
     contains
       procedure :: init
@@ -74,13 +73,12 @@ module QHmeshMod
       allocate(this%xC(isz), this%yC(jsz), this%zC(ksz))
       allocate(this%xE(isz+1), this%yE(jsz+1), this%zE(ksz+1))
 
-      allocate(this%KE(isz,jsz,ksz), this%L(isz,jsz,ksz))
 
       ! Define the mesh           
       this%xE = getMeshEdgeValues(ist,isz+1,this%dx,&
-        p_minval(this%LES%mesh(1,1,1,1)))
+        p_minval(this%LES%mesh(1,1,1,1))-this%LES%dx/2.d0)
       this%yE = getMeshEdgeValues(jst,jsz+1,this%dy,&
-        p_minval(this%LES%mesh(1,1,1,2)))
+        p_minval(this%LES%mesh(1,1,1,2))-this%LES%dy/2.d0)
       this%zE = getMeshEdgeValues(kst,ksz+1,this%dz,&
         p_minval(this%LES%mesh(1,1,1,3))-this%LES%dz/2.d0)
       
@@ -100,8 +98,6 @@ module QHmeshMod
       if (allocated(this%xC)) deallocate(this%xC)
       if (allocated(this%yC)) deallocate(this%yC)
       if (allocated(this%zC)) deallocate(this%zC)
-      if (allocated(this%KE)) deallocate(this%KE)
-      if (allocated(this%L))  deallocate(this%L)
       call decomp_info_finalize(this%gpC)
     end subroutine
     

@@ -2,8 +2,12 @@ Ryan:
 [x] 1. Finish mpi-calls inside sortAndExhange (PRIORITY 1) 
 [x] 2. Periodic offsets as needed.  (PRIORITY 2) 
 [x] 3. Fix the spectral gap - play with kmin and nk (PRIORITY 3) 
-[_] 4. Run HIT - small scale with uniform velocity for large scale - ensure that mode advance works. (PRIORITY 4) 
+[x] 4. Run HIT - small scale with uniform velocity for large scale - ensure that mode advance works. (PRIORITY 4) 
 [_] 5. Update neighbor ranks to mpi_proc_null if periodicity is not present (LOWEST PRIORITY)
+[_] 6. set up domain min max user function
+[_] 7. Learn how to use interpolator and interp from S1 to S2 grid
+[_] 8. Large scale manipulation happens before enrich%init()
 
 Aditya: 
-1. LG inputs 
+[x] 1. LG inputs
+[_] 2. Create small scale KE and Liso inputs 

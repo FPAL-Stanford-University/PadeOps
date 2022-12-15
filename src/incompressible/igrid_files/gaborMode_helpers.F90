@@ -1,21 +1,37 @@
-subroutine initLargeScales(this, tid, rid)
+subroutine initLargeScales(this, tid, rid, readGradients)
     class(igrid), intent(inout) :: this
     integer, intent(in) :: tid, rid
+    logical, intent(in) ::  readGradients
 
     ! Fill u, v and w 
     call this%readLargeScales(tid, rid)
     !call this%readRestartFile(tid, rid)
 
-    ! Compute uhat, vhat and what 
-    call this%spectC%fft(this%u,this%uhat)   
-    call this%spectC%fft(this%v,this%vhat)   
-    call this%spectE%fft(this%w,this%what) 
-
-    ! Interpolate primitive variables 
-    call this%interp_PrimitiveVars()
-
     ! Compute gradients 
-    call this%compute_duidxj()
+    if (readGradients) then
+      call readField3D(rid, tid, this%inputDir, "dudx", this%duidxjC(:,:,:,1) , this%gpC)
+      call readField3D(rid, tid, this%inputDir, "dudy", this%duidxjC(:,:,:,2) , this%gpC)
+      call readField3D(rid, tid, this%inputDir, "dudz", this%duidxjC(:,:,:,3) , this%gpC)
+      
+      call readField3D(rid, tid, this%inputDir, "dvdx", this%duidxjC(:,:,:,4) , this%gpC)
+      call readField3D(rid, tid, this%inputDir, "dvdy", this%duidxjC(:,:,:,5) , this%gpC)
+      call readField3D(rid, tid, this%inputDir, "dvdz", this%duidxjC(:,:,:,6) , this%gpC)
+      
+      call readField3D(rid, tid, this%inputDir, "dwdx", this%duidxjC(:,:,:,7) , this%gpC)
+      call readField3D(rid, tid, this%inputDir, "dwdy", this%duidxjC(:,:,:,8) , this%gpC)
+      call readField3D(rid, tid, this%inputDir, "dwdz", this%duidxjC(:,:,:,9) , this%gpC)
+    else
+
+      ! Compute uhat, vhat and what 
+      call this%spectC%fft(this%u,this%uhat)   
+      call this%spectC%fft(this%v,this%vhat)   
+      call this%spectE%fft(this%w,this%what) 
+  
+      ! Interpolate primitive variables 
+      call this%interp_PrimitiveVars()
+
+      call this%compute_duidxj()
+    end if
 
     ! Now u, v, wC and duidxjC are all accessible
 end subroutine
@@ -80,7 +96,6 @@ subroutine getPressure(this)
     class(igrid), intent(inout) :: this
 
 end subroutine 
-
 
 subroutine readLargeScales(this,tid, rid)
     use decomp_2d_io

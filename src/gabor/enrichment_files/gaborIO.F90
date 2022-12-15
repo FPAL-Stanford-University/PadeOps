@@ -1,9 +1,9 @@
-subroutine dumpData(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
+subroutine dumpData(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI,KE,L)
   use decomp_2d, only: nrank
   use basic_io,  only: write_1D_ascii
   class(enrichmentOperator), intent(inout) :: this
   real(rkind), dimension(:), intent(in) :: x, y, z, kx, ky, kz, uR, uI, vR, &
-    vI, wR, wI
+    vI, wR, wI, KE, L
   character(len=clen) :: fname
 
   write(fname,'(A,I2.2,A)')trim(this%outputdir)//'/rank',nrank,'_uhatR.txt'
@@ -34,4 +34,9 @@ subroutine dumpData(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
   call write_1D_ascii(y,fname)
   write(fname,'(A,I2.2,A)')trim(this%outputdir)//'/rank',nrank,'_z.txt'
   call write_1D_ascii(z,fname)
+  
+  write(fname,'(A,I2.2,A)')trim(this%outputdir)//'/rank',nrank,'_L.txt'
+  call write_1D_ascii(L,fname)
+  write(fname,'(A,I2.2,A)')trim(this%outputdir)//'/rank',nrank,'_KE.txt'
+  call write_1D_ascii(KE,fname)
 end subroutine

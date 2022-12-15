@@ -14,4 +14,8 @@ module gaborHooks
 
     end subroutine
   end interface
+
+  interface getDomainBounds
+    subroutine getDomainBounds()
+  end interface
 end module gaborHooks

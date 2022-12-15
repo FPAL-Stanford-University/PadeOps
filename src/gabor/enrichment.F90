@@ -38,6 +38,9 @@ module enrichmentMod
     integer :: nvars
     logical :: isStratified = .false.
 
+    ! Large scale data at mode locations
+    real(rkind), dimension(:), allocatable :: KE_loc, L_loc
+
     ! Halo-padded arrays
     real(rkind), dimension(:,:,:), allocatable :: uh, vh, wh
     real(rkind), dimension(:,:,:), allocatable :: Th
@@ -76,6 +79,7 @@ module enrichmentMod
     integer :: activeIndex 
     contains
       procedure          :: init
+      procedure          :: reinit
       procedure          :: destroy
       procedure          :: generateIsotropicModes
       procedure          :: strainModes
@@ -120,11 +124,12 @@ contains
     real(rkind) :: dt
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
-    logical :: doNotRenderInitialCondition = .true.
+    logical :: doNotRenderInitialCondition = .false.
     logical :: xPeriodic = .true., yPeriodic = .true., zPeriodic = .true.
     real(rkind) :: kminFact = 1.d0
+    logical :: readGradients = .false.
     
-    namelist /IO/      outputdir, writeIsotropicModes
+    namelist /IO/      outputdir, writeIsotropicModes, readGradients
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
       strainInitialCondition, doNotRenderInitialCondition, &
       xPeriodic, yPeriodic, zPeriodic, kminFact
@@ -165,21 +170,12 @@ contains
     this%writeIsotropicModes = writeIsotropicModes
 
     ! Get domain boundaries
-    xDom(1) = p_minval(this%largeScales%mesh(1,1,1,1))
-    xDom(2) = p_maxval(this%largeScales%mesh(this%largeScales%gpC%xsz(1),1,1,1)) &
-      + this%largeScales%dx
-    yDom(1) = p_minval(this%largeScales%mesh(1,1,1,2))
-    yDom(2) = p_maxval(this%largeScales%mesh(1,this%largeScales%gpC%xsz(2),1,2)) &
-      + this%largeScales%dy
-    zDom(1) = p_minval(this%largeScales%mesh(1,1,1,3)) &
-      - 0.5d0*this%largeScales%dz
-    zDom(2) = p_maxval(this%largeScales%mesh(1,1,this%largeScales%gpC%xsz(3),3)) &
-      + 0.5d0*this%largeScales%dz
+    call getDomainBoundaries(xDom,yDom,zDom)
 
     ! STEP  0: Get filenames for u, v and w from (input file?) for initialization
     ! Use the same file-naming convention for PadeOps restart files: 
     ! RESTART_Run00_u.000000
-    call this%largeScales%initLargeScales(tidInit,this%largeScales%runID)
+    call this%largeScales%initLargeScales(tidInit,this%largeScales%runID,readGradients)
     this%duidxj_LS => largeScales%duidxjC
     this%isStratified = this%largeScales%isStratified
     if (this%isStratified) then
@@ -188,18 +184,12 @@ contains
       this%nvars = 12
     end if
 
-    ! Get halo-padded velocity arrays
-    allocate(this%KE(this%largeScales%gpC%xsz(1),this%largeScales%gpC%xsz(2),&
-      this%largeScales%gpC%xsz(3)))
-    allocate(this%L(this%largeScales%gpC%xsz(1),this%largeScales%gpC%xsz(2),&
-      this%largeScales%gpC%xsz(3)))
-    call getLargeScaleParams(this%KE,this%L,this%largeScales)
+    allocate(this%KE(this%smallScales%gpC%xsz(1),this%smallScales%gpC%xsz(2),&
+      this%smallScales%gpC%xsz(3)))
+    allocate(this%L(this%smallScales%gpC%xsz(1),this%smallScales%gpC%xsz(2),&
+      this%smallScales%gpC%xsz(3)))
+    call getLargeScaleParams(this%KE,this%L,this%smallScales)
     call this%updateLargeScales(timeAdvance=.false.,initializing=.true.) 
-
-    ! Ryan 
-    ! STEP 1: Finish the QH region code to fill Gabor Modes (kx, ky, kz, x, y, z, uhat, ...)
-    call this%QHgrid%init(inputfile,this%largeScales)
-    call getLargeScaleParams(this%QHgrid%KE,this%QHgrid%L,this%largeScales)
 
     this%nxsupp = nint(2*this%QHgrid%dx/this%smallScales%dx)
     this%nysupp = nint(2*this%QHgrid%dy/this%smallScales%dy)
@@ -263,11 +253,44 @@ contains
     if (this%writeIsotropicModes) then
       call message(1, 'Writing modes to disk.')
       call this%dumpData(this%x,this%y,this%z,this%kx,this%ky,this%kz, &
-        this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI)
+        this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI, &
+        this%KE_loc, this%L_loc)
     end if
     if (this%strainInitialCondition) call this%strainModes()
    
-    call this%wrapupTimeStep(doNotRender = doNotRenderInitialCondition)
+    !call this%wrapupTimeStep(doNotRender = doNotRenderInitialCondition)
+    this%tid = this%tid + 1
+  end subroutine
+
+  subroutine reinit(this)
+    class(enrichmentOperator), intent(inout), target :: this 
+    
+    call getLargeScaleParams(this%KE,this%L,this%largeScales)
+    call this%updateLargeScales(timeAdvance=.false.,initializing=.true.) 
+
+    ! Compute the number of modes
+    this%nmodes = this%nk*this%ntheta * &
+      this%QHgrid%gpC%xsz(1)*this%QHgrid%gpC%xsz(2)*this%QHgrid%gpC%xsz(3)
+    
+    ! Allocate memory for mode data
+    !allocate(this%rawData(this%nmodes,this%nvars))
+    if (allocated(this%rawModeData)) deallocate(this%rawModeData)
+    allocate(this%rawModeData(this%nmodes,this%nvars,0:1))
+    this%activeIndex = 0
+#include "enrichment_files/togglePointer.F90"
+   
+    ! Initialize the Gabor modes
+    call this%generateIsotropicModes()
+
+    if (this%writeIsotropicModes) then
+      call message(1, 'Writing modes to disk.')
+      call this%dumpData(this%x,this%y,this%z,this%kx,this%ky,this%kz, &
+        this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI, &
+        this%KE_loc, this%L_loc)
+    end if
+    if (this%strainInitialCondition) call this%strainModes()
+   
+    !call this%wrapupTimeStep(doNotRender = doNotRenderInitialCondition)
   end subroutine
 
   subroutine destroy(this)
@@ -334,12 +357,12 @@ contains
 
     ! The halo'ed KE and L only matter if initializing the modes
     if (init) then
-      if(.not. allocated(this%KEh))      call this%largeScales%pg%alloc_array(this%KEh)
-      if(.not. allocated(this%Lh))       call this%largeScales%pg%alloc_array(this%Lh)
-      call this%largeScales%haloUpdateField(this%KE,this%KEh)
-      call this%largeScales%haloUpdateField(this%L, this%Lh)
-      call fixGhostIfNonPeriodic(this%KEh,this%largeScales%gpC)
-      call fixGhostIfNonPeriodic(this%Lh,this%largeScales%gpC)
+      if(.not. allocated(this%KEh))      call this%smallScales%pg%alloc_array(this%KEh)
+      if(.not. allocated(this%Lh))       call this%smallScales%pg%alloc_array(this%Lh)
+      call this%smallScales%haloUpdateField(this%KE,this%KEh)
+      call this%smallScales%haloUpdateField(this%L, this%Lh)
+      call fixGhostIfNonPeriodic(this%KEh,this%smallScales%gpC,enforcePositivity=.true.)
+      call fixGhostIfNonPeriodic(this%Lh,this%smallScales%gpC,enforcePositivity=.true.)
     end if
 
     if (this%isStratified) then
@@ -356,11 +379,17 @@ contains
     end do
   end subroutine
 
-  subroutine fixGhostIfNonPeriodic(f,gp)
+  subroutine fixGhostIfNonPeriodic(f,gp,enforcePositivity)
     use decomp_2d, only: decomp_info
     use procgrid_mod, only: num_pad
     real(rkind), dimension(-num_pad+1:,-num_pad+1:,-num_pad+1:), intent(inout) :: f
     type(decomp_info), intent(in) :: gp
+    logical, intent(in), optional :: enforcePositivity
+    logical :: makePositive
+
+    makePositive = .false.
+    if (present(enforcePositivity)) makePositive = enforcePositivity
+
     if (.not. periodicBCs(1)) then
       f(0,:,:) = 2*f(1,:,:) - f(2,:,:)
       f(gp%xsz(1)+1,:,:) = 2*f(gp%xsz(1),:,:) - f(gp%xsz(1)-1,:,:)
@@ -384,6 +413,9 @@ contains
       end if
     end if
 
+    if (makePositive) then
+      where(f < 0.d0) f = 0.d0
+    end if
   end subroutine 
 
   subroutine advanceTime(this)
@@ -395,13 +427,13 @@ contains
     integer :: n
 
     do n = 1,this%nmodes
-      call this%getLargeScaleDataAtModeLocation(n,duidxj,L,KE,Ui)
+      call this%getLargeScaleDataAtModeLocation(n,duidxj,Ui)
       k     = [this%kx(n)   , this%ky(n)   , this%kz(n)   ]
       uRtmp = [this%uhatR(n), this%vhatR(n), this%whatR(n)]
       uItmp = [this%uhatI(n), this%vhatI(n), this%whatI(n)]
       x     = [this%x(n)    , this%y(n)    , this%z(n)    ]
       
-      call rk4Step(uRtmp,uItmp,k,x,this%dt,this%Anu,KE,L,this%numolec,duidxj,Ui)
+      call rk4Step(uRtmp,uItmp,k,x,this%dt,this%Anu,this%KE_loc(n),this%L_loc(n),this%numolec,duidxj,Ui)
       
       this%kx(n)    = k(1)
       this%ky(n)    = k(2)

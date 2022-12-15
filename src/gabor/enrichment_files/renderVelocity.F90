@@ -20,7 +20,12 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     real(single_kind) :: wxSupport, wySupport, wzSupport, du, dv, dw
     integer :: tid
     real(single_kind), parameter :: pi_single = 4.0*atan(1.0)
+    real(single_kind) :: xdebug, ydebug, zdebug, distance
     
+    xdebug = 0.293750000000000
+    ydebug = 4.375000000000005E-002
+    zdebug = -6.250000000000000E-003    
+
     this%utmp = 0.e0
     this%vtmp = 0.e0
     this%wtmp = 0.e0
@@ -52,14 +57,14 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
       ! NOTE: The contribution of Gabor modes on neighboring processes is not
       ! accounted for here, nor is the periodic contribution for periodic
       ! directions whose data resides exlusively on the process (e.g. in x)
-      iist = max(ceiling(x(n)/this%smallScales%dx) - this%nxsupp/2 + 1, ist)
-      iien = min(floor(  x(n)/this%smallScales%dx) + this%nxsupp/2 - 1, ien)
+      iist = max(ceiling((x(n) - xDom(1))/this%smallScales%dx) - this%nxsupp/2 - 1, ist)
+      iien = min(floor(  (x(n) - xDom(1))/this%smallScales%dx) + this%nxsupp/2 + 1, ien)
 
-      jjst = max(ceiling(y(n)/this%smallScales%dy) - this%nysupp/2 - 1, jst)
-      jjen = min(floor(  y(n)/this%smallScales%dy) + this%nysupp/2 + 1, jen)
+      jjst = max(ceiling((y(n) - yDom(1))/this%smallScales%dy) - this%nysupp/2 - 1, jst)
+      jjen = min(floor(  (y(n) - yDom(1))/this%smallScales%dy) + this%nysupp/2 + 1, jen)
 
-      kkst = max(ceiling(z(n)/this%smallScales%dz) - this%nzsupp/2 - 1, kst)
-      kken = min(floor(  z(n)/this%smallScales%dz) + this%nzsupp/2 + 1, ken)
+      kkst = max(ceiling((z(n) - zDom(1))/this%smallScales%dz) - this%nzsupp/2 - 1, kst)
+      kken = min(floor(  (z(n) - zDom(1))/this%smallScales%dz) + this%nzsupp/2 + 1, ken)
       
       !iist = max(floor(  x(n)/this%smallScales%dx) - this%nxsupp/2, ist)
       !iien = min(ceiling(x(n)/this%smallScales%dx) + this%nxsupp/2, ien)
@@ -89,23 +94,17 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
         wRs = castSingle(wR(n))
         wIs = castSingle(wI(n))
 
+
         do k = kkst,kken
-          zF = dz*castSingle(k - 1)
+          zF = zDom(1) + dz*castSingle(k - 1)
           kdotx3 = kzs*(zF - zs)
           fz = max(cos(pi_single*(zF - zs)/wzSupport), 0.e0)
           do j = jjst,jjen
-            yF = dy*castSingle(j - 1)
+            yF = yDom(1) + dy*castSingle(j - 1)
             kdotx2 = kys*(yF - ys)
             fy = max(cos(pi_single*(yF - ys)/wySupport), 0.e0)
-            if (fy < 0.e0) then
-              print*, yF, ys, wySupport, pi_single
-              yF = dy*castSingle(jjen-1)
-              print*, cos(pi_single*(yF - ys)/wySupport)
-              print*, fy, jjst, jjen, j
-              stop
-            end if
             do i = iist,iien
-              xF = dx*castSingle(i - 1)
+              xF = xDom(1) + dx*castSingle(i - 1)
               kdotx = kdotx2 + kdotx3 + kxs*(xF - xs)
 
               cs = cos(kdotx)
@@ -128,6 +127,14 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
             end do
           end do
         end do
+        !distance = sqrt((xs - xdebug)**2 + (ys - ydebug)**2 + (zs - zdebug)**2)
+        !if (distance < wxsupport/2.e0) then
+        !  print*, xs, ys, zs, distance
+        !  print*, this%utmp(idebug, jdebug, kdebug) 
+        !  print*, iist, iien, jjst, jjen, kkst, kken
+        !  print*, xdebug, ydebug, zdebug
+        !  print*, "----------------------------"
+        !end if
       end if
       if (mod(n,100000) == 0 .and. tid == 0) then
         write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
