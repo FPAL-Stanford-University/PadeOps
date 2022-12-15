@@ -541,7 +541,7 @@ contains
     real(rkind), dimension(:,:), allocatable :: sendBufferLo, sendBufferHi
     real(rkind), dimension(:,:), allocatable :: recvBufferLo, recvBufferHi
     real(rkind), dimension(:,:,:), allocatable :: tmp
-    integer, dimension(4) :: sendReq, recvReq
+    integer, dimension(4) :: sendReq, recvReq, requests
     integer :: tag, ierr, sz1
 
     inactiveIndex = mod(this%activeIndex+1,2)
@@ -602,7 +602,9 @@ contains
     call MPI_ISend(sendBufferHi(1:iterHi,:),this%nvars*iterHi,mpirkind,neighHi,tag,&
         DECOMP_2D_COMM_CART_X,sendReq(4),ierr) 
     
-    call MPI_WaitAll(4,[recvReq(1:2), sendReq(1:2)],MPI_STATUSES_IGNORE,ierr)
+    requests(1:2) = recvReq(1:2)
+    requests(3:4) = sendReq(1:2)
+    call MPI_WaitAll(4,requests,MPI_STATUSES_IGNORE,ierr)
 
     allocate(recvBufferLo(howmanyLo,this%nvars))
     allocate(recvBufferHi(howmanyHi,this%nvars))
@@ -614,7 +616,9 @@ contains
     call MPI_IRecv(recvBufferHi,size(recvBufferHi),mpirkind,neighHi,tag,&
       DECOMP_2D_COMM_CART_X,recvReq(4),ierr)
   
-    call MPI_WaitAll(4,[recvReq(3:4), sendReq(3:4)], MPI_STATUSES_IGNORE,ierr)
+    requests(1:2) = recvReq(3:4)
+    requests(3:4) = sendReq(3:4)
+    call MPI_WaitAll(4,requests, MPI_STATUSES_IGNORE,ierr)
 
     if (size(this%rawModedata,1) < iterSelf+howmanyLo+howmanyHi) then
         sz1 = size(this%rawModeData,1)

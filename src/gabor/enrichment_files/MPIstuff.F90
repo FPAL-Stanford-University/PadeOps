@@ -21,6 +21,7 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff)
   integer :: ierr
   integer :: tag1, tag2
   integer, dimension(2) :: sendReq, recvReq
+  integer, dimension(4) :: requests  
   real(rkind) :: Ly, Lz
   real(rkind) :: PEmin, PEmax
   real(rkind), dimension(3) :: periodicCorrection
@@ -120,7 +121,9 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff)
   call MPI_ISend(sendCount2,1,MPI_INTEGER,neigh(2),tag2,&
     DECOMP_2D_COMM_CART_X,sendReq(2),ierr)
 
-  call MPI_WaitAll(4,[recvReq, sendReq],MPI_STATUSES_IGNORE,ierr)
+  requests = [recvReq(1), recvReq(2), sendReq(1), sendReq(2)]
+  !call MPI_WaitAll(4,[recvReq, sendReq],MPI_STATUSES_IGNORE,ierr)
+  call MPI_WaitAll(4,requests,MPI_STATUSES_IGNORE,ierr)
 
   ! Allocate memory for the recieve buffers
   allocate(recvBuff1(recvCount1,12))
@@ -137,7 +140,8 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff)
   call MPI_ISend(sendBuff2,size(sendBuff2),mpirkind,neigh(2),tag2,&
       DECOMP_2D_COMM_CART_X,sendReq(2),ierr) 
 
-  call MPI_WaitAll(4,[recvReq, sendReq], MPI_STATUSES_IGNORE,ierr)
+  requests = [recvReq(1), recvReq(2), sendReq(1), sendReq(2)]
+  call MPI_WaitAll(4,requests, MPI_STATUSES_IGNORE,ierr)
 
   if (present(haloBuff)) then 
     if (allocated(haloBuff)) deallocate(haloBuff) 
@@ -219,6 +223,7 @@ subroutine testMPIsendRecv()
   integer :: tagY1, tagY2, tagZ1, tagZ2
   integer :: rankY1, rankY2, rankZ1, rankZ2
   integer, dimension(4) :: recvReq, sendReq
+  integer, dimension(8) :: requests 
   integer :: n, ierr
   
   do n = 1,nproc
@@ -268,7 +273,9 @@ subroutine testMPIsendRecv()
   call MPI_ISend(nrank,1,MPI_INTEGER,neighbor(4),tagZ2,&
     DECOMP_2D_COMM_CART_X,sendReq(4),ierr)
 
-  call MPI_WaitAll(8,[recvReq(1:4), sendReq(1:4)],MPI_STATUSES_IGNORE,ierr)
+  requests(1:4) = recvReq
+  requests(5:8) = sendReq
+  call MPI_WaitAll(8,requests,MPI_STATUSES_IGNORE,ierr)
 
   do n = 1,nproc
     if (nrank == n-1) then
