@@ -17,7 +17,6 @@ module enrichmentMod
   implicit none
 
   private
-  integer :: nthreads
   integer, dimension(4) :: neighbor
   integer, dimension(2) :: coords, dims
   logical, dimension(3) :: periodicBCs
@@ -25,7 +24,7 @@ module enrichmentMod
 
   real(rkind), dimension(2) :: xDom, yDom, zDom
 
-  public :: enrichmentOperator, xDom, yDom, zDom, nthreads, interpAndAddGrids 
+  public :: enrichmentOperator, xDom, yDom, zDom, interpAndAddGrids 
 
   type :: enrichmentOperator
     !private
@@ -72,7 +71,7 @@ module enrichmentMod
     logical :: writeIsotropicModes
     
     ! Extra memory for velocity rendering
-    real(single_kind), dimension(:,:,:,:), allocatable :: utmp,vtmp,wtmp
+    real(single_kind), dimension(:,:,:), allocatable :: utmp,vtmp,wtmp
       ! Store info of modes on neighbor ranks that are within the support 
       ! window "halo"
     real(rkind), dimension(:,:), allocatable :: renderModeData
@@ -251,10 +250,9 @@ contains
     kst = this%smallScales%gpC%xst(3) 
     ken = this%smallScales%gpC%xen(3)
    
-    nthreads = omp_get_num_threads() 
-    allocate(this%utmp(ist:ien,jst:jen,kst:ken,nthreads))
-    allocate(this%vtmp(ist:ien,jst:jen,kst:ken,nthreads))
-    allocate(this%wtmp(ist:ien,jst:jen,kst:ken,nthreads))
+    allocate(this%utmp(ist:ien,jst:jen,kst:ken))
+    allocate(this%vtmp(ist:ien,jst:jen,kst:ken))
+    allocate(this%wtmp(ist:ien,jst:jen,kst:ken))
 
     ! Set things up for distributed memory
     this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%gpC%xsz(1) + 1)]

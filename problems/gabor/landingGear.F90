@@ -2,7 +2,7 @@
 
 program landingGear
   use kind_parameters,         only: clen, rkind
-  use enrichmentMod,           only: enrichmentOperator, nthreads, interpAndAddGrids 
+  use enrichmentMod,           only: enrichmentOperator,  interpAndAddGrids 
   use IncompressibleGrid,      only: igrid
   use auxiliary_openmp_subs,   only: GetArguments
   use mpi
@@ -18,14 +18,13 @@ program landingGear
   real(rkind), dimension(:,:,:), allocatable :: u, v, w
   integer :: tid = 0  
   logical :: dumpIndividualScales = .true. 
-  call MPI_Init_thread(MPI_THREAD_FUNNELED,provided,ierr)
+  call MPI_Init(ierr)
   
   call GETARG(1,inputS1)
   call GETARG(2,inputS2)
   call GETARG(3,inputS3)
   call GETARG(4,inputG12)
   call GETARG(5,inputG23)
-  call GetArguments(nthreads,6)
 
   call S1%init(inputS1, .true.) 
   

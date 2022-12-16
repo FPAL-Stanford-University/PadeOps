@@ -18,7 +18,6 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     real(single_kind) :: cs, ss, fx, fy, fz, f, xF, yF, zF, kxs, kys, kzs
     real(single_kind) :: uRs, uIs, vRs, vIs, wRs, wIs, xs, ys, zs, dx, dy, dz
     real(single_kind) :: wxSupport, wySupport, wzSupport, du, dv, dw
-    integer :: tid
     real(single_kind), parameter :: pi_single = 4.0*atan(1.0)
     
     this%utmp = 0.e0
@@ -42,11 +41,6 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     kst = this%smallScales%gpC%xst(3) 
     ken = this%smallScales%gpC%xen(3)
 
-    !$OMP PARALLEL &
-    !$OMP PRIVATE(tid,n,i,j,k,kdotx,kdotx3,kdotx2,fx,fy,fz,f) &
-    !$OMP PRIVATE(cs,ss,iist,iien,jjst,jjen,kkst,kken)
-    tid = omp_get_thread_num()
-    !$OMP DO
     do n = 1,size(x) 
       ! NOTE: These are global indices of the physical domain
       ! NOTE: The contribution of Gabor modes on neighboring processes is not
@@ -91,15 +85,15 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
 
 
         do k = kkst,kken
-          zF = zDom(1) + dz*castSingle(k - 1)
+          zF = real(zDom(1),kind=4) + dz*castSingle(k - 1)
           kdotx3 = kzs*(zF - zs)
           fz = max(cos(pi_single*(zF - zs)/wzSupport), 0.e0)
           do j = jjst,jjen
-            yF = yDom(1) + dy*castSingle(j - 1)
+            yF = real(yDom(1),kind=4) + dy*castSingle(j - 1)
             kdotx2 = kys*(yF - ys)
             fy = max(cos(pi_single*(yF - ys)/wySupport), 0.e0)
             do i = iist,iien
-              xF = xDom(1) + dx*castSingle(i - 1)
+              xF = real(xDom(1),kind=4) + dx*castSingle(i - 1)
               kdotx = kdotx2 + kdotx3 + kxs*(xF - xs)
 
               cs = cos(kdotx)
@@ -112,28 +106,21 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
               dv = 2*f*(vRs*cs - vIs*ss)
               dw = 2*f*(wRs*cs - wIs*ss)
 
-              this%utmp(i,j,k,tid+1) = this%utmp(i,j,k,tid+1) + du 
-              this%vtmp(i,j,k,tid+1) = this%vtmp(i,j,k,tid+1) + dv 
-              this%wtmp(i,j,k,tid+1) = this%wtmp(i,j,k,tid+1) + dw
+              this%utmp(i,j,k) = this%utmp(i,j,k) + du 
+              this%vtmp(i,j,k) = this%vtmp(i,j,k) + dv 
+              this%wtmp(i,j,k) = this%wtmp(i,j,k) + dw
               
-              !if (i == 11 .and. j == 13 .and. k == 16) then
-              !  print*, this%utmp(i,j,k,tid+1), xs, ys, zs
-              !end if
             end do
           end do
         end do
       end if
-      if (mod(n,100000) == 0 .and. tid == 0) then
+      if (mod(n,100000) == 0) then
         write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
         call message(trim(mssg))
       end if
     end do
 
-    !$OMP END DO
-    !$OMP CRITICAL
-    this%smallScales%u  = this%smallScales%u  + real(this%utmp(:,:,:,tid+1),rkind)
-    this%smallScales%v  = this%smallScales%v  + real(this%vtmp(:,:,:,tid+1),rkind)
-    this%smallScales%wC = this%smallScales%wC + real(this%wtmp(:,:,:,tid+1),rkind)
-    !$OMP END CRITICAL
-    !$OMP END PARALLEL
+    this%smallScales%u  = this%smallScales%u  + real(this%utmp,rkind)
+    this%smallScales%v  = this%smallScales%v  + real(this%vtmp,rkind)
+    this%smallScales%wC = this%smallScales%wC + real(this%wtmp,rkind)
 end subroutine

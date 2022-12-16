@@ -17,6 +17,8 @@ module random
     interface gaussian_random
         module procedure grand3R, grand2R, grand1R
     end interface
+    
+    integer, parameter :: ndiscard = 200
 contains
 
     subroutine grand3R(array,mu,sigma,seed)
@@ -106,7 +108,7 @@ contains
         real(rkind), dimension(:,:,:,:,:), intent(inout) :: array
         real(rkind), intent(in) :: left, right
         integer, optional, intent(in) :: seed
-        real(rkind) :: diff
+        real(rkind) :: diff, tmp 
         integer, allocatable :: iseed(:)
         integer :: n
 
@@ -121,6 +123,9 @@ contains
         else
             call init_random_seed()
         end if 
+        do n = 1,ndiscard
+            call random_number(tmp)
+        end do 
         call random_number(array)
         array = diff*array
         array = array + left
@@ -130,7 +135,7 @@ contains
         real(rkind), dimension(:,:,:,:), intent(inout) :: array
         real(rkind), intent(in) :: left, right
         integer, optional, intent(in) :: seed
-        real(rkind) :: diff
+        real(rkind) :: diff, tmp
         integer, allocatable :: iseed(:)
         integer :: n
 
@@ -145,6 +150,9 @@ contains
         else
             call init_random_seed()
         end if 
+        do n = 1,ndiscard
+            call random_number(tmp)
+        end do 
         call random_number(array)
         array = diff*array
         array = array + left
@@ -154,7 +162,7 @@ contains
         real(rkind), dimension(:,:,:), intent(inout) :: array
         real(rkind), intent(in) :: left, right
         integer, optional, intent(in) :: seed
-        real(rkind) :: diff
+        real(rkind) :: diff, tmp
         integer, allocatable :: iseed(:)
         integer :: n
 
@@ -169,6 +177,9 @@ contains
         else
             call init_random_seed()
         end if 
+        do n = 1,ndiscard
+            call random_number(tmp)
+        end do 
         call random_number(array)
         array = diff*array
         array = array + left
@@ -177,7 +188,7 @@ contains
     subroutine unrand2R(array,left, right, seed)
         real(rkind), dimension(:,:), intent(inout) :: array
         real(rkind), intent(in) :: left, right
-        real(rkind) :: diff
+        real(rkind) :: diff, tmp
         integer, optional, intent(in) :: seed
         integer, allocatable :: iseed(:)
         integer :: n
@@ -193,9 +204,15 @@ contains
         else
             call init_random_seed()
         end if 
+        
+        do n = 1,ndiscard
+            call random_number(tmp)
+        end do 
         call random_number(array)
         array = diff*array
         array = array + left
+
+            
     end subroutine
 
     subroutine unrand1R(array,left, right, seed)
@@ -227,7 +244,7 @@ contains
         real(rkind), intent(in) :: left, right
         integer, intent(in), optional :: seed
         integer, allocatable :: iseed(:)
-        real(rkind) :: diff
+        real(rkind) :: diff, tmp
         integer :: n
 
         diff = right - left
@@ -242,6 +259,9 @@ contains
             call init_random_seed()
         end if 
     
+        do n = 1,ndiscard
+            call random_number(tmp)
+        end do 
         call random_number(val)
         val = diff*val
         val = val + left

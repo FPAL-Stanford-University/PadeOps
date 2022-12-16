@@ -106,7 +106,12 @@ subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff)
   ! Let your neighbors know how much data you will be sending
   tag1 = 0
   tag2 = 0
-  
+
+  ! Set these to zero so that it is still set to something if getting from
+  ! mpi_proc_none
+  recvCount1 = 0
+  recvCount2 = 0 
+
   ! Receive from lower rank
   call MPI_IRecv(recvCount1,1,MPI_INTEGER,neigh(1),tag1,&
     DECOMP_2D_COMM_CART_X,recvReq(1),ierr)

@@ -216,7 +216,16 @@ subroutine generateIsotropicModes(this)
           wR(n,i,j,k) = uRmag*orientationZ
           wI(n,i,j,k) = uImag*orientationZ
         end do
-        
+       
+        !if (nrank == 0) then 
+        !    print*, "QHloc:", this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k)
+        !    print*, "Seeds:", seedFact
+        !    print*, "Locs:", gmx(:,i,j,k), gmy(:,i,j,k), gmz(:,i,j,k) 
+        !    print*, "Wavenums:", k1(:,i,j,k), k2(:,i,j,k), k3(:,i,j,k) 
+        !    print*, "kztemp/theta:", kzTemp, theta
+        !    print*, "thetavel/rand2:", thetaVel, rand2
+        !end if 
+        !stop 
       end do
     end do
   end do
@@ -244,6 +253,13 @@ subroutine generateIsotropicModes(this)
 
   this%KE_loc = reshape(KE_loc,(/nmodes/))
   this%L_loc = reshape(L_loc,(/nmodes/))
+
+  !print*, "ke_loc:", p_sum(sum(abs(this%KE_loc)))
+  !print*, "L_loc:", p_sum(sum(abs(this%L_loc)))
+  !print*, "x:", p_sum(sum(abs(this%x)))
+  !print*, "kx:", p_sum(sum(abs(this%kx)))
+  !print*, "uhat:", p_sum(sum(abs(this%uhatR)))
+  !stop 
 
   ! Confirm modes are divergence free
   call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&
