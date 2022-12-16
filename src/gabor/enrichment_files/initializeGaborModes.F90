@@ -119,7 +119,7 @@ iter2 = 1
         gmz(:,i,j,k) = zmin + this%QHgrid%dz*rand1
 
         nside = nint(real(this%nk*this%ntheta,rkind)**(1.d0/3.d0))
-        call assert(nside**3 == this%nk*this%ntheta)
+        call assert(nside**3 == this%nk*this%ntheta, "nk*ntheta should form a cube.")
         iter = 0
         dxsub = this%QHgrid%dx/nside
         dysub = this%QHgrid%dy/nside

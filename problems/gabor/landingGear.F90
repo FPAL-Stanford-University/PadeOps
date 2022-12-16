@@ -41,7 +41,7 @@ program landingGear
  
   ! Scale 1 : read from disk 
   call S1%initLargeScales(tid,readGradients=.true.) 
-  call S1%ComputeCD06Gradients([.false.,.false.,.false.])
+  !call S1%ComputeCD06Gradients([.false.,.false.,.false.])
   
   ! Scale 2 : Generate using modes 
   call enrich12%generateModes()
