@@ -14,6 +14,7 @@ module QHmeshMod
     real(rkind) :: dx, dy, dz 
     integer :: nx, ny, nz
     type(igrid), pointer :: LES
+    integer, dimension(:,:,:), allocatable :: gID
     
     contains
       procedure :: init
@@ -30,6 +31,7 @@ module QHmeshMod
       integer :: ist, ien, jst, jen, kst, ken, isz, jsz, ksz
       integer :: nxLESperQH, nyLESperQH, nzLESperQH
       integer :: ioUnit, ierr
+      integer :: i, j, k, ig, jg, kg
 
       namelist /QHMESH/ nxLESperQH, nyLESperQH, nzLESperQH
 
@@ -72,6 +74,7 @@ module QHmeshMod
       ! Allocate memory
       allocate(this%xC(isz), this%yC(jsz), this%zC(ksz))
       allocate(this%xE(isz+1), this%yE(jsz+1), this%zE(ksz+1))
+      allocate(this%gID(isz,jsz,ksz))
 
 
       ! Define the mesh           
@@ -86,6 +89,16 @@ module QHmeshMod
       this%yC = 0.5d0*(this%yE(2:jsz+1)+this%yE(1:jsz))
       this%zC = 0.5d0*(this%zE(2:ksz+1)+this%zE(1:ksz))
 
+      do k = 1,ksz
+        kg = kst + k - 1
+        do j = 1,jsz
+          jg = jst + j - 1
+          do i = 1,isz
+            ig = i
+            this%gID(i,j,k) = (kg - 1)*this%ny*this%nx + (jg - 1)*this%nx + ig
+          end do
+        end do
+      end do
     end subroutine
     
     subroutine destroy(this)
