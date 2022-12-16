@@ -62,6 +62,8 @@ module enrichmentMod
     logical     :: renderPressure = .false.
     integer     :: tidRender, tio , tidStop, tidsim
     integer, pointer :: tid
+    real(rkind) :: strainClipXmin, strainClipYmin, strainClipZmin
+    real(rkind) :: strainClipXmax, strainClipYmax, strainClipZmax
 
     ! Data IO
     character(len=clen) :: outputdir
@@ -128,15 +130,23 @@ contains
     logical :: strainInitialCondition = .true.
     logical :: doNotRenderInitialCondition = .false.
     logical :: xPeriodic = .true., yPeriodic = .true., zPeriodic = .true.
-    real(rkind) :: kminFact = 1.d0
+    real(rkind) :: kminFact
+    real(rkind) :: strainClipXmax, strainClipXmin
+    real(rkind) :: strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax
     logical :: readGradients = .false.
     
     namelist /IO/      outputdir, writeIsotropicModes, readGradients
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
       strainInitialCondition, doNotRenderInitialCondition, &
-      xPeriodic, yPeriodic, zPeriodic, kminFact
+      xPeriodic, yPeriodic, zPeriodic, kminFact, strainClipXmin, strainClipXmax, & 
+      strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
+
+    kminFact = 1.d0 
+    strainClipXmin = -1.D99; strainClipXmax = 1.D99
+    strainClipYmin = -1.D99; strainClipYmax = 1.D99
+    strainClipZmin = -1.D99; strainClipZmax = 1.D99
 
     ! Read inputfile
     ioUnit = 1
@@ -166,6 +176,12 @@ contains
     this%Anu = Anu 
     this%ctauGlobal = ctauGlobal
     this%strainInitialCondition = strainInitialCondition
+    this%strainClipXmin = strainClipXmin
+    this%strainClipYmin = strainClipYmin
+    this%strainClipZmin = strainClipZmin
+    this%strainClipXmax = strainClipXmax
+    this%strainClipYmax = strainClipYmax
+    this%strainClipZmax = strainClipZmax
 
     ! IO
     this%outputdir = outputdir
@@ -769,7 +785,7 @@ contains
     class(igrid), intent(inout) :: destGrid
     class(interpolator) :: interp 
     integer :: iter 
-     
+    
     call interp%LinInterp3D(sourceGrid%u ,destGrid%rbuffxC(:,:,:,1))
     destGrid%u = destGrid%u + destGrid%rbuffxC(:,:,:,1)
 

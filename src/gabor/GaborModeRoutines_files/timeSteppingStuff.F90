@@ -58,7 +58,7 @@ subroutine getUrhs(rhs,u,dudx,k,nuMod,KE,L,nu)
   real(rkind), dimension(3), intent(in) :: k
   real(rkind), intent(in) :: nuMod, KE, L, nu
   real(rkind), dimension(3,3) :: delta
-  real(rkind) :: ksq, nuk
+  real(rkind) :: ksq, nuk, onebyksq
   integer :: jj, kk, ll
 
   rhs = 0.d0
@@ -66,10 +66,12 @@ subroutine getUrhs(rhs,u,dudx,k,nuMod,KE,L,nu)
   delta(1,1) = 1.d0; delta(2,2) = 1.d0; delta(3,3) = 1.d0
   ksq = sum(k*k)
 
+  onebyksq = 1.d0/ksq 
+
   do jj = 1,3
     do kk = 1,3
       do ll = 1,3 ! Indices correspond to Pope eqn (11.83)
-        rhs(jj) = rhs(jj) - u(kk)*dudx(ll,kk)*(delta(jj,ll) - 2.d0*k(jj)*k(ll)/ksq)
+        rhs(jj) = rhs(jj) - u(kk)*dudx(ll,kk)*(delta(jj,ll) - 2.d0*k(jj)*k(ll)*onebyksq)
       end do
     end do
   end do

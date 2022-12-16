@@ -173,6 +173,8 @@ module IncompressibleGrid
         real(rkind) :: dtOld, dtRat, Tmn, wTh_surf
         integer :: wallMType, botBC_Temp, topBC_Temp 
 
+        real(rkind), dimension(:), allocatable, public :: x1d, y1d, z1d
+
         ! Statistics to compute 
         real(rkind), dimension(:), allocatable :: runningSum_sc, inst_horz_avg, runningSum_sc_turb, runningSum_turb, inst_horz_avg_turb, debugavg, debuginst
         real(rkind), dimension(:,:), allocatable :: zStats2dump, runningSum, TemporalMnNOW, horzavgstats
@@ -733,6 +735,17 @@ contains
        allocate(this%fbody_y(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
        allocate(this%fbody_z(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
        this%storeFbody = .true. ! Cant think of a case where this will be false 
+
+       allocate(this%x1d(this%nx))
+       allocate(this%y1d(this%ny))
+       allocate(this%z1d(this%nz))
+       this%x1d = this%mesh(:,1,1,1) 
+       call transpose_x_to_y(this%mesh(:,:,:,2), this%rbuffyC(:,:,:,1), this%gpC)
+       this%y1d = this%rbuffyC(1,:,1,1)
+       call transpose_x_to_y(this%mesh(:,:,:,3), this%rbuffyC(:,:,:,1), this%gpC)
+       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+       this%z1d = this%rbuffzC(1,1,:,1)
+       
 
 
        ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE

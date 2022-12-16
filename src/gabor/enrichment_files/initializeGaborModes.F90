@@ -1,5 +1,4 @@
 subroutine generateIsotropicModes(this)
-  use constants, only: rmaxInt
   use gridtools, only: logspace
   use arrayTools, only: sub2idx
   use random,    only: uniform_random
@@ -7,11 +6,13 @@ subroutine generateIsotropicModes(this)
                                doWarning, interpToLocation, initializeSeeds, &
                                updateSeeds
   use mpi
+  use reductions 
+  use seedGen 
   class(enrichmentOperator), intent(inout) :: this
   character(len=clen) :: mssg1, mssg2, mssg3, mssg4
   real(rkind) :: xmin, ymin, zmin
   integer :: i, j, k, kid, nk, ntheta, nmodes
-  real(rkind), dimension(7) :: seedFact
+  integer, dimension(7) :: seedFact
   integer :: isz, jsz, ksz
   real(rkind), dimension(:), allocatable :: kedge, kmag, dk, dkmodes, rand1, &
                                             r, rand2, thetaVel
@@ -90,7 +91,7 @@ subroutine generateIsotropicModes(this)
   jstQH = this%QHgrid%gpC%xst(2)
   kstQH = this%QHgrid%gpC%xst(3)
   
-  call initializeSeeds(seedFact, istQH, jstQH, kstQH, nxQH, nyQH)
+  !call initializeSeeds(seedFact, istQH, jstQH, kstQH, nxQH, nyQH)
 
   idxOld = sub2idx(istQH, jstQH, kstQH, nxQH, nyQH) - 1
   do k = 1,this%QHgrid%gpC%xsz(3)
@@ -100,18 +101,22 @@ subroutine generateIsotropicModes(this)
       do i = 1,this%QHgrid%gpC%xsz(1)
         xmin = this%QHgrid%xE(i)
         
-        idxCurrent = sub2idx(istQH + i - 1, jstQH + j - 1, kstQH + k - 1, nxQH, nyQH) 
-        call updateSeeds(seedFact,idxOld,idxCurrent)
-        idxOld = idxCurrent
-         
+        seedFact(1) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),1.D18) 
+        seedFact(2) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),2.D18) 
+        seedFact(3) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),3.D18) 
+        seedFact(4) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),4.D18) 
+        seedFact(5) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),5.D18) 
+        seedFact(6) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),6.D18) 
+        seedFact(7) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),7.D18) 
+       
         ! Uniformily distribute modes in QH region
-        call uniform_random(rand1,0.d0,1.d0,nint(seedFact(1)*rmaxInt))
+        call uniform_random(rand1,0.d0,1.d0,(seedFact(1)))
         gmx(:,i,j,k) = xmin + this%QHgrid%dx*rand1
         
-        call uniform_random(rand1,0.d0,1.d0,nint(seedFact(2)*rmaxInt))
+        call uniform_random(rand1,0.d0,1.d0,(seedFact(2)))
         gmy(:,i,j,k) = ymin + this%QHgrid%dy*rand1
 
-        call uniform_random(rand1,0.d0,1.d0,nint(seedFact(3)*rmaxInt))
+        call uniform_random(rand1,0.d0,1.d0,(seedFact(3)))
         gmz(:,i,j,k) = zmin + this%QHgrid%dz*rand1
 
         nside = nint(real(this%nk*this%ntheta,rkind)**(1.d0/3.d0))
@@ -131,9 +136,8 @@ subroutine generateIsotropicModes(this)
           end do
         end do
           
-        call uniform_random(thetaVel,0.d0,2.d0*pi,nint(seedFact(6)*rmaxInt))
-
-        call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),nint(seedFact(7)*rmaxInt))
+        call uniform_random(thetaVel,0.d0,2.d0*pi,(seedFact(6)))
+        call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),(seedFact(7)))
         
         ! TODO: kmin and kmax should be functions of space
         ! call this%getKminKmax(i,j,k)
@@ -141,8 +145,8 @@ subroutine generateIsotropicModes(this)
         kmag = 0.5d0*(kedge(1:nk) + kedge(2:nk+1))
         dk = kedge(2:nk+1) - kedge(1:nk)
           
-        call uniform_random(theta,0.d0,2.d0*pi,nint(seedFact(4)*rmaxInt))
-        call uniform_random(kztemp,-1.d0,1.d0,nint(seedFact(5)*rmaxInt))
+        call uniform_random(theta,0.d0,2.d0*pi,(seedFact(4)))
+        call uniform_random(kztemp,-1.d0,1.d0,(seedFact(5)))
           
         do kid = 1,nk
           kst = (kid - 1)*ntheta + 1
@@ -173,7 +177,7 @@ subroutine generateIsotropicModes(this)
             L_loc(n,i,j,k) = 1.d0
             KE_loc(n,i,j,k) = 0.d0
           end if
-          
+   
           myKmag = sqrt(k1(n,i,j,k)**2 + k2(n,i,j,k)**2 + k3(n,i,j,k)**2)
           
           E = getModelSpectrum(myKmag,KE_loc(n,i,j,k),L_loc(n,i,j,k))
@@ -206,7 +210,7 @@ subroutine generateIsotropicModes(this)
 
           uR(n,i,j,k) = uRmag*orientationX
           uI(n,i,j,k) = uImag*orientationX
-              
+             
           vR(n,i,j,k) = uRmag*orientationY
           vI(n,i,j,k) = uImag*orientationY
               
@@ -217,6 +221,8 @@ subroutine generateIsotropicModes(this)
       end do
     end do
   end do
+
+  
 
   ! Collapse the Gabor mode data into a 1D vector
   nmodes = this%nmodes 
@@ -282,58 +288,62 @@ subroutine strainModes(this)
   input = -(this%L_loc*kabs)**(-2.0_rkind)
   x     = 0.d0
 
- print*, maxval(abs(this%uhatR)), maxval(abs(this%vhatR)), maxval(abs(this%whatR)) 
- print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI)) 
+ !print*, maxval(abs(this%uhatR)), maxval(abs(this%vhatR)), maxval(abs(this%whatR)) 
+ !print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI)) 
  
  do n = 1,this%nmodes
-    CALL PFQ(input(n),output)
-    call this%getLargeScaleDataAtModeLocation(n,dudx,Ui)
-    S = sqrt(dudx(1,1)*dudx(1,1) + dudx(1,2)*dudx(1,2) + dudx(1,3)*dudx(1,3) + &
-             dudx(2,1)*dudx(2,1) + dudx(2,2)*dudx(2,2) + dudx(2,3)*dudx(2,3) + &
-             dudx(3,1)*dudx(3,1) + dudx(3,2)*dudx(3,2) + dudx(3,3)*dudx(3,3))
-    
-    k     = [this%kx(n),    this%ky(n),    this%kz(n)]
-    uRtmp = [this%uhatR(n), this%vhatR(n), this%whatR(n)]
-    uItmp = [this%uhatI(n), this%vhatI(n), this%whatI(n)]
-    
-    if (S < small) then
-      tauEddy = 0.d0
-    !    print*, "Zero strain rate at:", n, S, this%x(n), this%y(n), this%z(n)  
-    else
-      tauEddy = this%ctauGlobal/S*((this%L_loc(n)*kabs(n))**(-2.0_rkind/3.0_rkind))/sqrt(output) 
-    end if
+    if (      (this%x(n) > this%strainClipXmin) .and. (this%x(n) < this%strainClipXmax) & 
+        .and. (this%y(n) > this%strainClipYmin) .and. (this%y(n) < this%strainClipYmax) & 
+        .and. (this%z(n) > this%strainClipZmin) .and. (this%z(n) < this%strainClipZmax) ) then 
+       CALL PFQ(input(n),output)
+       call this%getLargeScaleDataAtModeLocation(n,dudx,Ui)
+       S = sqrt(dudx(1,1)*dudx(1,1) + dudx(1,2)*dudx(1,2) + dudx(1,3)*dudx(1,3) + &
+                dudx(2,1)*dudx(2,1) + dudx(2,2)*dudx(2,2) + dudx(2,3)*dudx(2,3) + &
+                dudx(3,1)*dudx(3,1) + dudx(3,2)*dudx(3,2) + dudx(3,3)*dudx(3,3))
+       
+       k     = [this%kx(n),    this%ky(n),    this%kz(n)]
+       uRtmp = [this%uhatR(n), this%vhatR(n), this%whatR(n)]
+       uItmp = [this%uhatI(n), this%vhatI(n), this%whatI(n)]
+       
+       if (S < small) then
+         tauEddy = 0.d0
+       !    print*, "Zero strain rate at:", n, S, this%x(n), this%y(n), this%z(n)  
+       else
+         tauEddy = this%ctauGlobal/S*((this%L_loc(n)*kabs(n))**(-2.0_rkind/3.0_rkind))/sqrt(output) 
+       end if
 
-    tauMean = 1/(S*sqrt(0.18) + 1E-10)
-    if (tauEddy > tauMean) tauEddy = tauMean
-    
-    call getDtMax(dt,[this%uhatR(n), this%vhatR(n), this%whatR(n)],&
-                     [this%uhatI(n), this%vhatI(n), this%whatI(n)],&
-                     S+1D-12,kabs(n),this%KE_loc(n),this%L_loc(n),this%Anu, tauEddy)
-    
-    
-    do tid = 1,nint(tauEddy/(dt + 1E-12))
-      call rk4Step(uRtmp,uItmp,k,x,dt,this%Anu,this%KE_loc(n),this%L_loc(n),this%numolec,dudx,Ui)
-    end do
+       tauMean = 1/(S*sqrt(0.18) + 1E-10)
+       if (tauEddy > tauMean) tauEddy = tauMean
+       
+       call getDtMax(dt,[this%uhatR(n), this%vhatR(n), this%whatR(n)],&
+                        [this%uhatI(n), this%vhatI(n), this%whatI(n)],&
+                        S+1D-12,kabs(n),this%KE_loc(n),this%L_loc(n),this%Anu, tauEddy)
+       
+       
+       do tid = 1,nint(tauEddy/(dt + 1E-12))
+         call rk4Step(uRtmp,uItmp,k,x,dt,this%Anu,this%KE_loc(n),this%L_loc(n),this%numolec,dudx,Ui)
+       end do
 
-    
-    this%kx(n) = k(1)
-    this%ky(n) = k(2)
-    this%kz(n) = k(3)
-    this%uhatR(n) = uRtmp(1)
-    this%uhatI(n) = uItmp(1)
-    this%vhatR(n) = uRtmp(2)
-    this%vhatI(n) = uItmp(2)
-    this%whatR(n) = uRtmp(3)
-    this%whatI(n) = uItmp(3)
-    
-    if (mod(n,10000) == 0 .and. nrank == 0) then
-      write(mssg,'(F8.5,A)') real(n,rkind)/real(this%nmodes,rkind)*100.d0,'% complete'
-      print*, trim(mssg)
-    end if
+       
+       this%kx(n) = k(1)
+       this%ky(n) = k(2)
+       this%kz(n) = k(3)
+       this%uhatR(n) = uRtmp(1)
+       this%uhatI(n) = uItmp(1)
+       this%vhatR(n) = uRtmp(2)
+       this%vhatI(n) = uItmp(2)
+       this%whatR(n) = uRtmp(3)
+       this%whatI(n) = uItmp(3)
+       
+       if (mod(n,10000) == 0 .and. nrank == 0) then
+         write(mssg,'(F8.5,A)') real(n,rkind)/real(this%nmodes,rkind)*100.d0,'% complete'
+         print*, trim(mssg)
+       end if
+    end if 
   end do
-  print*, "--------------------------------------------------"
- print*, maxval(abs(this%uhatR)), maxval(abs(this%vhatR)), maxval(abs(this%whatR)) 
- print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI)) 
+  !print*, "--------------------------------------------------"
+  !print*, maxval(abs(this%uhatR)), maxval(abs(this%vhatR)), maxval(abs(this%whatR)) 
+  !print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI)) 
   ! Confirm modes are divergence free
   call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&
     this%kx,this%ky,this%kz),'Velocity not divergence free (R) - Strained')
