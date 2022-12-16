@@ -38,7 +38,7 @@ subroutine generateIsotropicModes(this)
   ! Misc
   integer :: ierr, kst, ken, n
   integer :: nxQH, nyQH, istQH, jstQH, kstQH
-  integer :: ii, jj, kk, nside, iter
+  integer :: ii, jj, kk, nside, iter, iter2
   real(rkind) :: dxsub, dysub, dzsub
 
   call message("                                                                ")
@@ -92,7 +92,7 @@ subroutine generateIsotropicModes(this)
   kstQH = this%QHgrid%gpC%xst(3)
   
   !call initializeSeeds(seedFact, istQH, jstQH, kstQH, nxQH, nyQH)
-
+iter2 = 1
   do k = 1,this%QHgrid%gpC%xsz(3)
     zmin = this%QHgrid%zE(k)
     do j = 1,this%QHgrid%gpC%xsz(2)
@@ -100,13 +100,13 @@ subroutine generateIsotropicModes(this)
       do i = 1,this%QHgrid%gpC%xsz(1)
         xmin = this%QHgrid%xE(i)
         
-        seedFact(1) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),1.D18) 
-        seedFact(2) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),2.D18) 
-        seedFact(3) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),3.D18) 
-        seedFact(4) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),4.D18) 
-        seedFact(5) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),5.D18) 
-        seedFact(6) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),6.D18) 
-        seedFact(7) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),7.D18) 
+        seedFact(1) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),1.D18,this%QHgrid%gID(i,j,k),1) 
+        seedFact(2) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),2.D18,this%QHgrid%gID(i,j,k),2) 
+        seedFact(3) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),3.D18,this%QHgrid%gID(i,j,k),3) 
+        seedFact(4) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),4.D18,this%QHgrid%gID(i,j,k),4) 
+        seedFact(5) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),5.D18,this%QHgrid%gID(i,j,k),5) 
+        seedFact(6) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),6.D18,this%QHgrid%gID(i,j,k),6) 
+        seedFact(7) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),7.D18,this%QHgrid%gID(i,j,k),7) 
        
         ! Uniformily distribute modes in QH region
         call uniform_random(rand1,0.d0,1.d0,(seedFact(1)))
@@ -159,7 +159,8 @@ subroutine generateIsotropicModes(this)
           k2(kst:ken,i,j,k) = kmag(kid)*r*sin(theta(:,kid))
           dkmodes(kst:ken) = dk(kid)
         end do
-
+  !print*, theta, kztemp, seedFact(4), seedFact(5)
+  iter2 = iter2 + 1
         do n = 1,this%nk*this%ntheta
 
           ! get KE_loc and L_loc
