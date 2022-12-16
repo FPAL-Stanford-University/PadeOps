@@ -1,5 +1,4 @@
-subroutine interpToLocation(f,datOut,dx,dy,dz,xgrid1,ygrid1,zgrid1,x,y,z)
-  use procgrid_mod, only: num_pad
+subroutine interpToLocation(f,datOut,dx,dy,dz,xgrid1,ygrid1,zgrid1,x,y,z, num_pad)
   use constants, only: one
   ! Tri-linear interpolation to a given location (x,y,z)
   ! Inputs:
@@ -9,6 +8,7 @@ subroutine interpToLocation(f,datOut,dx,dy,dz,xgrid1,ygrid1,zgrid1,x,y,z)
   !     x,y,z    --> Coordinates of interpolation location
   ! Output:
   !     datOut --> Scalar value of interpolated data at (x,y,z)
+  integer, intent(in) :: num_pad 
   real(rkind), dimension(-num_pad+1:,-num_pad+1:,-num_pad+1:), intent(in) :: f
   real(rkind), intent(out) :: datOut
   real(rkind), intent(in) :: dx, dy, dz, x, y, z, xgrid1, ygrid1, zgrid1

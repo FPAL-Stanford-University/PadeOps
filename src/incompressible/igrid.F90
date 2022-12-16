@@ -418,9 +418,10 @@ contains
 #include "igrid_files/RK45_staging.F90"
 #include "igrid_files/gaborMode_helpers.F90"
 
-    subroutine init(this,inputfile, initialize2decomp)
+    subroutine init(this,inputfile, initialize2decomp, num_pad)
         class(igrid), intent(inout), target :: this        
         character(len=clen), intent(in) :: inputfile 
+        integer, intent(in), optional :: num_pad 
         character(len=clen) :: outputdir, inputdir, scalar_info_dir, turbInfoDir, ksOutputDir, controlDir = "null", moisture_info_dir, inputDirDyaw
         integer :: nx, ny, nz, ioUnit, nsteps = 999999, sponge_type = 1
         integer :: tid_StatsDump =10000, tid_compStats = 10000,  WallMType = 0, t_planeDump = 1000
@@ -460,7 +461,7 @@ contains
         character(len=clen) :: MeanFilesDir, powerDumpDir 
         logical :: WriteTurbineForce = .false., useforcedStratification = .false., useDynamicYaw = .FALSE. 
         integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0
-        integer :: clearRoundOffFreq = 1000
+        integer :: clearRoundOffFreq = 1000, npad 
 
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -512,6 +513,8 @@ contains
          read(unit=ioUnit, NML=SCALARS)
         end if
         close(ioUnit)
+        npad = 1 
+        if (present(num_pad)) npad = num_pad 
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%Re = Re; this%useSponge = useSpongeLayer
         this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified
@@ -577,7 +580,7 @@ contains
        call decomp_info_init(nx,ny,nz+1,this%gpE)
 
        ! Initialize MPI processor grid
-       call this%pg%init(prow,pcol,this%nx,this%ny,this%nz)
+       call this%pg%init(prow,pcol,this%nx,this%ny,this%nz, npad)
 
        if (this%useSystemInteractions) then
            if ((trim(controlDir) .eq. "null") .or.(trim(ControlDir) .eq. "NULL")) then

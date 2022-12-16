@@ -37,7 +37,7 @@ subroutine generateIsotropicModes(this)
 
   ! Misc
   integer :: ierr, kst, ken, n
-  integer :: nxQH, nyQH, istQH, jstQH, kstQH, idxOld, idxCurrent
+  integer :: nxQH, nyQH, istQH, jstQH, kstQH
   integer :: ii, jj, kk, nside, iter
   real(rkind) :: dxsub, dysub, dzsub
 
@@ -93,7 +93,6 @@ subroutine generateIsotropicModes(this)
   
   !call initializeSeeds(seedFact, istQH, jstQH, kstQH, nxQH, nyQH)
 
-  idxOld = sub2idx(istQH, jstQH, kstQH, nxQH, nyQH) - 1
   do k = 1,this%QHgrid%gpC%xsz(3)
     zmin = this%QHgrid%zE(k)
     do j = 1,this%QHgrid%gpC%xsz(2)
@@ -167,11 +166,11 @@ subroutine generateIsotropicModes(this)
           call interpToLocation(this%KEh,KE_loc(n,i,j,k),this%smallScales%dx,this%smallScales%dy,&
             this%smallScales%dz,this%smallScales%mesh(1,1,1,1),&
             this%smallScales%mesh(1,1,1,2),this%smallScales%mesh(1,1,1,3),&
-            gmx(n,i,j,k),gmy(n,i,j,k),gmz(n,i,j,k))
+            gmx(n,i,j,k),gmy(n,i,j,k),gmz(n,i,j,k),this%pgForInitModes%num_pad)
           call interpToLocation(this%Lh,L_loc(n,i,j,k),this%smallScales%dx,this%smallScales%dy,&
             this%smallScales%dz,this%smallScales%mesh(1,1,1,1),&
             this%smallScales%mesh(1,1,1,2),this%smallScales%mesh(1,1,1,3),&
-            gmx(n,i,j,k),gmy(n,i,j,k),gmz(n,i,j,k))
+            gmx(n,i,j,k),gmy(n,i,j,k),gmz(n,i,j,k),this%pgForInitModes%num_pad)
           
           if (L_loc(n,i,j,k) < 1.d-8) then
             L_loc(n,i,j,k) = 1.d0
@@ -276,7 +275,7 @@ subroutine strainModes(this)
   use decomp_2D,         only: nrank
   class(enrichmentOperator), intent(inout) :: this 
   real(rkind), dimension(this%nmodes) :: kabs, input
-  real(rkind) :: output, tauEddy, S, L, KE, tauMean
+  real(rkind) :: output, tauEddy, S, tauMean
   real(rkind), dimension(3) :: Ui
   real(rkind), dimension(3,3) :: dudx
   integer :: n, tid
@@ -367,17 +366,17 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,Ui)
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
     this%largeScales%mesh(1,1,1,3), &
-    this%x(gmID), this%y(gmID), this%z(gmID))
+    this%x(gmID), this%y(gmID), this%z(gmID),this%largeScales%pg%num_pad)
   call interpToLocation(this%vh, Ui(2),&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
     this%largeScales%mesh(1,1,1,3), &
-    this%x(gmID), this%y(gmID), this%z(gmID))
+    this%x(gmID), this%y(gmID), this%z(gmID),this%largeScales%pg%num_pad)
   call interpToLocation(this%wh, Ui(3),&
     this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
     this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
     this%largeScales%mesh(1,1,1,3), &
-    this%x(gmID), this%y(gmID), this%z(gmID))
+    this%x(gmID), this%y(gmID), this%z(gmID),this%largeScales%pg%num_pad)
   
   ! Velocity gradient
   idx = 1
@@ -387,7 +386,7 @@ subroutine getLargeScaleDataAtModeLocation(this,gmID,dudx,Ui)
         this%largeScales%dx, this%largeScales%dy, this%largeScales%dz,&
         this%largeScales%mesh(1,1,1,1), this%largeScales%mesh(1,1,1,2), &
         this%largeScales%mesh(1,1,1,3), &
-        this%x(gmID), this%y(gmID), this%z(gmID))
+        this%x(gmID), this%y(gmID), this%z(gmID),this%largeScales%pg%num_pad)
       idx = idx + 1
       ! dudx(1,1) = dudx = duidxj_h(:,:,:,1) see compute_duidxj() in igrid
       ! dudx(1,2) = dudy = duidxj_h(:,:,:,2) see compute_duidxj() in igrid

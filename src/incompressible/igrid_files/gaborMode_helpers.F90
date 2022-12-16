@@ -37,9 +37,9 @@ subroutine initLargeScales(this, tid, readGradients)
 end subroutine
 
 
-subroutine HaloUpdateField(this, u, uh)
-    use procgrid_mod, only: num_pad 
+subroutine HaloUpdateField(this, u, uh, num_pad)
     class(igrid), intent(inout) :: this 
+    integer, intent(in) :: num_pad 
     real(rkind), dimension(1:this%gpC%xsz(1), 1:this%gpC%xsz(2), 1:this%gpC%xsz(3)), intent(in) :: u 
     real(rkind), dimension(-num_pad+1:, -num_pad+1:, -num_pad+1:), intent(out) :: uh 
 
@@ -48,19 +48,19 @@ subroutine HaloUpdateField(this, u, uh)
     call this%pg%halo_exchange(uh)
 end subroutine 
 
-subroutine HaloUpdateVelocities(this, uh, vh, wh, duidxj_h)
-    use procgrid_mod, only: num_pad 
+subroutine HaloUpdateVelocities(this, uh, vh, wh, duidxj_h, num_pad)
     class(igrid), intent(inout) :: this 
+    integer, intent(in) :: num_pad 
     real(rkind), dimension(-num_pad+1:, -num_pad+1:, -num_pad+1:), intent(out) :: uh, vh, wh
     real(rkind), dimension(-num_pad+1:, -num_pad+1:, -num_pad+1:,:), intent(out) :: duidxj_h
     integer :: idx
 
-    call this%HaloUpdateField(this%u , uh)
-    call this%HaloUpdateField(this%v , vh)
-    call this%HaloUpdateField(this%wC, wh)
+    call this%HaloUpdateField(this%u , uh, num_pad)
+    call this%HaloUpdateField(this%v , vh, num_pad)
+    call this%HaloUpdateField(this%wC, wh, num_pad)
 
     do idx = 1,size(duidxj_h,4)
-        call this%HaloUpdateField(this%duidxjC(:,:,:,idx), duidxj_h(:,:,:,idx))
+        call this%HaloUpdateField(this%duidxjC(:,:,:,idx), duidxj_h(:,:,:,idx), num_pad)
     end do 
 
 end subroutine

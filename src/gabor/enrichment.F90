@@ -1,6 +1,6 @@
 module enrichmentMod
   use kind_parameters,    only: rkind, clen, single_kind, castSingle, mpirkind
-  use incompressibleGrid, only: igrid
+  use incompressibleGrid, only: igrid, prow, pcol
   use QHmeshMod,          only: QHmesh
   use exits,              only: message
   use constants,          only: pi
@@ -13,6 +13,7 @@ module enrichmentMod
   use reductions,         only: p_maxval, p_minval
   use timer,              only: tic, toc
   use interpolatorMod,         only: interpolator
+  use procgrid_mod, only: procgrid
   implicit none
 
   private
@@ -47,6 +48,7 @@ module enrichmentMod
     real(rkind), dimension(:,:,:), allocatable :: Th
     real(rkind), dimension(:,:,:), allocatable :: KE, L, KEh, Lh
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj_h
+    type(procgrid) :: pgForInitModes 
 
     integer, public :: nxsupp, nysupp, nzsupp
     type(igrid), pointer :: largeScales, smallScales
@@ -124,7 +126,7 @@ contains
     real(rkind) :: scalefact = 1.d0, Anu = 1.d-4, numolec = 0.d0
     real(rkind) :: ctauGlobal = 1.d0
     logical :: writeIsotropicModes = .false.
-    integer :: ist, ien, jst, jen, kst, ken
+    integer :: ist, ien, jst, jen, kst, ken, npad_ForInitModes
     real(rkind) :: dt
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
@@ -204,6 +206,9 @@ contains
       this%smallScales%gpC%xsz(3)))
     call getLargeScaleParams(this%KE,this%L,this%smallScales)
 
+    npad_ForinitModes = max(ceiling(real(smallScales%ny)/real(largeScales%ny)), & 
+        ceiling(real(smallScales%nz)/real(largeScales%nz))) 
+    call this%pgForInitModes%init(prow,pcol,smallScales%nx,smallScales%ny,smallScales%nz,npad_ForinitModes)
     call this%QHgrid%init(inputfile, this%largeScales)
 
     this%nxsupp = nint(2*this%QHgrid%dx/this%smallScales%dx)
@@ -371,76 +376,84 @@ contains
     if(.not. allocated(this%wh))       call this%largeScales%pg%alloc_array(this%wh)
     if(.not. allocated(this%duidxj_h)) call this%largeScales%pg%alloc_array(this%duidxj_h,9)
     call this%largeScales%HaloUpdateVelocities(this%uh, this%vh, this%wh, &
-      this%duidxj_h)
+      this%duidxj_h,this%largeScales%pg%num_pad)
 
     ! The halo'ed KE and L only matter if initializing the modes
     if (init) then
-      if(.not. allocated(this%KEh))      call this%smallScales%pg%alloc_array(this%KEh)
-      if(.not. allocated(this%Lh))       call this%smallScales%pg%alloc_array(this%Lh)
-      call this%smallScales%haloUpdateField(this%KE,this%KEh)
-      call this%smallScales%haloUpdateField(this%L, this%Lh)
-      call fixGhostIfNonPeriodic(this%KEh,this%smallScales%gpC,enforcePositivity=.true.)
-      call fixGhostIfNonPeriodic(this%Lh,this%smallScales%gpC,enforcePositivity=.true.)
+      if(.not. allocated(this%KEh))      call this%pgForInitModes%alloc_array(this%KEh)
+      if(.not. allocated(this%Lh))       call this%pgForInitModes%alloc_array(this%Lh)
+      this%KEh(1:this%smallScales%gpC%xsz(1), 1:this%smallScales%gpC%xsz(2), 1:this%smallScales%gpC%xsz(3)) = this%KE
+      this%Lh (1:this%smallScales%gpC%xsz(1), 1:this%smallScales%gpC%xsz(2), 1:this%smallScales%gpC%xsz(3)) = this%L
+      call this%pgForInitModes%halo_exchange(this%KEh)
+      call this%pgForInitModes%halo_exchange(this%Lh)
+      
+      call fixGhostIfNonPeriodic(this%KEh,this%smallScales%gpC,this%pgForInitModes%num_pad)
+      call fixGhostIfNonPeriodic(this%Lh,this%smallScales%gpC,this%pgForInitModes%num_pad)
     end if
 
     if (this%isStratified) then
       if(.not. allocated(this%Th))       call this%largeScales%pg%alloc_array(this%Th)
-      call this%largeScales%haloUpdateField(this%largeScales%T,this%Th)
-      call fixGhostIfNonPeriodic(this%Th,this%largeScales%gpC)
+      call this%largeScales%haloUpdateField(this%largeScales%T,this%Th,this%largeScales%pg%num_pad)
+      call fixGhostIfNonPeriodic(this%Th,this%largeScales%gpC,this%largeScales%pg%num_pad)
     end if
 
-    call fixGhostIfNonPeriodic(this%uh,this%largeScales%gpC)
-    call fixGhostIfNonPeriodic(this%vh,this%largeScales%gpC)
-    call fixGhostIfNonPeriodic(this%wh,this%largeScales%gpC)
+    call fixGhostIfNonPeriodic(this%uh,this%largeScales%gpC,this%largeScales%pg%num_pad)
+    call fixGhostIfNonPeriodic(this%vh,this%largeScales%gpC,this%largeScales%pg%num_pad)
+    call fixGhostIfNonPeriodic(this%wh,this%largeScales%gpC,this%largeScales%pg%num_pad)
     do i = 1,9
-      call fixGhostIfNonPeriodic(this%duidxj_h(:,:,:,i),this%largeScales%gpC)
+      call fixGhostIfNonPeriodic(this%duidxj_h(:,:,:,i),this%largeScales%gpC,this%largeScales%pg%num_pad)
     end do
   end subroutine
 
-  subroutine fixGhostIfNonPeriodic(f,gp,enforcePositivity)
+  subroutine fixGhostIfNonPeriodic(f,gp, num_pad)
     use decomp_2d, only: decomp_info
-    use procgrid_mod, only: num_pad
+    integer, intent(in) :: num_pad 
     real(rkind), dimension(-num_pad+1:,-num_pad+1:,-num_pad+1:), intent(inout) :: f
     type(decomp_info), intent(in) :: gp
-    logical, intent(in), optional :: enforcePositivity
-    logical :: makePositive
+    integer :: id 
 
-    makePositive = .false.
-    if (present(enforcePositivity)) makePositive = enforcePositivity
 
     if (.not. periodicBCs(1)) then
-      f(0,:,:) = 2*f(1,:,:) - f(2,:,:)
-      f(gp%xsz(1)+1,:,:) = 2*f(gp%xsz(1),:,:) - f(gp%xsz(1)-1,:,:)
+        do id = -num_pad+1,0
+            f(id,:,:) = f(1,:,:) !2*f(1,:,:) - f(2,:,:)
+        end do
+        do id = 1,num_pad
+            f(gp%xsz(1)+id,:,:) = f(gp%xsz(1),:,:) !2*f(gp%xsz(1),:,:) - f(gp%xsz(1)-1,:,:)
+        end do 
     end if
 
     if (.not. periodicBCs(2)) then
       if (gp%xst(2) == 1) then
-        f(:,0,:) = 2*f(:,1,:) - f(:,2,:)
+          do id = -num_pad+1,0
+            f(:,id,:) = f(:,1,:) !2*f(:,1,:) - f(:,2,:)
+          end do 
       end if
       if (gp%xen(2) == gp%ysz(2)) then
-        f(:,gp%xsz(2)+1,:) = 2*f(:,gp%xsz(2),:) - f(:,gp%xsz(2)-1,:)
+        do id = 1,num_pad
+          f(:,gp%xsz(2)+id,:) = f(:,gp%xsz(2),:) 
+        end do 
       end if
     end if
 
     if (.not. periodicBCs(3)) then
       if (gp%xst(3) == 1) then
-        f(:,:,0) = 2*f(:,:,1) - f(:,:,2)
+        do id = -num_pad+1,0
+            f(:,:,id) = f(:,:,1) 
+        end do 
       end if
       if (gp%xen(3) == gp%zsz(3)) then
-        f(:,:,gp%xsz(3)+1) = 2*f(:,:,gp%xsz(3)) - f(:,:,gp%xsz(3)-1)
+        do id = 1,num_pad 
+            f(:,:,gp%xsz(3)+id) = f(:,:,gp%xsz(3)) 
+        end do 
       end if
     end if
 
-    if (makePositive) then
-      where(f < 0.d0) f = 0.d0
-    end if
   end subroutine 
 
   subroutine advanceTime(this)
     use GaborModeRoutines, only: rk4Step
     class(enrichmentOperator), intent(inout) :: this 
     real(rkind), dimension(3) :: k, uRtmp, uItmp, x, Ui
-    real(rkind) :: L, KE
     real(rkind), dimension(3,3) :: duidxj
     integer :: n
 

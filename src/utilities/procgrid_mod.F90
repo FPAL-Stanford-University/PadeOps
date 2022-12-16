@@ -5,9 +5,8 @@ module procgrid_mod
     implicit none
 
     private
-    public :: procgrid, PAD_SPURIOUS, num_pad
+    public :: procgrid, PAD_SPURIOUS
 
-    integer , parameter :: num_pad = 4 
     logical, parameter :: PAD_SPURIOUS = .false.
     
     type :: procgrid
@@ -19,6 +18,7 @@ module procgrid_mod
         real(rkind), dimension(:,:,:), allocatable :: halo_sendbuff_zup  , halo_sendbuff_zdown
         real(rkind), dimension(:,:,:), allocatable :: halo_recvbuff_yleft, halo_recvbuff_yright
         real(rkind), dimension(:,:,:), allocatable :: halo_recvbuff_zup  , halo_recvbuff_zdown
+        integer :: num_pad 
         contains 
             procedure :: init
             procedure :: halo_exchange  
@@ -36,7 +36,7 @@ contains
         real(rkind), dimension(:,:,:), allocatable, intent(out) :: arr
 
         if (allocated(arr)) deallocate(arr)
-        allocate(arr(-num_pad+1:this%decomp%xsz(1)+num_pad,-num_pad+1:this%decomp%xsz(2)+num_pad,-num_pad+1:this%decomp%xsz(3)+num_pad))
+        allocate(arr(-this%num_pad+1:this%decomp%xsz(1)+this%num_pad,-this%num_pad+1:this%decomp%xsz(2)+this%num_pad,-this%num_pad+1:this%decomp%xsz(3)+this%num_pad))
     end subroutine 
 
     subroutine alloc_array4(this, arr,nfields)
@@ -45,7 +45,7 @@ contains
         real(rkind), dimension(:,:,:,:), allocatable, intent(out) :: arr
 
         if (allocated(arr)) deallocate(arr)
-        allocate(arr(-num_pad+1:this%decomp%xsz(1)+num_pad,-num_pad+1:this%decomp%xsz(2)+num_pad,-num_pad+1:this%decomp%xsz(3)+num_pad, nfields))
+        allocate(arr(-this%num_pad+1:this%decomp%xsz(1)+this%num_pad,-this%num_pad+1:this%decomp%xsz(2)+this%num_pad,-this%num_pad+1:this%decomp%xsz(3)+this%num_pad, nfields))
     end subroutine 
 
     subroutine alloc_array5(this, arr,n1,n2)
@@ -54,14 +54,14 @@ contains
         real(rkind), dimension(:,:,:,:,:), allocatable, intent(out) :: arr
 
         if (allocated(arr)) deallocate(arr)
-        allocate(arr(-num_pad+1:this%decomp%xsz(1)+num_pad,-num_pad+1:this%decomp%xsz(2)+num_pad,-num_pad+1:this%decomp%xsz(3)+num_pad, n1, n2))
+        allocate(arr(-this%num_pad+1:this%decomp%xsz(1)+this%num_pad,-this%num_pad+1:this%decomp%xsz(2)+this%num_pad,-this%num_pad+1:this%decomp%xsz(3)+this%num_pad, n1, n2))
     end subroutine 
     
-    subroutine init(this, prow, pcol, nx, ny, nz)
+    subroutine init(this, prow, pcol, nx, ny, nz, num_pad)
         use exits, only: message
         class(procgrid), intent(inout) :: this
         logical, dimension(3) :: periodicbcs
-        integer, intent(in) :: prow, pcol, nx, ny, nz
+        integer, intent(in) :: prow, pcol, nx, ny, nz, num_pad
         integer :: nrow, ncol, ntasks, ierr 
     
         integer :: DECOMP_CART_X
@@ -72,6 +72,8 @@ contains
         this%nx = nx
         this%ny = ny
         this%nz = nz
+        this%num_pad = num_pad 
+        
         if ((prow == 0) .and. (pcol == 0)) then
             call get_proc_factors(ntasks,nrow,ncol)
         else
@@ -85,11 +87,11 @@ contains
             call mpi_abort(MPI_COMM_WORLD, 0, ierr) 
         end if 
 
-        if (.not. check_stencil_validity(this%ny,this%nz,nrow,ncol)) then
+        if (.not. check_stencil_validity(this%ny,this%nz,nrow,ncol,this%num_pad)) then
             !call message(0,"Default proc decomposition incompatible with stencil.")
             !call message(0,"Will try to swap order.")
             call swap_proc_order(nrow,ncol)
-            if (.not. check_stencil_validity(this%ny,this%nz,nrow,ncol)) then
+            if (.not. check_stencil_validity(this%ny,this%nz,nrow,ncol,this%num_pad)) then
                 print*, nrow, ncol
                 print*, "Need a better processor decomposition algorithm for this domain. Current algorithm fails"
                 call mpi_abort(MPI_COMM_WORLD, 0, ierr) 
@@ -111,17 +113,16 @@ contains
 
         this%nrow = nrow
         this%ncol = ncol 
-
         
-        allocate(this%halo_sendbuff_yleft (this%decomp%xsz(1),num_pad,this%decomp%xsz(3)))
-        allocate(this%halo_sendbuff_yright(this%decomp%xsz(1),num_pad,this%decomp%xsz(3)))
-        allocate(this%halo_sendbuff_zup  (this%decomp%xsz(1),this%decomp%xsz(2)+2*num_pad,num_pad))
-        allocate(this%halo_sendbuff_zdown(this%decomp%xsz(1),this%decomp%xsz(2)+2*num_pad,num_pad))
+        allocate(this%halo_sendbuff_yleft (this%decomp%xsz(1),this%num_pad,this%decomp%xsz(3)))
+        allocate(this%halo_sendbuff_yright(this%decomp%xsz(1),this%num_pad,this%decomp%xsz(3)))
+        allocate(this%halo_sendbuff_zup  (this%decomp%xsz(1),this%decomp%xsz(2)+2*this%num_pad,this%num_pad))
+        allocate(this%halo_sendbuff_zdown(this%decomp%xsz(1),this%decomp%xsz(2)+2*this%num_pad,this%num_pad))
         
-        allocate(this%halo_recvbuff_yleft (this%decomp%xsz(1),num_pad,this%decomp%xsz(3)))
-        allocate(this%halo_recvbuff_yright(this%decomp%xsz(1),num_pad,this%decomp%xsz(3)))
-        allocate(this%halo_recvbuff_zup  (this%decomp%xsz(1),this%decomp%xsz(2)+2*num_pad,num_pad))
-        allocate(this%halo_recvbuff_zdown(this%decomp%xsz(1),this%decomp%xsz(2)+2*num_pad,num_pad))
+        allocate(this%halo_recvbuff_yleft (this%decomp%xsz(1),this%num_pad,this%decomp%xsz(3)))
+        allocate(this%halo_recvbuff_yright(this%decomp%xsz(1),this%num_pad,this%decomp%xsz(3)))
+        allocate(this%halo_recvbuff_zup  (this%decomp%xsz(1),this%decomp%xsz(2)+2*this%num_pad,this%num_pad))
+        allocate(this%halo_recvbuff_zdown(this%decomp%xsz(1),this%decomp%xsz(2)+2*this%num_pad,this%num_pad))
         
         call message(0,"Processor decomposition information:")
         call message(1,"Nrows:", nrow)
@@ -147,10 +148,10 @@ contains
     subroutine halo_exchange(this, ufield)
         use kind_parameters, only: mpirkind
         class(procgrid), intent(inout) :: this
-        real(rkind), dimension(-num_pad+1:,-num_pad+1:,-num_pad+1:), intent(inout) :: ufield
+        real(rkind), dimension(-this%num_pad+1:,-this%num_pad+1:,-this%num_pad+1:), intent(inout) :: ufield
         integer :: send_req1, recv_req1, status(MPI_STATUS_SIZE)
         integer :: send_req2, recv_req2, ierr, tag1 = 123, tag2 = 321
-        integer :: nx, ny, nz, idx
+        integer :: nx, ny, nz!, idx
         
         nx = this%decomp%xsz(1)
         ny = this%decomp%xsz(2)
@@ -158,66 +159,66 @@ contains
 
         ! Y - halo exchange
         
-        call MPI_IRECV(this%halo_recvbuff_yleft ,nx*nz*num_pad,mpirkind,this%YneighLeft ,tag1,MPI_COMM_WORLD,recv_req1,ierr)
-        call MPI_IRECV(this%halo_recvbuff_yright,nx*nz*num_pad,mpirkind,this%YneighRight,tag2,MPI_COMM_WORLD,recv_req2,ierr)
+        call MPI_IRECV(this%halo_recvbuff_yleft ,nx*nz*this%num_pad,mpirkind,this%YneighLeft ,tag1,MPI_COMM_WORLD,recv_req1,ierr)
+        call MPI_IRECV(this%halo_recvbuff_yright,nx*nz*this%num_pad,mpirkind,this%YneighRight,tag2,MPI_COMM_WORLD,recv_req2,ierr)
         
-        this%halo_sendbuff_yleft  = ufield(1:nx,1:num_pad,1:nz)
-        this%halo_sendbuff_yright = ufield(1:nx,ny-num_pad+1:ny,1:nz)
+        this%halo_sendbuff_yleft  = ufield(1:nx,1:this%num_pad,1:nz)
+        this%halo_sendbuff_yright = ufield(1:nx,ny-this%num_pad+1:ny,1:nz)
   
-        call MPI_ISEND(this%halo_sendbuff_yleft ,nx*nz*num_pad,mpirkind,this%YneighLeft ,tag2,MPI_COMM_WORLD,send_req1,ierr)
-        call MPI_ISEND(this%halo_sendbuff_yright,nx*nz*num_pad,mpirkind,this%YneighRight,tag1,MPI_COMM_WORLD,send_req2,ierr)
+        call MPI_ISEND(this%halo_sendbuff_yleft ,nx*nz*this%num_pad,mpirkind,this%YneighLeft ,tag2,MPI_COMM_WORLD,send_req1,ierr)
+        call MPI_ISEND(this%halo_sendbuff_yright,nx*nz*this%num_pad,mpirkind,this%YneighRight,tag1,MPI_COMM_WORLD,send_req2,ierr)
 
         call MPI_WAIT(recv_req1,status,ierr)
         call MPI_WAIT(recv_req2,status,ierr)
 
-        ufield(1:nx,-num_pad+1:0,1:nz) = this%halo_recvbuff_yleft
-        ufield(1:nx,ny+1:ny+num_pad,1:nz) = this%halo_recvbuff_yright
+        ufield(1:nx,-this%num_pad+1:0,1:nz) = this%halo_recvbuff_yleft
+        ufield(1:nx,ny+1:ny+this%num_pad,1:nz) = this%halo_recvbuff_yright
         
         call MPI_WAIT(send_req1,status,ierr)
         call MPI_WAIT(send_req2,status,ierr)
 
         ! Z - halo exchange 
 
-        call MPI_IRECV(this%halo_recvbuff_zdown,(ny+2*num_pad)*nx*num_pad,mpirkind,this%ZneighDown,tag1,MPI_COMM_WORLD,recv_req1,ierr)
-        call MPI_IRECV(this%halo_recvbuff_zup  ,(ny+2*num_pad)*nx*num_pad,mpirkind,this%ZneighUp  ,tag2,MPI_COMM_WORLD,recv_req2,ierr)
+        call MPI_IRECV(this%halo_recvbuff_zdown,(ny+2*this%num_pad)*nx*this%num_pad,mpirkind,this%ZneighDown,tag1,MPI_COMM_WORLD,recv_req1,ierr)
+        call MPI_IRECV(this%halo_recvbuff_zup  ,(ny+2*this%num_pad)*nx*this%num_pad,mpirkind,this%ZneighUp  ,tag2,MPI_COMM_WORLD,recv_req2,ierr)
    
-        this%halo_sendbuff_zdown  = ufield(1:nx,-num_pad+1:ny+num_pad,1:num_pad      )
-        this%halo_sendbuff_zup    = ufield(1:nx,-num_pad+1:ny+num_pad,nz-num_pad+1:nz)
+        this%halo_sendbuff_zdown  = ufield(1:nx,-this%num_pad+1:ny+this%num_pad,1:this%num_pad      )
+        this%halo_sendbuff_zup    = ufield(1:nx,-this%num_pad+1:ny+this%num_pad,nz-this%num_pad+1:nz)
         
-        call MPI_ISEND(this%halo_sendbuff_zdown,(ny+2*num_pad)*nx*num_pad,mpirkind,this%ZneighDown,tag2,MPI_COMM_WORLD,send_req1,ierr)
-        call MPI_ISEND(this%halo_sendbuff_zup  ,(ny+2*num_pad)*nx*num_pad,mpirkind,this%ZneighUp  ,tag1,MPI_COMM_WORLD,send_req2,ierr)
+        call MPI_ISEND(this%halo_sendbuff_zdown,(ny+2*this%num_pad)*nx*this%num_pad,mpirkind,this%ZneighDown,tag2,MPI_COMM_WORLD,send_req1,ierr)
+        call MPI_ISEND(this%halo_sendbuff_zup  ,(ny+2*this%num_pad)*nx*this%num_pad,mpirkind,this%ZneighUp  ,tag1,MPI_COMM_WORLD,send_req2,ierr)
         
         call MPI_WAIT(recv_req1,status,ierr)
         call MPI_WAIT(recv_req2,status,ierr)
 
-        ufield(1:nx,-num_pad+1:ny+num_pad,-num_pad+1:0) = this%halo_recvbuff_zdown
-        ufield(1:nx,-num_pad+1:ny+num_pad,nz+1:nz+num_pad) = this%halo_recvbuff_zup 
+        ufield(1:nx,-this%num_pad+1:ny+this%num_pad,-this%num_pad+1:0) = this%halo_recvbuff_zdown
+        ufield(1:nx,-this%num_pad+1:ny+this%num_pad,nz+1:nz+this%num_pad) = this%halo_recvbuff_zup 
         
         call MPI_WAIT(send_req1,status,ierr)
         call MPI_WAIT(send_req2,status,ierr)
     
         ! X - exchange (swap)
-        ufield(-num_pad+1:0   ,-num_pad+1:ny+num_pad,-num_pad+1:nz+num_pad) = ufield(nx-num_pad+1:nx,-num_pad+1:ny+num_pad,-num_pad+1:nz+num_pad )
-        ufield(nx+1:nx+num_pad,-num_pad+1:ny+num_pad,-num_pad+1:nz+num_pad) = ufield(1:num_pad      ,-num_pad+1:ny+num_pad,-num_pad+1:nz+num_pad )
+        ufield(-this%num_pad+1:0   ,-this%num_pad+1:ny+this%num_pad,-this%num_pad+1:nz+this%num_pad) = ufield(nx-this%num_pad+1:nx,-this%num_pad+1:ny+this%num_pad,-this%num_pad+1:nz+this%num_pad )
+        ufield(nx+1:nx+this%num_pad,-this%num_pad+1:ny+this%num_pad,-this%num_pad+1:nz+this%num_pad) = ufield(1:this%num_pad      ,-this%num_pad+1:ny+this%num_pad,-this%num_pad+1:nz+this%num_pad )
    
         if (PAD_SPURIOUS) then
-            ufield(-num_pad+1,:,:) = 9.d99
-            ufield(nx+num_pad,:,:) = 9.d99
-            ufield(:,-num_pad+1,:) = 9.d99
-            ufield(:,ny+num_pad,:) = 9.d99
-            ufield(:,:,-num_pad+1) = 9.d99
-            ufield(:,:,nz+num_pad) = 9.d99
+            ufield(-this%num_pad+1,:,:) = 9.d99
+            ufield(nx+this%num_pad,:,:) = 9.d99
+            ufield(:,-this%num_pad+1,:) = 9.d99
+            ufield(:,ny+this%num_pad,:) = 9.d99
+            ufield(:,:,-this%num_pad+1) = 9.d99
+            ufield(:,:,nz+this%num_pad) = 9.d99
         end if 
     
     
     end subroutine 
 
 
-    pure function check_stencil_validity(nx,ny,nrow,ncol) result(isValid)
-        integer, intent(in) :: nx, ny, nrow, ncol
+    pure function check_stencil_validity(nx,ny,nrow,ncol, npad) result(isValid)
+        integer, intent(in) :: nx, ny, nrow, ncol, npad
         logical :: isValid
 
-        if (((ny/ncol) < num_pad) .or. ((nx/nrow) < num_pad)) then
+        if (((ny/ncol) < npad) .or. ((nx/nrow) < npad)) then
             isValid = .false. 
         else
             isValid = .true. 
