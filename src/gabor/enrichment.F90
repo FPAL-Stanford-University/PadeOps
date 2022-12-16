@@ -236,14 +236,14 @@ contains
     allocate(this%wtmp(ist:ien,jst:jen,kst:ken,nthreads))
 
     ! Set things up for distributed memory
-    call getneighbors(neighbor)
+    this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%gpC%xsz(1) + 1)]
+    this%PEybound = [this%QHgrid%yE(1), this%QHgrid%yE(this%QHgrid%gpC%xsz(2) + 1)]
+    this%PEzbound = [this%QHgrid%zE(1), this%QHgrid%zE(this%QHgrid%gpC%xsz(3) + 1)]
     call MPI_Cart_Get(DECOMP_2D_COMM_CART_X,2,dims,periodicBCs(2:3),coords,ierr)
     periodicBCs(1) = xPeriodic
     periodicBCs(2) = yPeriodic
     periodicBCs(3) = zPeriodic
-    this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%gpC%xsz(1) + 1)]
-    this%PEybound = [this%QHgrid%yE(1), this%QHgrid%yE(this%QHgrid%gpC%xsz(2) + 1)]
-    this%PEzbound = [this%QHgrid%zE(1), this%QHgrid%zE(this%QHgrid%gpC%xsz(3) + 1)]
+    call getneighbors(neighbor,this%PEybound,this%PEzbound,periodicBCs)
    
   end subroutine
 

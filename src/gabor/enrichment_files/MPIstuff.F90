@@ -200,15 +200,27 @@ subroutine copyMode(modeData, cpyArr, periodicCorrection)
 
 end subroutine
   
-subroutine getneighbors(neighbor)
+subroutine getneighbors(neighbor,PEybound,PEzbound,periodic)
   integer, dimension(4), intent(out) :: neighbor
-  integer :: ierr
+  real(rkind), dimension(2), intent(in) :: PEybound, PEzbound
+  logical, dimension(3), intent(in) :: periodic
+  integer :: ierr, i
+  real(rkind), parameter :: tol = 1.d-13
 
   ! For X-pencil
   call MPI_CART_SHIFT(DECOMP_2D_COMM_CART_X, 0, 1, &
        neighbor(1), neighbor(2), ierr) ! north & south
   call MPI_CART_SHIFT(DECOMP_2D_COMM_CART_X, 1, 1, &
        neighbor(3), neighbor(4), ierr) ! top & bottom
+
+  do i = 1,2
+    if ((abs(PEybound(i) - yDom(i)) < tol) .and.(.not. periodic(2)) ) then
+      neighbor(i) = MPI_PROC_NULL
+    end if
+    if ((abs(PEzbound(i) - zDom(i)) < tol) .and.(.not. periodic(3)) ) then
+      neighbor(i+2) = MPI_PROC_NULL
+    end if
+  end do
 
 end subroutine
 
