@@ -842,8 +842,10 @@ stop
         do imat = 1, this%ns
           call this%material(imat)%filter(iflag,x_bc,y_bc,z_bc)
         end do
-        
-        this%material(2)%VF = one - this%material(1)%VF
+       
+        if(this%ns==2) then
+            this%material(2)%VF = one - this%material(1)%VF
+        endif
 
     end subroutine
 
