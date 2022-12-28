@@ -24,7 +24,7 @@ module SolidMod
         class(sep1solid), allocatable :: elastic
 
         type(decomp_info), pointer :: decomp
-        type(derivatives), pointer :: der,derD02, derD06
+        type(derivatives), pointer :: der,derD02, derD04,derD06
         type(filters),     pointer :: fil
         type(filters),     pointer :: gfil
 
@@ -226,10 +226,10 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,derD02,derD06,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,useAkshayForm, updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns, x_bc, y_bc, z_bc)
+    subroutine init(this,decomp,der,derD02,derD04,derD06,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,useAkshayForm, updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns, x_bc, y_bc, z_bc)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
-        type(derivatives), target, intent(in) :: der,derD02, derD06
+        type(derivatives), target, intent(in) :: der,derD02,derD04, derD06
         type(filters),     target, intent(in) :: fil, gfil
         logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot
         logical, intent(in) :: use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cpg_west,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe, useAkshayForm
@@ -240,6 +240,7 @@ contains
         this%decomp => decomp
         this%der  => der
         this%derD02  => derD02
+        this%derD04  => derD04
         this%derD06  => derD06
         this%fil  => fil
         this%gfil => gfil
@@ -703,6 +704,7 @@ contains
         nullify( this%gfil   )
         nullify( this%der    )
         nullify( this%derD02    )
+        nullify( this%derD04    )
         nullify( this%derD06    )
         nullify( this%decomp )
     end subroutine
@@ -4787,9 +4789,14 @@ contains
            rhsVF = rhsVF + u*tmp1 + v*tmp2 + w*tmp3
 
         else
+<<<<<<< HEAD
         !   call secondder(this%VF,tmp4,tmp5,tmp6,[0,0],[0,0],[0,0])
  
            rhsVF = -rhsVF/this%rhom + u*tmp1 + v*tmp2 + w*tmp3! + this%physmu*(tmp4 + tmp5 + tmp6)
+=======
+      
+           rhsVF = -rhsVF/this%rhom + tmp4 + this%VF*tmp5 
+>>>>>>> d0f67177b2fb56f1796bddaf45c05e60d8858b5b
        endif
 
 
@@ -4985,7 +4992,11 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: Ys_0, VF_0,Ys_fil,mask,VF_fil
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhom 
         integer :: i, j ,k, iflag = one
+<<<<<<< HEAD
         real(rkind) :: eps1 = 1d-10, eps2 = 1.70,  minVF = 1d-6 , n = 1 
+=======
+        real(rkind) :: eps1 = 1d-12, eps2 = 0.70,threshold, minVF = 1d-6 , n = 1 
+>>>>>>> d0f67177b2fb56f1796bddaf45c05e60d8858b5b
         ! Get detg in rhom
         rhom = this%g11*(this%g22*this%g33-this%g23*this%g32) &
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
@@ -4995,6 +5006,7 @@ contains
             rhom = sqrt(rhom)
         end if
   
+<<<<<<< HEAD
 
        !! Clipping Ys and VF !!
 
@@ -5046,43 +5058,26 @@ contains
       !  where(mask .GE. eps2)
 
 !      rhom = this%elastic%rho0
-         rhom = (rho*Ys_0 + this%elastic%rho0*rhom*epssmall)/(VF_0 + epssmall)
+!         rhom = (rho*Ys_0 + this%elastic%rho0*rhom*epssmall)/(VF_0 + epssmall)
 !        call filter3D(this%decomp, this%fil, rhom, iflag,this%x_bc,this%y_bc,this%z_bc)
+     !  where( (this%Ys .LT. (this%elastic%rho0*eps)/rho ) .AND. (this%VF .LT. eps) )
+     !     rhom = ((this%elastic%rho0*eps) + this%elastic%rho0*rhom*epssmall)/(eps+epssmall)
+     !  elsewhere((this%Ys .LT. (this%elastic%rho0*eps)/rho ) )
+     !     rhom = ((this%elastic%rho0*eps) + this%elastic%rho0*rhom*epssmall)/(this%VF+epssmall)
+     !  elsewhere( this%VF .LT. eps)
+     !     rhom = (rho*this%Ys +this%elastic%rho0*rhom*epssmall)/(eps+epssmall)
+     !  elsewhere
+          rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)
+     !  end where
 
-       ! elsewhere
+    
+  !  threshold = 1d-5
+  !  where( this%VF .LE. threshold)
 
-        !  rhom = (rho*Ys_0 + this%elastic%rho0*rhom*epssmall)/(VF_0 + epssmall)
+  !    rhom = this%elastic%rho0
+  !    this%Ys = rhom*this%VF/rho
 
-       ! endwhere
-
-        ! Get rhom = rho*Ys/VF (Additional terms to give correct limiting behaviour when Ys and VF tend to 0)
-        
-       
-
-!     !   where((this%Ys .LT. eps2))
-
-       !  rhom = ( this%elastic%rho0*rhom*epssmall)/(epssmall)
-        
-
-       ! elsewhere((this%Ys .LT. 0 ) .AND. (this%VF .LT. 0) )
-        
-       !   rhom = ( this%elastic%rho0*rhom*epssmall)/( epssmall)
-
-       ! elsewhere( (this%Ys .LT. 0) .AND. (this%VF .GT. 0))
-
-       !   rhom = (this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)
-       !elsewhere( this%Ys .GT. 1-eps2)
-
-        ! rhom = (rho*(1) + this%elastic%rho0*rhom*epssmall)/(1 + epssmall)
-
-      ! elsewhere
-
-      !    rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(VF_0 + epssmall)
-
-      ! endwhere   
-
-        this%rhom = rhom
-
+  !  endwhere
 
 !  do k=1,this%nzp
 !                do j = 1,this%nyp
@@ -5096,6 +5091,7 @@ contains
 !                    end do
 !                end do
 !            end do
+    this%rhom = rhom
 
 
     end subroutine
@@ -5186,6 +5182,7 @@ contains
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
+
 
         this%Ys = this%consrv(:,:,:,1) / rho
         if(this%pRelax) then

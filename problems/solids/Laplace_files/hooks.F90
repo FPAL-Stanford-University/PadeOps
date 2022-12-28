@@ -1,4 +1,4 @@
-module Oscillatory_Droplet_data
+module Laplace_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,eight,three,six,sixth,zero
     use FiltersMod,       only: filters
@@ -6,7 +6,7 @@ module Oscillatory_Droplet_data
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
     real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one, eta_det_ge = one,eta_det_ge_2 = one, eta_det_gp = one,eta_det_gp_2 = one, eta_det_gt = one,eta_det_gt_2 = one,diff_c_ge = one,diff_c_ge_2 = one, diff_c_gp = one,diff_c_gp_2 = one, diff_c_gt = one,diff_c_gt_2 = one
-    real(rkind) :: minVF = 0.2_rkind, thick = one
+    real(rkind) :: minVF = 0.2_rkind, thick = one,  q1 = 0, q2 = 0, minYs
     real(rkind) :: rhoRatio = one, pRatio = two, p_ten = one
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
@@ -19,8 +19,8 @@ module Oscillatory_Droplet_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 8, Lx = 8, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 1
-    real(rkind) :: tau0_2=1d0, Nvel=1d0, minYs,etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
+    real(rkind) :: Ly = 2D0, Lx = 2D0, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 0.4d0
+    real(rkind) :: tau0_2=1d0, Nvel=1d0, etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
 
 
     type(filters) :: mygfil
@@ -131,7 +131,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
 
@@ -185,7 +185,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
     
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -211,12 +211,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     namelist /PROBINPUT/  p_infty,p_ten, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
                           plastic2, explPlast2, yield2, interface_init, kwave, a_ratio,&
-                          melt_t, melt_c, melt_t2, melt_c2, &
+                          melt_t, melt_c, melt_t2, melt_c2, q1, q2,&
                           kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e,kos_sh, &
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
                           diff_c_ge,diff_c_ge_2,diff_c_gp,diff_c_gp_2,diff_c_gt,diff_c_gt_2, v0, v0_2, tau0, &
-			tau0_2, eta0k, Nvel, etasize, ksize, delta_rho, Nrho, delta, Tp, thick
+			tau0_2, eta0k, Nvel, etasize, ksize, delta_rho, Nrho, delta, Tp, thick, R
 
     
     ioUnit = 11
@@ -234,23 +234,24 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
-     !   if(rhoRatio > 0) then
+!       if (rhoRatio > 0) then
          ! if rhoRatio is positive, only rho_0 is different. Rgas is set such
           ! that Temperature equilibrium condition is satisfied
         !  gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
         !  rho_0_2 = rho_0*rhoRatio; mu_2 = mu
-       ! else
+ !       else
           ! if rhoRatio is negative, all quantities except Rgas need to be
           ! specified in input file. Rgas is then set such
           ! that Temperature equilibrium condition is satisfied
-          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+  !        if (adjustRgas) then
+            Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_ten+p_infty)*rho_0/rho_0_2
 
           ! determine p_amb that guarantees T equilibrium
         !  if(adjustPamb) then
         !    fac = Rgas_2*rho_0_2/Rgas/rho_0
         !    p_amb = (fac*p_infty - p_infty_2)/(one - fac)
-        !  endif
-       ! endif
+   !       endif
+   !     endif
   if (nrank == 0) then
             print *, '---Material 1---'
             write(*,'(3(a,e12.5))') 'rho_0 = ', rho_0, ', gam  = ', gamma, ', p_infty = ', p_infty
@@ -267,8 +268,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! Set materials
         ! call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10)) !mca: see Sep1SolidEOS.F90 "init"
         ! call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,yield2,1.0D-10))
-        call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10,eta_det_ge,eta_det_gp,eta_det_gt,diff_c_ge,diff_c_gp,diff_c_gt,melt_t,melt_c,kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e,kos_sh,nx,ny,nz)) !mca: see Sep1SolidEOS.F90 "init"
-        call mix%set_material(2,stiffgas(gamma_2,Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,yield2,1.0D-10,eta_det_ge_2,eta_det_gp_2,eta_det_gt_2,diff_c_ge_2,diff_c_gp_2,diff_c_gt_2,melt_t2,melt_c2,kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2,nx,ny,nz))
+        call mix%set_material(1,stiffgas(gamma, Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10,eta_det_ge,eta_det_gp,eta_det_gt,diff_c_ge,diff_c_gp,diff_c_gt,melt_t,melt_c,kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e,kos_sh,nx,ny,nz)) !mca: see Sep1SolidEOS.F90 "init"
+        call mix%set_material(2,stiffgas(gamma_2, Rgas_2,p_infty_2),sep1solid(rho_0_2,mu_2,yield2,1.0D-10,eta_det_ge_2,eta_det_gp_2,eta_det_gt_2,diff_c_ge_2,diff_c_gp_2,diff_c_gt_2,melt_t2,melt_c2,kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2,nx,ny,nz))
 
 
         ! set logicals for plasticity
@@ -278,33 +279,32 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
 
         ! speed of sound
-        a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-        a2 = sqrt((gamma*(p2+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2)
+        a1 = sqrt((gamma*(p_amb+p_infty+p_ten) + 4.0d0/3.0d0*mu)/rho1)
+        a2 = sqrt((gamma_2*(p_amb+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2)
 
         
  	        ! Set up smearing function for VF based on interface location and thickness
-       ! p = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
+       ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = sqrt(((x - 4)**2)/(1.25)**2 + ((y - 4)**2)/(0.8)**2)
+	eta = sqrt((x - 1)**2 + (y - 1)**2)
 
-        !eta = ((x-2)**2 + (y-0.5)**2)	
+        !mp = half * ( one - erf((R**2 -(x-1_rkind)*(x-1_rkind) - (y-1_rkind)*(y-1_rkind))/(thick*dx)) )	
+        tmp = 1/ (1+exp( (eta - R)/(thick*dx)) )
 
-        tmp = (half-minVF)  * ( one + tanh( (eta-(R))/(thick*dx) ) )
-      ! rad =  0.15825
+        !tmp = 1/( one + exp( (sqrt(eta)-(R))/(thick) ) )
+
         !set mixture Volume fraction
         !eta = (x - 1)**2 + (y - 0.75)**2
         !where( (eta .le. (R)**2  )
-        mix%material(2)%VF = tmp
-        mix%material(1)%VF = one - mix%material(2)%VF
+        mix%material(1)%VF =  minVF+(one-two*minVF)*tmp
+        mix%material(2)%VF = one - mix%material(1)%VF
 	!endwhere 
                
 	!Set density profile and mass fraction based on volume fraction
 	rho = rho_0*mix%material(1)%VF + rho_0_2*mix%material(2)%VF
-	mix%material(2)%Ys = mix%material(2)%VF * rho_0_2 / rho
-	mix%material(1)%Ys = one - mix%material(2)%Ys ! Enforce sum to unity
-
-        minYs = minVF*rho_0
+	mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
+	mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
 
         !set velocities
@@ -327,16 +327,25 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         !u   = zero
         !w   = zero
 	
-	u = 0
+	u = v0
 	v = 0
 	w = 0
+
+        minYs = minVF*rho_0
+
+        rhoL = rho_0_2
+        rhoR = rho_0_2
+        YsL  = mix%material(1)%Ys(1,1,1)
+        YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
+        VFL  = mix%material(1)%VF(1,1,1)
+        VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
 
 
         !set mixture pressure (uniform)
 	mix%material(1)%p = p_amb+p_ten*mix%material(1)%VF
 	mix%material(2)%p = mix%material(1)%p
 
-        ! Set initial values of g (inverse deformation gradient)
+     ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
         mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
@@ -345,8 +354,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
 	mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-        rhoL = rho_0_2
-        rhoR = rho_0_2
+
+
+
 
         !gt should be same as g
         mix%material(1)%gt11 = one;  mix%material(1)%gt12 = zero; mix%material(1)%gt13 = zero
@@ -385,7 +395,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use operators,        only: curl
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
 
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -434,7 +444,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        ! if (decomp%ysz(2) == 1) then
-       !     write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Oscillatory_Droplet_"//trim(str)//"_", vizcount, ".dat"
+       !     write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Laplace_"//trim(str)//"_", vizcount, ".dat"
 
        !     open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
        !     write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
@@ -510,7 +520,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        curl_p = P_MEAN(mix%material(1)%curl_p)*six*one
 
           
-       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Oscillatory_Droplet_statistics.dat"
+       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Laplace_statistics.dat"
 
        if (vizcount == 0) then
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
@@ -657,7 +667,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -667,12 +677,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
-    integer :: ny,nx, i, j
-    real(rkind) :: dx, xspng, tspng, xspngL, xspngR
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dumL, dumR,  dum
+    integer :: nx,ny, i, j
+    real(rkind) :: dx,dy, xspng, tspng, xspng1, xspng2
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     
     nx = decomp%ysz(1)
     ny = decomp%ysz(2)
+
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -691,124 +702,146 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-        if(decomp%yst(1)==1) then
+
+          if(decomp%yst(1)==1) then
           if(x_bc(1)==0) then
-              rho( 1,:,:) = rhoL
-              u  ( 1,:,:) = zero
-              v  ( 1,:,:) = 0
-              w  ( 1,:,:) = zero
-              mix%material(1)%p(1,:,:) = p_amb
-              mix%material(2)%p(1,:,:) = p_amb
+          !    rho( 1,:,:) = rhoL
+          !    u  ( 1,:,:) = zero
+          !    v  ( 1,:,:) = 0
+          !    w  ( 1,:,:) = zero
+          !    mix%material(1)%p(1,:,:) = p_amb
+          !    mix%material(2)%p(1,:,:) = p_amb
         !      
-              mix%material(1)%VF ( 1,:,:) = minVF
-              mix%material(2)%VF ( 1,:,:) = one - minVF
-              mix%material(1)%Ys ( 1,:,:) = minYs
-              mix%material(2)%Ys ( 1,:,:) = one - minYs
+          !    mix%material(1)%VF ( 1,:,:) = minVF
+          !    mix%material(2)%VF ( 1,:,:) = one - minVF
+          !    mix%material(1)%Ys ( 1,:,:) = minYs
+          !    mix%material(2)%Ys ( 1,:,:) = one - minYs
           end if
         endif
 
         if(decomp%yen(1)==decomp%xsz(1)) then
           if(x_bc(2)==0) then
-              rho( nx,:,:) = rhoR
-              u  ( nx,:,:) = zero
-              v  ( nx,:,:) = 0
-              w  ( nx,:,:) = zero
-              mix%material(1)%p(nx,:,:) = p_amb
-              mix%material(2)%p(nx,:,:) = p_amb
-
-              mix%material(1)%VF ( nx,:,:) = minVF
-              mix%material(2)%VF ( nx,:,:) = one - minVF
-              mix%material(1)%Ys ( nx,:,:) = minYs
-              mix%material(2)%Ys ( nx,:,:) = one - minYs
+          !    rho( nx,:,:) = rhoR
+          !    u  ( nx,:,:) = zero
+          !    v  ( nx,:,:) = 0
+          !    w  ( nx,:,:) = zero
+          !    mix%material(1)%p(nx,:,:) = p_amb
+          !    mix%material(2)%p(nx,:,:) = p_amb
+              
+          !    mix%material(1)%VF ( nx,:,:) = minVF
+          !    mix%material(2)%VF ( nx,:,:) = one - minVF
+          !    mix%material(1)%Ys ( nx,:,:) = minYs
+          !    mix%material(2)%Ys ( nx,:,:) = one - minYs
           end if
         endif
 
         if(decomp%yst(2)==1) then
           if(y_bc(1)==0) then
-              rho( :,1,:) = rhoL
-              u  ( :,1,:) = zero
-              v  ( :,1,:) = 0
-              w  ( :,1,:) = zero
-              mix%material(1)%p(:,1,:) = p_amb
-              mix%material(2)%p(:,1,:) = p_amb
+          !    rho( :,1,:) = rhoL
+          !    u  ( :,1,:) = zero
+          !    v  ( :,1,:) = 0
+          !    w  ( :,1,:) = zero
+          !    mix%material(1)%p(:,1,:) = p_amb
+          !    mix%material(2)%p(:,1,:) = p_amb
         !
-              mix%material(1)%VF ( :,1,:) = minVF
-              mix%material(2)%VF ( :,1,:) = one - minVF
-              mix%material(1)%Ys ( :,1,:) = minYs
-              mix%material(2)%Ys ( :,1,:) = one - minYs
+          !    mix%material(1)%VF ( :,1,:) = minVF
+          !    mix%material(2)%VF ( :,1,:) = one - minVF
+          !    mix%material(1)%Ys ( :,1,:) = minYs
+          !    mix%material(2)%Ys ( :,1,:) = one - minYs
           end if
         end if
 
-       if(decomp%yen(2)==decomp%ysz(2)) then
+
+        if(decomp%yen(2)==decomp%ysz(2)) then
           if(y_bc(2)==0) then
-              rho( :,ny,:) = rhoR
-              u  ( :,ny,:) = zero
-              v  ( :,ny,:) = zero
-              w  ( :,ny,:) = zero
-              mix%material(1)%p(:,ny,:) = p_amb
-              mix%material(2)%p(:,ny,:) = p_amb
+          !    rho( :,ny,:) = rhoR
+          !    u  ( :,ny,:) = zero
+          !    v  ( :,ny,:) = zero
+          !    w  ( :,ny,:) = zero
+          !    mix%material(1)%p(:,ny,:) = p_amb
+          !    mix%material(2)%p(:,ny,:) = p_amb
         !
-              mix%material(1)%VF ( :,ny,:) = minVF
-              mix%material(2)%VF ( :,ny,:) = one - minVF
-              mix%material(1)%Ys ( :,ny,:) = minYs
-              mix%material(2)%Ys ( :,ny,:) = one - minYs
+          !    mix%material(1)%VF ( :,ny,:) = minVF
+          !    mix%material(2)%VF ( :,ny,:) = one - minVF
+          !    mix%material(1)%Ys ( :,ny,:) = minYs
+          !    mix%material(2)%Ys ( :,ny,:) = one - minYs
           end if
         endif
 
 
+       !if(decomp%yst(1)==1) then
+         !if(x_bc(1)==0) then
+          !    ! rho( 1,:,:) = rhoL
+           !   ! u  ( 1,:,:) = (u2-u1)
+           !   v  ( 1,:,:) = zero
+           !   w  ( 1,:,:) = zero
+           !   do i=1,5
+           !       mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
+           !       mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
+           !   end do
+              
+              ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
+              ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
+              ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
+  
+              ! mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12( 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
+              ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
+              ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
+              
+              ! mix%material(1)%Ys ( 1,:,:) = YsL
+              ! mix%material(2)%Ys ( 1,:,:) = one - YsL
+  
+            !  mix%material(1)%VF ( 1,:,:) = VFL
+            !  mix%material(2)%VF ( 1,:,:) = one - VFL
+         ! end if
+        !endif
+
+        
 
 
-        !xspng = -two + half
-        !tspng = 0.2_rkind
-        !dx = x(2,1,1) - x(1,1,1)
-        !dum = half*(one - tanh( (x-xspng)/(tspng) ))
-
-        xspngL = 0.20
-        xspngR = Lx -xspngL
-        dx = x(2,1,1) - x(1,1,1)
-        tspng = 0.04
-        dx = x(2,1,1) - x(1,1,1)
-        dumL = half*(one - tanh( (x-xspngL)/(tspng) ))+ half*(one - tanh((y-xspngL)/(tspng) ))
-        dumR = half*(one + tanh( (x-xspngR)/(tspng) )) + half*(one + tanh((y-xspngR)/(tspng) ))       
-        dum  = dumL+dumR
+       ! xspng1 = 0.22
+       ! xspng2 = Lx -xspng1
+       ! dx = x(2,1,1) - x(1,1,1)
+       ! tspng = 0.04
+       ! dum = half*(one - tanh( (x-xspng1)/(tspng) )) + half*(one + tanh((x-xspng2)/tspng) ) + half*(one - tanh( (y-xspng1)/(tspng) )) + half*(one + tanh((y-xspng2)/tspng) )
 
 
-        do i=1,4
-            tmp = u
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            u = u + dum*(tmp - u)
+       ! do i=1,4
+       !     tmp = u
+       !     call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !     u = u + dum*(tmp - u)
 
-            tmp = v
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            v = v + dum*(tmp - v)
+       !     tmp = v
+       !     call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !     v = v + dum*(tmp - v)
 
-            tmp = w
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            w = w + dum*(tmp - w)
+       !     tmp = w
+       !     call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !     w = w + dum*(tmp - w)
 
-           tmp = e
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            e = e + dum*(tmp - e)
+       !     tmp = e
+       !     call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !     e = e + dum*(tmp - e)
 
-            tmp = rho
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            rho = rho + dum*(tmp - rho)
+       !     tmp = rho
+       !     call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !     rho = rho + dum*(tmp - rho)
 
-            tmp = mix%material(1)%p
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+       !     tmp = mix%material(1)%p
+       !     call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !     mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
 
-            tmp = mix%material(2)%p
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+       !     tmp = mix%material(2)%p
+       !     call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !     mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
 
-            tmp = mix%material(1)%pe
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%pe = mix%material(1)%pe + dum*(tmp - mix%material(1)%pe)
+       !     tmp = mix%material(1)%pe
+       !     call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !     mix%material(1)%pe = mix%material(1)%pe + dum*(tmp - mix%material(1)%pe)
 
-            tmp = mix%material(2)%pe
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%pe = mix%material(2)%pe + dum*(tmp - mix%material(2)%pe)
+       !     tmp = mix%material(2)%pe
+       !     call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !     mix%material(2)%pe = mix%material(2)%pe + dum*(tmp - mix%material(2)%pe)
 
            ! do j = 1,9
            !     tmp = mix%material(1)%g(:,:,:,j)
@@ -838,27 +871,27 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
             !mca add for stability
 
-            tmp = T
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            T = T + dum*(tmp - T)
+        !    tmp = T
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    T = T + dum*(tmp - T)
 
-            tmp = mix%material(1)%T
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%T = mix%material(1)%T + dum*(tmp - mix%material(1)%T)
+        !    tmp = mix%material(1)%T
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    mix%material(1)%T = mix%material(1)%T + dum*(tmp - mix%material(1)%T)
 
-            tmp = mix%material(2)%T
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%T = mix%material(2)%T + dum*(tmp - mix%material(2)%T)
+        !    tmp = mix%material(2)%T
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    mix%material(2)%T = mix%material(2)%T + dum*(tmp - mix%material(2)%T)
 
-            tmp = mix%material(1)%Ys
-           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%Ys = mix%material(1)%Ys + dum*(tmp - mix%material(1)%Ys)
+        !    tmp = mix%material(1)%Ys
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    mix%material(1)%Ys = mix%material(1)%Ys + dum*(tmp - mix%material(1)%Ys)
 
-            tmp = mix%material(2)%Ys
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
+        !   tmp = mix%material(2)%Ys
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
 
-        end do
+       ! end do
 
        ! if(decomp%yen(1)==decomp%xsz(1)) then
           !if(x_bc(2)==0) then
@@ -918,7 +951,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use SolidMixtureMod,  only: solid_mixture
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
 
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -935,7 +968,11 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-    end associate
+!v = 0
+!w = 0
+!u = 0
+!p = p_amb
+   end associate
 end subroutine
 
 subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
@@ -946,7 +983,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -963,6 +1000,10 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
     end associate
+
+
+
+
 end subroutine
 
 subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,VF,p,rhs)
@@ -972,7 +1013,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -992,7 +1033,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1012,7 +1053,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1032,7 +1073,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Oscillatory_Droplet_data
+    use Laplace_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

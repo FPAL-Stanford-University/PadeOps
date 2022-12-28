@@ -16,7 +16,6 @@ module StiffGasEOS
 
         real(rkind) :: PInf = one           ! Gas constant
         real(rkind) :: Cv = one           ! Gas constant
-
     contains
 
         ! procedure :: init

@@ -13,7 +13,7 @@ module ShearLayer_data
     real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, vL, vR
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
-    real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3
+    real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3, alpha4
     real(rkind) :: kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2, v_disturb
     real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, Nrho = 1, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1
     integer     :: kos_sh,kos_sh2
@@ -216,7 +216,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
                           diff_c_ge,diff_c_ge_2,diff_c_gp,diff_c_gp_2,diff_c_gt,diff_c_gt_2, &
-                          v0, v_disturb, alpha3, v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho
+                          v0, alpha4, v_disturb, alpha3, v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -291,14 +291,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
        ! kwave = ksize*delta
         m = p_mu2/p_mu
         U0 = delta_d*(p_mu2*v0_2 +p_mu*v0)/(delta*(p_mu+p_mu2))
-        eta2 = x-interface_init-6*delta_rho
+        eta2 = eta-6*delta_rho
 
         !set velocities based on mass fraction
-        u   = alpha3*v_disturb*exp(-(eta2/delta)**2)*sin(alpha3*y)
+        u   = v_disturb*exp(-abs((eta2/(delta))))*(alpha4*sin(alpha4*y)) !sin(alpha4*(2/3)*y)+alpha4*sin(alpha4/3*y)+alpha4*sin(alpha4*y))
+
+
         where(eta2 .ge. 0)
-            v = v0_2*erf(eta2/delta) + v_disturb*-eta2/delta*exp(-(eta2/delta)**2)*cos(alpha3*y) ! + U0*(1 - erf(eta/delta_d))
-        elsewhere(eta2 .lt. 0)
-            v = v0*erf(eta2/delta) + v_disturb*-eta2/delta*exp(-(eta2/delta)**2)*cos(alpha3*y)   !!+ !U0*(1 + erf(eta/delta_d))
+            v = v0_2*erf(eta2/delta) + v_disturb*-eta2/delta*exp(-abs((eta2/(delta))))*cos(alpha4*y) ! (3/2*cos(alpha4*(2/3)*y)+3*cos(alpha4/3*y)+cos(alpha4*y)) ! + U0*(1 - erf(eta/delta_d))
+        elsewhere(eta2 .lt. 0 )
+            v = v0*erf(eta2/delta) + v_disturb*-eta2/delta*exp(-abs((eta2/(delta))))*cos(alpha4*y) !3/2*cos(alpha4*(2/3)*y)+3*cos(alpha4/3*y)+cos(alpha4*y))  !!+ !U0*(1 + erf(eta/delta_d))
         endwhere
         w   = zero
 

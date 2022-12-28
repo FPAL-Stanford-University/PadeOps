@@ -66,7 +66,7 @@ module SolidGrid
     type, extends(grid) :: sgrid
        
         type(filters),          allocatable :: gfil
-        type(derivatives),      allocatable :: derD02, derD06
+        type(derivatives),      allocatable :: derD02, derD06, derD04
         type(solid_mixture),    allocatable :: mix
         type(ladobject),        allocatable :: LAD
         type(derivativesStagg), allocatable :: derStagg
@@ -106,8 +106,8 @@ module SolidGrid
         logical     :: useAkshayForm	
         logical     :: weightedcurvature
 	logical     :: surface_mask
-	logical     :: use_FV               !flag to use FV in surface tension scheme
-	logical     :: use_gradphi          !flag to use phi formulation in surface tension calculation
+	logical     :: use_FV, use_D04               !flag to use FV in surface tension scheme
+	logical     :: use_gradphi,energy_surfTen          !flag to use phi formulation in surface tension calculation
 	logical     :: use_gradVF           !flag to use VF formulation in surface tension calculation		
         logical     :: use_gradXi
         logical     :: use_surfaceTension   !flag to turn on/off surface tension (in momentum and energy equations)
@@ -211,6 +211,7 @@ contains
         integer :: i, j, k, itmp(3) 
         integer :: ioUnit
         real(rkind) :: gam = 1.4_rkind
+        real(rkind) :: q = 0
         real(rkind) :: Rgas = one
         real(rkind) :: PInf = zero
         real(rkind) :: shmod = zero
@@ -235,7 +236,7 @@ contains
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., usePhiForm = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-        logical     :: useAkshayForm = .FALSE.,use_surfaceTension = .FALSE., use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_FV = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. 
+        logical     :: useAkshayForm = .FALSE.,use_surfaceTension = .FALSE., use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE.
         real(rkind) :: surfaceTension_coeff = 0.0d0, R = 1d0, p_amb = 1d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0
@@ -261,7 +262,7 @@ contains
                            useAkshayForm, useNC, PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, usePhiForm,intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
-                           use_surfaceTension, use_gradXi,use_gradphi, use_gradVF, use_FV, surface_mask, weightedcurvature, surfaceTension_coeff, R, p_amb
+                           use_surfaceTension, use_gradXi,energy_surfTen,use_gradphi, use_gradVF, use_FV,use_D04, surface_mask, weightedcurvature, surfaceTension_coeff, R, p_amb
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -326,7 +327,9 @@ contains
         this%weightedcurvature    = weightedcurvature
 	this%surface_mask 	  = surface_mask
 	this%use_FV  		  = use_FV
+        this%use_D04              = use_D04
 	this%use_gradphi 	  = use_gradphi
+        this%energy_surfTen       = energy_surfTen
         this%use_gradXi           = use_gradXi
 	this%use_gradVF 	  = use_gradVF
         this%use_surfaceTension   = use_surfaceTension  
@@ -436,7 +439,20 @@ contains
                             periodicx,     periodicy,      periodicz, &
                                               "d02",  "d02",   "d02", &
                               .false.,       .false.,        .false., &
-                              .false.)      
+                              .false.)     
+
+        if ( allocated(this%derD04) ) deallocate(this%derD04)
+        allocate(this%derD04)
+
+        ! Initialize derivatives
+        call this%derD04%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d02",  "d02",   "d02", &
+                              .false.,       .false.,        .false., &
+                              .false.)
+
+ 
         ! Allocate derD06
         if ( allocated(this%derD06) ) deallocate(this%derD06)
         allocate(this%derD06)
@@ -445,7 +461,7 @@ contains
         call this%derD06%init(                           this%decomp, &
                               this%dx,       this%dy,        this%dz, &
                             periodicx,     periodicy,      periodicz, &
-                                              "d04",  "d04",   "d04", &
+                                              "d06",  "d06",   "d06", &
                               .false.,       .false.,        .false., &
                               .false.)      
 
@@ -502,7 +518,7 @@ contains
 
 
   ! Initialize derivatives
-        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derD06,this%interpMid,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension, this%use_gradXi, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc)
+        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derD06,this%derD04,this%interpMid,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension, this%use_gradXi,this%energy_surfTen, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV,this%use_D04, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc)
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -622,7 +638,10 @@ contains
 
         call this%derD02%destroy()
         if (allocated(this%derD02)) deallocate(this%derD02) 
-      
+     
+        call this%derD04%destroy()
+        if (allocated(this%derD04)) deallocate(this%derD04)
+
         call this%derD06%destroy()
         if (allocated(this%derD06)) deallocate(this%derD06)
   
@@ -840,6 +859,8 @@ contains
             call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)  ! Compute surface tension terms for momentum and energy equations
 
         endif
+
+
 
         ! Write out initial conditions
         ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
@@ -1183,6 +1204,11 @@ contains
             !print *, nrank, 12
         end do
 
+      !  if(this%pEqb) then
+      !    call this%mix%MLong_relax(this%rho, this%e, this%p)
+      !    call this%post_bc_2()
+      !  endif
+
         this%step = this%step + 1
             
     end subroutine
@@ -1212,7 +1238,15 @@ contains
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
 	
 	if (this%use_surfaceTension) then
-		dtsigma = max( P_MINVAL( sqrt( (this%rho)/(4*pi*this%surfaceTension_coeff*( 1/this%dx**3 + 1/this%dy**3 + 1/this%dx**3) ) ) ), phys_mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy + 1/this%dz) )  )
+              !  if ( phys_mu > eps) then
+          ! filter3D(this%decomp,this%fil,gradphi(:,:,:,3),iflag,x_bc,y_bc,z_bc)
+	          dtsigma = 0.25 * max( P_MINVAL( sqrt( (this%rho)/(4*pi*this%surfaceTension_coeff*( 1/this%dx**3 + 1/this%dy**3 + 1/this%dx**3) ) ) ), P_MINVAL(this%mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy + 1/this%dz) ) ))
+              !  else 
+              !    dtsigma = P_MINVAL( sqrt( (this%rho)/(4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 + 1/this%dx**3) ) ) )
+                  
+               !   print *, 'dtsigma: ', dtsigma
+
+              !  end if
 	end if
         ! species specific
         call this%mix%get_dt(this%rho, delta, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast)
@@ -1370,13 +1404,17 @@ contains
                   write(str,'(ES10.3E3)') 1.0D0-dtSharp_Adiff/dtCFL
                   stability = 'sharp a-diff: '//trim(str)//' CFL loss fraction'
                end if
-               if ( this%dt > dtSharp_bound ) then
-                  this%dt = dtSharp_bound
-                  !write(str2,'(F25.18)') dtCFL
-                  !write(str,'(F6.2)') 1.0D2*dtSharp_bound/dtCFL
-                  !stability = 'Sharp VF bounds: '//trim(str)//'%'//' '//trim(str2)
-                  write(str,'(ES10.3E3)') 1.0D0-dtSharp_bound/dtCFL
-                  stability = 'sharp VF bounds: '//trim(str)//' CFL loss fraction'
+               
+               if(this%intSharp_msk) then
+
+                  if ( this%dt > dtSharp_bound ) then
+                      this%dt = dtSharp_bound
+                      !write(str2,'(F25.18)') dtCFL
+                      !write(str,'(F6.2)') 1.0D2*dtSharp_bound/dtCFL
+                      !stability = 'Sharp VF bounds: '//trim(str)//'%'//' '//trim(str2)
+                      write(str,'(ES10.3E3)') 1.0D0-dtSharp_bound/dtCFL
+                      stability = 'sharp VF bounds: '//trim(str)//' CFL loss fraction'
+                  end if
                end if
             end if
 
@@ -1475,6 +1513,7 @@ contains
         endif
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get specieselastic energies, and mixture and species devstress
         ! Get specieshydrodynamic energy, temperature; and mixture pressure, temperature
+        call this%mix%get_ehydro_from_p(this%rho) 
         call this%mix%get_pmix(this%p)                         ! Get mixturepressure
         call this%mix%get_Tmix(this%T)                         ! Get mixturetemperature
         call this%mix%getSOS(this%rho,this%p,this%sos)
