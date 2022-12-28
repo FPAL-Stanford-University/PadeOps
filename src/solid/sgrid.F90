@@ -244,7 +244,7 @@ contains
 
         real(rkind) :: intSharp_gam = 0.0d0, intSharp_eps = 0.0d0, intSharp_cut = 1.0d-2, intSharp_dif = 1.0d1, intSharp_tnh = 1.0D-2, intSharp_pfloor = 0.0D0, intSharp_tfloor = 0.0D0
 
-        real(rkind) :: filter_alpha = 0.45
+        real(rkind) :: filter_alpha = 0.499
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
@@ -2419,6 +2419,8 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         ! If inviscid set everything to zero (otherwise use a model)
         this%mu   = this%phys_mu1   * this%mix%material(1)%VF
         this%bulk = this%phys_bulk1 * this%mix%material(1)%VF
+        this%mix%material(1)%physmu = this%phys_mu1
+        this%mix%material(2)%physmu = this%phys_mu2
 
         if (this%mix%ns .eq. 2) then
             this%mu   = this%mu   + this%phys_mu2   * this%mix%material(2)%VF

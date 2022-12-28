@@ -78,7 +78,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: diff_gp
         real(rkind), dimension(:,:,:),   allocatable :: diff_pe
         real(rkind), dimension(:,:,:,:), allocatable :: Ji
-
+        real(rkind), dimension(:,:,:,:), allocatable :: physmu
         ! species-specific variables for interface sharpening
         real(rkind), dimension(:,:,:,:), allocatable :: intSharp_a,intSharp_R,intSharp_aDiff,intSharp_RDiff
         real(rkind), dimension(:,:,:),   allocatable :: intSharp_aFV,intSharp_RFV
@@ -450,6 +450,9 @@ contains
         if( allocated( this%kap ) ) deallocate( this%kap )
         allocate( this%kap(this%nxp,this%nyp,this%nzp) )
 
+    !    if( allocated( this%physmu ) ) deallocate( this%physmu )
+    !    allocate( this%physmu(this%nxp,this%nyp,this%nzp) )
+
         ! Allocate material diffusive flux
         if( allocated( this%qi ) ) deallocate( this%qi )
         allocate( this%qi(this%nxp,this%nyp,this%nzp,3) )
@@ -636,6 +639,7 @@ contains
         if( allocated( this%diff_gp ) ) deallocate( this%diff_gp )
         if( allocated( this%diff_pe ) ) deallocate( this%diff_pe )
         if( allocated( this%kap )  ) deallocate( this%kap )
+      !  if( allocated( this%physmu )  ) deallocate( this%physmu )
         if( allocated( this%T )    ) deallocate( this%T )
         if( allocated( this%p )    ) deallocate( this%p )
         if( allocated( this%modDevSigma ) ) deallocate( this%modDevSigma )
@@ -712,6 +716,7 @@ contains
         this%diff_gp = zero
         this%diff_pe = zero
         this%kap = zero
+      !  this%physmu = zero
 
     end subroutine
 
@@ -4637,7 +4642,9 @@ contains
         tmp3 = rhsYs*w - this%Ji(:,:,:,3)
 
         call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
+       ! call secondder(this%Ys*rho,tmp1,tmp2,tmp3,[0,0],[0,0],[0,0])
 
+       ! rhsYs = rhsYs + !this%physmu*(tmp1 + tmp2 + tmp3)
     end subroutine
 
     subroutine update_eh(this,isub,dt,rho,u,v,w,x,y,z,tsim,divu,viscwork,src,taustar,x_bc,y_bc,z_bc)
@@ -4753,7 +4760,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3, tmp4, tmp5, rhocsq1, rhocsq2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3, tmp4, tmp5, tmp6,rhocsq1, rhocsq2
 
         ! Add C/rhom to Fsource
         !--call this%getSpeciesDensity(rho,tmp1)  !-- use this%rhom
@@ -4780,8 +4787,9 @@ contains
            rhsVF = rhsVF + u*tmp1 + v*tmp2 + w*tmp3
 
         else
-      
-           rhsVF = -rhsVF/this%rhom + u*tmp1 + v*tmp2 + w*tmp3
+        !   call secondder(this%VF,tmp4,tmp5,tmp6,[0,0],[0,0],[0,0])
+ 
+           rhsVF = -rhsVF/this%rhom + u*tmp1 + v*tmp2 + w*tmp3! + this%physmu*(tmp4 + tmp5 + tmp6)
        endif
 
 
@@ -4971,12 +4979,13 @@ contains
 
     subroutine getSpeciesDensity(this,rho,rhom)
         use operators,       only: filter3D
+        use constants,  only: eps
         class(solid), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  ::rho
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: Ys_0, VF_0,Ys_fil,mask,VF_fil
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhom 
         integer :: i, j ,k, iflag = one
-        real(rkind) :: eps1 = 1d-8, eps2 = 0.70,  minVF = 1d-6 , n = 1 
+        real(rkind) :: eps1 = 1d-10, eps2 = 1.70,  minVF = 1d-6 , n = 1 
         ! Get detg in rhom
         rhom = this%g11*(this%g22*this%g33-this%g23*this%g32) &
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
@@ -4991,28 +5000,22 @@ contains
 
        ! eps2 = eps1/this%elastic%rho0 
     
-       ! where((this%Ys .LT. eps1))
-       !      Ys_0 = eps1
-       ! elsewhere(this%Ys .GT. 1-eps1)
-       !      Ys_0 = 1-eps1
-       ! elsewhere
-       !      Ys_0 = this%Ys
-       ! endwhere
+        where(this%Ys .LT. ((eps1*this%elastic%rho0)/rho))
+             Ys_0 = (eps1*this%elastic%rho0)/rho
+        elsewhere
+             Ys_0 = this%Ys
+        endwhere
 
        !! clip negative and zero values !!
-      ! where(this%VF .LT. eps1)
+       where(this%VF .LT. eps1)
 
-      !    VF_0 = eps1
+          VF_0 = eps1
 
-      ! elsewhere(this%VF .GT. 1-eps1)
+       elsewhere
 
-      !    VF_0 = 1-eps1
+          VF_0 = this%VF      
 
-      ! elsewhere
-
-      !    VF_0 = this%VF      
-
-       ! endwhere
+       endwhere
 
 
        !! clip negative and zero values !!
@@ -5033,8 +5036,8 @@ contains
 
       ! Ys_fil = Ys_0**(0.75) /( Ys_0**(0.75) + (1- Ys_0)**(0.75))
       ! VF_fil = VF_0**(0.75) /(Ys_0**(0.75) + (1 - Ys_0)**(0.75))
-       !call filter3D(this%decomp, this%fil, Ys_fil, iflag, this%x_bc,this%y_bc,this%z_bc)
-       !call filter3D(this%decomp, this%fil, VF_fil, iflag, this%x_bc,this%y_bc,this%z_bc)
+     !  call filter3D(this%decomp, this%fil, Ys_0, iflag, this%x_bc,this%y_bc,this%z_bc)
+     !  call filter3D(this%decomp, this%fil, VF_0, iflag, this%x_bc,this%y_bc,this%z_bc)
 !print *, "after filter"
 
        
@@ -5042,7 +5045,9 @@ contains
 
       !  where(mask .GE. eps2)
 
-          rhom = (rho*this%Ys + this%elastic%rho0*rhom*epssmall)/(this%VF + epssmall)
+!      rhom = this%elastic%rho0
+         rhom = (rho*Ys_0 + this%elastic%rho0*rhom*epssmall)/(VF_0 + epssmall)
+!        call filter3D(this%decomp, this%fil, rhom, iflag,this%x_bc,this%y_bc,this%z_bc)
 
        ! elsewhere
 
@@ -5084,9 +5089,9 @@ contains
 !                    do i = 1,this%nxp
 !                        if ( rhom(i,j,k) < zero ) then
 !                            print *, "Found negative species density in material"
-          !                  print *, "  Ys = ", this%material(imat)%Ys(i,j,k)
-          !                  print *, "  VF = ", this%material(imat)%Vf(i,j,k)
-          !                  ! exit
+!                            print *, "  Ys = ", this%Ys(i,j,k)
+!                            print *, "  VF = ", this%VF(i,j,k)
+!                             exit
 !                        end if
 !                    end do
 !                end do

@@ -574,7 +574,7 @@ stop
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rho1gambyone, rho2gambyone, diffPInf,  tmp
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: VF1, VF2
         integer :: imat, i,j,k,a(3), s = 2
-        real(rkind) :: gamfac,eps2, eps1 = 1D-8, minVF = 1D-8
+        real(rkind) :: gamfac,eps2, eps1 = 1D-10, minVF = 1D-8
 
         ! print *, '---'
         ! subtract elastic energy to determine hydrostatic energy. Temperature
@@ -583,27 +583,26 @@ stop
         ehmix = mixE
        ! print *, "  read energy "
         ehmix = ehmix*mixRho
-        tmp = zero
-        do imat = 1, this%ns
+       ! tmp = zero
+       do imat = 1, this%ns
         
       
-        !ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+!       ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
 
         gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
 
         ! call this%material(imat)%getSpeciesDensity(mixRho,rhom)
       
-        where( this%material(imat)%VF .lt. this%intSharp_cut)      
+        where( this%material(imat)%VF .lt. eps1)    
            !  ehmix = ehmix - gamfac*this%material(imat)%VF
            !ehmix = ehmix - gamfac*this%material(imat)%VF/mixRho
            !  tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%Ys/rhom
-            ehmix = ehmix - gamfac*(this%intSharp_cut)
-            tmp = tmp + this%material(imat)%hydro%onebygam_m1*(this%intSharp_cut)
+            ehmix = ehmix - gamfac*eps1
+            tmp = tmp + this%material(imat)%hydro%onebygam_m1*eps1
 
-         elsewhere( this%material(imat)%VF .gt. 1-this%intSharp_cut)
-
-           ehmix = ehmix - gamfac*(1-this%intSharp_cut)
-           tmp = tmp + this%material(imat)%hydro%onebygam_m1*(1-this%intSharp_cut)
+         elsewhere( this%material(imat)%VF .gt. 1+eps1)
+          ehmix = ehmix - gamfac*(1 + eps1)
+          tmp = tmp + this%material(imat)%hydro%onebygam_m1*(1 + eps1)
 
          elsewhere
 
@@ -629,7 +628,7 @@ stop
 
        enddo
 
-        mixP = ehmix/tmp
+       mixP = ehmix/tmp
 
          ! a = minloc(ehmix)
          ! print *, "  loc: ", minloc(ehmix)
@@ -659,49 +658,49 @@ stop
 
 
 !         !! Retrieve material densities
-        ! call this%material(1)%getSpeciesDensity(mixRho,rhom1)
-        ! call this%material(2)%getSpeciesDensity(mixRho,rhom2)
+!         call this%material(1)%getSpeciesDensity(mixRho,rhom1)
+!         call this%material(2)%getSpeciesDensity(mixRho,rhom2)
     
-        ! rho2gambyone = rhom2*(this%material(2)%hydro%gam -1)
-        ! rho1gambyone = rhom1*(this%material(1)%hydro%gam -1)
+!         rho2gambyone = rhom2*(this%material(2)%hydro%gam -1)
+!         rho1gambyone = rhom1*(this%material(1)%hydro%gam -1)
 
-        ! denom = 0
+!         denom = 0
          
         ! eps1 = this%intSharp_cut
           
-          ! where(this%material(1)%Ys .lt. eps1)
-           ! VF1 = 0
-        ! elsewhere(this%material(1)%Ys .gt. 1-eps1)
-        !   VF1 = 1
-        ! elsewhere
-        !   VF1 = this%material(1)%Ys
-        ! endwhere
+!        where(this%material(1)%Ys .lt. eps)
+!           VF1 = abs(this%material(1)%Ys)
+!        elsewhere(this%material(1)%Ys .gt. 1+eps)
+!           VF1 = 1 - abs(this%material(1)%Ys -1)
+!        elsewhere
+!           VF1 = this%material(1)%Ys
+!        endwhere
 
         ! eps2 = this%intSharp_cut
-        ! where(this%material(2)%Ys .lt. eps2)
-        !   VF2 = 0
-        ! elsewhere(this%material(2)%Ys .gt. 1-eps1)
-        !   VF2 = 1
-        ! elsewhere
-       !    VF2 = this%material(2)%Ys
-       !  endwhere
+!         where(this%material(2)%Ys .lt. eps)
+!           VF2 = abs(this%material(2)%Ys)
+!         elsewhere(this%material(2)%Ys .gt. 1+eps)
+!           VF2 = 1 - abs(this%material(2)%Ys - 1)
+!         elsewhere
+!           VF2 = this%material(2)%Ys
+!         endwhere
         
-       !  denom = VF1*rho2gambyone + VF2*rho1gambyone
+!         denom = VF1*rho2gambyone + VF2*rho1gambyone
 
-       !  diffPInf = this%material(1)%hydro%gam*this%material(1)%hydro%PInf - this%material(2)%hydro%gam*this%material(2)%hydro%PInf
+!         diffPInf = this%material(1)%hydro%gam*this%material(1)%hydro%PInf - this%material(2)%hydro%gam*this%material(2)%hydro%PInf
 
          !! Solve for species energys (these formulas are from Conservation of
          !Energy where emix = summation Yi*eh_i & from isobaric assumption p1 = p2 = ei*rho_i*(gam_i-1)
         
-!         e_species = this%material(1)%eh
+      !  e_species = this%material(1)%eh
 
-        ! where(this%material(2)%Ys .lt. eps)
-        !    this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*eps)/denom
-        ! elsewhere(this%material(2)%Ys .gt. (1))
-        !    this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*(1))/denom
-        ! elsewhere
-        !    this%material(1)%eh = (rho2gambyone*ehmix +  diffPInf*VF2)/denom
-        ! endwhere
+       !  where(this%material(2)%Ys .lt. eps)
+       !     this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*eps)/denom
+       !  elsewhere(this%material(2)%Ys .gt. (1))
+       !     this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*(1))/denom
+       !  elsewhere
+       !     this%material(1)%eh = (rho2gambyone*ehmix +  diffPInf*VF2)/denom
+       ! endwhere
      
          !del_e = this%material(1)%eh-e_species
          !delta_max = (s - 1)*e_species
@@ -725,7 +724,7 @@ stop
 
         ! elsewhere
 
-        !   this%material(2)%eh = (rho1gambyone*ehmix -diffPInf*VF1)/denom
+        ! this%material(2)%eh = (rho1gambyone*ehmix -diffPInf*VF1)/denom
 
        !  endwhere
         ! del_e = this%material(2)%eh-e_species
@@ -739,33 +738,33 @@ stop
         ! this%material(2)%eh = e_species + delta_e2
 
               
-       !  mixP = this%material(1)%eh*rhom1*(this%material(1)%hydro%gam -1)-this%material(1)%hydro%gam*this%material(1)%hydro%PInf
+        ! mixP = this%material(1)%eh*rhom1*(this%material(1)%hydro%gam -1)-this%material(1)%hydro%gam*this%material(1)%hydro%PInf
 
          do imat = 1, this%ns
 
-             this%material(imat)%p = mixP
+            this%material(imat)%p = mixP
             call this%material(imat)%get_ehydroT_from_p(mixRho)
             ! call this%material(imat)%getSpeciesDensity(mixRho,rhom)
 
             ! e_species = this%material(imat)%eh
 
-           ! this%material(imat)%eh = (this%material(imat)%p + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf) * this%material(imat)%hydro%onebygam_m1 / rhom
+            ! this%material(imat)%eh = (this%material(imat)%p + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf) * this%material(imat)%hydro%onebygam_m1 / rhom
 
-           !  del_e = this%material(imat)%eh-e_species
-           !  delta_max = (s - 1)*e_species
-           !  delta_min = (1/s - 1)*e_species
+            ! del_e = this%material(imat)%eh-e_species
+            ! delta_max = (s - 1)*e_species
+            ! delta_min = (1/s - 1)*e_species
 
             ! Use limitors on species energy
-           !  delta_e1 =  min( del_e, delta_max )
-           !  delta_e2 = max( delta_e1, delta_min )
+            ! delta_e1 =  min( del_e, delta_max )
+            ! delta_e2 = max( delta_e1, delta_min )
 
-           !  this%material(imat)%eh = e_species + delta_e2
+            ! this%material(imat)%eh = e_species + delta_e2
 
-           !  call this%material(imat)%hydro%get_T(this%material(imat)%eh, this%material(imat)%T, rhom)
+            ! call this%material(imat)%hydro%get_T(this%material(imat)%eh, this%material(imat)%T, rhom)
          end do
 
-        ! call this%material(1)%hydro%get_T(this%material(1)%eh,this%material(1)%T, rhom1)
-        ! call this%material(2)%hydro%get_T(this%material(2)%eh,this%material(2)%T, rhom2)
+         !call this%material(1)%hydro%get_T(this%material(1)%eh,this%material(1)%T, rhom1)
+         !call this%material(2)%hydro%get_T(this%material(2)%eh,this%material(2)%T, rhom2)
 !rint *, " call T "
     end subroutine
 

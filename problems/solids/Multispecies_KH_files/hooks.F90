@@ -19,7 +19,7 @@ module Multispecies_KH_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 10d-3, Lx = 10d-3, interface_init = 0.005d0, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 1d0, Lx = 1d0, interface_init = 1d0, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -270,10 +270,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! Set up smearing function for VF based on interface location and thickness
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 
-        delta_rho = Nvel * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
+        eta =(x-interface_init-eta0k*cos(2*pi*y/kwave))
+        !eta = x-interface_init
+        !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	tmp = (half - minVF) * ( one - erf( (x-(interface_init))/(2*delta_rho) ) )
-	
+	tmp = (half - minVF) * ( one - erf( eta/(delta_rho) ) )
 	!set mixture Volume fraction
 	mix%material(1)%VF = tmp
 	mix%material(2)%VF = 1 - mix%material(1)%VF
@@ -287,12 +288,12 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
        ! eta0k = etasize*delta
        ! kwave = ksize*delta
-        eta =(x-interface_init-eta0k*sin(2*pi*y/kwave))
         m = p_mu2/p_mu
         U0 = delta_d*(p_mu2*v0_2 +p_mu*v0)/(delta*(p_mu+p_mu2))
-
+        
 
         !set velocities based on mass fraction
+
         u   = zero
         where(eta .gt. 0)
             v = v0_2*erf(eta/delta)      !+ U0*(1 - erf(eta/delta_d))
@@ -589,42 +590,42 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         endif
 
         ! apply sponge at left and right boundaries to damp outgoing waves
-        xspngL = 0.15d0*Lx
-        xspngR = 0.85d0*Lx
-        tspng = 0.03d0
-        dx = x(2,1,1) - x(1,1,1)
-        dumL = half*(one - tanh( (x-xspngL)/(tspng) ))
-        dumR = half*(one + tanh( (x-xspngR)/(tspng) ))
-        dum  = dumL+dumR
+        !xspngL = 0.15d0*Lx
+        !xspngR = 0.85d0*Lx
+        !tspng = 0.03d0
+        !dx = x(2,1,1) - x(1,1,1)
+        !dumL = half*(one - tanh( (x-xspngL)/(tspng) ))
+        !dumR = half*(one + tanh( (x-xspngR)/(tspng) ))
+        !dum  = dumL+dumR
 
-        do i=1,4
-            tmp = u
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            u = u + dum*(tmp - u)
+        !do i=1,4
+        !    tmp = u
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    u = u + dum*(tmp - u)
 
-            tmp = v
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            v = v + dum*(tmp - v)
+        !    tmp = v
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    v = v + dum*(tmp - v)
 
-            tmp = w
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            w = w + dum*(tmp - w)
+        !    tmp = w
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    w = w + dum*(tmp - w)
 
-            tmp = e
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            e = e + dum*(tmp - e)
+        !    tmp = e
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    e = e + dum*(tmp - e)
 
-            tmp = rho
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            rho = rho + dum*(tmp - rho)
+        !    tmp = rho
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    rho = rho + dum*(tmp - rho)
 
-            tmp = mix%material(1)%p
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+        !    tmp = mix%material(1)%p
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
 
-            tmp = mix%material(2)%p
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+        !    tmp = mix%material(2)%p
+        !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        !    mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
 
             ! TODO: delete tmp = mix%material(1)%pe
             ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
@@ -634,14 +635,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
             ! TODO: delete mix%material(2)%pe = mix%material(2)%pe + dum*(tmp - mix%material(2)%pe)
 
-            do j = 1,9
-                tmp = mix%material(1)%g(:,:,:,j)
-                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-                mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
+!            do j = 1,9
+!                tmp = mix%material(1)%g(:,:,:,j)
+!                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!                mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
 
-                tmp = mix%material(2)%g(:,:,:,j)
-                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-                mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
+!                tmp = mix%material(2)%g(:,:,:,j)
+!                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!                mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
 
                 ! TODO: delete tmp = mix%material(1)%g_t(:,:,:,j)
                 ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
@@ -658,31 +659,31 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                 ! TODO: delete tmp = mix%material(2)%g_p(:,:,:,j)
                 ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
                 ! TODO: delete mix%material(2)%g_p(:,:,:,j) = mix%material(2)%g_p(:,:,:,j) + dum*(tmp - mix%material(2)%g_p(:,:,:,j))
-            end do
+!            end do
 
             !mca add for stability
 
-            !tmp = T
-            !call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            !T = T + dum*(tmp - T)
+         !   tmp = T
+         !   call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+         !   T = T + dum*(tmp - T)
 
-            tmp = mix%material(1)%T
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%T = mix%material(1)%T + dum*(tmp - mix%material(1)%T)
+         !   tmp = mix%material(1)%T
+         !   call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+         !   mix%material(1)%T = mix%material(1)%T + dum*(tmp - mix%material(1)%T)
 
-            tmp = mix%material(2)%T
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%T = mix%material(2)%T + dum*(tmp - mix%material(2)%T)
+         !   tmp = mix%material(2)%T
+         !   call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+         !   mix%material(2)%T = mix%material(2)%T + dum*(tmp - mix%material(2)%T)
 
-            tmp = mix%material(1)%Ys
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%Ys = mix%material(1)%Ys + dum*(tmp - mix%material(1)%Ys)
+         !   tmp = mix%material(1)%Ys
+         !   call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+         !   mix%material(1)%Ys = mix%material(1)%Ys + dum*(tmp - mix%material(1)%Ys)
 
-            tmp = mix%material(2)%Ys
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
+         !   tmp = mix%material(2)%Ys
+         !   call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+         !   mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
 
-        end do
+       ! end do
 
     end associate
 end subroutine

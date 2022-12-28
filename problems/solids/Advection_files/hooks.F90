@@ -19,7 +19,7 @@ module Advection_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1d0, Lx = 0.25d0, interface_init = 1d0, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 1d0, Lx = 0.25d0, interface_init = 0.5d0, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -270,7 +270,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! Set up smearing function for VF based on interface location and thickness
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 
-        eta =(y-interface_init-eta0k*sin(2*pi*y/kwave))
+        eta =(y-interface_init)
         !eta = x-interface_init
         !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
@@ -298,7 +298,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         !mix%material(1)%p  = (p_amb +p_disturb)*tmp2+p_amb
         mix%material(1)%p = p_amb
         mix%material(2)%p  = mix%material(1)%p
-        
+!        mix%material(1)%T = 298
+!        mix%material(2)%T = 298
+         
         ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -309,14 +311,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         !Stuff for boundary conditions
-        rhoL = rho(1,1,1)
-        rhoR = rho(decomp%ysz(1),1,1)
-        vL = v(1,1,1)
-        vR = v(decomp%ysz(1),1,1)
-        YsL  = mix%material(1)%Ys(1,1,1)
-        YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
-        VFL  = mix%material(1)%VF(1,1,1)
-        VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
+        !rhoL = rho(1,1,1)
+        !rhoR = rho(decomp%ysz(1),1,1)
+        !vL = v(1,1,1)
+        !vR = v(decomp%ysz(1),1,1)
+        !YsL  = mix%material(1)%Ys(1,1,1)
+        !YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
+        !VFL  = mix%material(1)%VF(1,1,1)
+        !VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
 
         !TODO: delete this block
         !Set gt and gp to identity
@@ -696,7 +698,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-    real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     type(solid_mixture),             intent(in) :: mix
     integer                                     :: imin, ind(1)
 
@@ -706,7 +708,10 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-
+    !    v = 5
+    !    u = 0
+    !    w = 0
+    !    p = p_amb
         ! ! determine interface velocity
         ! ind = minloc(abs(mix%material(1)%VF(:,1,1)-0.5d0))
         ! imin = ind(1)
