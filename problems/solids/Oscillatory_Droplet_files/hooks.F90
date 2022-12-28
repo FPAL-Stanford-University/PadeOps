@@ -19,8 +19,8 @@ module Oscillatory_Droplet_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1d0, Lx = 1d0, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 0.3
-    real(rkind) :: tau0_2=1d0, Nvel=1d0, etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
+    real(rkind) :: Ly = 8, Lx = 8, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 1
+    real(rkind) :: tau0_2=1d0, Nvel=1d0, minYs,etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
 
 
     type(filters) :: mygfil
@@ -279,17 +279,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         ! speed of sound
         a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-        a2 = sqrt((gamma*(p2+p_infty_2) + 4.0d0/3.0d0*mu)/rho2)
+        a2 = sqrt((gamma*(p2+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2)
 
         
  	        ! Set up smearing function for VF based on interface location and thickness
        ! p = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	!eta = ((x - 4)**2)/(1.25)**2 + ((y - 4)**2)/(0.8)**2
-         eta = ((x-0.5)**2 + (y-0.5)**2)	
-tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick*dx) ) )
+	eta = sqrt(((x - 4)**2)/(1.25)**2 + ((y - 4)**2)/(0.8)**2)
 
+        !eta = ((x-2)**2 + (y-0.5)**2)	
+
+        tmp = (half-minVF)  * ( one + tanh( (eta-(R))/(thick*dx) ) )
+      ! rad =  0.15825
         !set mixture Volume fraction
         !eta = (x - 1)**2 + (y - 0.75)**2
         !where( (eta .le. (R)**2  )
@@ -301,6 +303,8 @@ tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick*dx) ) )
 	rho = rho_0*mix%material(1)%VF + rho_0_2*mix%material(2)%VF
 	mix%material(2)%Ys = mix%material(2)%VF * rho_0_2 / rho
 	mix%material(1)%Ys = one - mix%material(2)%Ys ! Enforce sum to unity
+
+        minYs = minVF*rho_0
 
 
         !set velocities
@@ -327,13 +331,12 @@ tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick*dx) ) )
 	v = 0
 	w = 0
 
-	 tmp2 = (half-minVF)  * ( one + tanh( (eta-((R-thick)**2))/(0.001) ) )
 
         !set mixture pressure (uniform)
 	mix%material(1)%p = p_amb+p_ten*mix%material(1)%VF
 	mix%material(2)%p = mix%material(1)%p
 
-     ! Set initial values of g (inverse deformation gradient)
+        ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
         mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
@@ -342,9 +345,8 @@ tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick*dx) ) )
         mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
 	mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-
-
-
+        rhoL = rho_0_2
+        rhoR = rho_0_2
 
         !gt should be same as g
         mix%material(1)%gt11 = one;  mix%material(1)%gt12 = zero; mix%material(1)%gt13 = zero
@@ -690,171 +692,84 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         if(decomp%yst(1)==1) then
-         if(x_bc(1)==0) then
-              rho( 1,:,:) = 1
-              u  ( 1,:,:) =  0
-              v  ( 1,:,:) = zero
+          if(x_bc(1)==0) then
+              rho( 1,:,:) = rhoL
+              u  ( 1,:,:) = zero
+              v  ( 1,:,:) = 0
               w  ( 1,:,:) = zero
-           !   do i=1,5
-                  mix%material(1)%p( 1,:,:) = p_amb
-                  mix%material(2)%p( 1,:,:) = p_amb
-           !   end do
-              
-              ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-              ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
-              ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
-  
-              ! mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12( 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
-              ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
-              ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
-              
-               mix%material(1)%Ys ( 1,:,:) = minVF
-               mix%material(2)%Ys ( 1,:,:) = one - minVF
-  
+              mix%material(1)%p(1,:,:) = p_amb
+              mix%material(2)%p(1,:,:) = p_amb
+        !      
               mix%material(1)%VF ( 1,:,:) = minVF
               mix%material(2)%VF ( 1,:,:) = one - minVF
+              mix%material(1)%Ys ( 1,:,:) = minYs
+              mix%material(2)%Ys ( 1,:,:) = one - minYs
           end if
         endif
 
-
-      if(decomp%yen(1)==decomp%xsz(1)) then
+        if(decomp%yen(1)==decomp%xsz(1)) then
           if(x_bc(2)==0) then
-        !      rho( nx,:,:) = rhoR
-        !      u  ( nx,:,:) = zero
-        !      v  ( nx,:,:) = vR
-        !      w  ( nx,:,:) = zero
-        !      mix%material(1)%p(nx,:,:) = p_amb
-        !      mix%material(2)%p(nx,:,:) = p_amb
-        !
-
-              rho( nx,:,:) = 1
-              u  ( nx,:,:) =  0
-              v  ( nx,:,:) = zero
+              rho( nx,:,:) = rhoR
+              u  ( nx,:,:) = zero
+              v  ( nx,:,:) = 0
               w  ( nx,:,:) = zero
-           !   do i=1,5
-                  mix%material(1)%p( nx,:,:) = p_amb
-                  mix%material(2)%p( nx,:,:) = p_amb
-           !   end do
-
-              ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12(
-              ! 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-              ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:)
-              ! = one;  mix%material(1)%g23( 1,:,:) = zero
-              ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:)
-              ! = zero; mix%material(1)%g33( 1,:,:) = one
-
-              ! mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12(
-              ! 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
-              ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:)
-              ! = one;  mix%material(2)%g23( 1,:,:) = zero
-              ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:)
-              ! = zero; mix%material(2)%g33( 1,:,:) = one
-
-               mix%material(1)%Ys ( nx,:,:) = minVF
-               mix%material(2)%Ys ( nx,:,:) = one - minVF
+              mix%material(1)%p(nx,:,:) = p_amb
+              mix%material(2)%p(nx,:,:) = p_amb
 
               mix%material(1)%VF ( nx,:,:) = minVF
               mix%material(2)%VF ( nx,:,:) = one - minVF
-
+              mix%material(1)%Ys ( nx,:,:) = minYs
+              mix%material(2)%Ys ( nx,:,:) = one - minYs
           end if
         endif
 
         if(decomp%yst(2)==1) then
           if(y_bc(1)==0) then
-        !      rho( 1,:,:) = rhoL
-        !      u  ( 1,:,:) = zero
-        !      v  ( 1,:,:) = vL
-        !      w  ( 1,:,:) = zero
-        !      mix%material(1)%p(1,:,:) = p_amb
-        !      mix%material(2)%p(1,:,:) = p_amb
-        !
-              rho( :,1,:) = 1
-              u  ( :,1,:) =  0
-              v  ( :,1,:) = zero
+              rho( :,1,:) = rhoL
+              u  ( :,1,:) = zero
+              v  ( :,1,:) = 0
               w  ( :,1,:) = zero
-           !   do i=1,5
-                  mix%material(1)%p( :,1,:) = p_amb
-                  mix%material(2)%p( :,1,:) = p_amb
-           !   end do
-
-              ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12(
-              ! 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-              ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:)
-              ! = one;  mix%material(1)%g23( 1,:,:) = zero
-              ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:)
-              ! = zero; mix%material(1)%g33( 1,:,:) = one
-
-              ! mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12(
-              ! 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
-              ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:)
-              ! = one;  mix%material(2)%g23( 1,:,:) = zero
-              ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:)
-              ! = zero; mix%material(2)%g33( 1,:,:) = one
-
-               mix%material(1)%Ys ( :,1,:) = minVF
-               mix%material(2)%Ys ( :,1,:) = one - minVF
-
+              mix%material(1)%p(:,1,:) = p_amb
+              mix%material(2)%p(:,1,:) = p_amb
+        !
               mix%material(1)%VF ( :,1,:) = minVF
               mix%material(2)%VF ( :,1,:) = one - minVF
-
+              mix%material(1)%Ys ( :,1,:) = minYs
+              mix%material(2)%Ys ( :,1,:) = one - minYs
           end if
-        endif
+        end if
 
-
-if(decomp%yen(2)==decomp%ysz(2)) then
+       if(decomp%yen(2)==decomp%ysz(2)) then
           if(y_bc(2)==0) then
-        !      rho( nx,:,:) = rhoR
-        !      u  ( nx,:,:) = zero
-        !      v  ( nx,:,:) = vR
-        !      w  ( nx,:,:) = zero
-        !      mix%material(1)%p(nx,:,:) = p_amb
-        !      mix%material(2)%p(nx,:,:) = p_amb
-        !
-              rho( :,ny,:) = 1
-              u  ( :,ny,:) =  0
+              rho( :,ny,:) = rhoR
+              u  ( :,ny,:) = zero
               v  ( :,ny,:) = zero
               w  ( :,ny,:) = zero
-           !   do i=1,5
-                  mix%material(1)%p( :,ny,:) = p_amb
-                  mix%material(2)%p( :,ny,:) = p_amb
-           !   end do
-
-              ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12(
-              ! 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
-              ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:)
-              ! = one;  mix%material(1)%g23( 1,:,:) = zero
-              ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:)
-              ! = zero; mix%material(1)%g33( 1,:,:) = one
-
-              ! mix%material(2)%g11( 1,:,:) = rho2/rho_0;  mix%material(2)%g12(
-              ! 1,:,:) = zero; mix%material(2)%g13( 1,:,:) = zero
-              ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:)
-              ! = one;  mix%material(2)%g23( 1,:,:) = zero
-              ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:)
-              ! = zero; mix%material(2)%g33( 1,:,:) = one
-
-               mix%material(1)%Ys ( :,ny,:) = minVF
-               mix%material(2)%Ys ( :,ny,:) = one - minVF
-
+              mix%material(1)%p(:,ny,:) = p_amb
+              mix%material(2)%p(:,ny,:) = p_amb
+        !
               mix%material(1)%VF ( :,ny,:) = minVF
               mix%material(2)%VF ( :,ny,:) = one - minVF
-
+              mix%material(1)%Ys ( :,ny,:) = minYs
+              mix%material(2)%Ys ( :,ny,:) = one - minYs
           end if
         endif
+
+
+
 
         !xspng = -two + half
         !tspng = 0.2_rkind
         !dx = x(2,1,1) - x(1,1,1)
         !dum = half*(one - tanh( (x-xspng)/(tspng) ))
-        xspngL = 0.15d0*Lx
-        xspngR = 0.85d0*Lx
-        tspng = 0.03d0
+
+        xspngL = 0.20
+        xspngR = Lx -xspngL
+        dx = x(2,1,1) - x(1,1,1)
+        tspng = 0.04
         dx = x(2,1,1) - x(1,1,1)
         dumL = half*(one - tanh( (x-xspngL)/(tspng) ))+ half*(one - tanh((y-xspngL)/(tspng) ))
-
-        dumR = half*(one + tanh( (x-xspngR)/(tspng) )) + half*(one + tanh((y-xspngR)/(tspng) ))
-
-        
+        dumR = half*(one + tanh( (x-xspngR)/(tspng) )) + half*(one + tanh((y-xspngR)/(tspng) ))       
         dum  = dumL+dumR
 
 
@@ -1020,8 +935,6 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-
-
     end associate
 end subroutine
 

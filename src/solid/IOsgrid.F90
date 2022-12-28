@@ -351,9 +351,55 @@ contains
             call update_halo(mix%material(imat)%diff_pe,tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_diff_pe',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%rhom,tmp1,1,gp,.FALSE.)
+            E_IO =VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_rhom',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+           
+            call update_halo(mix%xi(:,:,:,imat),tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_xi',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+         !   call update_halo(mix%VF_fil(:,:,:,imat),tmp1,1,gp,.FALSE.)
+         !   E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_VFfil',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         !   if( allocated(tmp1) ) deallocate(tmp1)
+
                
          end do
 
+         
+         call update_halo(mix%gradp(:,:,:,1),tmp1,1,gp,.FALSE.)
+         E_IO=VTK_VAR_XML(NC_NN=nn,varname='gradp_x',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         if( allocated(tmp1) ) deallocate(tmp1)
+
+
+         call update_halo(mix%gradp(:,:,:,2),tmp1,1,gp,.FALSE.)
+         E_IO=VTK_VAR_XML(NC_NN=nn,varname='gradp_y',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         if( allocated(tmp1) ) deallocate(tmp1)
+
+         call update_halo(mix%gradp(:,:,:,3),tmp1,1,gp,.FALSE.)
+         E_IO=VTK_VAR_XML(NC_NN=nn,varname='gradp_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         if( allocated(tmp1) ) deallocate(tmp1)
+   
+
+         call update_halo(mix%norm(:,:,:,1),tmp1,1,gp,.FALSE.)
+         E_IO =VTK_VAR_XML(NC_NN=nn,varname='norm_1x',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         if( allocated(tmp1) ) deallocate(tmp1)
+
+
+         call update_halo(mix%norm(:,:,:,2),tmp1,1,gp,.FALSE.)
+         E_IO =VTK_VAR_XML(NC_NN=nn,varname='norm_1y',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         if( allocated(tmp1) ) deallocate(tmp1)
+
+         call update_halo(mix%norm(:,:,:,3),tmp1,1,gp,.FALSE.)
+         E_IO =VTK_VAR_XML(NC_NN=nn,varname='norm_1z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         if( allocated(tmp1) ) deallocate(tmp1)
+        
+         call update_halo(mix%antidiff(:,:,:),tmp1,1,gp,.FALSE.)
+         E_IO=VTK_VAR_XML(NC_NN=nn,varname='antidiff',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         if( allocated(tmp1) ) deallocate(tmp1)
+
+ 
          !surface tension terms
          if(mix%use_surfaceTension) then
             call update_halo(mix%kappa,tmp1,1,gp,.FALSE.)
@@ -376,6 +422,18 @@ contains
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='norm_x',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
 
+           ! call update_halo(mix%gradp(:,:,:,2),tmp1,1,gp,.FALSE.)
+           ! E_IO =VTK_VAR_XML(NC_NN=nn,varname='gradp_y',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+           ! if( allocated(tmp1) ) deallocate(tmp1)
+
+           ! call update_halo(mix%gradp(:,:,:,3),tmp1,1,gp,.FALSE.)
+           ! E_IO = VTK_VAR_XML(NC_NN=nn,varname='gradp_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+           ! if( allocated(tmp1) ) deallocate(tmp1)
+
+           ! call update_halo(mix%gradp(:,:,:,1),tmp1,1,gp,.FALSE.)
+           ! E_IO = VTK_VAR_XML(NC_NN=nn,varname='gradp_x',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+           ! if( allocated(tmp1) ) deallocate(tmp1)
+
 
             call update_halo(mix%norm(:,:,:,2),tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='norm_y',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
@@ -384,6 +442,7 @@ contains
             call update_halo(mix%norm(:,:,:,3),tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='norm_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
+
        
             call update_halo(mix%surfaceTension_f(:, :, :, 1),tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fx',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
@@ -403,10 +462,7 @@ contains
             call update_halo(mix%surfaceTension_e,tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_e',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
-
-
-
-  
+       
        endif
 
         E_IO = VTK_DAT_XML(var_location='node',var_block_action='close')
