@@ -54,7 +54,7 @@ module SolidMixtureMod
         
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa
-        real(rkind), allocatable, dimension(:,:,:,:) :: norm, gradp
+        real(rkind), allocatable, dimension(:,:,:,:) :: norm, gradp, gradVF
 	real(rkind), allocatable, dimension(:,:,:)   :: phi
         real(rkind), allocatable, dimension(:,:,:)   :: fmask, antidiff
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_send_1, buffer_send_k_1
@@ -286,6 +286,9 @@ contains
         if(allocated(this%gradp)) deallocate(this%gradp)
         allocate(this%gradp(this%nxp, this%nyp, this%nzp, 3))
 
+        if(allocated(this%gradVF)) deallocate(this%gradVF)
+        allocate(this%gradVF(this%nxp, this%nyp, this%nzp, 3))
+
         if(allocated(this%kappa)) deallocate(this%kappa)
         allocate(this%kappa(this%nxp, this%nyp, this%nzp))
 
@@ -366,6 +369,7 @@ contains
         if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
         if(allocated(this%norm)) deallocate(this%norm)
         if(allocated(this%gradp)) deallocate(this%gradp)
+        if(allocated(this%gradVF)) deallocate(this%gradVF)
         if(allocated(this%kappa)) deallocate(this%kappa)
 	if(allocated(this%buffer_send_1)) deallocate(this%buffer_send_1)
         if(allocated(this%buffer_send_2)) deallocate(this%buffer_send_2)
@@ -596,6 +600,7 @@ stop
         ehmix = mixE
        ! print *, "  read energy "
         ehmix = ehmix*mixRho
+       do imat = 1, this%ns
         tmp = zero
 
         thresh = eps
@@ -628,7 +633,7 @@ stop
              this%material(2)%VF = 1-thresh
              this%material(2)%Ys = 1-thresh/this%material(1)%elastic%rho0
         endwhere
-
+        enddo
 
        ! cutoff = 1d-5
        ! where( this%material(1)%Ys .LE. cutoff*this%material(1)%elastic%rho0)
@@ -648,7 +653,7 @@ stop
         do imat = 1, this%ns
         
       
-        !ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
+!       ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
 
         gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
 
@@ -690,7 +695,7 @@ stop
 
        enddo
 
-        mixP = ehmix/tmp
+       mixP = ehmix/tmp
 
          ! a = minloc(ehmix)
          ! print *, "  loc: ", minloc(ehmix)
@@ -728,49 +733,49 @@ stop
 
 
 !         !! Retrieve material densities
-        ! call this%material(1)%getSpeciesDensity(mixRho,rhom1)
-        ! call this%material(2)%getSpeciesDensity(mixRho,rhom2)
+!         call this%material(1)%getSpeciesDensity(mixRho,rhom1)
+!         call this%material(2)%getSpeciesDensity(mixRho,rhom2)
     
-        ! rho2gambyone = rhom2*(this%material(2)%hydro%gam -1)
-        ! rho1gambyone = rhom1*(this%material(1)%hydro%gam -1)
+!         rho2gambyone = rhom2*(this%material(2)%hydro%gam -1)
+!         rho1gambyone = rhom1*(this%material(1)%hydro%gam -1)
 
-        ! denom = 0
+!         denom = 0
          
         ! eps1 = this%intSharp_cut
           
-          ! where(this%material(1)%Ys .lt. eps1)
-           ! VF1 = 0
-        ! elsewhere(this%material(1)%Ys .gt. 1-eps1)
-        !   VF1 = 1
-        ! elsewhere
-        !   VF1 = this%material(1)%Ys
-        ! endwhere
+!        where(this%material(1)%Ys .lt. eps)
+!           VF1 = abs(this%material(1)%Ys)
+!        elsewhere(this%material(1)%Ys .gt. 1+eps)
+!           VF1 = 1 - abs(this%material(1)%Ys -1)
+!        elsewhere
+!           VF1 = this%material(1)%Ys
+!        endwhere
 
         ! eps2 = this%intSharp_cut
-        ! where(this%material(2)%Ys .lt. eps2)
-        !   VF2 = 0
-        ! elsewhere(this%material(2)%Ys .gt. 1-eps1)
-        !   VF2 = 1
-        ! elsewhere
-       !    VF2 = this%material(2)%Ys
-       !  endwhere
+!         where(this%material(2)%Ys .lt. eps)
+!           VF2 = abs(this%material(2)%Ys)
+!         elsewhere(this%material(2)%Ys .gt. 1+eps)
+!           VF2 = 1 - abs(this%material(2)%Ys - 1)
+!         elsewhere
+!           VF2 = this%material(2)%Ys
+!         endwhere
         
-       !  denom = VF1*rho2gambyone + VF2*rho1gambyone
+!         denom = VF1*rho2gambyone + VF2*rho1gambyone
 
-       !  diffPInf = this%material(1)%hydro%gam*this%material(1)%hydro%PInf - this%material(2)%hydro%gam*this%material(2)%hydro%PInf
+!         diffPInf = this%material(1)%hydro%gam*this%material(1)%hydro%PInf - this%material(2)%hydro%gam*this%material(2)%hydro%PInf
 
          !! Solve for species energys (these formulas are from Conservation of
          !Energy where emix = summation Yi*eh_i & from isobaric assumption p1 = p2 = ei*rho_i*(gam_i-1)
         
-!         e_species = this%material(1)%eh
+      !  e_species = this%material(1)%eh
 
-        ! where(this%material(2)%Ys .lt. eps)
-        !    this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*eps)/denom
-        ! elsewhere(this%material(2)%Ys .gt. (1))
-        !    this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*(1))/denom
-        ! elsewhere
-        !    this%material(1)%eh = (rho2gambyone*ehmix +  diffPInf*VF2)/denom
-        ! endwhere
+       !  where(this%material(2)%Ys .lt. eps)
+       !     this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*eps)/denom
+       !  elsewhere(this%material(2)%Ys .gt. (1))
+       !     this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*(1))/denom
+       !  elsewhere
+       !     this%material(1)%eh = (rho2gambyone*ehmix +  diffPInf*VF2)/denom
+       ! endwhere
      
          !del_e = this%material(1)%eh-e_species
          !delta_max = (s - 1)*e_species
@@ -794,7 +799,7 @@ stop
 
         ! elsewhere
 
-        !   this%material(2)%eh = (rho1gambyone*ehmix -diffPInf*VF1)/denom
+        ! this%material(2)%eh = (rho1gambyone*ehmix -diffPInf*VF1)/denom
 
        !  endwhere
         ! del_e = this%material(2)%eh-e_species
@@ -808,7 +813,7 @@ stop
         ! this%material(2)%eh = e_species + delta_e2
 
               
-       !  mixP = this%material(1)%eh*rhom1*(this%material(1)%hydro%gam -1)-this%material(1)%hydro%gam*this%material(1)%hydro%PInf
+        ! mixP = this%material(1)%eh*rhom1*(this%material(1)%hydro%gam -1)-this%material(1)%hydro%gam*this%material(1)%hydro%PInf
 
          do imat = 1, this%ns
 
@@ -818,23 +823,23 @@ stop
 
             ! e_species = this%material(imat)%eh
 
-           ! this%material(imat)%eh = (this%material(imat)%p + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf) * this%material(imat)%hydro%onebygam_m1 / rhom
+            ! this%material(imat)%eh = (this%material(imat)%p + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf) * this%material(imat)%hydro%onebygam_m1 / rhom
 
-           !  del_e = this%material(imat)%eh-e_species
-           !  delta_max = (s - 1)*e_species
-           !  delta_min = (1/s - 1)*e_species
+            ! del_e = this%material(imat)%eh-e_species
+            ! delta_max = (s - 1)*e_species
+            ! delta_min = (1/s - 1)*e_species
 
             ! Use limitors on species energy
-           !  delta_e1 =  min( del_e, delta_max )
-           !  delta_e2 = max( delta_e1, delta_min )
+            ! delta_e1 =  min( del_e, delta_max )
+            ! delta_e2 = max( delta_e1, delta_min )
 
-           !  this%material(imat)%eh = e_species + delta_e2
+            ! this%material(imat)%eh = e_species + delta_e2
 
-           !  call this%material(imat)%hydro%get_T(this%material(imat)%eh, this%material(imat)%T, rhom)
-         end do
+            ! call this%material(imat)%hydro%get_T(this%material(imat)%eh, this%material(imat)%T, rhom)
+         enddo
 
-        ! call this%material(1)%hydro%get_T(this%material(1)%eh,this%material(1)%T, rhom1)
-        ! call this%material(2)%hydro%get_T(this%material(2)%eh,this%material(2)%T, rhom2)
+         !call this%material(1)%hydro%get_T(this%material(1)%eh,this%material(1)%T, rhom1)
+         !call this%material(2)%hydro%get_T(this%material(2)%eh,this%material(2)%T, rhom2)
 !rint *, " call T "
     end subroutine
 
@@ -3249,7 +3254,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
     subroutine get_surfaceTension(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
-        use operators, only: divergence,gradient,filter3D !, laplacian
+        use operators, only: divergence,gradient,filter3D, laplacian
         use constants,       only: zero,epssmall,eps,one,two,third,half
         use exits,           only: GracefulExit
         use reductions, only : P_MAXVAL
@@ -3285,6 +3290,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 
         call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+        this%gradVF = gradVF
         call gradient(this%decomp,this%der,this%material(1)%p,this%gradp(:,:,:,1),this%gradp(:,:,:,2),this%gradp(:,:,:,3))
 !high order derivative
  
@@ -3320,7 +3326,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 		  call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
               	  call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
 	          call divergenceFV(this,NMint, this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-                
+                  call divergence(this%decomp,this%derD02,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
                 else if (this%use_D04) then
                   call divergence(this%decomp,this%derD04,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
                 else		!kappa, divergence of surface normal	
@@ -3384,10 +3390,11 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
          ! call filter3D(this%decomp, this%gfil, this%norm(:,:,:,3),iflag,x_bc,y_bc,z_bc)
 
          if(this%use_FV) then
-            call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
-            call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
-            call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
-            call divergenceFV(this,NMint,this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+           ! call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
+           ! call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
+           ! call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
+           ! call divergenceFV(this,NMint,this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call divergence(this%decomp,this%derD02,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
          else if(this%use_D04) then
             call divergence(this%decomp,this%derD04,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
          else
@@ -3612,7 +3619,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
        endif
 
        
-       where( (this%material(1)%VF .LE. 5d-3) .OR. (this%material(1)%VF .GE. (1-5d-3)))
+       where( (this%material(1)%VF .LE. 5d-6) .OR. (this%material(1)%VF .GE. (1-5d-6)))
 
           this%kappa = 0
 
@@ -3628,20 +3635,21 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 	 !his%fmask = 1 - (1 - 4*this%material(1)%VF*(1-this%material(1)%VF))**nmask 
 	 !this%fmask = tanh( ( ((this%material(1)%VF-minVF)*(one-this%material(1)%VF-minVF)) / tmask)**two )
 
-        where (this%material(1)%VF .LE. (one-minVF))
-                mask2 = one
-        elsewhere (this%material(1)%VF .GT. (one-minVF))
-                mask2 = eps
-        elsewhere (this%material(1)%VF .LE. minVF)
-                mask2 = eps
-        endwhere
+       ! where (this%material(1)%VF .GT. (one-1d-5))
+       !         mask2 = 0
+       ! elsewhere (this%material(1)%VF .LE. 1d-5)
+       !         mask2 = 0
+       ! elsewhere
+       !         mask2 = one
+       ! endwhere
 
         !his%maskKappa = this%fmask*this%kappa*mask2
 	!TODO: Compute surface tension force and store in this%surfaceTension_f
         this%surfaceTension_f(:,:,:,1) = -6*this%surfaceTension_coeff*this%fmask*this%kappa*gradVF(:,:,:,1)
         this%surfaceTension_f(:,:,:,2) = -6*this%surfaceTension_coeff*this%fmask*this%kappa*gradVF(:,:,:,2)
         this%surfaceTension_f(:,:,:,3) = -6*this%surfaceTension_coeff*this%fmask*this%kappa*gradVF(:,:,:,3)
-
+          
+        this%maskKappa = this%fmask*this%kappa 
 
 	else
 
@@ -3662,16 +3670,22 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         if(this%energy_surfTen) then
        
-      !   call laplacian(this%material(1)%VF, lapVF, x_bc, y_bc, z_bc)
-      !  mu =6*this%surfaceTension_coeff/this%intSharp_eps*this%material(1)%VF*(1-this%material(1)%VF)*(1-2*this%material(1)%VF) &
-      !      - 6*this%surfaceTension_coeff*this%intSharp_eps*lapVF
+           if(this%use_FV) then
+              call laplacian(this%decomp,this%derD02,this%material(1)%VF, lapVF,[0,0],[0,0],[0,0])
+           else if(this%use_D04) then
+              call laplacian(this%decomp,this%derD04,this%material(1)%VF, lapVF,[0,0],[0,0],[0,0])
+           else
+              call laplacian(this%decomp,this%der,this%material(1)%VF, lapVF, [0,0],[0,0],[0,0]) 
+           end if
 
-      !  this%surfaceTension_f(:,:,:,1) = mu*gradVF(:,:,:,1)
-      !  this%surfaceTension_f(:,:,:,2) = mu*gradVF(:,:,:,2)
-      !  this%surfaceTension_f(:,:,:,3) = mu*gradVF(:,:,:,3)
+           mu =6*this%surfaceTension_coeff/this%intSharp_eps*this%material(1)%VF*(1-this%material(1)%VF)*(1-2*this%material(1)%VF) &
+            - 6*this%surfaceTension_coeff*this%intSharp_eps*lapVF
 
-
-
+           this%surfaceTension_f(:,:,:,1) = mu*gradVF(:,:,:,1)
+           this%surfaceTension_f(:,:,:,2) = mu*gradVF(:,:,:,2)
+           this%surfaceTension_f(:,:,:,3) = mu*gradVF(:,:,:,3)
+           this%fmask = lapVF
+           this%kappa = mu
         endif
 
      !  do i = 1, 3
@@ -3683,10 +3697,14 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
 	this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
 
-      ! call filter3D(this%decomp, this%fil,this%surfaceTension_e,iflag,x_bc,y_bc,z_bc)
-      ! call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,1),iflag,x_bc,y_bc,z_bc)
-      ! call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,2),iflag,x_bc,y_bc,z_bc)
-      ! call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,3),iflag,x_bc,y_bc,z_bc)
+    !  call filter3D(this%decomp, this%fil,this%surfaceTension_e,iflag,x_bc,y_bc,z_bc)
+    !  call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,1),iflag,x_bc,y_bc,z_bc)
+    !  call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,2),iflag,x_bc,y_bc,z_bc)
+    !  call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,3),iflag,x_bc,y_bc,z_bc)
+      
+    !  call filter3D(this%decomp, this%fil,this%gradp(:,:,:,1),iflag,x_bc,y_bc,z_bc)
+    !  call filter3D(this%decomp, this%fil,this%gradp(:,:,:,2),iflag,x_bc,y_bc,z_bc)
+    !  call filter3D(this%decomp, this%fil,this%gradp(:,:,:,3),iflag,x_bc,y_bc,z_bc)
 
 
 
