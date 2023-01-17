@@ -4789,14 +4789,10 @@ contains
            rhsVF = rhsVF + u*tmp1 + v*tmp2 + w*tmp3
 
         else
-<<<<<<< HEAD
         !   call secondder(this%VF,tmp4,tmp5,tmp6,[0,0],[0,0],[0,0])
  
            rhsVF = -rhsVF/this%rhom + u*tmp1 + v*tmp2 + w*tmp3! + this%physmu*(tmp4 + tmp5 + tmp6)
-=======
       
-           rhsVF = -rhsVF/this%rhom + tmp4 + this%VF*tmp5 
->>>>>>> d0f67177b2fb56f1796bddaf45c05e60d8858b5b
        endif
 
 
@@ -4992,11 +4988,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: Ys_0, VF_0,Ys_fil,mask,VF_fil
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhom 
         integer :: i, j ,k, iflag = one
-<<<<<<< HEAD
-        real(rkind) :: eps1 = 1d-10, eps2 = 1.70,  minVF = 1d-6 , n = 1 
-=======
         real(rkind) :: eps1 = 1d-12, eps2 = 0.70,threshold, minVF = 1d-6 , n = 1 
->>>>>>> d0f67177b2fb56f1796bddaf45c05e60d8858b5b
         ! Get detg in rhom
         rhom = this%g11*(this%g22*this%g33-this%g23*this%g32) &
              - this%g12*(this%g21*this%g33-this%g31*this%g23) &
@@ -5006,28 +4998,10 @@ contains
             rhom = sqrt(rhom)
         end if
   
-<<<<<<< HEAD
 
        !! Clipping Ys and VF !!
 
        ! eps2 = eps1/this%elastic%rho0 
-    
-        where(this%Ys .LT. ((eps1*this%elastic%rho0)/rho))
-             Ys_0 = (eps1*this%elastic%rho0)/rho
-        elsewhere
-             Ys_0 = this%Ys
-        endwhere
-
-       !! clip negative and zero values !!
-       where(this%VF .LT. eps1)
-
-          VF_0 = eps1
-
-       elsewhere
-
-          VF_0 = this%VF      
-
-       endwhere
 
 
        !! clip negative and zero values !!

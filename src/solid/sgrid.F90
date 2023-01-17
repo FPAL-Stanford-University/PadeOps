@@ -1219,8 +1219,9 @@ contains
 	use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
-        real(rkind) :: dtCFL, a, dtsigma,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0
+        real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0
         integer :: i
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk   !Source term for possible use in VF, g eh eqns
         character(len=30) :: str,str2
 
         this%st_limit = 20
@@ -1239,12 +1240,18 @@ contains
 	
 	if (this%use_surfaceTension) then
               !  if ( phys_mu > eps) then
-          ! filter3D(this%decomp,this%fil,gradphi(:,:,:,3),iflag,x_bc,y_bc,z_bc)
-	          dtsigma = 0.25 * max( P_MINVAL( sqrt( (this%rho)/(4*pi*this%surfaceTension_coeff*( 1/this%dx**3 + 1/this%dy**3 + 1/this%dx**3) ) ) ), P_MINVAL(this%mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy + 1/this%dz) ) ))
+          ! filter3D(this%decomp,this%fil,gradphi(:,:,:,3),iflag,x_bc,y_bc,z_bc)  
+                  uk = ABS(this%u*this%mix%norm(:,:,:,1)) + ABS(this%v*this%mix%norm(:,:,:,2)) + ABS(this%w*this%mix%norm(:,:,:,3))
+	          dtsigma =  min( P_MINVAL( 1/ (sqrt( (4*pi*this%surfaceTension_coeff) / (this%rho*( this%dx**3 + this%dy**3 + this%dz**3))) + uk*(1/this%dx + 1/this%dy + 1/this%dz  ))), & 
+                                            P_MINVAL( sqrt((this%rho)/(4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 +1/this%dx**3) ) ) ))
+
+                                           !    P_MINVAL(this%mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy + 1/this%dz) ) ))
               !  else 
-              !    dtsigma = P_MINVAL( sqrt( (this%rho)/(4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 + 1/this%dx**3) ) ) )
-                  
-               !   print *, 'dtsigma: ', dtsigma
+                  dtsigma2 = P_MINVAL( sqrt( (this%rho)/(4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 + 1/this%dx**3) ) ) )
+                  dtsigma3 =  P_MINVAL( 1/ (sqrt((4*pi*this%surfaceTension_coeff) / (this%rho*( this%dx**3 + this%dy**3 +this%dz**3))) + uk*(1/this%dx + 1/this%dy + 1/this%dz  )))
+                  print *, 'dtsigma1: ', dtsigma
+                  print *, 'dtsigma2: ', dtsigma2
+                  print *, 'dtsigma3: ', dtsigma3
 
               !  end if
 	end if
