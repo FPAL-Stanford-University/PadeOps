@@ -279,7 +279,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         ! speed of sound
         a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-        a2 = sqrt((gamma*(p2+p_infty) + 4.0d0/3.0d0*mu)/rho2)
+        a2 = sqrt((gamma_2*(p2+p_infty) + 4.0d0/3.0d0*mu_2)/rho2)
 
         
  	        ! Set up smearing function for VF based on interface location and thickness
@@ -955,8 +955,8 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
 	v =  ((sin(pi*y))**two)*(sin(two*pi*x))*(cos(pi*tsim/Tp))
 	w = 0
 	p = p_amb
-!	T = 6010
-!	e = 7768
+	T = 10
+	e = 2.941
         ! ! determine interface velocity
         ! ind = minloc(abs(mix%material(1)%VF(:,1,1)-0.5d0))
         ! imin = ind(1)
