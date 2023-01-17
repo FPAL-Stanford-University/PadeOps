@@ -50,7 +50,44 @@ contains
         call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,dfdz,decomp)
 
-    end subroutine 
+    end subroutine
+
+    subroutine laplacian(decomp,der, f, lapf, x_bc_, y_bc_, z_bc_)
+        type(decomp_info), intent(in) :: decomp
+        type(derivatives), intent(in) :: der
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)),intent(in)  :: f
+        real(rkind), dimension(size(f,1), size(f,2), size(f,3)),intent(out) :: lapf
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) ::xtmp,xdum
+        real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) ::ztmp,zdum
+        real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) ::ytmp,ydum
+
+        
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
+
+
+        ! Get Y derivatives
+        call der%d2dy2(f,lapf,y_bc(1),y_bc(2))
+
+        ! Get X derivatives
+        call transpose_y_to_x(f,xtmp,decomp)
+        call der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xdum,ytmp,decomp)
+
+        lapf = lapf + ytmp
+
+        ! Get Z derivatives
+        call transpose_y_to_z(f,ztmp,decomp)
+        call der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
+        call transpose_z_to_y(zdum,ytmp,decomp)
+
+        lapf = lapf + ytmp
+
+    end subroutine
+ 
 
     subroutine curl(decomp, der, u, v, w, curlu, x_bc_, y_bc_, z_bc_)
         type(decomp_info), intent(in) :: decomp
