@@ -147,11 +147,11 @@ contains
         fname = fname_prefix(:len_trim(fname_prefix))//"/"//trim(tempname)
         call decomp_2d_read_one(2,rperturb,fname, gp)
 
-        u = u + uperturb    ! * exp(-(y**2.0_rkind)/8.0_rkind)
-        v = v + vperturb    ! * exp(-(y**2.0_rkind)/8.0_rkind)
-        w = w + wperturb    ! * exp(-(y**2.0_rkind)/8.0_rkind)
-        p = p + pperturb    ! * exp(-(y**2.0_rkind)/8.0_rkind)
-        rho = rho + rperturb! * exp(-(y**2.0_rkind)/8.0_rkind)
+        u = u + uperturb * exp(-(y**2.0_rkind)/8.0_rkind)
+        v = v + vperturb * exp(-(y**2.0_rkind)/8.0_rkind)
+        w = w + wperturb * exp(-(y**2.0_rkind)/8.0_rkind)
+        p = p + pperturb * exp(-(y**2.0_rkind)/8.0_rkind)
+        rho = rho + rperturb* exp(-(y**2.0_rkind)/8.0_rkind)
 
         deallocate(uperturb)
         deallocate(vperturb)
@@ -226,7 +226,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     ! Need to set x, y and z as well as  dx, dy and dz
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         if (nrank == 0) then
-            print *, "Domain size: ",Lx,Ly,Lz
+            print *, "Domain size: ",Lx,Ly,Lz ! ,ix1,iy1,iz1,ixn,iyn,izn
         end if
         dx = Lx/real(nx,rkind)
         dy = Ly/real(ny,rkind)
@@ -296,7 +296,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
     ! Local domain sizes
     nxl = decomp%ysz(1);    nyl = decomp%ysz(2);   nzl = decomp%ysz(3)
-
+    
+    !print *, "checking nx,ny,nz,n ",nx,ny,nz,nxl,nyl,nzl
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
                  p => fields(:,:,:,  p_index), T  => fields(:,:,:,T_index),&
@@ -468,7 +469,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         ! Sponge+bulk for exit bc
         ! Gradually apply the exit boundary conditions
         dy = Ly/real(decomp%ysz(2)-1,rkind)
-        filpt = 5.0_rkind/dy 
+        filpt = 4.0_rkind/dy 
         thickT = real(5.D0, rkind)
         
         ! Gussian Filter for 
