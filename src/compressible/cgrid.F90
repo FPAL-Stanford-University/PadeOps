@@ -1983,6 +1983,10 @@ contains
            call this%viz%write_variable(this%tausgs(:,:,:,4) ,'t22')
            call this%viz%write_variable(this%tausgs(:,:,:,5) ,'t23')
            call this%viz%write_variable(this%tausgs(:,:,:,6) ,'t33')
+           call this%viz%write_variable(this%Qjsgs(:,:,:,1) ,'q1')
+           call this%viz%write_variable(this%Qjsgs(:,:,:,2) ,'q2')
+           call this%viz%write_variable(this%Qjsgs(:,:,:,3) ,'q3')
+          ! call this%viz%write_variable(this%sgsmodel%nusgs,'nusgs')
         end if
  
         ! TODO: Add hook_viz here
