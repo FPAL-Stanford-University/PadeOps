@@ -5,11 +5,10 @@ module randomJetHIT_parameters
     use fortran_assert, only: assert
     implicit none
     
-    logical :: filterMask = .false.
+    integer :: filterMaskHowManyTimes = 0
     integer :: NjetsX = 0, NjetsY = 0
     real(rkind) :: jetXsz, jetYsz, jetZsz
     real(rkind) :: jetZst = 0.d0
-    real(rkind) :: wJet = 1.d0
     
     ! GlobalDomainStuff
     real(rkind) :: Lx = two*pi, Ly = two*pi, Lz = two*pi
@@ -155,8 +154,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     integer :: nxg, nyg, nzg
     
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, filterMask, dumpMaskFreq, &
-      NjetsX, NjetsY, jetZst, jetXsz, jetYsz, jetZsz, wJet
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, filterMaskHowManyTimes, dumpMaskFreq, &
+      NjetsX, NjetsY, jetZst, jetXsz, jetYsz, jetZsz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

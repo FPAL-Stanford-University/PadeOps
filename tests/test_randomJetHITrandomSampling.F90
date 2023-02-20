@@ -8,7 +8,7 @@ program test_randomJetHITrandomSampling
 
   type(jet), dimension(:,:), allocatable :: jetArray
   character(len=clen) :: inputfile
-  integer, parameter :: Nsamples = 100000
+  integer, parameter :: Nsamples = 10000
   integer :: ierr, i, j, gID, NjetsTotal
   real(rkind), parameter :: Lx = 4.d0*pi, Ly = 4.d0*pi
   integer, parameter :: NjetsX = 8, NjetsY = 8

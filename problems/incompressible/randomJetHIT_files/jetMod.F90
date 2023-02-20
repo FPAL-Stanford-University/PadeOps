@@ -1,10 +1,11 @@
 module jetMod
-  use kind_parameters, only: rkind
+  use kind_parameters, only: rkind, clen
+  use random,          only: gaussian_random, uniform_random
   use exits,           only: message
   implicit none
   private
 
-  public :: jet, sourceFraction, muOn, sigmaFact
+  public :: jet, sourceFraction, muOn, sigmaFact, outputdir, wJet
 
   real(rkind) :: sourceFraction = 0.125d0
   real(rkind) :: muOn = 3.d0
@@ -12,12 +13,15 @@ module jetMod
   real(rkind) :: muOff, sigmaOff, sigmaOn
   logical :: moduleParametersAreSet = .false.
   logical :: dumpJetInfo = .false.
+  real(rkind) :: wJet = 1.d0, uHjet = 0.d0
 
   ! Scaling fact for tanh(t) profile for smooth on/off of the jet
-  real(rkind) :: rampOnOffFact
+  real(rkind) :: rampOnOffFact = 1.e9
   
   ! 99.9% thickness of tanh profile due to rampOnOffFact
   real(rkind) :: tanhDelta
+
+  character(len=clen) :: outputdir
 
   type jet
     private
@@ -26,6 +30,7 @@ module jetMod
     real(rkind), public :: zst ! The start of the jet
     real(rkind) :: tstart, duration, lastWeight
     real(rkind), public :: weight
+    real(rkind), public :: u, v, w
     logical :: IamOn
     logical :: initialized = .false.
     integer :: gID
@@ -39,11 +44,14 @@ module jetMod
       procedure          :: destroy
       procedure          :: isOn
       procedure, private :: getOnOffDuration
+      procedure, private :: setJetVelocity
       procedure, private :: updateSeed
       procedure          :: getStatus
       procedure          :: getTstart
       procedure          :: getDuration
-      procedure, private :: print
+      procedure          :: getID
+      procedure          :: getLocation
+      procedure          :: print
       procedure          :: testRandomSampling
       procedure          :: testUpdateWeight
       procedure, private :: updateWeight
@@ -56,7 +64,7 @@ module jetMod
       integer :: ioUnit
     
       namelist /JET_INPUT/ muOn, sourceFraction, sigmaFact, dumpJetInfo, &
-        rampOnOffFact
+        rampOnOffFact, uHjet, wJet, outputdir
 
       ioUnit = 11
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -67,7 +75,7 @@ module jetMod
       sigmaOff = sigmaFact*muOff
       sigmaOn = sigmaFact*muOn
       moduleParametersAreSet = .true.
-      tanhDelta = getDelta(rampOnOffFact)
+      tanhDelta = max(getDelta(rampOnOffFact), 0.d0)
     end subroutine
 
     subroutine init(this,xloc,yloc,zst,xsz,ysz,zsz,gID,inputfile,NjetsTotal,tInit)
@@ -94,9 +102,14 @@ module jetMod
       ! Initialize the seed machinery (i.e. the logistic map sequence)
       logMapInit = real(gID,rkind)/(real(NjetsTotal,rkind) + 0.5d0)
       this%logMap = initializeLogMap(gID,x0=logMapInit)
+
+      ! Initialize the jet state
       this%tstart = 0.d0
       this%duration = 0.d0
+      this%w = wJet
       call this%getOnOffDuration(tInit)
+      call this%setJetVelocity()
+      call this%print()
 
       this%initialized = .true.
     end subroutine
@@ -109,7 +122,6 @@ module jetMod
     end subroutine
 
     subroutine getOnOffDuration(this,tnow)
-      use random, only: gaussian_random, uniform_random
       class(jet), intent(inout) :: this
       real(rkind), intent(in) :: tnow
       real(rkind), dimension(2) :: rand
@@ -146,9 +158,23 @@ module jetMod
         this%lastWeight = this%weight
         this%duration = rand(1)
         this%tstart = tnow
-        call this%print()
       end if
 
+    end subroutine
+    
+    subroutine setJetVelocity(this)    
+      class(jet), intent(inout) :: this
+      integer :: sgn
+
+      if (uHjet > 1.d-14 .and. this%IamOn) then
+        call uniform_random(this%u,-uHjet,uHjet,this%seed)
+        sgn = nint(abs(this%u)/uHjet)
+        if (sgn == 0) sgn = -1
+        this%v = sgn*sqrt(this%w*this%w - this%u*this%u)
+      else
+        this%u = 0.d0
+        this%v = 0.d0
+      end if
     end subroutine
 
     subroutine print(this)
@@ -158,11 +184,14 @@ module jetMod
         call message(0,'Attributes for jet ID ',this%gID)
         if (this%Iamon) then
           call message(1,'On duration', this%duration)
+          call message(2,'uJet', this%u)
+          call message(2,'vJet', this%v)
+          call message(2,'wJet', this%w)
         else
           call message(1,'Off duration', this%duration)
         end if
-        call message(1,'(x,y) location', [this%xloc, this%yloc])
-        call message(1,'(zst,zen)', [this%zst, this%zst + this%zsz])
+        call message(2,'(x,y) location', [this%xloc, this%yloc])
+        call message(2,'(zst,zen)', [this%zst, this%zst + this%zsz])
 
       end if
     end subroutine
@@ -173,6 +202,7 @@ module jetMod
       logical :: IamOn
 
       call this%getOnOffDuration(time)
+      call this%setJetVelocity()
       call this%updateWeight(time)
       IamOn = this%IamOn
     end function
@@ -227,6 +257,7 @@ module jetMod
       call assert(dumpJetInfo,'Must set "dumpJetInfo" to true to run this test')
       do n = 1,Nsamples
         call this%getOnOffDuration(this%tstart + this%duration + 0.1d0)
+        call this%print()
       end do
     end subroutine
 
@@ -252,6 +283,19 @@ module jetMod
       class(jet), intent(inout) :: this
       real(rkind) :: myDuration
       myDuration = this%duration
+    end function
+    
+    function getID(this) result(gID)
+      class(jet), intent(inout) :: this
+      integer :: gID
+      gID = this%gID
+    end function
+    
+    function getLocation(this) result(myLocation)
+      class(jet), intent(inout) :: this
+      real(rkind), dimension(2) :: myLocation
+      myLocation(1) = this%xloc
+      myLocation(2) = this%yloc
     end function
     
     function getTstart(this) result(myTstart)

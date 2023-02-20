@@ -214,17 +214,16 @@ moisture_info_dir = "null"
 /
 /
 &PROBLEM_INPUT
-Lx                    = 12.566370614359172d0           ! Domain Length  (appropriate dimesions/non-dimensionalized)
-Ly                    = 12.566370614359172d0          ! Domain Width  (appropriate dimesions/non-dimensionalized)
-Lz                    = 12.566370614359172d0         ! Domain Height  (appropriate dimesions/non-dimensionalized)
-filterMask            = .false.
-dumpMaskFreq          = 100
-NjetsX                = 6
-NjetsY                = 6
-jetXsz                = 0.4908738521234052d0
-jetYsz                = 0.4908738521234052d0
-jetZsz                = 1.9634954084936207d0
-wJet                  = 1.d0 
+Lx                     = 12.566370614359172d0           ! Domain Length  (appropriate dimesions/non-dimensionalized)
+Ly                     = 12.566370614359172d0          ! Domain Width  (appropriate dimesions/non-dimensionalized)
+Lz                     = 12.566370614359172d0         ! Domain Height  (appropriate dimesions/non-dimensionalized)
+filterMaskHowManyTimes = 0
+dumpMaskFreq           = 100
+NjetsX                 = 6
+NjetsY                 = 6
+jetXsz                 = 0.4908738521234052d0
+jetYsz                 = 0.4908738521234052d0
+jetZsz                 = 1.9634954084936207d0
 /
 /
 &JET_INPUT
@@ -234,4 +233,6 @@ sigmaFact             = 0.3333333333333333d0
 dumpJetInfo           = .false.
 rampOnOffFact         = 200.d0                    ! Determines how fast a jet turns on/off (tanh profile). 
                                                   ! (Larger=faster)
+uHjet                 = 0.d0    ! The maximum possible (absolute) horizontal velocity
+wJet                  = 1.d0    ! The maximum possible velocity in z (note jet vertical velocity is always >= 0)
 /

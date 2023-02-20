@@ -85,10 +85,12 @@ contains
       end if
     end subroutine
 
-    subroutine setJetMask(x, y, z, time, mask, gp, thisJet)
+    subroutine setJetMask(x, y, z, time, arr, gp, thisJet, arrID)
         real(rkind), dimension(:,:,:), intent(in) :: x, y, z
-        real(rkind), dimension(:,:,:), intent(out) :: mask
+        real(rkind), dimension(:,:,:), intent(out) :: arr
         real(rkind), intent(in) :: time
+        integer, intent(in) :: arrID
+        integer, parameter :: u = 1, v = 2, w = 3, mask = 4
         class(decomp_info), intent(in) :: gp
         class(jet), intent(inout) :: thisJet
         integer :: ist, ien, jst, jen, kst, ken 
@@ -116,7 +118,16 @@ contains
 
           call getStEnIndices(xmin,xmax,dx,gp%xst(1),gp%xen(1),ist,ien)
           call getStEnIndices(ymin,ymax,dy,gp%xst(2),gp%xen(2),jst,jen)
-          call setMask(ist,ien,jst,jen,kst,ken,gp,mask,thisJet%weight)
+          select case (arrID)
+          case (u)
+            call setMask(ist,ien,jst,jen,kst,ken,gp,arr,thisJet%weight*thisJet%u)
+          case (v)
+            call setMask(ist,ien,jst,jen,kst,ken,gp,arr,thisJet%weight*thisJet%v)
+          case (w)
+            call setMask(ist,ien,jst,jen,kst,ken,gp,arr,thisJet%weight*thisJet%w)
+          case (mask)
+            call setMask(ist,ien,jst,jen,kst,ken,gp,arr,1.d0)
+          end select
         end if
 
     end subroutine
@@ -160,15 +171,25 @@ contains
             call gracefulExit('Invalid RK substep',ierr) 
         end select 
 
-        igp%immersedBodies(1)%RbodyC = 0.d0
-        igp%immersedBodies(1)%RbodyE = 0.d0
+        igp%immersedBodies(1)%RbodyC  = zero 
+        igp%immersedBodies(1)%RbodyE  = zero 
+        igp%immersedBodies(1)%uTarget = zero 
+        igp%immersedBodies(1)%vTarget = zero 
+        igp%immersedBodies(1)%wTarget = zero
 
         do j = 1,NjetsY
           do i = 1,NjetsX
             call setJetMask(igp%mesh(:,:,:,1), igp%mesh(:,:,:,2), igp%mesh(:,:,:,3), &
-              tnow, igp%immersedBodies(1)%RbodyC, igp%gpC, jetArray(i,j))
+              tnow, igp%immersedBodies(1)%RbodyC, igp%gpC, jetArray(i,j), 4)
             call setJetMask(igp%mesh(:,:,:,1), igp%mesh(:,:,:,2), igp%mesh(:,:,:,3), &
-              tnow, igp%immersedBodies(1)%RbodyE, igp%gpC, jetArray(i,j))
+              tnow, igp%immersedBodies(1)%RbodyE, igp%gpE, jetArray(i,j), 4)
+            
+            call setJetMask(igp%mesh(:,:,:,1), igp%mesh(:,:,:,2), igp%mesh(:,:,:,3), &
+              tnow, igp%immersedBodies(1)%uTarget, igp%gpC, jetArray(i,j), 1)
+            call setJetMask(igp%mesh(:,:,:,1), igp%mesh(:,:,:,2), igp%mesh(:,:,:,3), &
+              tnow, igp%immersedBodies(1)%vTarget, igp%gpC, jetArray(i,j), 2)
+            call setJetMask(igp%mesh(:,:,:,1), igp%mesh(:,:,:,2), igp%mesh(:,:,:,3), &
+              tnow, igp%immersedBodies(1)%wTarget, igp%gpE, jetArray(i,j), 3)
           end do
         end do
        
@@ -179,21 +200,34 @@ contains
           call filterField(igp%immersedBodies(1)%RbodyE,gauss_x,gauss_y,gauss_zE,&
             igp%gpE,igp%rbuffxE(:,:,:,1:2), igp%rbuffyE(:,:,:,1:2), &
             igp%rbuffzE(:,:,:,1:2))
+          
+          call filterField(igp%immersedBodies(1)%uTarget,gauss_x,gauss_y,gauss_zC,&
+            igp%gpC,igp%rbuffxC(:,:,:,1:2), igp%rbuffyC(:,:,:,1:2), &
+            igp%rbuffzC(:,:,:,1:2))
+          call filterField(igp%immersedBodies(1)%vTarget,gauss_x,gauss_y,gauss_zC,&
+            igp%gpC,igp%rbuffxC(:,:,:,1:2), igp%rbuffyC(:,:,:,1:2), &
+            igp%rbuffzC(:,:,:,1:2))
+          call filterField(igp%immersedBodies(1)%wTarget,gauss_x,gauss_y,gauss_zE,&
+            igp%gpE,igp%rbuffxE(:,:,:,1:2), igp%rbuffyE(:,:,:,1:2), &
+            igp%rbuffzE(:,:,:,1:2))
         end do
+
+        where (igp%immersedBodies(1)%RbodyC > 0.d0) igp%immersedBodies(1)%RbodyC = 1.d0
+        where (igp%immersedBodies(1)%RbodyE > 0.d0) igp%immersedBodies(1)%RbodyE = 1.d0
         
         if (rkStage == 1 .and. mod(igp%step,dumpMaskFreq) == 0) then
+          call igp%dumpFullField(igp%immersedBodies(1)%uTarget,'utgt',igp%gpC)
+          call igp%dumpFullField(igp%immersedBodies(1)%vTarget,'vtgt',igp%gpC)
+          call igp%dumpFullField(igp%immersedBodies(1)%wTarget,'wtgt',igp%gpE)
           call igp%dumpFullField(igp%immersedBodies(1)%RbodyC,'mask',igp%gpC)
         end if
 
-        igp%immersedBodies(1)%uTarget = zero 
-        igp%immersedBodies(1)%vTarget = zero 
-        igp%immersedBodies(1)%wTarget = wJet
 
     end subroutine 
 
 end module 
 
-program randomJetHIT
+program randomJetHITwithHoriontalVelocity
     use mpi
     use kind_parameters,  only: clen, rkind
     use IncompressibleGrid, only: igrid
