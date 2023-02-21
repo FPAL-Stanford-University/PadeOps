@@ -935,7 +935,7 @@ contains
             deallocate(tmpzE)
             nullify(zEinZ, zinZ)
 
-            zstSponge = zstSponge*(this%zTop - this%zBot)     !! <PERCENTAGE OF THE DOMAIN>
+            zstSponge = zstSponge*(this%zTop - this%zBot) + this%zBot  !! <PERCENTAGE OF THE DOMAIN>
             !zstSponge = zstSponge*this%zTop                   !! <PERCENTAGE OF THE DOMAIN>
             select case(sponge_type)
             case(1)
@@ -965,7 +965,6 @@ contains
                 !   end where
                 !end if 
                 !!!!!!!!!!!!!!! OLD BLOCK -- assumes zBot = 0 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                
                 if (useTopAndBottomSymmetricSponge) then
                     ! Ensure zinY and zEinY are centered at 0 irrespective of this%zBot
                     zinY  = zinY  - this%zMid
