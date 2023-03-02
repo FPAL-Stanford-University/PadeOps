@@ -153,8 +153,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = Lx/real(nx,rkind)
-        dy = Ly/real(ny,rkind)
+        dx = Lx/real(nx-1,rkind)
+        dy = Ly/real(ny-1,rkind)
         dz = dx
 
         if(abs(dx-dy)>1.0d-13) then
@@ -164,7 +164,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx   ! x \in (-2,4]
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx   ! x \in (-2,4]
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -195,7 +195,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2)) :: p,Fx,Fy
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp2, tmp, dum, eta
     real(rkind), dimension(8) :: fparams
@@ -205,7 +205,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 	logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 	
-    integer :: nx,ny,nz
+    integer :: nx,ny,nz,ix
     nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
 
     namelist /PROBINPUT/  p_infty,p_ten, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
@@ -278,8 +278,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
 
         ! speed of sound
-        a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-        a2 = sqrt((gamma*(p2+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2)
+        a1 = sqrt((gamma*(p_amb+p_infty) + 4.0d0/3.0d0*mu)/rho1)
+        a2 = sqrt((gamma_2*(p_amb+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho2)
 
         
  	        ! Set up smearing function for VF based on interface location and thickness
@@ -294,8 +294,27 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
       ! rad =  0.15825
         !set mixture Volume fraction
         !eta = (x - 1)**2 + (y - 0.75)**2
+
+        open (unit=8, file="P.txt", status='old', action='read' )
+
+        do ix = 1,nx
+          read(8,*) p(ix,:)
+        end do
+
+        open (unit=12, file="Fx.txt", status='old', action='read' )
+
+!        do ix = 1,nx
+!          read(12,*) Fx(ix,:)
+!        end do
+!        open (unit=10, file="Fy.txt", status='old', action='read' )
+
+!        do ix = 1,nx
+!          read(10,*) Fy(ix,:)
+!        end do
+
+
         !where( (eta .le. (R)**2  )
-        mix%material(2)%VF = tmp
+        mix%material(2)%VF = minVF+tmp
         mix%material(1)%VF = one - mix%material(2)%VF
 	!endwhere 
                
@@ -333,9 +352,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
 
         !set mixture pressure (uniform)
-	mix%material(1)%p = p_amb+p_ten*mix%material(1)%VF
-	mix%material(2)%p = mix%material(1)%p
+	mix%material(1)%p(:,:,1) =  p !p_ten*mix%material(1)%VF + p_amb
+	mix%material(2)%p(:,:,1)  = mix%material(1)%p(:,:,1)
 
+       !mix%surfaceTension_f(:,:,1,1) = Fx
+       !mix%surfaceTension_f(:,:,1,2) = Fy
         ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -763,11 +784,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !dx = x(2,1,1) - x(1,1,1)
         !dum = half*(one - tanh( (x-xspng)/(tspng) ))
 
-        xspngL = 0.20
+        xspngL = 0.70
         xspngR = Lx -xspngL
         dx = x(2,1,1) - x(1,1,1)
-        tspng = 0.04
-        dx = x(2,1,1) - x(1,1,1)
+        tspng = 8*dx
         dumL = half*(one - tanh( (x-xspngL)/(tspng) ))+ half*(one - tanh((y-xspngL)/(tspng) ))
         dumR = half*(one + tanh( (x-xspngR)/(tspng) )) + half*(one + tanh((y-xspngR)/(tspng) ))       
         dum  = dumL+dumR

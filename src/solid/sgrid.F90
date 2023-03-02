@@ -111,6 +111,7 @@ module SolidGrid
 	logical     :: use_gradVF           !flag to use VF formulation in surface tension calculation		
         logical     :: use_gradXi
         logical     :: use_surfaceTension   !flag to turn on/off surface tension (in momentum and energy equations)
+        logical     :: use_CnsrvSurfaceTension
         real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
         real(rkind) :: R, p_amb
         logical :: filt_mask = .FALSE.             ! mask filter in high gradient regions
@@ -236,7 +237,7 @@ contains
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., usePhiForm = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .TRUE., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .TRUE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-        logical     :: useAkshayForm = .FALSE.,use_surfaceTension = .FALSE., use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE.
+        logical     :: useAkshayForm = .FALSE.,use_CnsrvSurfaceTension = .FALSE., use_surfaceTension = .FALSE., use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE.
         real(rkind) :: surfaceTension_coeff = 0.0d0, R = 1d0, p_amb = 1d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0
@@ -262,7 +263,7 @@ contains
                            useAkshayForm, useNC, PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, usePhiForm,intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2, &
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
-                           use_surfaceTension, use_gradXi,energy_surfTen,use_gradphi, use_gradVF, use_FV,use_D04, surface_mask, weightedcurvature, surfaceTension_coeff, R, p_amb
+                           use_CnsrvSurfaceTension, use_surfaceTension, use_gradXi,energy_surfTen,use_gradphi, use_gradVF, use_FV,use_D04, surface_mask, weightedcurvature, surfaceTension_coeff, R, p_amb
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -332,7 +333,8 @@ contains
         this%energy_surfTen       = energy_surfTen
         this%use_gradXi           = use_gradXi
 	this%use_gradVF 	  = use_gradVF
-        this%use_surfaceTension   = use_surfaceTension  
+        this%use_surfaceTension   = use_surfaceTension 
+        this%use_CnsrvSurfaceTension = use_CnsrvSurfaceTension 
         this%surfaceTension_coeff = surfaceTension_coeff
         this%R                    = R
         this%p_amb                = p_amb
@@ -448,7 +450,7 @@ contains
         call this%derD04%init(                           this%decomp, &
                               this%dx,       this%dy,        this%dz, &
                             periodicx,     periodicy,      periodicz, &
-                                              "d02",  "d02",   "d02", &
+                                              "d04",  "d04",   "d04", &
                               .false.,       .false.,        .false., &
                               .false.)
 
@@ -514,7 +516,7 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)      
-
+ 
 
 
   ! Initialize derivatives
@@ -856,9 +858,24 @@ contains
                 call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
             endif
 
-            call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)  ! Compute surface tension terms for momentum and energy equations
+             call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)  ! Compute surface tension terms for momentum and energy equations
+        !      call this%mix%get_gradp(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
+
+         !       this%mix%surfaceTension_f = this%mix%gradp
+        endif
+
+        if(this%use_CnsrvSurfaceTension) then
+            if(this%mix%ns.ne.2) then
+                call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
+            endif
+
+            call this%mix%get_surfaceTensionCnsrv(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
+            ! Compute surface tension terms for momentum and energy equations
 
         endif
+
+
+       call this%mix%get_gradp(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
 
 
 
@@ -977,6 +994,11 @@ contains
 
         do isub = 1,RK45_steps
 
+
+            if(this%use_CnsrvSurfaceTension) then
+                call this%mix%get_surfaceTensionPE(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
+            endif
+
             !print *, '----', nrank, isub
             call this%get_conserved()
             call this%get_conserved_g()
@@ -1034,6 +1056,17 @@ contains
                 endif
 
                 call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)  ! Compute surface tension terms for momentum and energy equations
+
+            endif
+
+
+             if(this%use_CnsrvSurfaceTension) then
+                if(this%mix%ns.ne.2) then
+                    call GracefulExit("Surface tension is not defined forsingle-species, and not implemented for more than 2 species",4634)
+                endif
+
+                call this%mix%get_surfaceTensionCnsrv(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
+                ! Compute surface tension terms for momentum and energy equations
 
             endif
 
@@ -1140,6 +1173,14 @@ contains
                
             ! endif
 
+
+            if(this%use_CnsrvSurfaceTension) then
+
+               call this%mix%getYs(this%rho)
+               call this%mix%get_surfaceTensionPE(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
+
+            endif
+
             call this%get_primitive()
             call this%get_primitive_g()
             call this%mix%implicit_plastic(this%rho) !implicit plastic deformation using new g and new rho
@@ -1170,6 +1211,7 @@ contains
 
                !    call this%mix%equilibrateTemperature(this%rho, this%e, this%p, this%T, isub, RK45_steps) 
                     call this%mix%equilibratePressureTemperature_new(this%rho, this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
+               !     call this%mix%pressureLiquidGas(this%rho, this%e, this%p)
                !    call this%mix%get_pmix(this%p)                         ! Get mixture pressure
                !    call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
                ! enddo
@@ -1238,20 +1280,15 @@ contains
         !dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
 	
-	if (this%use_surfaceTension) then
+	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then
           ! filter3D(this%decomp,this%fil,gradphi(:,:,:,3),iflag,x_bc,y_bc,z_bc)  
                   uk = ABS(this%u*this%mix%norm(:,:,:,1)) + ABS(this%v*this%mix%norm(:,:,:,2)) + ABS(this%w*this%mix%norm(:,:,:,3))
-	          dtsigma =  min( P_MINVAL( 1/ (sqrt( (4*pi*this%surfaceTension_coeff) / (this%rho*( this%dx**3 + this%dy**3 + this%dz**3))) + uk*(1/this%dx + 1/this%dy + 1/this%dz  ))), & 
-                                            P_MINVAL( sqrt((this%rho)/(4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 +1/this%dx**3) ) ) ))
-
-                                           !    P_MINVAL(this%mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy + 1/this%dz) ) ))
+	          dtsigma =  max(1/P_MAXVAL( sqrt((4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 +1/this%dx**3) )/ (this%rho))) , &
+                                  P_MINVAL(this%mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy + 1/this%dz) ) ))
               !  else 
                   dtsigma2 = P_MINVAL( sqrt( (this%rho)/(4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 + 1/this%dx**3) ) ) )
                   dtsigma3 =  P_MINVAL( 1/ (sqrt((4*pi*this%surfaceTension_coeff) / (this%rho*( this%dx**3 + this%dy**3 +this%dz**3))) + uk*(1/this%dx + 1/this%dy + 1/this%dz  )))
-                  print *, 'dtsigma1: ', dtsigma
-                  print *, 'dtsigma2: ', dtsigma2
-                  print *, 'dtsigma3: ', dtsigma3
 
               !  end if
 	end if
@@ -1388,7 +1425,7 @@ contains
                write(str,'(ES10.3E3)') 1.0D0-dtdiff_gp/dtCFL
                stability = 'diffusive g_p: '//trim(str)//' CFL loss fraction'
             endif
-	if (this%use_surfaceTension) then	
+	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then	
 	    if ( this%dt > dtsigma ) then
                this%dt = dtsigma
                write(str,'(ES10.3E3)') 1.0D0-dtsigma/dtCFL
@@ -1438,7 +1475,7 @@ contains
         use decomp_2d,  only: nrank
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:), pointer :: onebyrho
-        !real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: onebyrho
+       ! real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: onebyrho
         real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
         real(rkind) :: rhomin
 
@@ -1458,8 +1495,18 @@ contains
         this%u = rhou * onebyrho
         this%v = rhov * onebyrho
         this%w = rhow * onebyrho
-        this%e = (TE*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
+
+        if(this%use_CnsrvSurfaceTension) then
+     
+           this%e = ((TE-this%mix%surfaceTension_pe)*onebyrho) - half*( this%u*this%u + this%v*this%v + this%w*this%w )
+
+        else
+           
+           this%e = (TE*onebyrho) - half*(this%u*this%u + this%v*this%v +this%w*this%w )
+
        
+        endif
+    
         call this%mix%get_primitive(this%rho, this%u, this%v, this%w, this%e, this%devstress, this%p, this%sos)                  ! Get primitive variables for individual species
 
     end subroutine
@@ -1480,8 +1527,12 @@ contains
         this%Wcnsrv(:,:,:,mom_index  ) = this%rho * this%u
         this%Wcnsrv(:,:,:,mom_index+1) = this%rho * this%v
         this%Wcnsrv(:,:,:,mom_index+2) = this%rho * this%w
-        this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*( this%u*this%u + this%v*this%v + this%w*this%w ) )
 
+        if(this%use_CnsrvSurfaceTension) then
+            this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e + half*this%u*this%u + this%v*this%v + this%w*this%w ) + this%mix%surfaceTension_pe
+        else
+            this%Wcnsrv(:,:,:, TE_index  ) = this%rho * ( this%e +half*this%u*this%u + this%v*this%v + this%w*this%w )
+        endif
         ! add 2M (mass fraction and hydrodynamic energy) variables here
         call this%mix%get_conserved(this%rho,this%u,this%v,this%w)
 
@@ -2222,7 +2273,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
 
         !!Surface Tension
-                if (this%use_surfaceTension) then
+        if (this%use_surfaceTension) then
             rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + this%mix%surfaceTension_f(:,:,:,1)
             rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + this%mix%surfaceTension_f(:,:,:,2)
             rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + this%mix%surfaceTension_f(:,:,:,3)
@@ -2271,6 +2322,11 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%u + this%p - tauxx ! x-momentum
 !print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fxx
+
+        endif
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2, this%x_bc(1), this%x_bc(2)) ! Symmetric for x-momentum
 !do i = 1, size(flux,1)
@@ -2280,18 +2336,36 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%v          - tauxy ! y-momentum
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fxy
+
+        endif
+
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
+ 
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%w          - tauxz ! z-momentum
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fxz
+
+        endif
+
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
         flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauxx)*this%u - this%v*tauxy - this%w*tauxz + qx ! Total Energy
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fxx*this%u -this%mix%surfaceTension_fxy*this%v - this%mix%surfaceTension_fxz*this%w
+
+        endif
         call transpose_y_to_x(flux,xtmp1,this%decomp)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
@@ -2313,18 +2387,39 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         ytmp1 => this%ybuf(:,:,:,6)
 
         flux = this%Wcnsrv(:,:,:,mom_index+1)*this%u          - tauxy ! x-momentum
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fxy
+
+        endif
+
         call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - ytmp1
 
         flux = this%Wcnsrv(:,:,:,mom_index+1)*this%v + this%p - tauyy ! y-momentum
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fyy
+
+        endif
         call this%der%ddy(flux,ytmp1, this%y_bc(1), this%y_bc(2)) ! Symmetric for y-momentum
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - ytmp1
 
         flux = this%Wcnsrv(:,:,:,mom_index+1)*this%w          - tauyz ! z-momentum
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fyz
+
+        endif
         call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - ytmp1
 
         flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauyy)*this%v - this%u*tauxy - this%w*tauyz + qy ! Total Energy
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fxy*this%u - this%mix%surfaceTension_fyy*this%v - this%mix%surfaceTension_fyz*this%w  
+
+        endif
         call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - ytmp1
 
@@ -2345,24 +2440,44 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
 
         flux = this%Wcnsrv(:,:,:,mom_index+2)*this%u          - tauxz ! x-momentum
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fxz
+
+        endif
         call transpose_y_to_z(flux,ztmp1,this%decomp)
         call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
         call transpose_z_to_y(ztmp2,flux,this%decomp)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
 
         flux = this%Wcnsrv(:,:,:,mom_index+2)*this%v          - tauyz ! y-momentum
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fyz
+
+        endif
         call transpose_y_to_z(flux,ztmp1,this%decomp)
         call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
         call transpose_z_to_y(ztmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
 
         flux = this%Wcnsrv(:,:,:,mom_index+2)*this%w + this%p - tauzz ! z-momentum
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fzz
+
+        endif
         call transpose_y_to_z(flux,ztmp1,this%decomp)
         call this%der%ddz(ztmp1,ztmp2, this%z_bc(1), this%z_bc(2)) ! Symmetric for z-momentum
         call transpose_z_to_y(ztmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
 
         flux = (this%Wcnsrv(:,:,:, TE_index  ) + this%p - tauzz)*this%w - this%u*tauxz - this%v*tauyz + qz ! Total Energy
+        if(this%use_CnsrvSurfaceTension) then
+
+            flux = flux - this%mix%surfaceTension_fxz*this%u - this%mix%surfaceTension_fyz*this%v - this%mix%surfaceTension_fzz*this%w
+
+        endif
         call transpose_y_to_z(flux,ztmp1,this%decomp)
         call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
         call transpose_z_to_y(ztmp2,flux,this%decomp)

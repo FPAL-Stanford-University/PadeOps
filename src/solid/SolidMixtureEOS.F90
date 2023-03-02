@@ -49,12 +49,14 @@ module SolidMixtureMod
         real(rkind) :: intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor
         real(rkind), allocatable, dimension(:,:,:,:) :: intSharp_f,intSharp_h,VFboundDiff,intSharp_fDiff,intSharp_hDiff,intSharp_fFV
         real(rkind), allocatable, dimension(:,:,:,:) :: surfaceTension_f,xi
+        real(rkind), allocatable, dimension(:,:,:)   :: surfaceTension_fxx, surfaceTension_fyy, surfaceTension_fzz, surfaceTension_fxy,surfaceTension_fxz, surfaceTension_fyz, surfaceTension_pe
         real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e
         real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV
         
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa
-        real(rkind), allocatable, dimension(:,:,:,:) :: norm, gradp, gradVF
+        real(rkind), allocatable, dimension(:,:,:,:) :: norm, normFV,gradp,gradVF,gradxi
+        real(rkind), allocatable, dimension(:,:,:,:,:) :: gradVF_FV
 	real(rkind), allocatable, dimension(:,:,:)   :: phi
         real(rkind), allocatable, dimension(:,:,:)   :: fmask, antidiff
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_send_1, buffer_send_k_1
@@ -72,6 +74,7 @@ module SolidMixtureMod
 
         procedure :: init
         procedure :: set_material
+        procedure :: pressureLiquidGas
         procedure :: relaxPressure
         procedure :: relaxPressure_os
         procedure :: equilibratePressure
@@ -102,6 +105,10 @@ module SolidMixtureMod
         procedure :: get_J
         procedure :: get_q
         procedure :: get_intSharp
+        procedure :: get_gradp
+        procedure :: get_surfaceTensionPE
+        procedure :: get_surfaceTensionCnsrv
+        procedure :: getYs
         procedure :: get_surfaceTension
         procedure :: interpolateFV !TODO: check BCs on all FV terms        procedure :: divergenceFV
         procedure :: gradientFV
@@ -216,7 +223,7 @@ contains
 
         ! Allocate array of solid objects (Use a dummy to avoid memory leaks)
         allocate(dummy)
-        call dummy%init(decomp,der,derD02,derD04,derD06,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%useAkshayForm,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns, this%x_bc, this%y_bc, this%z_bc)
+        call dummy%init(decomp,der,derD02,derD04,derD06,derStagg,interpMid,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%useAkshayForm,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns, this%x_bc, this%y_bc, this%z_bc)
 
         if (allocated(this%material)) deallocate(this%material)
         allocate(this%material(this%ns))!, source=dummy)
@@ -227,7 +234,7 @@ contains
 
 
      do i=1,this%ns
-            call this%material(i)%init(decomp,der,derD02,derD04,derD06,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%useAkshayForm,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns, this%x_bc, this%y_bc, this%z_bc)
+            call this%material(i)%init(decomp,der,derD02,derD04,derD06,derStagg,interpMid,fil,gfil,this%PTeqb,this%pEqb,this%pRelax,this%use_gTg,this%useOneG,this%intSharp,this%intSharp_spf,intSharp_ufv,this%intSharp_d02,intSharp_cut,this%intSharp_cpg_west,this%useAkshayForm,this%updateEtot,this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%ns, this%x_bc, this%y_bc, this%z_bc)
         end do
         deallocate(dummy)
 
@@ -280,14 +287,46 @@ contains
         if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
         allocate(this%surfaceTension_e(this%nxp, this%nyp, this%nzp))
 
+        if(allocated(this%surfaceTension_pe)) deallocate(this%surfaceTension_pe)
+        allocate(this%surfaceTension_pe(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%surfaceTension_fxx)) deallocate(this%surfaceTension_fxx)
+        allocate(this%surfaceTension_fxx(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%surfaceTension_fyy)) deallocate(this%surfaceTension_fyy)
+        allocate(this%surfaceTension_fyy(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%surfaceTension_fzz)) deallocate(this%surfaceTension_fzz)
+        allocate(this%surfaceTension_fzz(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%surfaceTension_fxy)) deallocate(this%surfaceTension_fxy)
+        allocate(this%surfaceTension_fxy(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%surfaceTension_fxz)) deallocate(this%surfaceTension_fxz)
+        allocate(this%surfaceTension_fxz(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%surfaceTension_fyz)) deallocate(this%surfaceTension_fyz)
+        allocate(this%surfaceTension_fyz(this%nxp, this%nyp, this%nzp))
+
         if(allocated(this%norm)) deallocate(this%norm)
         allocate(this%norm(this%nxp, this%nyp, this%nzp, 3))
+
+        if(allocated(this%normFV)) deallocate(this%normFV)
+        allocate(this%normFV(this%nxp, this%nyp, this%nzp, 3))
+
+
 
         if(allocated(this%gradp)) deallocate(this%gradp)
         allocate(this%gradp(this%nxp, this%nyp, this%nzp, 3))
 
         if(allocated(this%gradVF)) deallocate(this%gradVF)
         allocate(this%gradVF(this%nxp, this%nyp, this%nzp, 3))
+        
+        if(allocated(this%gradVF_FV)) deallocate(this%gradVF_FV)
+        allocate(this%gradVF_FV(this%nxp, this%nyp, this%nzp, 3,3))
+        
+        if(allocated(this%gradxi)) deallocate(this%gradxi)
+        allocate(this%gradxi(this%nxp, this%nyp, this%nzp, 3))
 
         if(allocated(this%kappa)) deallocate(this%kappa)
         allocate(this%kappa(this%nxp, this%nyp, this%nzp))
@@ -367,9 +406,19 @@ contains
 
         if(allocated(this%surfaceTension_f)) deallocate(this%surfaceTension_f)
         if(allocated(this%surfaceTension_e)) deallocate(this%surfaceTension_e)
+        if(allocated(this%surfaceTension_pe)) deallocate(this%surfaceTension_pe)
+        if(allocated(this%surfaceTension_fxx)) deallocate(this%surfaceTension_fxx)
+        if(allocated(this%surfaceTension_fyy)) deallocate(this%surfaceTension_fyy)
+        if(allocated(this%surfaceTension_fzz)) deallocate(this%surfaceTension_fzz)
+        if(allocated(this%surfaceTension_fxy)) deallocate(this%surfaceTension_fxy)
+        if(allocated(this%surfaceTension_fxz)) deallocate(this%surfaceTension_fxz)
+        if(allocated(this%surfaceTension_fyz)) deallocate(this%surfaceTension_fyz)
         if(allocated(this%norm)) deallocate(this%norm)
+        if(allocated(this%normFV)) deallocate(this%normFV)
         if(allocated(this%gradp)) deallocate(this%gradp)
         if(allocated(this%gradVF)) deallocate(this%gradVF)
+        if(allocated(this%gradVF_FV)) deallocate(this%gradVF_FV)
+        if(allocated(this%gradxi)) deallocate(this%gradxi)
         if(allocated(this%kappa)) deallocate(this%kappa)
 	if(allocated(this%buffer_send_1)) deallocate(this%buffer_send_1)
         if(allocated(this%buffer_send_2)) deallocate(this%buffer_send_2)
@@ -415,6 +464,70 @@ contains
         
         if (allocated(this%material(imat)%elastic)) deallocate(this%material(imat)%elastic)
         allocate( this%material(imat)%elastic, source=elastic )
+    end subroutine
+
+
+     subroutine pressureLiquidGas(this,mixRho,mixE,mixP)
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: mixP
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix,rhom,e_species, delta_max, delta_min, del_e, delta_e1, delta_e2, rhom2, rhom1,denom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rho1gambyone,rho2gambyone, diffPInf,  tmp, q, Cv
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: VF1, VF2, A1,A2,mixT
+        integer :: imat, i,j,k,a(3), s = 2
+        real(rkind) :: gamfac,eps2, eps1 = 1D-8, minVF = 1D-8, thresh, cutoff
+
+        print *, "liquidgas"
+        Cv = this%material(1)%Ys*this%material(1)%hydro%Cv+this%material(2)%Ys*this%material(2)%hydro%Cv
+        
+        print *, "Cv"
+         
+        A1 = this%material(1)%Ys*(this%material(1)%hydro%gam-1)*this%material(1)%hydro%Cv/Cv*(mixRho*mixE- this%material(1)%hydro%PInf)
+        A2 = this%material(2)%Ys*(this%material(2)%hydro%gam-1)*this%material(2)%hydro%Cv/Cv*(mixRho*mixE-this%material(2)%hydro%PInf)
+
+        mixP = 0.5*( A1 + A2 -(this%material(1)%hydro%PInf+this%material(2)%hydro%PInf)) + sqrt( 0.25*(A2 - A1- (this%material(2)%hydro%PInf - this%material(1)%hydro%PInf))**2 + A1*A2)        
+
+        print *, "mixP"
+        do k=1,this%nzp
+           do j=1,this%nyp
+              do i=1,this%nxp
+                 
+
+                 if(mixP(i,j,k) < 0) then
+                 print *, "mixP = ", mixP(i,j,k)
+                 endif
+                 mixT(i,j,k) = zero
+                 do imat = 1, this%ns
+                    mixT(i,j,k) = mixT(i,j,k) +this%material(imat)%Ys(i,j,k)*this%material(imat)%hydro%Cv * (mixP(i,j,k) +this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf)/(mixP(i,j,k) +this%material(imat)%hydro%PInf) !original
+                 enddo
+                 mixT(i,j,k) = ehmix(i,j,k)/mixT(i,j,k)
+
+                 do imat = 1, this%ns
+                    this%material(imat)%T(i,j,k) = mixT(i,j,k)
+                    this%material(imat)%p(i,j,k) = mixP(i,j,k)
+
+                    this%material(imat)%VF(i,j,k)= mixRho(i,j,k)*this%material(imat)%Ys(i,j,k)*(this%material(imat)%hydro%gam-one)* this%material(imat)%hydro%Cv*mixT(i,j,k)/(mixP(i,j,k) +this%material(imat)%hydro%PInf) !original
+
+                    this%material(imat)%eh(i,j,k) = this%material(imat)%hydro%Cv*mixT(i,j,k)*(mixP(i,j,k) + this%material(imat)%hydro%gam*this%material(imat)%hydro%PInf) / (mixP(i,j,k) + this%material(imat)%hydro%PInf)
+                 end do
+
+              enddo
+           enddo
+        enddo
+
+        !this may need to be modified for ns>2
+        tmp = zero
+        do imat = 1, this%ns-one
+           tmp = tmp + this%material(imat)%VF
+        enddo
+        this%material(this%ns)%VF = one - tmp
+
+        tmp = zero
+        do imat = 1, this%ns-one
+           tmp = tmp + this%material(imat)%eh
+        enddo
+        this%material(this%ns)%eh = ehmix - tmp
+
     end subroutine
 
     subroutine relaxPressure_os(this,rho,u,v,w,mixE,dtsim,mixP)
@@ -1948,6 +2061,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         logical :: useTiwari = .FALSE., useRhoYsbound = .FALSE., useTotalRho = .FALSE.
         logical :: periodicx,periodicy,periodicz, useGradPsi = .FALSE., useRhoLocal = .TRUE., useHighOrder = .TRUE.,useYSbound = .TRUE., useNewSPF = .TRUE., useNewSPFfull = .FALSE.!, useTiwari = .TRUE.
 
+        this%xi = 0.0d0
+        gradxi  = 0.0d0
+
         !correct intSharp_tnh if negative
         if(this%intSharp_tnh.le.zero) then
            this%intSharp_tnh = one/eps
@@ -3250,7 +3366,150 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         endif
 
+        
+
  end subroutine get_intSharp
+
+ subroutine get_gradp(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
+        use decomp_2d, only: transpose_y_to_x, transpose_x_to_y, transpose_y_to_z,transpose_z_to_y
+        use operators, only: divergence,gradient,filter3D, laplacian
+        use constants,       only: zero,epssmall,eps,one,two,third,half
+        use exits,           only: GracefulExit
+        use reductions, only : P_MAXVAL
+        class(solid_mixture),                               intent(inout) :: this
+        integer, dimension(2),                              intent(in) :: x_bc,y_bc, z_bc
+        real(rkind),                                        intent(in) :: dx,dy,dz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        logical,                                            intent(in) :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,VFmag,tanhmask, GVFmag, GPHImag, mask2, updatedKappa, weight, kappaSum,phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi,gradxi, gradVFk
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
+        integer :: iflag = one
+        real(rkind) :: r = 0.5D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0, e =1D-100
+        !TODO: add additional arrays to be used locally in calculation of
+        !surface tension force
+        integer :: i,j,k,n
+        integer, dimension(2) :: coords
+
+        call gradient(this%decomp,this%der,this%material(1)%p,this%gradp(:,:,:,1),this%gradp(:,:,:,2),this%gradp(:,:,:,3))
+
+       
+    end subroutine
+
+  subroutine get_surfaceTensionPE(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
+        use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
+        use operators, only: divergence,gradient,filter3D, laplacian
+        use constants,       only: zero,epssmall,eps,one,two,third,half
+        use exits,           only: GracefulExit
+        use reductions, only : P_MAXVAL
+        class(solid_mixture),                               intent(inout) :: this
+        integer, dimension(2),                              intent(in) :: x_bc,y_bc, z_bc
+        real(rkind),                                        intent(in) :: dx,dy,dz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        logical,                                            intent(in) :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,VFmag,tanhmask, GYSmag, GPHImag, mask2, updatedKappa, weight,kappaSum,phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradYs,gradphi,gradxi, gradVFk, gradYs_x, gradYs_y, gradYs_z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
+        integer :: iflag = one
+        real(rkind) :: r = 0.5D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0, e = 1D-100
+        !TODO: add additional arrays to be used locally in calculation of
+        !surface tension force
+        integer :: i,j,k,n
+        integer, dimension(2) :: coords
+
+
+        if  (this%ns.ne.2) then
+            call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
+        endif
+
+
+        call gradient(this%decomp,this%derD02,this%material(1)%Ys,gradYs(:,:,:,1),gradYs(:,:,:,2),gradYs(:,:,:,3))
+        !high order derivative
+
+        GYSmag = sqrt( gradYs(:,:,:,1)**two +gradYs(:,:,:,2)**two+gradYs(:,:,:,3)**two )
+
+       this%surfaceTension_pe = this%surfaceTension_coeff*GYSmag
+    end subroutine
+
+   subroutine get_surfaceTensionCnsrv(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
+        use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
+        use operators, only: divergence,gradient,filter3D, laplacian
+        use constants,       only: zero,epssmall,eps,one,two,third,half
+        use exits,           only: GracefulExit
+        use reductions, only : P_MAXVAL
+        class(solid_mixture),                               intent(inout) :: this
+        integer, dimension(2),                              intent(in) :: x_bc,y_bc, z_bc
+        real(rkind),                                        intent(in) :: dx,dy,dz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+        logical,                                            intent(in) :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,VFmag,tanhmask, GYSmag, GPHImag, mask2, updatedKappa, weight, kappaSum,phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2,s1,s2,s3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradYs, gradphi,gradxi, gradVFk, gradYs_x, gradYs_y, gradYs_z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
+        integer :: iflag = one
+        real(rkind) :: r = 0.5D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0, e = 1D-100
+        !TODO: add additional arrays to be used locally in calculation of
+        !surface tension force
+        integer :: i,j,k,n
+        integer, dimension(2) :: coords
+
+
+        if  (this%ns.ne.2) then
+            call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
+        endif
+        
+
+        call gradient(this%decomp,this%derD02,this%material(1)%Ys,gradYs(:,:,:,1),gradYs(:,:,:,2),gradYs(:,:,:,3))
+        !high order derivative
+        this%gradVF = gradYs
+
+        call gradient(this%decomp,this%der,this%material(1)%p,this%gradp(:,:,:,1),this%gradp(:,:,:,2),this%gradp(:,:,:,3))
+        GYSmag = sqrt( gradYs(:,:,:,1)**two + gradYs(:,:,:,2)**two+gradYs(:,:,:,3)**two )
+
+        where( GYSmag .LE. eps)
+            this%surfaceTension_fxx = this%surfaceTension_coeff*( GYSmag  )
+            this%surfaceTension_fyy = this%surfaceTension_coeff*( GYSmag  )
+            this%surfaceTension_fzz = this%surfaceTension_coeff*( GYSmag  )
+            this%surfaceTension_fxy = this%surfaceTension_coeff*( zero )
+            this%surfaceTension_fxz = this%surfaceTension_coeff*( zero )
+            this%surfaceTension_fyz = this%surfaceTension_coeff*( zero )
+        elsewhere
+            this%surfaceTension_fxx = this%surfaceTension_coeff*( GYSmag - gradYs(:,:,:,1)*gradYs(:,:,:,1)/GYSmag )
+            this%surfaceTension_fyy = this%surfaceTension_coeff*( GYSmag - gradYs(:,:,:,2)*gradYs(:,:,:,2)/GYSmag )
+            this%surfaceTension_fzz = this%surfaceTension_coeff*( GYSmag - gradYs(:,:,:,3)*gradYs(:,:,:,3)/GYSmag )
+            this%surfaceTension_fxy = this%surfaceTension_coeff*(  -gradYs(:,:,:,2)*gradYs(:,:,:,1)/GYSmag )
+            this%surfaceTension_fxz = this%surfaceTension_coeff*(  -gradYs(:,:,:,1)*gradYs(:,:,:,3)/GYSmag )
+            this%surfaceTension_fyz = this%surfaceTension_coeff*(  -gradYs(:,:,:,2)*gradYs(:,:,:,3)/GYSmag )
+        endwhere
+
+        call divergence(this%decomp,this%der,this%surfaceTension_fxx,this%surfaceTension_fxy,this%surfaceTension_fxz,this%surfaceTension_f(:,:,:,1),x_bc,y_bc,z_bc)
+        call divergence(this%decomp,this%der,this%surfaceTension_fxy,this%surfaceTension_fyy,this%surfaceTension_fyz,this%surfaceTension_f(:,:,:,2),x_bc,y_bc,z_bc)
+        call divergence(this%decomp,this%der,this%surfaceTension_fxz,this%surfaceTension_fyz,this%surfaceTension_fzz,this%surfaceTension_f(:,:,:,3),x_bc,y_bc,z_bc)
+
+        s1 = u*this%surfaceTension_fxx + v*this%surfaceTension_fxy + w*this%surfaceTension_fxz
+        s2 = u*this%surfaceTension_fxy + v*this%surfaceTension_fyy +w*this%surfaceTension_fyz
+        s3 = u*this%surfaceTension_fxz + v*this%surfaceTension_fyz +w*this%surfaceTension_fzz
+      
+        call divergence(this%decomp,this%der,s1, s2, s3,this%surfaceTension_e,x_bc,y_bc,z_bc)
+
+
+    end subroutine 
+ 
+    subroutine getYs(this,rho)
+        use operators, only: divergence,gradient,filter3D
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: rho
+        real(rkind) :: minYs1,minVF = 1d-6, minYs2
+        integer :: imat
+
+        minVF = 1d-6
+
+        if(this%PTeqb) then
+        do imat = 1, this%ns
+          call this%material(imat)%getYs(rho)
+        end do
+        endif
+
+   end subroutine 
 
     subroutine get_surfaceTension(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
@@ -3263,9 +3522,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind),                                        intent(in) :: dx,dy,dz
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
         logical,                                            intent(in) :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,VFmag,tanhmask, GVFmag, GPHImag, mask2, updatedKappa, weight, kappaSum, phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,VFmag,tanhmask, GVFmag, GPHImag, mask2, updatedKappa, weight, kappaSum, phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2,divu,divphiu
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi, gradxi, gradVFk
-	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint
+	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
 	integer :: iflag = one
 	real(rkind) :: r = 0.5D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0, e = 1D-100 
 	!TODO: add additional arrays to be used locally in calculation of surface tension force
@@ -3280,10 +3539,19 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !initialize surface tension force and energy source to zero everywhere
         this%surfaceTension_f = 0.0d0
         this%surfaceTension_e = 0.0d0
-        this%kappa            = 0.0d0
+        !this%kappa            = 0.0d0
         updatedKappa           = 0.0d0
         weight                 = 0.0d0
         kappaSum               = 0.0d0
+        gradVFk                = 0.0d0
+        gradVF                 = 0.0d0
+        this%norm              = 0.0d0
+        this%normFV            = 0.0d0
+        this%xi(:,:,:,1)       = 0.0d0
+        this%fmask             = 0.0d0
+        GVFmag                 = 0.0d0
+        gradxi                 = 0.0d0
+        NMint                  = 0.0d0
 
         !TODO: Compute curvature (use gradient and divergence operators)
         !for example, to take the gradient of the volume fraction of species # 1
@@ -3297,36 +3565,64 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 	if (this%use_gradVF) then
 
                 if(this%use_FV) then
+
                    call gradient(this%decomp,this%derD02,this%material(1)%VF,gradVFk(:,:,:,1),gradVFk(:,:,:,2),gradVFk(:,:,:,3)) !high order derivative
-	        else if (this%use_D04) then
+                  ! call gradientFV(this,this%material(1)%VF,gradVF_FV,dx,dy,dz,periodicx,periodicy,periodicz, this%x_bc, this%y_bc, this%z_bc)
+
+                   this%gradVF_FV = gradVF_FV
+                else if (this%use_D04) then
                    call gradient(this%decomp,this%derD04,this%material(1)%VF,gradVFk(:,:,:,1),gradVFk(:,:,:,2),gradVFk(:,:,:,3)) !high order derivative
                 else
                    call gradient(this%decomp,this%der,this%material(1)%VF,gradVFk(:,:,:,1),gradVFk(:,:,:,2),gradVFk(:,:,:,3)) !high order derivative
                 endif
-                  
-                !magnitude of surface vector
-                GVFmag = sqrt( gradVFk(:,:,:,1)**two + gradVFk(:,:,:,2)**two + gradVFk(:,:,:,3)**two )
+
+
+
+               ! if(this%use_FV) then
+                  !magnitude of surface vector
+               !   GVFmag = sqrt( gradVF_FV(:,:,:,1,1)**two + gradVF_FV(:,:,:,2,2)**two +gradVF_FV(:,:,:,3,3)**two )
+ 
+               !    where (GVFmag < eps)
+               !     this%norm(:,:,:,1) = zero
+               !     this%norm(:,:,:,2) = zero
+               !     this%norm(:,:,:,3) = zero
+               !   elsewhere
+               !     this%norm(:,:,:,1) = gradVF_FV(:,:,:,1,1) / GVFmag
+               !     this%norm(:,:,:,2) = gradVF_FV(:,:,:,2,2) / GVFmag
+               !     this%norm(:,:,:,3) = gradVF_FV(:,:,:,3,3) / GVFmag
+               !   endwhere
+
+               ! else 
+                 !magnitude of surface vector
+                 GVFmag = sqrt( gradVFk(:,:,:,1)**two + gradVFk(:,:,:,2)**two +gradVFk(:,:,:,3)**two )
 
             	!surface normal
-           	where (GVFmag < eps)
-                  this%norm(:,:,:,1) = zero
-                  this%norm(:,:,:,2) = zero
-                  this%norm(:,:,:,3) = zero
-              	elsewhere
-                  this%norm(:,:,:,1) = gradVFk(:,:,:,1) / GVFmag
-                  this%norm(:,:,:,2) = gradVFk(:,:,:,2) / GVFmag
-                  this%norm(:,:,:,3) = gradVFk(:,:,:,3) / GVFmag
-              	endwhere
+           	  where (GVFmag < eps)
+                    this%norm(:,:,:,1) = zero
+                    this%norm(:,:,:,2) = zero
+                    this%norm(:,:,:,3) = zero
+              	  elsewhere
+                    this%norm(:,:,:,1) = gradVFk(:,:,:,1) / GVFmag
+                    this%norm(:,:,:,2) = gradVFk(:,:,:,2) / GVFmag
+                    this%norm(:,:,:,3) = gradVFk(:,:,:,3) / GVFmag
+                  endwhere
+              !  endif
+
 
                 this%fmask =(this%material(1)%VF-this%intSharp_cut)*(one-this%intSharp_cut-this%material(1)%VF)
 	
 		if (this%use_FV) then
              
-	          call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
-		  call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
-              	  call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
-	          call divergenceFV(this,NMint, this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-                  call divergence(this%decomp,this%derD02,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
+	         call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
+		 call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
+              	 call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
+                 this%normFV(:,:,:,1) = NMint(:,:,:,1,1)	
+                 this%normFV(:,:,:,2) = NMint(:,:,:,2,2)
+                 this%normFV(:,:,:,3) = NMint(:,:,:,3,3)
+
+                 call divergenceFV(this,this%normFV, this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+                !  call divergence(this%decomp,this%derD02,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
                 else if (this%use_D04) then
                   call divergence(this%decomp,this%derD04,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
                 else		!kappa, divergence of surface normal	
@@ -3348,53 +3644,84 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
          ! xi = this%intSharp_eps*log( (this%phi + e )/ (1 - this%phi + e) )
           where( this%material(1)%VF .GE. 1-this%intSharp_cut)
-                 xi = this%intSharp_eps*log( ( 1-2*this%intSharp_cut+ e )/ (e))*(1/(1-2*this%intSharp_cut))
+                 this%xi(:,:,:,1) = this%intSharp_eps*log( ( 1-2*this%intSharp_cut+ e )/ (e))*(1/(1-2*this%intSharp_cut))
           elsewhere( this%material(1)%VF .LE. this%intSharp_cut )
-                 xi = this%intSharp_eps*log( ( e) / (1 -2*this%intSharp_cut + e))*(1/(1-2*this%intSharp_cut))
+                 this%xi(:,:,:,1)  = this%intSharp_eps*log( ( e) / (1 -2*this%intSharp_cut + e))*(1/(1-2*this%intSharp_cut))
           elsewhere
-                 xi = this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( this%material(1)%VF -this%intSharp_cut + e )/ (1 - this%intSharp_cut - this%material(1)%VF + e) )
+                 this%xi(:,:,:,1)  = this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( (this%material(1)%VF -this%intSharp_cut + e )/ (1 - this%intSharp_cut -this%material(1)%VF + e) )
           endwhere
+       ! this%xi(:,:,:,1) = this%intSharp_eps*log( (this%phi + e) / ( 1 - this%phi + e) )
 
           if(this%use_FV) then
-            call gradient(this%decomp,this%derD02,xi,gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3)) 
+           ! call gradientFV(this,this%xi(:,:,:,1) ,gradVF_FV,dx,dy,dz,periodicx,periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+            call gradient(this%decomp,this%derD02,this%xi(:,:,:,1),gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3))
+            this%gradVF_FV = gradVF_FV
           else if(this%use_D04) then
-            call gradient(this%decomp,this%derD04,xi,gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3))
+            call gradient(this%decomp,this%derD04,this%xi(:,:,:,1),gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3))
           else
-            call gradient(this%decomp,this%der,xi,gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3))
+            call gradient(this%decomp,this%der,this%xi(:,:,:,1),gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3))
           endif
+          
 
-          call filter3D(this%decomp, this%gfil, gradxi(:,:,:,1), iflag,x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, gradxi(:,:,:,2),iflag,x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, gradxi(:,:,:,3),iflag,x_bc,y_bc,z_bc)
+         !if(this%use_FV) then
+         !  call filter3D(this%decomp, this%gfil,gradVF_FV(:,:,:,1,1),iflag,x_bc,y_bc,z_bc)
+         !  call filter3D(this%decomp, this%gfil,gradVF_FV(:,:,:,2,2),iflag,x_bc,y_bc,z_bc)
+         !  call filter3D(this%decomp, this%gfil,gradVF_FV(:,:,:,3,3),iflag,x_bc,y_bc,z_bc)
 
-          this%fmask = 0.25*(1 - (tanh((1-2*this%intSharp_cut)*xi/(2 *this%intSharp_eps)))**2)-0.5*(1+tanh((1-2*this%intSharp)*xi/(2 *this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut
+             !magnitude of surface vector
+         !   GVFmag = sqrt( gradVF_FV(:,:,:,1,1)**two +gradVF_FV(:,:,:,2,2)**two +gradVF_FV(:,:,:,3,3)**two )
 
-          !calculate surface normal
+         !   where (GVFmag < eps)
+         !        this%norm(:,:,:,1) = zero
+         !        this%norm(:,:,:,2) = zero
+         !        this%norm(:,:,:,3) = zero
+         !   elsewhere
+         !        this%norm(:,:,:,1) = gradVF_FV(:,:,:,1,1) / GVFmag
+         !        this%norm(:,:,:,2) = gradVF_FV(:,:,:,2,2) / GVFmag
+         !        this%norm(:,:,:,3) = gradVF_FV(:,:,:,3,3) / GVFmag
+         !   endwhere
 
-          !magnitude of surface vector
-          GVFmag = sqrt( gradxi(:,:,:,1)**two + gradxi(:,:,:,2)**two + gradxi(:,:,:,3)**two )
+         !else 
 
-          !surface normal
-          where (GVFmag < eps)
-            this%norm(:,:,:,1) = zero
-            this%norm(:,:,:,2) = zero
-            this%norm(:,:,:,3) = zero
-          elsewhere
-            this%norm(:,:,:,1) = gradxi(:,:,:,1) / GVFmag
-            this%norm(:,:,:,2) = gradxi(:,:,:,2) / GVFmag
-            this%norm(:,:,:,3) = gradxi(:,:,:,3) / GVFmag
-          endwhere
+            call filter3D(this%decomp, this%gfil, gradxi(:,:,:,1),iflag,x_bc,y_bc,z_bc)
+            call filter3D(this%decomp, this%gfil, gradxi(:,:,:,2),iflag,x_bc,y_bc,z_bc)
+            call filter3D(this%decomp, this%gfil, gradxi(:,:,:,3),iflag,x_bc,y_bc,z_bc)
 
-         ! call filter3D(this%decomp, this%gfil, this%norm(:,:,:,1), iflag,x_bc,y_bc,z_bc)
-         ! call filter3D(this%decomp, this%gfil, this%norm(:,:,:,2),iflag,x_bc,y_bc,z_bc)
-         ! call filter3D(this%decomp, this%gfil, this%norm(:,:,:,3),iflag,x_bc,y_bc,z_bc)
+            this%gradxi = gradxi
+ 
+            !magnitude of surface vector
+            GVFmag = sqrt( gradxi(:,:,:,1)**two + gradxi(:,:,:,2)**two +gradxi(:,:,:,3)**two )
+
+            !surface normal
+            where (GVFmag < eps)
+              this%norm(:,:,:,1) = zero
+              this%norm(:,:,:,2) = zero
+              this%norm(:,:,:,3) = zero
+            elsewhere
+              this%norm(:,:,:,1) = gradxi(:,:,:,1) / GVFmag
+              this%norm(:,:,:,2) = gradxi(:,:,:,2) / GVFmag
+              this%norm(:,:,:,3) = gradxi(:,:,:,3) / GVFmag
+            endwhere
+        !  endif
+        
+         ! this%fmask = 0.25*(1 - (tanh((1-2*this%intSharp_cut)*this%xi(:,:,:,1)/(2 *this%intSharp_eps)))**2)-0.5*(1+tanh((1-2*this%intSharp)*this%xi(:,:,:,1)/(2 *this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut
+
+          this%fmask =(this%material(1)%VF-this%intSharp_cut)*(one-this%intSharp_cut-this%material(1)%VF)
+
+
+          call filter3D(this%decomp, this%gfil, this%norm(:,:,:,1), iflag,x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, this%norm(:,:,:,2),iflag,x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, this%norm(:,:,:,3),iflag,x_bc,y_bc,z_bc)
 
          if(this%use_FV) then
-           ! call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
-           ! call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
-           ! call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
-           ! call divergenceFV(this,NMint,this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-            call divergence(this%decomp,this%derD02,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
+            call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
+            call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
+            call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
+            this%normFV(:,:,:,1) = NMint(:,:,:,1,1)        
+            this%normFV(:,:,:,2) = NMint(:,:,:,2,2)
+            this%normFV(:,:,:,3) = NMint(:,:,:,3,3)
+            call divergenceFV(this,this%normFV,this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+           ! call divergence(this%decomp,this%derD02,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
          else if(this%use_D04) then
             call divergence(this%decomp,this%derD04,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
          else
@@ -3436,32 +3763,18 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               endwhere
 
                 if (this%use_FV) then
-                         
 
-                     call gradientFV(this,this%phi,gradphi,dx,dy,dz,periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+                  call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-x_bc, y_bc, z_bc)
+                  call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, x_bc,-y_bc, z_bc)
+                  call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, x_bc, y_bc,-z_bc)
+                  call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
+                  call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
+                  call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
+                  this%normFV(:,:,:,1) = NMint(:,:,:,1,1)        
+                  this%normFV(:,:,:,2) = NMint(:,:,:,2,2)
+                  this%normFV(:,:,:,3) = NMint(:,:,:,3,3)
 
-                     !calculate surface normal
-
-                     !magnitude of surface vector
-                     GPHImag = sqrt( gradphi(:,:,:,1)**two + gradphi(:,:,:,2)**two + gradphi(:,:,:,3)**two )
-
-
-                     !surface normal
-                        where (GPHImag < eps)
-                            this%norm(:,:,:,1) = eps
-                            this%norm(:,:,:,2) = eps
-                            this%norm(:,:,:,3) = eps
-                       elsewhere
-                           this%norm(:,:,:,1) = gradphi(:,:,:,1) / GPHImag
-                           this%norm(:,:,:,2) = gradphi(:,:,:,2) / GPHImag
-                           this%norm(:,:,:,3) = gradphi(:,:,:,3) / GPHImag
-                       endwhere
-
-                         call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-x_bc, y_bc, z_bc)
-                         call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, x_bc,-y_bc, z_bc)
-                         call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, x_bc, y_bc,-z_bc)
-
-                         call divergenceFV(this,NMint, this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                  call divergenceFV(this,this%normFV,this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
                 else
 
@@ -3619,12 +3932,13 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
        endif
 
        
-       where( (this%material(1)%VF .LE. 5d-6) .OR. (this%material(1)%VF .GE. (1-5d-6)))
+     !  where( (this%material(1)%VF .LE. 1d-6) .OR. (this%material(1)%VF .GE. (1-1d-6)))
 
-          this%kappa = 0
+     !     this%kappa = 0
 
-       endwhere
+     !  endwhere
 
+   !  this%kappa = this%kappa*tanh((this%material(1)%VF*(1-this%material(1)%VF)/0.01)**2)
 
 
 
@@ -3653,15 +3967,15 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 	else
 
-     !  this%fmask = 1 - (1 -4*this%material(1)%VF*(1-this%material(1)%VF))**nmask
-     !  where( this%fmask .LE. eps)
-     !     this%fmask = 0
-     !  endwhere
+       this%fmask = 1 - (1 -4*this%material(1)%VF*(1-this%material(1)%VF))**nmask
+       where( this%fmask .LE. eps)
+          this%fmask = 0
+       endwhere
        ! tanhmask =tanh((((this%material(1)%VF-this%intSharp_cut)*(one-this%material(1)%VF-this%intSharp_cut))/this%intSharp_tnh)**two )
 
      !  this%kappa = this%fmask*this%kappa
         !TODO: Compute surface tension force and store in this%surfaceTension_f
-
+        !this%kappa = one/0.4
 	this%surfaceTension_f(:,:,:,1) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,1)
 	this%surfaceTension_f(:,:,:,2) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,2)
         this%surfaceTension_f(:,:,:,3) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,3)
@@ -3695,16 +4009,20 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
      !  enddo
 
         !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
-	this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
+!	this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
 
-    !  call filter3D(this%decomp, this%fil,this%surfaceTension_e,iflag,x_bc,y_bc,z_bc)
-    !  call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,1),iflag,x_bc,y_bc,z_bc)
-    !  call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,2),iflag,x_bc,y_bc,z_bc)
-    !  call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,3),iflag,x_bc,y_bc,z_bc)
+      call divergence(this%decomp,this%der,u,v,w,divu,x_bc,y_bc,z_bc)
+      call divergence(this%decomp,this%der,u*this%material(1)%VF,v*this%material(1)%VF,w*this%material(1)%VF,divphiu,x_bc,y_bc,z_bc)
+
+      this%surfaceTension_e = this%surfaceTension_coeff*this%kappa*(divphiu - this%material(1)%VF*divu)
+      call filter3D(this%decomp, this%fil,this%surfaceTension_e,iflag,x_bc,y_bc,z_bc)
+      call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,1),iflag,x_bc,y_bc,z_bc)
+      call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,2),iflag,x_bc,y_bc,z_bc)
+      call filter3D(this%decomp, this%fil, this%surfaceTension_f(:,:,:,3),iflag,x_bc,y_bc,z_bc)
       
-    !  call filter3D(this%decomp, this%fil,this%gradp(:,:,:,1),iflag,x_bc,y_bc,z_bc)
-    !  call filter3D(this%decomp, this%fil,this%gradp(:,:,:,2),iflag,x_bc,y_bc,z_bc)
-    !  call filter3D(this%decomp, this%fil,this%gradp(:,:,:,3),iflag,x_bc,y_bc,z_bc)
+      call filter3D(this%decomp, this%fil,this%gradp(:,:,:,1),iflag,x_bc,y_bc,z_bc)
+      call filter3D(this%decomp, this%fil,this%gradp(:,:,:,2),iflag,x_bc,y_bc,z_bc)
+      call filter3D(this%decomp, this%fil,this%gradp(:,:,:,3),iflag,x_bc,y_bc,z_bc)
 
 
 

@@ -23,10 +23,12 @@ module SolidMod
         class(stiffgas ), allocatable :: hydro
         class(sep1solid), allocatable :: elastic
 
-        type(decomp_info), pointer :: decomp
-        type(derivatives), pointer :: der,derD02, derD04,derD06
-        type(filters),     pointer :: fil
-        type(filters),     pointer :: gfil
+        type(decomp_info), pointer      :: decomp
+        type(derivativesStagg), pointer :: derStagg
+        type(derivatives), pointer      :: der,derD02, derD04,derD06
+        type(interpolators), pointer    :: interpMid
+        type(filters),     pointer      :: fil
+        type(filters),     pointer      :: gfil
 
         real(rkind), dimension(:,:,:), allocatable :: Ys
         real(rkind), dimension(:,:,:), allocatable :: VF
@@ -141,6 +143,7 @@ module SolidMod
         procedure :: getModifiedModulii
         procedure :: get_conserved
         procedure :: get_conserved_g
+        procedure :: getYs
         procedure :: get_primitive
         procedure :: get_primitive_g
         procedure :: getSpeciesDensity
@@ -226,10 +229,12 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,derD02,derD04,derD06,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,useAkshayForm, updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns, x_bc, y_bc, z_bc)
+    subroutine init(this,decomp,der,derD02,derD04,derD06,derStagg,interpMid,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,useAkshayForm, updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns, x_bc, y_bc, z_bc)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der,derD02,derD04, derD06
+        type(derivativesStagg), pointer :: derStagg
+        type(interpolators), pointer    :: interpMid
         type(filters),     target, intent(in) :: fil, gfil
         logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot
         logical, intent(in) :: use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cpg_west,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe, useAkshayForm
@@ -244,7 +249,8 @@ contains
         this%derD06  => derD06
         this%fil  => fil
         this%gfil => gfil
-       
+        this%derStagg => derStagg
+        this%interpMid => interpMid 
         this%PTeqb  = PTeqb
         this%pEqb   = pEqb
         this%pRelax = pRelax
@@ -706,6 +712,8 @@ contains
         nullify( this%derD02    )
         nullify( this%derD04    )
         nullify( this%derD06    )
+        nullify( this%derStagg  )
+        nullify( this%interpMid )
         nullify( this%decomp )
     end subroutine
 
@@ -4754,26 +4762,45 @@ contains
     end subroutine
 
     subroutine getRHS_VF(this,other,rho,u,v,w,divu,src,rhsVF,x_bc,y_bc,z_bc)
-        use operators, only: gradient, divergence
+        use operators, only: gradient, divergence,divergenceFV
         use constants, only: one
         class(solid),                                       intent(in)  :: this
         class(solid),                                       intent(in)  :: other
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,divu,src
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
+
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1, tmp2, tmp3, tmp4, tmp5, tmp6,rhocsq1, rhocsq2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2, tmp3, tmp4, tmp5, tmp6,rhocsq1, rhocsq2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: divu, divuVF,u_int, v_int, w_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: divu_d,divuVF_d, uVF_int, vVF_int, wVF_int
+ 
 
         ! Add C/rhom to Fsource
         !--call this%getSpeciesDensity(rho,tmp1)  !-- use this%rhom
         call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
           
-        call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
+     !   call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
 
-        call divergence(this%decomp,this%der,-u*this%VF,-v*this%VF,-w*this%VF,tmp4,-x_bc,-y_bc,-z_bc) 
+     !   call divergence(this%decomp,this%der,-u*this%VF,-v*this%VF,-w*this%VF,tmp4,-x_bc,-y_bc,-z_bc) 
 
-        call divergence(this%decomp,this%der,u,v,w,tmp5,-x_bc,-y_bc,-z_bc)
+     !   call divergence(this%decomp,this%der,u,v,w,tmp5,-x_bc,-y_bc,-z_bc)
+        
+        call interpolateFV(this%decomp,this%interpMid,u,u_int,periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
+        call interpolateFV(this%decomp,this%interpMid,v,v_int,periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
+        call interpolateFV(this%decomp,this%interpMid,w,w_int,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,-this%z_bc)
+        call divergenceFV(this%decomp, this%interpMid,u_int,divu(:,:,:,1),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call divergenceFV(this%decomp, this%interpMid,v_int,divu(:,:,:,2),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call divergenceFV(this%decomp, this%interpMid,u_int,divu(:,:,:,3),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+
+
+
+
+        
  
+        
+
         if (this%useAkshayForm) then
            
 
@@ -5150,6 +5177,17 @@ contains
         endif
 
     end subroutine
+
+    subroutine getYs(this,rho)
+        use operators, only : gradient
+        class(solid), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)                :: rhom
+
+        this%Ys = this%consrv(:,:,:,1) / rho
+
+    end subroutine
+
 
     subroutine get_primitive(this,rho,u,v,w)
         use operators, only : gradient

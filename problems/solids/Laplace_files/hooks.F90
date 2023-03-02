@@ -19,7 +19,7 @@ module Laplace_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 2D0, Lx = 2D0, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 0.4d0
+    real(rkind) :: Ly = 2.0D0, Lx = 2.0D0, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 0.4d0
     real(rkind) :: tau0_2=1d0, Nvel=1d0, etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
 
 
@@ -147,16 +147,24 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     ! If base decomposition is in Y
     ix1 = decomp%yst(1); iy1 = decomp%yst(2); iz1 = decomp%yst(3)
     ixn = decomp%yen(1); iyn = decomp%yen(2); izn = decomp%yen(3)
-    
+   
+    print *, 'ix1= ', ix1
+    print *, 'iy1= ', iy1
+ 
     ! Create mesh from [0,1)x[0,1)x[0,1) using nx, ny, nz points in x, y and z respectively
     ! Need to set x, y and z as well as  dx, dy and dz
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = Lx/real(nx,rkind)
-        dy = Ly/real(ny,rkind)
+        dx = Lx/real(nx-1,rkind)
+        dy = Ly/real(ny-1,rkind)
         dz = dx
 
+        print *, 'dx = ', dx
+        print *, 'dy = ', dy
+
+        print *, 'size x ', size(mesh,1)
+        print *, 'size y', size(mesh,2)
         if(abs(dx-dy)>1.0d-13) then
           call warning("dx not equal to dy")
         endif
@@ -164,12 +172,16 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx   ! x \in (-2,4]
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx   ! x \in (-2,4]
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
+                
+                   
                 end do
             end do
         end do
+
+       print *, "x,y = ", x(2,2,1), y(2,2,1)
 
     end associate
 
@@ -204,8 +216,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind) :: a0, a0_2, vc
 	logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
-	
-    integer :: nx,ny,nz
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2)) :: p	
+    integer :: nx,ny,nz, ix
     nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
 
     namelist /PROBINPUT/  p_infty,p_ten, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
@@ -263,7 +275,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             write(*,'(3(a,e12.5))') 'tau0  = ', tau0_2
             write(*,*) 'p_amb = ', p_amb
         end if
-
+       
+        print *, 'nx= ', nx
+        print *, 'ny= ', ny
 
         ! Set materials
         ! call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10)) !mca: see Sep1SolidEOS.F90 "init"
@@ -287,7 +301,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = sqrt((x - 1)**2 + (y - 1)**2)
+	eta = sqrt((x - 1.0)**2 + (y - 1.0)**2)
 
         !mp = half * ( one - erf((R**2 -(x-1_rkind)*(x-1_rkind) - (y-1_rkind)*(y-1_rkind))/(thick*dx)) )	
         tmp = 1/ (1+exp( (eta - R)/(thick*dx)) )
@@ -341,10 +355,23 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
 
 
+
+        ! Read in pressure profile
+       ! open (unit=8, file="P.txt", status='old', action='read' )
+
+       ! do ix = 1,nx
+       !   read(8,*) p(ix,:)
+       ! end do
+
         !set mixture pressure (uniform)
-	mix%material(1)%p = p_amb+p_ten*mix%material(1)%VF
+	mix%material(1)%p = p_ten*mix%material(1)%VF + p_amb
 	mix%material(2)%p = mix%material(1)%p
 
+        mix%surfaceTension_f(:,:,:,1) = 0.3/(thick*dx)*(-(x-1)* exp( (eta-R)/(thick*dx))/ ( eta**2 * (1 + exp( (eta - R)/(thick*dx)))**2))
+        mix%surfaceTension_f(:,:,:,2) = 0.3/(thick*dx)*(-(y-1)* exp((eta-R)/(thick*dx))/ ( eta**2 * (1 + exp( (eta - R)/(thick*dx)))**2))
+        mix%surfaceTension_f(:,:,:,3) = 0 
+        mix%surfaceTension_e = 0;
+        mix%kappa  = -1 / sqrt( (x-1)**2 + (y-1)**2) 
      ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -968,10 +995,11 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+
 !v = 0
 !w = 0
 !u = 0
-!p = p_amb
    end associate
 end subroutine
 

@@ -368,7 +368,7 @@ contains
                
          end do
          
-         if(mix%use_surfaceTension) then
+       !  if((mix%use_surfaceTension) .OR. (mix%use_CnsrvSurfaceTension)) then
             call update_halo(mix%kappa,tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='kappa',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
@@ -397,6 +397,18 @@ contains
             E_IO =VTK_VAR_XML(NC_NN=nn,varname='norm_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
 
+            call update_halo(mix%normFV(:,:,:,1),tmp1,1,gp,.FALSE.)
+            E_IO =VTK_VAR_XML(NC_NN=nn,varname='normFV_x',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%normFV(:,:,:,2),tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='normFV_y',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%normFV(:,:,:,3),tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='normFV_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
             call update_halo(mix%gradp(:,:,:,2),tmp1,1,gp,.FALSE.)
             E_IO =VTK_VAR_XML(NC_NN=nn,varname='gradp_x',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
@@ -420,7 +432,36 @@ contains
             call update_halo(mix%gradVF(:,:,:,1),tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='gradVF_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
-            
+           
+            call update_halo(mix%gradVF_FV(:,:,:,1,1),tmp1,1,gp,.FALSE.)
+            E_IO =VTK_VAR_XML(NC_NN=nn,varname='gradVFFV_x',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%gradVF_FV(:,:,:,2,2),tmp1,1,gp,.FALSE.)
+            E_IO =VTK_VAR_XML(NC_NN=nn,varname='gradVFFV_y',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%gradVF_FV(:,:,:,3,3),tmp1,1,gp,.FALSE.)
+            E_IO =VTK_VAR_XML(NC_NN=nn,varname='gradVFFV_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%gradVF_FV(:,:,:,2,1),tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='gradVFFV_xy',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%gradxi(:,:,:,1),tmp1,1,gp,.FALSE.)
+            E_IO =VTK_VAR_XML(NC_NN=nn,varname='gradxi_x',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%gradxi(:,:,:,2),tmp1,1,gp,.FALSE.)
+            E_IO =VTK_VAR_XML(NC_NN=nn,varname='gradxi_y',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%gradxi(:,:,:,3),tmp1,1,gp,.FALSE.)
+            E_IO =VTK_VAR_XML(NC_NN=nn,varname='gradxi_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+  
             call update_halo(mix%surfaceTension_f(:, :, :, 1),tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fx',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
@@ -439,8 +480,40 @@ contains
             call update_halo(mix%surfaceTension_e,tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_e',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%surfaceTension_pe,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_pe',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%surfaceTension_fxx,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fxx',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%surfaceTension_fyy,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fyy',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%surfaceTension_fzz,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fzz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%surfaceTension_fxz,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fxz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%surfaceTension_fxy,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fxy',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%surfaceTension_fyz,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='surfaceTension_fyz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
        
-       endif
+!       endif
+
+
+
 
       ! call update_halo(mix%xi,tmp1,1,gp,.FALSE.)
       ! E_IO = VTK_VAR_XML(NC_NN=nn,varname='xi',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
@@ -534,31 +607,42 @@ contains
 
             end do
 
-             if(mix%use_surfaceTension) then
+           !  if((mix%use_surfaceTension) .OR. (mix%use_CnsrvSurfaceTension)) then
                 E_IO = PVTK_VAR_XML(varname='kappa', tp='Float64') 
                 E_IO = PVTK_VAR_XML(varname='maskKappa', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='fmask', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='norm_x', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='norm_y', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='norm_z', tp='Float64')
-                E_IO = PVTK_VAR_XML(varname='gradp_x', tp='Float64')
-                E_IO = PVTK_VAR_XML(varname='gradp_y', tp='Float64')
-                E_IO = PVTK_VAR_XML(varname='gradp_z', tp='Float64')
-                E_IO = PVTK_VAR_XML(varname='gradVF_x', tp='Float64')
-                E_IO = PVTK_VAR_XML(varname='norm_x', tp='Float64')
-                E_IO = PVTK_VAR_XML(varname='norm_y', tp='Float64')
-                E_IO = PVTK_VAR_XML(varname='norm_z', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='normFV_x', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='normFV_y', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='normFV_z', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='gradp_x', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='gradp_y', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='gradp_z', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='gradVF_x', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='gradVF_y', tp='Float64')
-                E_IO = PVTK_VAR_XML(varname='gradVF_z', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='gradVF_z', tp='Float64')                
+                E_IO = PVTK_VAR_XML(varname='gradVFFV_x', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='gradVFFV_y', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='gradVFFV_z', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='gradVFFV_xy', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='gradxi_x', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='gradxi_y', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='gradxi_z', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='surfaceTension_fx', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='surfaceTension_fy', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='surfaceTension_fz', tp='Float64')
-                E_IO = PVTK_VAR_XML(varname='surfaceTension_e', tp='Float64')               
-            endif
+                E_IO = PVTK_VAR_XML(varname='surfaceTension_e', tp='Float64')       
+                E_IO = PVTK_VAR_XML(varname='surfaceTension_pe', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='surfaceTension_fxx', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='surfaceTension_fyy', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='surfaceTension_fzz', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='surfaceTension_fxz', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='surfaceTension_fxy', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='surfaceTension_fyz', tp='Float64')
+       !     endif
+
 
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='close')
             
