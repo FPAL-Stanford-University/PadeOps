@@ -5,7 +5,7 @@ module ShearLayer_data
     use decomp_2d,        only: decomp_info, nrank
     use basic_io,         only: read_2d_ascii 
     use reductions,       only: P_MAXVAL,P_MINVAL
-    use exits,            only: message
+    use exits,            only: message, message_min_max
     use mpi
     implicit none
     integer, parameter :: ns = 1
@@ -432,6 +432,11 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
             write(outputunit,'(3ES26.16)') tsim, tke_mean
             close(outputunit)
         end if
+
+        !!!! write out cmodel_local and cmodel_local_Qjsgs if using
+        !!!! DynamicProcedureType==1 so that we can analyze if the
+        !!!! LD implementation is correct
+
     end associate
 end subroutine
 
@@ -469,7 +474,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         ! Sponge+bulk for exit bc
         ! Gradually apply the exit boundary conditions
         dy = Ly/real(decomp%ysz(2)-1,rkind)
-        filpt = 4.0_rkind/dy 
+        filpt = 3.0_rkind/dy 
         thickT = real(5.D0, rkind)
         
         ! Gussian Filter for 
@@ -526,12 +531,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 end subroutine
 
 
-subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,two
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank
     use MixtureEOSMod,    only: mixture
+    use sgsmod_cgrid,     only: sgs_cgrid
     use exits,            only: message
     use reductions,       only: P_MAXVAL,P_MINVAL
 
@@ -540,15 +546,17 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     implicit none
     type(decomp_info),               intent(in) :: decomp
     type(mixture),                   intent(in) :: mix
+    type(sgs_cgrid),                 intent(in) :: sgsmodel
     integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
 
     real(rkind) :: dx, Ythick, oob
-    integer :: ny
+    integer :: ny  , j
     integer :: iounit = 229
     character(len=clen) :: outputfile
+    real(rkind), dimension(decomp%ysz(2)) :: cmodel_loc, cmodel_loc_Qjsgs
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -563,6 +571,34 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
         call message(2,"Maximum diffusivity",P_MAXVAL(diff))
+
+        !if(useSGS)
+          !if(sgsmodel%DynamicProcedureType==1) then
+             call message_min_max(2,"Bounds for LD-Coeff-tke      : ",     &
+                    sgsmodel%get_Max_LocalDynamicProcedure_Coeff_tke(),   &
+                    sgsmodel%get_Min_LocalDynamicProcedure_Coeff_tke())
+             call message_min_max(2,"Bounds for LD-Coeff      : ",     &
+                    sgsmodel%get_Max_LocalDynamicProcedure_Coeff(),   &
+                    sgsmodel%get_Min_LocalDynamicProcedure_Coeff())
+             call message_min_max(2,"Bounds for LD-Coeff-Qjsgs: ",     &
+                    sgsmodel%get_Max_LocalDynamicProcedure_Coeff_Qjsgs(),   &
+                    sgsmodel%get_Min_LocalDynamicProcedure_Coeff_Qjsgs())
+          !endif
+
+           if(mod(step,100)==0) then
+              cmodel_loc = sgsmodel%get_LocalDynamicProcedure_Coeff()
+              cmodel_loc_Qjsgs = sgsmodel%get_LocalDynamicProcedure_Coeff_Qjsgs()
+              if(nrank==0) then
+                  write(outputfile, '(a,i5.5,a)') 'cmodel_', step, '.dat'
+                  open(10,file=outputfile,status='unknown')
+                  do j=1,decomp%ysz(2)
+                     write(10,'(3(e19.12),1x)') y(1,j,1), cmodel_loc(j), cmodel_loc_Qjsgs(j)
+                  enddo
+                  close(10)
+              endif
+           endif
+
+       ! endif
 
     end associate
 

@@ -23,7 +23,113 @@ function getMax_kapsgs(this) result(val)
    end if
 end function
 
-!!!
+pure function get_LocalDynamicProcedure_Coeff(this) result(val)
+   class(sgs_cgrid), intent(in) :: this
+   real(rkind), dimension(this%nyL) :: val
+
+   if (this%DynamicProcedureType==1) then
+      val(:) = this%cmodel_local(:)
+   else
+      val(:) = 0.d0
+   end if
+
+end function
+
+pure function get_LocalDynamicProcedure_Coeff_Qjsgs(this) result(val)
+   class(sgs_cgrid), intent(in) :: this
+   real(rkind), dimension(this%nyL) :: val
+
+   if (this%DynamicProcedureType==1) then
+      val(:) = this%cmodel_local_Qjsgs(:)
+   else
+      val(:) = 0.d0
+   end if
+
+end function
+
+pure function get_LocalDynamicProcedure_Coeff_tke(this) result(val)
+   class(sgs_cgrid), intent(in) :: this
+   real(rkind), dimension(this%nyL) :: val
+
+   if (this%DynamicProcedureType==1) then
+      val(:) = this%cmodel_local_tke(:)
+   else
+      val(:) = 0.d0
+   end if
+
+end function
+
+pure function get_Max_LocalDynamicProcedure_Coeff(this) result(val)
+   class(sgs_cgrid), intent(in) :: this
+   real(rkind) :: val
+
+   if (this%DynamicProcedureType==1) then
+      val = maxval(this%cmodel_local(:))
+   else
+      val = 0.d0
+   end if
+
+end function
+
+pure function get_Max_LocalDynamicProcedure_Coeff_Qjsgs(this) result(val)
+   class(sgs_cgrid), intent(in) :: this
+   real(rkind) :: val
+
+   if (this%DynamicProcedureType==1) then
+      val = maxval(this%cmodel_local_Qjsgs(:))
+   else
+      val = 0.d0
+   end if
+
+end function
+
+pure function get_Max_LocalDynamicProcedure_Coeff_tke(this) result(val)
+   class(sgs_cgrid), intent(in) :: this
+   real(rkind) :: val
+
+   if (this%DynamicProcedureType==1) then
+      val = maxval(this%cmodel_local_tke(:))
+   else
+      val = 0.d0
+   end if
+
+end function
+
+pure function get_Min_LocalDynamicProcedure_Coeff(this) result(val)
+   class(sgs_cgrid), intent(in) :: this
+   real(rkind) :: val
+
+   if (this%DynamicProcedureType==1) then
+      val = minval(this%cmodel_local(:))
+   else
+      val = 0.d0
+   end if
+
+end function
+
+pure function get_Min_LocalDynamicProcedure_Coeff_Qjsgs(this) result(val)
+   class(sgs_cgrid), intent(in) :: this
+   real(rkind) :: val
+
+   if (this%DynamicProcedureType==1) then
+      val = minval(this%cmodel_local_Qjsgs(:))
+   else
+      val = 0.d0
+   end if
+
+end function
+
+pure function get_Min_LocalDynamicProcedure_Coeff_tke(this) result(val)
+   class(sgs_cgrid), intent(in) :: this
+   real(rkind) :: val
+
+   if (this%DynamicProcedureType==1) then
+      val = minval(this%cmodel_local_tke(:))
+   else
+      val = 0.d0
+   end if
+
+end function
 !!!pure function get_GlobalConstant(this) result(val)
 !!!   class(sgs_igrid), intent(in) :: this
 !!!   real(rkind)                     :: val

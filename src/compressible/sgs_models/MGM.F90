@@ -9,8 +9,10 @@ subroutine init_mgm(this)
    this%cmgm_y = this%dy**2 / 12.0d0 
    this%cmgm_z = this%dz**2 / 12.0d0
    this%PrCpfac= this%Cp / this%Pr
-   this%c1_mgm = eight * (this%deltaLES**2) * ceps_2 
-   this%c2_mgm = two * (this%deltaLES**2) * cepsT_2
+   this%c1_mgm = eight * (this%deltaLES**2) !* ceps_2 
+   this%c2_mgm = two * (this%deltaLES**2) !* cepsT_2
+   this%cmodel_global =  this%Csgs
+   this%cmodel_global_Qjsgs =  this%Csgs/this%Prsgs
 
    call message(1,"MGM model initialized") 
 
@@ -23,10 +25,12 @@ subroutine destroy_mgm(this)
 
 end subroutine
 
-subroutine get_tausgs_mgm(this, rho, duidxj, tausgs)
+!subroutine get_tausgs_mgm(this, rho, duidxj, tausgs)
+subroutine get_mgm_kernel(this, rho, duidxj, Sij, tausgs)
    class(sgs_cgrid), intent(inout) :: this
    real(rkind), dimension(this%nxL,this%nyL,this%nzL  ), intent(in)  :: rho
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,9), intent(in)  :: duidxj
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL,6), intent(in)  :: Sij
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,6), intent(out) :: tausgs
 
    real(rkind)  :: G11, G12, G13, G22, G23, G33 , Gmm , ckl, multfactor, maxrho
@@ -55,8 +59,8 @@ subroutine get_tausgs_mgm(this, rho, duidxj, tausgs)
 
             Gmm = G11 + G22 + G33 + eps
             
-            ckl = - (  G11 * this%S_ij(i,j,k,1) + G22 * this%S_ij(i,j,k,4) + G33 * this%S_ij(i,j,k,6) + &
-                two * (G12 * this%S_ij(i,j,k,2) + G13 * this%S_ij(i,j,k,3) + G23 * this%S_ij(i,j,k,5) ) ) / Gmm
+            ckl = - (  G11 * Sij(i,j,k,1) + G22 * Sij(i,j,k,4) + G33 * Sij(i,j,k,6) + &
+                two * (G12 * Sij(i,j,k,2) + G13 * Sij(i,j,k,3) + G23 * Sij(i,j,k,5) ) ) / Gmm
            
             multfactor = this%c1_mgm * ckl * ckl * rho(i,j,k) / Gmm
  
@@ -79,11 +83,60 @@ subroutine get_tausgs_mgm(this, rho, duidxj, tausgs)
 
 end subroutine
 
+subroutine multiply_by_model_coefficient_mgm(this, tausgs)
+   class(sgs_cgrid), intent(inout) :: this
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL,6), intent(inout)  :: tausgs
 
-subroutine get_Qjsgs_mgm(this, rho, duidxj, gradT, Qjsgs)
+   integer  :: ii, j, k
+
+   if( (this%DynamicProcedureType==0) .or. (this%DynamicProcedureType==2)) then
+      !! constant coefficient or Global-Dynamic Procedure
+      do ii = 1, 6
+          tausgs(:,:,:,ii) = this%cmodel_global * tausgs(:,:,:,ii)
+      enddo 
+   elseif(this%DynamicProcedureType==1) then
+      !! Local-Dynamic Procedure - averaged in (x,z); function of (y)
+      do ii = 1, 6
+        do k = 1, this%nzL
+          do j = 1, this%nyL
+            tausgs(:,j,k,ii) = this%cmodel_local(j) * tausgs(:,j,k,ii)
+          end do
+        end do
+      end do
+   endif
+
+end subroutine
+
+subroutine multiply_by_model_coefficient_mgm_Qjsgs(this, Qjsgs)
+   class(sgs_cgrid), intent(inout) :: this
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(inout)  :: Qjsgs
+
+   integer  :: ii, j, k
+
+   if( (this%DynamicProcedureType==0) .or. (this%DynamicProcedureType==2)) then
+      !! constant coefficient or Global-Dynamic Procedure
+      do ii = 1, 3
+          Qjsgs(:,:,:,ii) = this%cmodel_global_Qjsgs * Qjsgs(:,:,:,ii)
+      enddo 
+   elseif(this%DynamicProcedureType==1) then
+      !! Local-Dynamic Procedure - averaged in (x,z); function of (y)
+      do ii = 1, 3
+        do k = 1, this%nzL
+          do j = 1, this%nyL
+            Qjsgs(:,j,k,ii) = this%cmodel_local_Qjsgs(j) * Qjsgs(:,j,k,ii)
+          end do
+        end do
+      end do
+   endif
+
+end subroutine
+
+!subroutine get_Qjsgs_mgm(this, rho, duidxj, gradT, Qjsgs)
+subroutine get_Qjsgs_mgm_kernel(this, rho, duidxj, Sij, gradT, Qjsgs)
    class(sgs_cgrid), intent(inout) :: this
    real(rkind), dimension(this%nxL,this%nyL,this%nzL  ), intent(in)  :: rho
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,9), intent(in)  :: duidxj
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL,6), intent(in)  :: Sij
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(in)  :: gradT
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(out) :: Qjsgs
 
@@ -124,8 +177,8 @@ subroutine get_Qjsgs_mgm(this, rho, duidxj, gradT, Qjsgs)
 
             modG = sqrt(G1T**2 + G2T**2 + G3T**2) + eps
             
-            ckl = -( G11 * this%S_ij(i,j,k,1) + G22 * this%S_ij(i,j,k,4) + G33 * this%S_ij(i,j,k,6) + &
-                two*(G12 * this%S_ij(i,j,k,2) + G13 * this%S_ij(i,j,k,3) + G23 * this%S_ij(i,j,k,5) ) ) / Gmm
+            ckl = -( G11 * Sij(i,j,k,1) + G22 * Sij(i,j,k,4) + G33 * Sij(i,j,k,6) + &
+                two*(G12 * Sij(i,j,k,2) + G13 * Sij(i,j,k,3) + G23 * Sij(i,j,k,5) ) ) / Gmm
 
             cnT = -( G1T * gradT(i,j,k,1) + G2T * gradT(i,j,k,2) + G3T * gradT(i,j,k,3) )/ modG
             

@@ -303,41 +303,7 @@ contains
         this%Ys   => this%fields(:,:,:,Ys_index:Ys_index+ns-1)
         this%diff => this%fields(:,:,:,Ys_index+ns:Ys_index+2*ns-1)
 
-        ! Initialize everything to a constant Zero
-        this%fields = zero
-        this%Ys(:,:,:,1) = one   ! So that all massfractions add up to unity
-
-        Cp = 3.5_rkind
-        Pr = 0.7_rkind  !!!needed to be fixed
-        
-        this%useSGS = useSGS
-
-        if(this%useSGS) then
-            call alloc_buffs(this%tausgs,6,'y',this%decomp)
-            call alloc_buffs(this%Qjsgs, 3,'y',this%decomp)
-           
-            allocate(this%sgsmodel)
-            
-            call this%sgsmodel%init(this%decomp, Cp, Pr, this%dx, this%dy, this%dz, inputfile)
-         
-        endif
-
-        ! Finally, set the local array dimensions
-        this%nxp = this%decomp%ysz(1)
-        this%nyp = this%decomp%ysz(2)
-        this%nzp = this%decomp%ysz(3)
-
-        ! Go to hooks if a different initialization is derired 
-        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
-        
-        ! Check for correct initialization of the mixture object
-        call this%mix%check_initialization()
-
-        ! Update mix
-        call this%mix%update(this%Ys)
-        call this%mix%get_e_from_p(this%rho,this%p,this%e)
-        call this%mix%get_T(this%e,this%T)
+!!! ----- block moved from here --------
 
         ! print *, "Cp(1,1,1) = ", this%mix%Cp(1,1,1)
         ! print *, "Cp(-1,1,1) = ", this%mix%Cp(this%nxp,1,1)
@@ -412,6 +378,45 @@ contains
         call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
 
         this%SkewSymm = SkewSymm
+
+!!! ----- block moved to here --------
+!-------------this should be moved to after alloc buffs, der, etc------------------------------
+        ! Initialize everything to a constant Zero
+        this%fields = zero
+        this%Ys(:,:,:,1) = one   ! So that all massfractions add up to unity
+
+        Cp = 3.5_rkind
+        Pr = 0.7_rkind  !!!needed to be fixed
+        
+        this%useSGS = useSGS
+
+        if(this%useSGS) then
+            call alloc_buffs(this%tausgs,6,'y',this%decomp)
+            call alloc_buffs(this%Qjsgs, 3,'y',this%decomp)
+           
+            allocate(this%sgsmodel)
+            
+            call this%sgsmodel%init(this%der, this%decomp, Cp, Pr, this%dx, this%dy, this%dz, inputfile, this%xbuf, this%ybuf, this%zbuf, periodicx, periodicy, periodicz, x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn)
+         
+        endif
+
+        ! Finally, set the local array dimensions
+        this%nxp = this%decomp%ysz(1)
+        this%nyp = this%decomp%ysz(2)
+        this%nzp = this%decomp%ysz(3)
+
+        ! Go to hooks if a different initialization is derired 
+        call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
+        
+        ! Check for correct initialization of the mixture object
+        call this%mix%check_initialization()
+
+        ! Update mix
+        call this%mix%update(this%Ys)
+        call this%mix%get_e_from_p(this%rho,this%p,this%e)
+        call this%mix%get_T(this%e,this%T)
+!-------------this should be moved to after alloc buffs, der, etc------------------------------
 
         allocate(varnames(nfields))
         varnames(rho_index ) = 'density'
@@ -841,13 +846,13 @@ contains
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
+            call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%sgsmodel, this%step, this%tsim)
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
                 call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 ! call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
-                call this%getRHS(rhs)
+                call this%getRHS(rhs, .false.)
                 call this%write_viz()
                 vizcond = .FALSE.
             end if
@@ -927,6 +932,7 @@ contains
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
 
         integer :: isub,i,j,k,l
+        logical :: newTimeStep
 
         character(len=clen) :: charout
 
@@ -981,6 +987,13 @@ contains
 
 
         do isub = 1,RK45_steps
+
+            if(isub==1) then
+                newTimeStep = .true.
+            else
+                newTimeStep = .false.
+            endif
+
             call this%get_conserved()
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
@@ -990,7 +1003,7 @@ contains
                 call GracefulExit(trim(charout), 999)
             end if
 
-            call this%getRHS(rhs)
+            call this%getRHS(rhs, newTimeStep)
             Qtmp = this%dt*rhs + RK45_A(isub)*Qtmp
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
@@ -1248,7 +1261,7 @@ contains
 
     end subroutine
 
-    subroutine getRHS(this, rhs)
+    subroutine getRHS(this, rhs, newTimeStep)
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
@@ -1261,6 +1274,7 @@ contains
         real(rkind), dimension(:,:,:), pointer :: qx,qy,qz
         real(rkind), dimension(:,:,:,:), pointer :: Jx,Jy,Jz
         integer :: i
+        logical :: newTimeStep
 
         dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
@@ -1276,8 +1290,8 @@ contains
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if(this%useSGS) then
-            call this%sgsmodel%getTauSGS(duidxj, this%rho,        this%tausgs)
-            call this%sgsmodel%getQjSGS (duidxj, this%rho, gradT, this%Qjsgs )
+            call this%sgsmodel%getTauSGS(newTimeStep, duidxj, this%rho, this%u, this%v, this%w, this%tausgs)
+            call this%sgsmodel%getQjSGS (newTimeStep, duidxj, this%rho, this%u, this%v, this%w, this%T, gradT, this%Qjsgs )
         endif
 
         if (this%mix%ns .GT. 1) then

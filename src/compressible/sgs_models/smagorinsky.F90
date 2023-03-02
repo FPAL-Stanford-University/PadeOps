@@ -6,10 +6,11 @@ subroutine init_smagorinsky(this)
    ! Can be reset to true via dynamic procedure initialization, 
    ! in case the global dynamic procedure is used. 
       
-   this%useCglobal = .true.
-   this%cmodel_global = (this%Csgs*this%deltaLES)**2
-
+   !this%useCglobal = .true.
+   !this%cmodel_global = (this%Csgs*this%deltaLES)**2
    this%isEddyViscosityModel = .true. 
+   this%cmodel_global = this%Csgs !* this%deltaLES**2 ! one       
+   this%cmodel_global_Qjsgs =  this%Csgs/this%Prsgs
 
    call message(1,"Smagorinsky model initialized")
 end subroutine
@@ -21,9 +22,10 @@ subroutine destroy_smagorinsky(this)
 
 end subroutine
 
-subroutine get_smagorinsky_kernel(this, modS_sq)
+subroutine get_smagorinsky_kernel(this, modS_sq, nusgs)
    class(sgs_cgrid), intent(inout) :: this
    real(rkind), dimension(this%nxL,this%nyL,this%nzL), intent(in)  :: modS_sq
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL), intent(out) :: nusgs
    !real(rkind), dimension(nxL, nyL) :: S
    
    !!do k = 1,nzL
@@ -44,7 +46,9 @@ subroutine get_smagorinsky_kernel(this, modS_sq)
    !!   end do 
    !!end do
 
-   this%nusgs = sqrt(modS_sq)
+   nusgs = sqrt(modS_sq) 
+   nusgs = sqrt(modS_sq) * (this%deltaLES**2)
+
 
 
 end subroutine

@@ -3,6 +3,7 @@ module FiltersMod
     use cf90stuff,       only: cf90
     use gaussianstuff,   only: gaussian
     use lstsqstuff,      only: lstsq
+    use box2stuff,       only: box2
     use exits,           only: gracefulExit, message
     use decomp_2d,       only: decomp_info, nrank
 
@@ -18,6 +19,7 @@ module FiltersMod
         type(cf90)    , allocatable :: xcf90, ycf90, zcf90
         type(gaussian), allocatable :: xgauf, ygauf, zgauf
         type(lstsq)   , allocatable :: xlsqf, ylsqf, zlsqf
+        type(box2)    , allocatable :: xbox2, ybox2, zbox2
 
         integer, dimension(3)          :: xsz, ysz, zsz ! Local decomposition sizes
         
@@ -50,6 +52,8 @@ contains
             m = "gaussian"
         case (3)
             m = "lstsq"
+        case (4)
+            m = "box2"
         end select 
     end function
 
@@ -63,6 +67,8 @@ contains
             m = "gaussian"
         case (3)
             m = "lstsq"
+        case (4)
+            m = "box2"
         end select
     end function 
         
@@ -76,12 +82,14 @@ contains
             m = "gaussian"
         case (3)
             m = "lstsq"
+        case (4)
+            m = "box2"
         end select
     end function 
         
     subroutine init_procedures(this, nx, ny, nz, &
                                      methodx, methody, methodz, &
-                                     periodicx, periodicy, periodicz) 
+                                     periodicx, periodicy, periodicz)
 
         class( filters ) , intent(inout) :: this
         integer          , intent(in)    :: nx, ny, nz
@@ -116,6 +124,14 @@ contains
             end if
             this%xmethod = 3
         
+        case("box2") 
+            allocate (this%xbox2)
+            ierr = this%xbox2%init(nx, periodicx)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing box2 filter failed in X ",51)
+            end if
+            this%xmethod = 4
+        
         case default
             call GracefulExit("Incorrect method select in direction X", 52)
         end select 
@@ -147,6 +163,14 @@ contains
             end if
             this%ymethod = 3
         
+        case("box2") 
+            allocate (this%ybox2)
+            ierr = this%ybox2%init(ny, periodicy)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing box2 filter failed in Y ",51)
+            end if
+            this%ymethod = 4
+        
         case default
             call GracefulExit("Incorrect method select in direction Y", 52)
         end select 
@@ -177,6 +201,14 @@ contains
             end if
             this%zmethod = 3
         
+        case("box2") 
+            allocate (this%zbox2)
+            ierr = this%zbox2%init(nz, periodicz)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing box2 filter failed in Z ",51)
+            end if
+            this%zmethod = 4
+        
         case default
             call GracefulExit("Incorrect method select in direction Z", 52)
         end select 
@@ -193,6 +225,8 @@ contains
             call this%xgauf%destroy
         case (3)
             call this%xlsqf%destroy
+        case (4)
+            call this%xbox2%destroy
         end select
 
         select case (this%ymethod)  
@@ -202,6 +236,8 @@ contains
             call this%ygauf%destroy
         case (3)
             call this%ylsqf%destroy
+        case (4)
+            call this%ybox2%destroy
         end select
         
         select case (this%zmethod)  
@@ -211,6 +247,8 @@ contains
             call this%zgauf%destroy
         case (3)
             call this%zlsqf%destroy
+        case (4)
+            call this%zbox2%destroy
         end select
 
         this%initialized = .false. 
@@ -230,6 +268,8 @@ contains
             call this%xgauf%filter1( f, ff, this%xsz(2), this%xsz(3), bc1, bcn)
         case (3)
             call this%xlsqf%filter1( f, ff, this%xsz(2), this%xsz(3))
+        case (4)
+            call this%xbox2%filter1( f, ff, this%xsz(2), this%xsz(3), bc1, bcn)
         end select
 
     end subroutine
@@ -247,6 +287,8 @@ contains
             call this%ygauf%filter2( f, ff, this%ysz(1), this%ysz(3), bc1, bcn)
         case (3)
             call this%ylsqf%filter2( f, ff, this%ysz(1), this%ysz(3))
+        case (4)
+            call this%ybox2%filter2( f, ff, this%ysz(1), this%ysz(3), bc1, bcn)
         end select
 
     end subroutine
@@ -264,6 +306,8 @@ contains
             call this%zgauf%filter3( f, ff, this%zsz(1), this%zsz(2), bc1, bcn)
         case (3)
             call this%zlsqf%filter3( f, ff, this%zsz(1), this%zsz(2))
+        case (4)
+            call this%zbox2%filter3( f, ff, this%zsz(1), this%zsz(2), bc1, bcn)
         end select
 
     end subroutine
@@ -273,12 +317,12 @@ contains
     
     subroutine init_parallel(this,                              gp  , &
                                      periodicx, periodicy, periodicz, & 
-                                     methodx  , methody  , methodz    )
+                                     methodx  , methody  , methodz)
+
         class( filters )   , intent(inout) :: this
-        class( decomp_info), intent(in)  :: gp 
+        class( decomp_info), intent(in)    :: gp 
         character(len=*)   , intent(in)    :: methodx, methody, methodz 
         logical            , intent(in)    :: periodicx, periodicy, periodicz
-        
 
         if (this%initialized) then
             call message("WARNING: Reinitializing the FILTER class!")
@@ -291,14 +335,14 @@ contains
 
         call this%init_procedures(  this%xsz(1),  this%ysz(2),  this%zsz(3), &
                                      methodx, methody, methodz, &
-                                     periodicx, periodicy, periodicz) 
+                                     periodicx, periodicy, periodicz)
 
         this%initialized = .true. 
     end subroutine
 
     subroutine init_serial(this,          nx  ,      ny  ,       nz , &
                                      periodicx, periodicy, periodicz, &
-                                     methodx  , methody  , methodz  )
+                                     methodx  , methody  , methodz)
 
         class( filters ) , intent(inout) :: this
         integer          , intent(in)    :: nx, ny, nz
@@ -316,7 +360,7 @@ contains
 
         call this%init_procedures(        nx,      ny,      nz, &
                                      methodx, methody, methodz, &
-                                     periodicx, periodicy, periodicz) 
+                                     periodicx, periodicy, periodicz)
     
         this%initialized = .true. 
     end subroutine

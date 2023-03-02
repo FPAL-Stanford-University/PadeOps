@@ -6,10 +6,11 @@ subroutine init_sigma(this)
    ! Can be reset to false via dynamic procedure initialization, 
    ! in case the dynamic procedure is planar averages
 
-   this%useCglobal = .true. 
-   this%cmodel_global = (this%Csgs*this%deltaLES)**2
-  
+   !this%useCglobal = .true. 
+   !this%cmodel_global = (this%Csgs*this%deltaLES)**2
    this%isEddyViscosityModel = .true. 
+   this%cmodel_global = this%Csgs! * (this%deltaLES**2) ! one  
+   this%cmodel_global_Qjsgs =  this%Csgs/this%Prsgs
 
    call message(1,"Sigma model initialized")
 end subroutine
@@ -21,9 +22,10 @@ subroutine destroy_sigma(this)
 
 end subroutine
 
-subroutine get_sigma_kernel(this, duidxj)
+subroutine get_sigma_kernel(this, duidxj, nusgs)
    class(sgs_cgrid), intent(inout) :: this
    real(rkind), intent(in), dimension(this%nxL,this%nyL,this%nzL,9):: duidxj
+   real(rkind), intent(out), dimension(this%nxL,this%nyL,this%nzL):: nusgs
 
    real(rkind) :: G11, G12, G13, G22, G23, G33
    real(rkind) :: I1, I2, I3, I1sq, I1cu
@@ -86,8 +88,8 @@ subroutine get_sigma_kernel(this, duidxj)
             sigma3 = max(sigma3,zero)
             sigma3 = sqrt(sigma3)
 
-            this%nusgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
-
+            nusgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
+            nusgs(i,j,k) = nusgs(i,j,k) * (this%deltaLES**2)
          end do 
       end do 
    end do

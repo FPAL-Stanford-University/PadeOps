@@ -10,10 +10,11 @@ subroutine init_amd(this)
        call message(1, "!!!! WARNING !!!! PrSGS = ", this%PrSGS)
    endif
    
-   this%camd_x = this%Csgs*1.5d0*this%dx*sqrt(1.d0/12.0d0)
-   this%camd_y = this%Csgs*1.5d0*this%dy*sqrt(1.d0/12.0d0)
-   this%camd_z = this%Csgs*1.5d0*this%dz*sqrt(1.d0/12.0d0)          !this%PadeDer%getApproxPoincareConstant()
-   this%cmodel_global = one                                    ! Anisotropic model constants 
+   this%camd_x = 1.5d0*this%dx!*sqrt(1.d0/12.0d0)*this%Csgs
+   this%camd_y = 1.5d0*this%dy!*sqrt(1.d0/12.0d0)*this%Csgs
+   this%camd_z = 1.5d0*this%dz!*sqrt(1.d0/12.0d0)*this%Csgs           !this%PadeDer%getApproxPoincareConstant()
+   this%cmodel_global = this%Csgs ! one                               ! Anisotropic model constants 
+   this%cmodel_global_Qjsgs =  this%Csgs/this%Prsgs
    call message(1,"AMD model initialized")
 
 end subroutine
@@ -25,9 +26,12 @@ subroutine destroy_amd(this)
 
 end subroutine
 
-subroutine get_amd_kernel(this, duidxj)
+!subroutine get_amd_kernel(this, duidxj)
+subroutine get_amd_kernel(this, duidxj, Sij, nusgs)
    class(sgs_cgrid), intent(inout) :: this
    real(rkind), intent(in), dimension(this%nxL,this%nyL,this%nzL,9) :: duidxj
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL,6), intent(in)  :: Sij
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL), intent(out)  :: nusgs
 
    real(rkind) :: num, den
    integer :: i, j, k
@@ -48,34 +52,34 @@ subroutine get_amd_kernel(this, duidxj)
             ! First compute the numerator
             num =           ((duidxj(i,j,k,1)*this%camd_x)*(duidxj(i,j,k,1)*this%camd_x) &
                       +      (duidxj(i,j,k,2)*this%camd_y)*(duidxj(i,j,k,2)*this%camd_y) &
-                      +      (duidxj(i,j,k,3)*this%camd_z)*(duidxj(i,j,k,3)*this%camd_z)) * this%S_ij(i,j,k,1)
+                      +      (duidxj(i,j,k,3)*this%camd_z)*(duidxj(i,j,k,3)*this%camd_z)) * Sij(i,j,k,1)
 
             num = num +     ((duidxj(i,j,k,4)*this%camd_x)*(duidxj(i,j,k,4)*this%camd_x) &
                       +      (duidxj(i,j,k,5)*this%camd_y)*(duidxj(i,j,k,5)*this%camd_y) &
-                      +      (duidxj(i,j,k,6)*this%camd_z)*(duidxj(i,j,k,6)*this%camd_z)) * this%S_ij(i,j,k,4)
+                      +      (duidxj(i,j,k,6)*this%camd_z)*(duidxj(i,j,k,6)*this%camd_z)) * Sij(i,j,k,4)
 
             num = num +     ((duidxj(i,j,k,7)*this%camd_x)*(duidxj(i,j,k,7)*this%camd_x) &
                       +      (duidxj(i,j,k,8)*this%camd_y)*(duidxj(i,j,k,8)*this%camd_y) &
-                      +      (duidxj(i,j,k,9)*this%camd_z)*(duidxj(i,j,k,9)*this%camd_z)) * this%S_ij(i,j,k,6)
+                      +      (duidxj(i,j,k,9)*this%camd_z)*(duidxj(i,j,k,9)*this%camd_z)) * Sij(i,j,k,6)
 
             num = num + two*((duidxj(i,j,k,1)*this%camd_x)*(duidxj(i,j,k,4)*this%camd_x) &
                            + (duidxj(i,j,k,2)*this%camd_y)*(duidxj(i,j,k,5)*this%camd_y) &
-                           + (duidxj(i,j,k,3)*this%camd_z)*(duidxj(i,j,k,6)*this%camd_z)) * this%S_ij(i,j,k,2)
+                           + (duidxj(i,j,k,3)*this%camd_z)*(duidxj(i,j,k,6)*this%camd_z)) * Sij(i,j,k,2)
             
             num = num + two*((duidxj(i,j,k,1)*this%camd_x)*(duidxj(i,j,k,7)*this%camd_x) &
                            + (duidxj(i,j,k,2)*this%camd_y)*(duidxj(i,j,k,8)*this%camd_y) &
-                           + (duidxj(i,j,k,3)*this%camd_z)*(duidxj(i,j,k,9)*this%camd_z)) * this%S_ij(i,j,k,3)
+                           + (duidxj(i,j,k,3)*this%camd_z)*(duidxj(i,j,k,9)*this%camd_z)) * Sij(i,j,k,3)
 
             num = num + two*((duidxj(i,j,k,4)*this%camd_x)*(duidxj(i,j,k,7)*this%camd_x) &
                            + (duidxj(i,j,k,5)*this%camd_y)*(duidxj(i,j,k,8)*this%camd_y) &
-                           + (duidxj(i,j,k,6)*this%camd_z)*(duidxj(i,j,k,9)*this%camd_z)) * this%S_ij(i,j,k,5)
+                           + (duidxj(i,j,k,6)*this%camd_z)*(duidxj(i,j,k,9)*this%camd_z)) * Sij(i,j,k,5)
 
             ! Now compute the denominator
             den =  duidxj(i,j,k,1)*duidxj(i,j,k,1) +  duidxj(i,j,k,2)*duidxj(i,j,k,2) + duidxj(i,j,k,3)*duidxj(i,j,k,3) &
                  + duidxj(i,j,k,4)*duidxj(i,j,k,4) +  duidxj(i,j,k,5)*duidxj(i,j,k,5) + duidxj(i,j,k,6)*duidxj(i,j,k,6) &
                  + duidxj(i,j,k,7)*duidxj(i,j,k,7) +  duidxj(i,j,k,8)*duidxj(i,j,k,8) + duidxj(i,j,k,9)*duidxj(i,j,k,9) 
                      
-            this%nusgs(i,j,k) = max(-num/(den + 1.d-15),zero) 
+            nusgs(i,j,k) = max(-num/(den + 1.d-15),zero) 
          end do 
       end do
    end do 
@@ -83,10 +87,11 @@ end subroutine
 
 
 
-subroutine get_amd_Dkernel(this, duidxj, gradT)
+subroutine get_amd_Dkernel(this, duidxj, gradT, kapsgs)
    class(sgs_cgrid), intent(inout) :: this
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,9), intent(in) :: duidxj
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(in) :: gradT
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL),   intent(out):: kapsgs
 
    real(rkind) :: num, den
    integer :: i, j, k
@@ -112,7 +117,7 @@ subroutine get_amd_Dkernel(this, duidxj, gradT)
            ! Now get the denominator
            den = gradT(i,j,k,1)*gradT(i,j,k,1) + gradT(i,j,k,2)*gradT(i,j,k,2) +  gradT(i,j,k,3)*gradT(i,j,k,3)  
 
-           this%kapsgs(i,j,k) = max(-num/(den + 1.d-15),zero)
+           kapsgs(i,j,k) = max(-num/(den + 1.d-15),zero)
         end do 
       end do
    end do 
