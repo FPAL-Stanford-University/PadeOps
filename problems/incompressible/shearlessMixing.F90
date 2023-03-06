@@ -107,7 +107,7 @@ program shearlessMixing
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
     call tic() 
-    do while (SM%tsim < SM%tstop) 
+    do while (SM%tsim < SM%tstop .and. SM%step < SM%nsteps) 
        dt1 = SM%get_dt(recompute=.true.)
        dt2 = HIT%get_dt(recompute=.true.)
        dt = min(dt1, dt2)

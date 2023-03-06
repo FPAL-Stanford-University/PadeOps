@@ -1160,22 +1160,6 @@ contains
            call this%spectC%alloc_r2c_out(this%vExtra,2)
            call this%spectE%alloc_r2c_out(this%wExtra,2)
 
-           !this%uhat1 => this%uExtra(:,:,:,1)
-           !this%vhat1 => this%vExtra(:,:,:,1)
-           !this%what1 => this%wExtra(:,:,:,1)
-
-           !this%uhat2 => this%uExtra(:,:,:,2)
-           !this%vhat2 => this%vExtra(:,:,:,2)
-           !this%what2 => this%wExtra(:,:,:,2)
-
-           !this%uhat3 => this%uExtra(:,:,:,3)
-           !this%vhat3 => this%vExtra(:,:,:,3)
-           !this%what3 => this%wExtra(:,:,:,3)
-
-           !this%uhat4 => this%uExtra(:,:,:,4)
-           !this%vhat4 => this%vExtra(:,:,:,4)
-           !this%what4 => this%wExtra(:,:,:,4)
-
            this%ustar => this%uExtra(:,:,:,1)
            this%vstar => this%vExtra(:,:,:,1)
            this%wstar => this%wExtra(:,:,:,1)
