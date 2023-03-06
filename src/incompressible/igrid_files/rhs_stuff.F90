@@ -181,6 +181,8 @@
            call this%spectC%fft(T1c,fT1C)
            T1E = -this%w*this%dTdzE
            call this%spectE%fft(T1E,fT1E)
+           call gracefulExit("Shouldn't the line below use fT1E instead of "//&
+             "fT2E? -- rhs_stuff.F90", ierr)
            call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
            call this%Pade6opZ%interpz_E2C(tzE,tzC,WdTdzBC_bottom,WdTdzBC_top)
            call transpose_z_to_y(tzC,this%T_rhs, this%sp_gpC)

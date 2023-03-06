@@ -1,6 +1,6 @@
 module IncompressibleGrid
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa 
+    use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa, im0
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
     use igrid_hooks!, only: setDirichletBC_Temp, set_Reference_Temperature, meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
@@ -68,6 +68,8 @@ module IncompressibleGrid
         
         character(clen) :: inputDir
         integer :: headerfid = 12345   
+        integer :: clearRoundOffFreq
+        integer :: NumericalSchemeVert = 0
 
         ! Variables common to grid
         integer :: nx, ny, nz, t_datadump, t_restartdump
@@ -95,7 +97,6 @@ module IncompressibleGrid
 
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsE
-
         type(immersedBody), dimension(:), allocatable :: immersedBodies 
 
         type(padepoisson), allocatable :: padepoiss
@@ -108,6 +109,8 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer :: uhat2, vhat2, what2, That2
         complex(rkind), dimension(:,:,:), pointer :: uhat3, vhat3, what3, That3
         complex(rkind), dimension(:,:,:), pointer :: uhat4, vhat4, what4, That4
+        complex(rkind), dimension(:,:,:), pointer :: ustar, vstar, wstar
+        complex(rkind), dimension(:,:,:), pointer :: du, dv, dw
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC2, SfieldsE2
         complex(rkind), dimension(:,:,:,:), allocatable :: uExtra, vExtra, wExtra, TExtra 
         complex(rkind), dimension(:,:,:,:), allocatable :: uRHSExtra, vRHSExtra, wRHSExtra, TRHSExtra 
@@ -153,7 +156,8 @@ module IncompressibleGrid
         integer :: runID, t_start_planeDump, t_stop_planeDump, t_planeDump, t_DivergenceCheck
         integer :: t_start_pointProbe, t_stop_pointProbe, t_pointProbe
         logical :: useCoriolis = .true. , isStratified = .false., useSponge = .false., useMoisture = .false.
-        logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false.  
+        logical :: useExtraForcing = .false., useGeostrophicForcing = .false., isInviscid = .false. 
+        logical :: addExtraSourceTerm = .false. 
         logical :: useSGS = .false., computeTurbinePressure = .false.  
         logical :: UseDealiasFilterVert = .false.
         logical :: useDynamicProcedure 
@@ -273,7 +277,7 @@ module IncompressibleGrid
         integer :: zHubIndex = 16
 
         ! HIT Forcing
-        logical :: useHITForcing = .false., useforcedStratification = .false. 
+        logical :: useHITForcing = .false., useforcedStratification = .false.
         logical :: useHITRealSpaceLinearForcing = .false.
         type(HIT_shell_forcing), allocatable :: hitforce
         real(rkind) :: HITForceTimeScale 
@@ -320,8 +324,10 @@ module IncompressibleGrid
             !procedure, private :: init_stats
             procedure, private :: init_stats3D
             procedure, private :: AdamsBashforth
+            procedure, private :: FwdEuler
             procedure, private :: TVD_RK3
             procedure, private :: SSP_RK45
+            procedure, private :: RK4
             procedure, private :: ComputePressure
             procedure, private :: interp_primitiveVars
             procedure, private :: compute_duidxj
@@ -356,6 +362,7 @@ module IncompressibleGrid
             procedure, private :: dump_planes
             procedure, private :: dealiasRealField_C
             procedure          :: dumpFullField 
+            procedure          :: dumpSpectralField 
             procedure, private :: dump_scalar_fields
             procedure, private :: dumpVisualizationInfo
             procedure, private :: DeletePrevStats3DFiles
@@ -381,7 +388,10 @@ module IncompressibleGrid
             procedure          :: advance_SSP_RK45_Stage_2 
             procedure          :: advance_SSP_RK45_Stage_3 
             procedure          :: advance_SSP_RK45_Stage_4 
-            procedure          :: advance_SSP_RK45_Stage_5 
+            procedure          :: advance_SSP_RK45_Stage_5
+            procedure, private :: advance_RK4_all_stages
+            procedure          :: advance_RK4_Stage 
+            procedure          :: getMaxOddballModes 
    end type
 
 contains 
@@ -394,6 +404,7 @@ contains
 #include "igrid_files/budgets_stuff.F90"
 #include "igrid_files/popRHS_stuff.F90"
 #include "igrid_files/RK45_staging.F90"
+#include "igrid_files/RK4_staging.F90"
 
     subroutine init(this,inputfile, initialize2decomp)
         class(igrid), intent(inout), target :: this        
@@ -409,6 +420,7 @@ contains
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
         logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
+        logical :: addExtraSourceTerm = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
@@ -416,7 +428,9 @@ contains
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
         logical :: normStatsByUstar=.false., ComputeStokesPressure = .true., UseDealiasFilterVert = .false., ComputeRapidSlowPressure = .false.
         real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0, HITForceTimeScale = 10.d0
-        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., useFringe = .false., useHITForcing = .false., useControl = .false., useHITRealSpaceLinearForcing = .false.
+        logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., &
+          useFringe = .false., useHITForcing = .false., useControl = .false., &
+          useHITRealSpaceLinearForcing = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
@@ -433,9 +447,11 @@ contains
         integer :: MeanTIDX, MeanRID, vizDump_schedule = 0    
         character(len=clen) :: MeanFilesDir, powerDumpDir 
         logical :: WriteTurbineForce = .false., useforcedStratification = .false., useDynamicYaw = .FALSE. 
-        integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0, numberOfImmersedBodies = 0
+        integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0
+        integer :: numberOfImmersedBodies = 0
         logical :: useImmersedBodies = .false. 
         real(rkind) :: immersed_taufact = 1.d0 
+        integer :: clearRoundOffFreq = 1000
 
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -443,15 +459,21 @@ contains
         namelist /IO/ vizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
                     & t_stop_pointProbe, t_pointProbe
-        namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
-        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, BuoyancyTermType,useforcedStratification,&
-                          useGeostrophicForcing, G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,useHITForcing, useScalars, frameAngle, buoyancyDirection, useHITRealSpaceLinearForcing, HITForceTimeScale, useImmersedBodies, numberOfImmersedBodies, immersed_taufact  
+        !namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
+        namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,&
+          useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, &
+          BuoyancyTermType,useforcedStratification, useGeostrophicForcing, &
+          G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,&
+          useHITForcing, useScalars, frameAngle, buoyancyDirection, &
+          useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm, &
+          useImmersedBodies, numberOfImmersedBodies, immersed_taufact  
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
                             UseDealiasFilterVert, t_DivergenceCheck, TimeSteppingScheme, InitSpinUp, &
-                            useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias, dealiasType 
+                            useExhaustiveFFT, dealiasFact, scheme_xy, donot_dealias, dealiasType, &
+                            clearRoundOffFreq
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, &
                                  KSdoZfilter, nKSvertFilt
         namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure, ComputeRapidSlowPressure            
@@ -466,7 +488,7 @@ contains
         read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=NUMERICS)
         read(unit=ioUnit, NML=IO)
-        read(unit=ioUnit, NML=STATS)
+        !read(unit=ioUnit, NML=STATS)
         read(unit=ioUnit, NML=OS_INTERACTIONS)
         read(unit=ioUnit, NML=PHYSICS)
         read(unit=ioUnit, NML=PRESSURE_CALC)
@@ -500,6 +522,7 @@ contains
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
         this%donot_dealias = donot_dealias; this%ioType = ioType; this%HITForceTimeScale = HITForceTimeScale
         this%moistureFactor = moistureFactor; this%useHITRealSpaceLinearForcing = useHITRealSpaceLinearForcing
+        this%NumericalSchemeVert = NumericalSchemeVert
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -508,7 +531,8 @@ contains
         end if 
         this%t_restartDump = t_restartDump; this%tid_statsDump = tid_statsDump; this%useCoriolis = useCoriolis; 
         this%tSimStartStats = tSimStartStats; this%useWindTurbines = useWindTurbines
-        this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS 
+        this%tid_compStats = tid_compStats; this%useExtraForcing = useExtraForcing; this%useSGS = useSGS
+        this%addExtraSourceTerm = addExtraSourceTerm 
         this%UseDealiasFilterVert = UseDealiasFilterVert
         this%G_geostrophic = G_geostrophic; this%G_alpha = G_alpha; this%Fr = Fr; 
         this%fastCalcPressure = fastCalcPressure 
@@ -524,6 +548,7 @@ contains
         this%computeTurbinePressure = computeTurbinePressure; this%turbPr = Pr
         this%restartPhi = 0.d0
         this%Ra = Ra
+        this%clearRoundOffFreq = clearRoundOffFreq
         if (useWindturbines) this%WriteTurbineForce = WriteTurbineForce
 
         ! STEP 2: ALLOCATE DECOMPOSITIONS
@@ -675,7 +700,7 @@ contains
        !end if
 
        !allocate(this%cbuffxC(this%sp_gpC%xsz(1),this%sp_gpC%xsz(2),this%sp_gpC%xsz(3),2))
-       allocate(this%cbuffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),2))
+       allocate(this%cbuffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),3))
        allocate(this%cbuffyE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),2))
        
        allocate(this%cbuffzC(this%sp_gpC%zsz(1),this%sp_gpC%zsz(2),this%sp_gpC%zsz(3),3))
@@ -782,16 +807,16 @@ contains
        !    call this%compute_and_bcast_surface_Mn()
        !end if
 
-       if ((PeriodicInZ) .and. (useHITforcing)) then
-           tmpmn = p_sum(this%u)/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
-           this%u = this%u - tmpmn
-           
-           tmpmn = p_sum(this%v)/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
-           this%v = this%v - tmpmn
-           
-           tmpmn = p_sum(this%w)/(real(nx,rkind)*real(ny,rkind)*real(nz + 1,rkind))
-           this%w = this%w - tmpmn
-       end if
+       !if ((PeriodicInZ) .and. (useHITforcing)) then
+       !    tmpmn = p_sum(this%u)/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
+       !    this%u = this%u - tmpmn
+       !    
+       !    tmpmn = p_sum(this%v)/(real(nx,rkind)*real(ny,rkind)*real(nz,rkind))
+       !    this%v = this%v - tmpmn
+       !    
+       !    tmpmn = p_sum(this%w)/(real(nx,rkind)*real(ny,rkind)*real(nz + 1,rkind))
+       !    this%w = this%w - tmpmn
+       !end if
        call this%interp_PrimitiveVars()
        call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
     
@@ -844,6 +869,7 @@ contains
            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
        end if  
 
+        ! First get z at edges
         zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
         zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
         call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
@@ -856,8 +882,6 @@ contains
         ! STEP 11: Initialize SGS model
         allocate(this%SGSmodel)
         if (this%useSGS) then
-            ! First get z at edges
-
             if ((this%initSpinup) .or. (this%useScalars) .or. (this%isStratified)) then
                sgsmod_stratified = .true. 
             else
@@ -879,6 +903,7 @@ contains
         if (this%useSponge) then
             allocate(this%RdampC(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)))
             allocate(this%RdampE(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)))
+            zinY => this%rbuffyC(:,:,:,1)
             zinZ => this%rbuffzC(:,:,:,1)
             zEinZ => this%rbuffzE(:,:,:,1); 
             call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
@@ -909,7 +934,7 @@ contains
             deallocate(tmpzE)
             nullify(zEinZ, zinZ)
 
-            zstSponge = zstSponge*(this%zTop - this%zBot)     !! <PERCENTAGE OF THE DOMAIN>
+            zstSponge = zstSponge*(this%zTop - this%zBot) + this%zBot  !! <PERCENTAGE OF THE DOMAIN>
             !zstSponge = zstSponge*this%zTop                   !! <PERCENTAGE OF THE DOMAIN>
             select case(sponge_type)
             case(1)
@@ -939,7 +964,6 @@ contains
                 !   end where
                 !end if 
                 !!!!!!!!!!!!!!! OLD BLOCK -- assumes zBot = 0 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                
                 if (useTopAndBottomSymmetricSponge) then
                     ! Ensure zinY and zEinY are centered at 0 irrespective of this%zBot
                     zinY  = zinY  - this%zMid
@@ -1085,8 +1109,11 @@ contains
        if (this%PreprocessForKS) then
            allocate(this%LES2KS)
            if (this%KSinitType == 0) then
-               call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
+               !call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%outputdir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
+               call this%LES2KS%init(this%spectC, this%gpC, this%dx, this%dy, this%KSOutputDir, this%RunID, this%probes, this%KSFilFact, KSdoZfilter, nKSvertFilt)
                call this%LES2KS%link_pointers(this%uFil4KS, this%vFil4KS, this%wFil4KS)
+               call this%LES2KS%applyFilterForKS(this%u, this%v, this%w)
+               call this%LES2KS%dumpKSfilteredFields()
                if (this%useProbes) then
                    if (this%doIhaveAnyProbes) then
                        allocate(this%KS_Probe_Data(1:4,1:this%nprobes,0:this%probeTimeLimit-1))
@@ -1099,7 +1126,7 @@ contains
                   &         this%dz, this%planes2dumpC_KS, this%planes2dumpF_KS)
            end if
            this%KSupdated = .false. 
-           call message(0, "KS Preprocessor initializaed successfully.")
+           call message(0, "KS Preprocessor initialized successfully.")
        end if 
 
 
@@ -1127,9 +1154,50 @@ contains
            call this%spectE%alloc_r2c_out(this%wRHSExtra,1)
            call this%spectC%alloc_r2c_out(this%TExtra,3)
            call this%spectC%alloc_r2c_out(this%TRHSExtra,1)
-        end if 
+        else if (timeSteppingScheme == 5 .or. timeSteppingScheme == 6) then
+           call this%spectC%alloc_r2c_out(this%uExtra,2)
+           call this%spectC%alloc_r2c_out(this%vExtra,2)
+           call this%spectE%alloc_r2c_out(this%wExtra,2)
 
-       if ((timeSteppingScheme .ne. 0) .and. (timeSteppingScheme .ne. 1) .and. (timeSteppingScheme .ne. 2)) then
+           !this%uhat1 => this%uExtra(:,:,:,1)
+           !this%vhat1 => this%vExtra(:,:,:,1)
+           !this%what1 => this%wExtra(:,:,:,1)
+
+           !this%uhat2 => this%uExtra(:,:,:,2)
+           !this%vhat2 => this%vExtra(:,:,:,2)
+           !this%what2 => this%wExtra(:,:,:,2)
+
+           !this%uhat3 => this%uExtra(:,:,:,3)
+           !this%vhat3 => this%vExtra(:,:,:,3)
+           !this%what3 => this%wExtra(:,:,:,3)
+
+           !this%uhat4 => this%uExtra(:,:,:,4)
+           !this%vhat4 => this%vExtra(:,:,:,4)
+           !this%what4 => this%wExtra(:,:,:,4)
+
+           this%ustar => this%uExtra(:,:,:,1)
+           this%vstar => this%vExtra(:,:,:,1)
+           this%wstar => this%wExtra(:,:,:,1)
+
+           this%du => this%uExtra(:,:,:,2)
+           this%dv => this%vExtra(:,:,:,2)
+           this%dw => this%wExtra(:,:,:,2)
+
+           this%ustar = im0
+           this%vstar = im0
+           this%wstar = im0
+
+           this%du = im0
+           this%dv = im0
+           this%dw = im0
+      end if 
+
+       if ((timeSteppingScheme .ne. 0) .and. &
+           (timeSteppingScheme .ne. 1) .and. &
+           (timeSteppingScheme .ne. 2) .and. &
+           (timeSteppingScheme .ne. 4) .and. &
+           (timeSteppingScheme .ne. 5) .and. &
+           (timeSteppingScheme .ne. 6)) then
            call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
        end if 
 
@@ -1164,8 +1232,9 @@ contains
        ! STEP 18: Set HIT Forcing
        if (this%useHITForcing) then
            allocate(this%hitforce)
-           call this%hitforce%init(inputfile, this%sp_gpC, this%sp_gpE, this%spectC, this%cbuffyE(:,:,:,1), &
-                          this%cbuffyC(:,:,:,1), this%cbuffzE(:,:,:,1), this%cbuffzC, this%step)
+           call this%hitforce%init(inputfile, this%gpC, this%sp_gpC, this%sp_gpE, &
+             this%spectC, this%spectE, this%cbuffyE(:,:,:,1), this%cbuffyC(:,:,:,1), &
+             this%cbuffzE(:,:,:,1), this%cbuffzC, this%rbuffxC(:,:,:,1), this%step)
        end if
        
        ! STEP 19: Set up storage for Pressure
@@ -1244,7 +1313,6 @@ contains
                 this%rbuffxC(:,:,:,1), this%rbuffxE(:,:,:,1), this%cbuffyC(:,:,:,1), this%cbuffyE(:,:,:,1))
          end do 
        end if 
-
        ! STEP 22a: Set moisture
        if(this%useMoisture) then
          if(this%usescalars) then
@@ -1336,8 +1404,11 @@ contains
        if ((this%vizDump_Schedule == 1) .and. (.not. this%useCFL)) then
            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
        end if 
-       if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
-           call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
+       if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. &
+                                          (TimeSteppingScheme .ne. 2) .and. &
+                                          (TimeSteppingScheme .ne. 5) .and. &
+                                          (TimeSteppingScheme .ne. 6))) then
+           call GracefulExit("fastCalcPressure feature is only supported with TVD RK3, SSP RK45, or RK4 time stepping.",123)
        end if
 
        if ((this%usescalars) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
@@ -1399,6 +1470,20 @@ contains
            else
              call this%advance_SSP_RK45_all_stages()
            end if
+        case(4)
+            call this%FwdEuler()
+        case(5)
+           if(present(dtforced)) then
+             call this%RK4(dtforced)
+           else
+             call this%RK4()
+           endif
+        case(6)
+           if(present(dtforced)) then
+             call this%advance_RK4_all_stages(dtforced)
+           else
+             call this%advance_RK4_all_stages()
+           endif
         end select
 
    end subroutine
@@ -1557,6 +1642,16 @@ contains
            dUdzBC_bottom   =  0; dVdzBC_bottom   =  0;
            WdUdzBC_bottom  = -1; WdVdzBC_bottom  = -1;
            UWBC_bottom     = -1; VWBC_bottom     = -1;   
+        case(4)
+           call message(1,"Free boundary")
+           call gracefulExit("This boundary condition is not currently "//&
+             "supported in the Poisson solver",423)
+           uBC_bottom      = 0; vBC_bottom      = 0;
+           dUdzBC_bottom   = 0; dVdzBC_bottom   = 0;
+           WdUdzBC_bottom  = 0; WdVdzBC_bottom  = 0;
+           UWBC_bottom     = 0; VWBC_bottom     = 0;
+           wBC_bottom      = 0; WdWdzBC_bottom  = 0; 
+           WWBC_bottom     = 0; dwdzBC_bottom   = 0;
         case default
            call gracefulExit("Invalid choice for BOTTOM WALL BCs",423)
         end select
@@ -1588,6 +1683,16 @@ contains
            dUdzBC_top   =  0; dVdzBC_top   =  0;
            WdUdzBC_top  = -1; WdVdzBC_top  = -1;
            UWBC_top     = -1; VWBC_top     = -1;   
+        case(4)
+           call message(1,"Free boundary")
+           call gracefulExit("This boundary condition is not currently "//&
+             "supported in the Poisson solver",423)
+           uBC_top      = 0; vBC_top      = 0;
+           dUdzBC_top   = 0; dVdzBC_top   = 0;
+           WdUdzBC_top  = 0; WdVdzBC_top  = 0;
+           UWBC_top     = 0; VWBC_top     = 0;   
+           wBC_top      = 0; WdWdzBC_top  = 0; 
+           WWBC_top     = 0; dwdzBC_top   = 0;
         case default
            call gracefulExit("Invalid choice for TOP WALL BCs",13)
         end select
@@ -1605,6 +1710,9 @@ contains
         case (3)
            TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
            WdTdzBC_top = 0;
+        case (4)
+           TBC_top = 0; dTdzBC_top = 0; WTBC_top = 0;
+           WdTdzBC_top = 0;
         end select 
         select case (botBC_Temp)
         case (0) ! Dirichlet BC for temperature at the bottom
@@ -1618,7 +1726,10 @@ contains
             WdTdzBC_bottom = 0;
         case (3) 
            TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1; 
-           WdTdzBC_bottom = 0;      
+           WdTdzBC_bottom = 0;
+        case (4) 
+           TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = 0; 
+           WdTdzBC_bottom = 0;
         end select
 
    end subroutine
@@ -1675,5 +1786,83 @@ contains
 
        if (this%tsim > Tstop_InitSpinUp) this%initspinup = .false. 
    end subroutine 
+
+   subroutine getMaxOddballModes(this,&
+                                 uXoddMaxI, uYoddMaxI, &
+                                 uXoddMaxR, uYoddMaxR, &
+                                 vXoddMaxI, vYoddMaxI, &
+                                 vXoddMaxR, vYoddMaxR, &
+                                 wXoddMaxI, wYoddMaxI, &
+                                 wXoddMaxR, wYoddMaxR, dataLoc)
+       use fortran_assert, only: assert
+
+       class(igrid), intent(inout) :: this
+       real(rkind), intent(out) :: uXoddMaxI, uYoddMaxI, &
+                                   uXoddMaxR, uYoddMaxR, & 
+                                   vXoddMaxI, vYoddMaxI, & 
+                                   vXoddMaxR, vYoddMaxR, & 
+                                   wXoddMaxI, wYoddMaxI, & 
+                                   wXoddMaxR, wYoddMaxR 
+       character(len=1), intent(in) :: dataLoc
+       integer :: nx, ny, nz
+       complex(rkind), dimension(:,:,:,:), allocatable :: cbuffxC, cbuffxE
+
+       nx = this%gpC%xsz(1)
+       ny = this%gpC%ysz(2)
+       nz = this%gpC%zsz(3)
+       
+       select case (dataLoc)
+       case ('C')
+         allocate(cbuffxC(this%sp_gpC%xsz(1), this%sp_gpC%xsz(2), &
+           this%sp_gpC%xsz(3), 3))
+         uYoddMaxI = p_maxval(maxval(aimag(this%uhat (:,ny/2+1,:))))
+         vYoddMaxI = p_maxval(maxval(aimag(this%vhat (:,ny/2+1,:))))
+         wYoddMaxI = p_maxval(maxval(aimag(this%whatC(:,ny/2+1,:))))
+
+         uYoddMaxR = p_maxval(maxval(real(this%uhat (:,ny/2+1,:),rkind)))
+         vYoddMaxR = p_maxval(maxval(real(this%vhat (:,ny/2+1,:),rkind)))
+         wYoddMaxR = p_maxval(maxval(real(this%whatC(:,ny/2+1,:),rkind)))
+         
+         call transpose_y_to_x(this%uhat, cbuffxC(:,:,:,1),this%sp_gpC)
+         call transpose_y_to_x(this%vhat, cbuffxC(:,:,:,2),this%sp_gpC)
+         call transpose_y_to_x(this%whatC,cbuffxC(:,:,:,3),this%sp_gpC)
+         
+         uXoddMaxI = p_maxval(maxval(aimag(cbuffxC(nx/2+1,:,:,1))))
+         vXoddMaxI = p_maxval(maxval(aimag(cbuffxC(nx/2+1,:,:,2))))
+         wXoddMaxI = p_maxval(maxval(aimag(cbuffxC(nx/2+1,:,:,3))))
+         
+         uXoddMaxR = p_maxval(maxval(real(cbuffxC(nx/2+1,:,:,1),rkind)))
+         vXoddMaxR = p_maxval(maxval(real(cbuffxC(nx/2+1,:,:,2),rkind)))
+         wXoddMaxR = p_maxval(maxval(real(cbuffxC(nx/2+1,:,:,3),rkind)))
+         
+         deallocate(cbuffxC)
+
+       case ('E')
+         allocate(cbuffxE(this%sp_gpE%xsz(1), this%sp_gpE%xsz(2), &
+           this%sp_gpE%xsz(3), 3))
+         uYoddMaxI = p_maxval(maxval(aimag(this%uEhat(:,ny/2+1,:))))
+         vYoddMaxI = p_maxval(maxval(aimag(this%vEhat(:,ny/2+1,:))))
+         wYoddMaxI = p_maxval(maxval(aimag(this%what (:,ny/2+1,:))))
+
+         uYoddMaxR = p_maxval(maxval(real(this%uEhat(:,ny/2+1,:),rkind)))
+         vYoddMaxR = p_maxval(maxval(real(this%vEhat(:,ny/2+1,:),rkind)))
+         wYoddMaxR = p_maxval(maxval(real(this%what (:,ny/2+1,:),rkind)))
+
+         call transpose_y_to_x(this%uEhat,cbuffxE(:,:,:,1),this%sp_gpE)
+         call transpose_y_to_x(this%vEhat,cbuffxE(:,:,:,2),this%sp_gpE)
+         call transpose_y_to_x(this%what, cbuffxE(:,:,:,3),this%sp_gpE)
+         
+         uXoddMaxI = p_maxval(maxval(aimag(cbuffxE(nx/2+1,:,:,1))))
+         vXoddMaxI = p_maxval(maxval(aimag(cbuffxE(nx/2+1,:,:,2))))
+         wXoddMaxI = p_maxval(maxval(aimag(cbuffxE(nx/2+1,:,:,3))))
+
+         uXoddMaxR = p_maxval(maxval(real(cbuffxE(nx/2+1,:,:,1),rkind)))
+         vXoddMaxR = p_maxval(maxval(real(cbuffxE(nx/2+1,:,:,2),rkind)))
+         wXoddMaxR = p_maxval(maxval(real(cbuffxE(nx/2+1,:,:,3),rkind)))
+         
+         deallocate(cbuffxE)
+       end select
+
+   end subroutine
 
 end module 

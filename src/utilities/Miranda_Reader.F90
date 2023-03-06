@@ -260,15 +260,21 @@ contains
 
                     ! Read x coordinate
                     READ(pUnit) procgrid
-                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 1) = real(procgrid,rkind)
+                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, &
+                      (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, &
+                      (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 1) = real(procgrid,rkind)
 
                     ! Read y coordinate
                     READ(pUnit) procgrid
-                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 2) = real(procgrid,rkind)
+                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, &
+                      (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, &
+                      (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 2) = real(procgrid,rkind)
                     
                     ! Read z coordinate
                     READ(pUnit) procgrid
-                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 3) = real(procgrid,rkind)
+                    this%mesh( (xp-xp1)*this%ax+1:(xp-xp1)*this%ax+this%ax, &
+                      (yp-yp1)*this%ay+1:(yp-yp1)*this%ay+this%ay, &
+                      (zp-zp1)*this%az+1:(zp-zp1)*this%az+this%az, 3) = real(procgrid,rkind)
 
                     CLOSE(pUnit)
                 

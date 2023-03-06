@@ -30,7 +30,7 @@ program TaylorGreenPeriodic
     call igp%printDivergence()
   
     call tic() 
-    do while (igp%tsim < igp%tstop) 
+    do while (igp%tsim < igp%tstop .and. igp%step < igp%nsteps) 
        
        call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
        call doTemporalStuff(igp)     !<-- Go to the temporal hook (see temporalHook.F90)

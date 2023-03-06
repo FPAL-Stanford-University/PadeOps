@@ -72,7 +72,6 @@
            end if
        end if
 
-
        call this%populate_RHS_extraTerms(copyFringeRHS, .false.)
 
    end subroutine
@@ -218,7 +217,9 @@
                this%v_rhs = this%v_rhs + this%HITforcing_y
                this%w_rhs = this%w_rhs + this%HITforcing_z
            else
-               call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep)
+               call this%hitforce%getRHS_HITForcing(this%u_rhs, this%v_rhs, &
+                 this%w_rhs, this%uhat, this%vhat, this%what, this%newTimeStep, &
+                 this%step)
            end if
        end if
 
@@ -296,12 +297,47 @@
        ! Step 11: Add statified forcing 
        if (this%isStratified .and. this%useforcedStratification) then
             call this%addForcedStratification()
-       end if 
-
+       end if
+       
        ! Step 12: Immersed Bodies 
        if (allocated(this%immersedBodies)) then 
          do idx = 1, size(this%immersedBodies)
-            call this%immersedBodies(idx)%updateRHS(this%u, this%v, this%w, this%u_rhs, this%v_rhs, this%w_rhs, this%dt) 
+            call this%immersedBodies(idx)%updateRHS(this%u, this%v, this%w, &
+              this%u_rhs, this%v_rhs, this%w_rhs, this%dt) 
          end do 
        end if 
+
+      ! Step 13: Add user-defined source term
+      if (this%addExtraSourceTerm) then
+        ! Take IFFT
+        call this%spectC%ifft(this%u_rhs,this%rbuffxC(:,:,:,1))
+        call this%spectC%ifft(this%v_rhs,this%rbuffxC(:,:,:,2))
+        call this%spectE%ifft(this%w_rhs,this%rbuffxE(:,:,:,1))
+
+        ! Interpolate edge to cell for w_rhs
+        call transpose_x_to_y(this%rbuffxE(:,:,:,1),this%rbuffyE(:,:,:,1),this%gpE)
+        call transpose_y_to_z(this%rbuffyE(:,:,:,1),this%rbuffzE(:,:,:,1),this%gpE)
+        call this%Pade6opZ%interpz_E2C(this%rbuffzE(:,:,:,1),this%rbuffzC(:,:,:,1),&
+          wBC_bottom, wBC_top)
+        call transpose_z_to_y(this%rbuffzC(:,:,:,1),this%rbuffyC(:,:,:,1),this%gpC)
+        call transpose_y_to_x(this%rbuffyC(:,:,:,1),this%rbuffxC(:,:,:,3),this%gpC)
+
+        ! Add the source term
+        call hook_source(this%tsim,this%mesh,this%Re,&
+          this%rbuffxC(:,:,:,1),this%rbuffxC(:,:,:,2),this%rbuffxC(:,:,:,3))
+
+        ! Interpolate cell to edge for w_rhs
+        call transpose_x_to_y(this%rbuffxC(:,:,:,3),this%rbuffyC(:,:,:,1),this%gpC)
+        call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),this%gpC)
+        call this%Pade6opZ%interpz_C2E(this%rbuffzC(:,:,:,1),this%rbuffzE(:,:,:,1),&
+          wBC_bottom, wBC_top)
+        call transpose_z_to_y(this%rbuffzE(:,:,:,1),this%rbuffyE(:,:,:,1),this%gpE)
+        call transpose_y_to_x(this%rbuffyE(:,:,:,1),this%rbuffxE(:,:,:,1),this%gpE)
+
+        ! Take FFT
+        call this%spectC%fft(this%rbuffxC(:,:,:,1), this%u_rhs)
+        call this%spectC%fft(this%rbuffxC(:,:,:,2), this%v_rhs)
+        call this%spectE%fft(this%rbuffxE(:,:,:,1), this%w_rhs)
+      end if 
+
    end subroutine 

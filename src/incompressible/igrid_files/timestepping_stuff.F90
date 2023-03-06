@@ -33,7 +33,6 @@
 
    end subroutine
 
-   
    subroutine TVD_RK3(this, dtforced)
        class(igrid), intent(inout), target :: this
        real(rkind), intent(in), optional :: dtforced
@@ -79,8 +78,8 @@
        end if
 
        ! Now perform the projection and prep for next stage
-       call this%project_and_prep(this%fastCalcPressure)
-        
+       !call this%project_and_prep(this%fastCalcPressure)
+       call this%project_and_prep(.false.)
 
        !!! STAGE 2
        ! Second stage - u, v, w are really pointing to u1, v1, w1 (which is
@@ -162,7 +161,7 @@
        if (this%AlreadyHaveRHS) then
            this%AlreadyHaveRHS = .false.
        else
-           call this%populate_rhs()
+           call this%populate_rhs() ! Set u_rhs, v_rhs, & w_rhs
        end if
        this%newTimeStep = .false.
        ! Set the pointers 
@@ -190,7 +189,10 @@
 
        ! Now perform the projection and prep for next stage
        
-       call this%project_and_prep(this%fastCalcPressure)
+       !call this%project_and_prep(this%fastCalcPressure)
+       call this%project_and_prep(.false.)
+       
+       ! u_hat is now divergence free
 
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        !!! STAGE 2 !!!!!!!!!!!!!!!!!!!!!!!!
@@ -306,8 +308,14 @@
        ! Now perform the projection and prep for next time step
        call this%project_and_prep(.false.)
 
+       ! We have all velocities (complex, real, edge, and cell) at t_n+1
+       ! We don't have pressure at t_n+1
+
        ! Wrap up this time step 
        call this%wrapup_timestep() 
+
+       ! If pressure was calculated in wrapup_timestep(), then we now have 
+       ! pressure at t_n+1 and rhs(u_n+1, p_n+1) => This rhs is divergence free
 
    end subroutine
 
@@ -357,13 +365,22 @@
        integer :: ierr = -1, ierr2
 
        ! STEP 1: Update Time, BCs and record probe data
-       this%step = this%step + 1; this%tsim = this%tsim + this%dt
+       this%step = this%step + 1
+       this%tsim = this%tsim + this%dt
        this%newTimeStep = .true. 
        if (this%useControl .AND. abs(180.d0/pi*this%angleHubHeight) > this%angleTrigger) then
            this%G_alpha = this%G_alpha - this%deltaGalpha
            this%frameAngle = this%frameAngle + this%deltaGalpha 
        end if
        
+       ! STEP 1B: Clear IFFT round-off inconsistency
+       if (mod(this%step,this%clearRoundOffFreq) == 0) then
+           call this%spectC%fft(this%u,this%uhat)
+           call this%spectC%fft(this%v,this%vhat)
+           call this%spectE%fft(this%w,this%what)
+
+       end if
+
        !if (this%isStratified) then
        !    if (this%botBC_Temp == 0) then
        !        this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
@@ -373,8 +390,12 @@
        if (this%useProbes) call this%updateProbes()
        if (this%computevorticity) call this%compute_vorticity
 
-       ierr = -1; forceWrite = .FALSE.; exitstat = .FALSE.; forceDumpPressure = .FALSE.; 
-       forceDumpProbes = .false.; restartWrite = .FALSE. 
+       ierr = -1
+       forceWrite = .FALSE.
+       exitstat = .FALSE.
+       forceDumpPressure = .FALSE.
+       forceDumpProbes = .false.
+       restartWrite = .FALSE. 
 
        if(this%tsim > this%tstop) then
          forceWrite = .TRUE.
@@ -541,6 +562,9 @@
            if (mod(this%step,this%t_dataDump) == 0) then
               call message(0,"Scheduled visualization dump.")
               call this%dump_visualization_files()
+              if (this%useHITForcing) then
+                call this%hitforce%dumpForcing(this%outputdir,this%RunID,this%step)
+              end if
            end if
       end if 
 
@@ -548,6 +572,9 @@
       if (forceWrite) then
          call message(2,"Performing a forced visualization dump.")
          call this%dump_visualization_files()
+         if (this%useHITForcing) then
+           call this%hitforce%dumpForcing(this%outputdir,this%RunID,this%step)
+         end if
       end if
 
       if (this%initspinup) then
@@ -606,6 +633,45 @@
 
        ! Step 5: Do end of time step operations (I/O, stats, etc.)
        call this%wrapup_timestep()
+   end subroutine
+   
+   subroutine FwdEuler(this)
+     use constants, only: imi
+       class(igrid), intent(inout) :: this
+       real(rkind) :: abf1, abf2
+
+       ! Step 0: Compute TimeStep 
+       call this%compute_deltaT
+
+       ! Step 1: Get the RHS
+       call this%populate_rhs()
+       call this%dealias_rhs(this%u_rhs,this%v_rhs,this%w_rhs)
+
+       ! Step 2: Time Advance
+       this%uhat = this%uhat + this%dt*this%u_rhs 
+       this%vhat = this%vhat + this%dt*this%v_rhs 
+       this%what = this%what + this%dt*this%w_rhs 
+
+       ! Step 3: Pressure Project and prep for the next step
+       !call this%dealiasFields()
+
+       ! Step 2: Pressure projection
+       call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+       
+       ! Step 3: Take it back to physical fields
+       call this%spectC%ifft(this%uhat,this%u,.true.)
+       call this%spectC%ifft(this%vhat,this%v,.true.)
+       call this%spectE%ifft(this%what,this%w,.true.)
+ 
+       ! STEP 4: Interpolate the cell center values of w
+       call this%interp_PrimitiveVars()
+
+       ! STEP 5: Compute duidxjC 
+       call this%compute_duidxj()
+
+       ! Step 5: Do end of time step operations (I/O, stats, etc.)
+       call this%wrapup_timestep()
+
    end subroutine
    
    function get_dt(this, recompute) result(val)
@@ -700,4 +766,53 @@
            end if
        end if 
 
+   end subroutine
+   
+   subroutine RK4(this, dtforced)
+       class(igrid), intent(inout), target :: this
+       real(rkind), intent(in), optional :: dtforced
+       integer :: idx
+       real(rkind), dimension(4) :: a, b
+
+       if(present(dtforced)) then
+         this%dt = dtforced
+       else
+         ! Step 0: Compute TimeStep 
+         call this%compute_deltaT
+       endif
+
+       this%du = im0
+       this%dv = im0
+       this%dw = im0
+       
+       a = [0.d0, 0.5d0, 0.5d0, 1.d0]
+       b = [1.d0, 2.d0, 2.d0, 1.d0]/6.d0
+   
+       do idx = 1,4
+         this%ustar = this%uhat + a(idx)*this%dt*this%u_rhs
+         this%vstar = this%vhat + a(idx)*this%dt*this%v_rhs
+         this%wstar = this%what + a(idx)*this%dt*this%w_rhs
+         
+         this%uhat => this%ustar
+         this%vhat => this%vstar
+         this%what => this%wstar
+         
+         call this%project_and_prep(.false.)
+         call this%populate_rhs()
+         call this%reset_pointers()
+
+         this%du = this%du + b(idx)*this%dt*this%u_rhs
+         this%dv = this%dv + b(idx)*this%dt*this%v_rhs
+         this%dw = this%dw + b(idx)*this%dt*this%w_rhs
+       end do
+
+       this%uhat = this%uhat + this%du 
+       this%vhat = this%vhat + this%dv 
+       this%what = this%what + this%dw 
+       
+       call this%project_and_prep(.false.)
+
+       ! Wrap up this time step 
+       call this%wrapup_timestep() 
+   
    end subroutine

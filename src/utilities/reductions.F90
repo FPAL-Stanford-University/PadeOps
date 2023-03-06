@@ -1,6 +1,6 @@
 module reductions
     use mpi
-    use kind_parameters, only: rkind,mpirkind
+    use kind_parameters, only: rkind, mpirkind, mpickind
     use decomp_2d, only: decomp_info, nrank, nproc
     use exits, only: GracefulExit
     
@@ -20,7 +20,9 @@ module reductions
     end interface
 
     interface P_SUM
-        module procedure P_SUM_ARR2_locComm,P_SUM_ARR1_locComm,P_SUM_sca_locComm, P_SUM_ARR3_locComm, P_SUM_arr3, P_SUM_arr2, P_SUM_arr1, P_SUM_sca, P_SUM_sca_INT
+        module procedure P_SUM_ARR2_locComm,P_SUM_ARR1_locComm,P_SUM_sca_locComm, &
+          P_SUM_ARR3_locComm, P_SUM_arr3, P_SUM_arr3_cmplx, P_SUM_arr2, &
+          P_SUM_arr1, P_SUM_sca, P_SUM_sca_cmplx, P_SUM_sca_INT
     end interface
 
     interface P_MEAN
@@ -166,6 +168,17 @@ contains
         call MPI_Allreduce(mysum, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
 
     end function
+    
+    function P_SUM_arr3_cmplx(x) result(summation)
+        complex(rkind), dimension(:,:,:), intent(in) :: x
+        complex(rkind) :: summation
+        complex(rkind) :: mysum
+        integer :: ierr
+
+        mysum = SUM(x)
+        call MPI_Allreduce(mysum, summation, 1, mpickind, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+    end function
 
     function P_SUM_sca_locComm(x,locCommWorld) result(summation)
         real(rkind), intent(in) :: x
@@ -234,6 +247,15 @@ contains
         integer :: ierr
 
         call MPI_Allreduce(x, summation, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+
+    end function
+
+    function P_SUM_sca_cmplx(x) result(summation)
+        complex(rkind), intent(in) :: x
+        complex(rkind) :: summation
+        integer :: ierr
+
+        call MPI_Allreduce(x, summation, 1, mpickind, MPI_SUM, MPI_COMM_WORLD, ierr)
 
     end function
 

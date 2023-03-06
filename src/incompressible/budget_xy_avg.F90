@@ -7,6 +7,7 @@ module budgets_xy_avg_mod
    use constants, only: half,two,one,zero
    use basic_io, only: read_2d_ascii, write_2d_ascii
    use mpi 
+   use fortran_assert, only: assert
 
    implicit none 
 
@@ -177,6 +178,7 @@ contains
         integer :: tidx_compute = 1000000, tidx_dump = 1000000, tidx_budget_start = -100
         logical :: do_budgets = .false., do_spectra = .false., do_autocorrel = .false.
         real(rkind) :: time_budget_start = -1.0d0
+        character(len=clen) :: mssg
         namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start, time_budget_start, do_spectra, do_autocorrel
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
@@ -184,7 +186,7 @@ contains
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
         read(unit=ioUnit, NML=BUDGET_XY_AVG)
         close(ioUnit)
-
+         
         this%igrid_sim => igrid_sim 
         this%run_id = igrid_sim%runid
         this%nz = igrid_sim%nz
@@ -200,6 +202,11 @@ contains
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
         this%avgFact = 1.d0/(real(igrid_sim%nx,rkind)*real(igrid_sim%ny,rkind))
+
+        if (.not. this%igrid_sim%fastCalcPressure) then
+            call GracefulExit("Cannot perform budget calculaitons if IGRID"//&
+              " is initialized with FASTCALCPRESSURE=.false.", ierr)
+        end if
 
         if((this%tidx_budget_start > 0) .and. (this%time_budget_start > 0.0d0)) then
             call GracefulExit("Both tidx_budget_start and time_budget_start in budget_xy_avg are positive. Turn one negative", 100)
@@ -248,6 +255,15 @@ contains
                     call GracefulExit("restart budgets not supported with do_autocorrel. Set one of them to false", 100)
                 endif
                 call this%RestartBudget(restart_rid, restart_tid, restart_counter)
+                
+                ! Error handling
+                call assert(size(this%Budget_0,1) == this%nz, &
+                  'size(this%Budget_0,1) == this%nz -- budget_xy_avg.F90')
+                write(mssg,'(A,I2,A,I2,A)')&
+                  'size(this%Budget_0,2) == 21 -- budget_xy_avg.F90'&
+                  //' | shape(this%Budget_0) = (', size(this%Budget_0,1), &
+                  ',', size(this%Budget_0,2), ')'
+                call assert(size(this%Budget_0,2) == 21, trim(mssg))
             else
                 call this%resetBudget()
             end if
@@ -266,7 +282,6 @@ contains
             allocate(this%tau_13_mean(this%nz), this%tau_23_mean(this%nz), this%tau_33_mean(this%nz))
             allocate(this%buoy_hydrostatic(this%nz)) 
             allocate(this%meanZ_bcast(this%nz)) 
-
 
             ! STEP 2: Allocate memory (massive amount of memory needed)
             call igrid_sim%spectC%alloc_r2c_out(this%uc)
@@ -289,12 +304,12 @@ contains
             call igrid_sim%spectE%alloc_r2c_out(this%pz)
             call igrid_sim%spectE%alloc_r2c_out(this%wb)
 
-
             ! STEP 3: Now instrument igrid 
             call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
                        & this%vcor, this%wcor, this%uturb) 
-
+            
+            call message("Budget_xy_avg initialized successfully!")
         end if 
 
     end subroutine 

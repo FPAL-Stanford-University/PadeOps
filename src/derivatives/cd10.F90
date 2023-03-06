@@ -738,10 +738,13 @@ contains
     
                 ! Step 11
                 y(this%n-1,j,k) = ( y(this%n-1,j,k) - this%LU1(this%n-1,9)*y(this%n,j,k) ) * this%LU1(this%n-1,5)
-                y(this%n-2,j,k) = ( y(this%n-2,j,k) - this%LU1(this%n-2,8)*y(this%n-1,j,k) - this%LU1(this%n-2,9)*y(this%n,j,k) ) * this%LU1(this%n-2,5)
-                y(this%n-3,j,k) = ( y(this%n-3,j,k) - this%LU1(this%n-3,6)*y(this%n-2,j,k) - this%LU1(this%n-3,8)*y(this%n-1,j,k) - this%LU1(this%n-3,9)*y(this%n,j,k) ) * this%LU1(this%n-3,5)
+                y(this%n-2,j,k) = ( y(this%n-2,j,k) - this%LU1(this%n-2,8)*y(this%n-1,j,k) - &
+                  this%LU1(this%n-2,9)*y(this%n,j,k) ) * this%LU1(this%n-2,5)
+                y(this%n-3,j,k) = ( y(this%n-3,j,k) - this%LU1(this%n-3,6)*y(this%n-2,j,k) - &
+                  this%LU1(this%n-3,8)*y(this%n-1,j,k) - this%LU1(this%n-3,9)*y(this%n,j,k) ) * this%LU1(this%n-3,5)
                 do i = this%n-4,1,-1
-                    y(i,j,k) = ( y(i,j,k) - this%LU1(i,6)*y(i+1,j,k) - this%LU1(i,7)*y(i+2,j,k) - this%LU1(i,8)*y(this%n-1,j,k) - this%LU1(i,9)*y(this%n,j,k) ) * this%LU1(i,5)
+                    y(i,j,k) = ( y(i,j,k) - this%LU1(i,6)*y(i+1,j,k) - this%LU1(i,7)*y(i+2,j,k) - &
+                      this%LU1(i,8)*y(this%n-1,j,k) - this%LU1(i,9)*y(this%n,j,k) ) * this%LU1(i,5)
                 end do
             end do
         end do
@@ -776,10 +779,13 @@ contains
     
             ! Step 11
             y(:,this%n-1,k) = ( y(:,this%n-1,k) - this%LU1(this%n-1,9)*y(:,this%n,k) ) * this%LU1(this%n-1,5)
-            y(:,this%n-2,k) = ( y(:,this%n-2,k) - this%LU1(this%n-2,8)*y(:,this%n-1,k) - this%LU1(this%n-2,9)*y(:,this%n,k) ) * this%LU1(this%n-2,5)
-            y(:,this%n-3,k) = ( y(:,this%n-3,k) - this%LU1(this%n-3,6)*y(:,this%n-2,k) - this%LU1(this%n-3,8)*y(:,this%n-1,k) - this%LU1(this%n-3,9)*y(:,this%n,k) ) * this%LU1(this%n-3,5)
+            y(:,this%n-2,k) = ( y(:,this%n-2,k) - this%LU1(this%n-2,8)*y(:,this%n-1,k) - &
+              this%LU1(this%n-2,9)*y(:,this%n,k) ) * this%LU1(this%n-2,5)
+            y(:,this%n-3,k) = ( y(:,this%n-3,k) - this%LU1(this%n-3,6)*y(:,this%n-2,k) - &
+              this%LU1(this%n-3,8)*y(:,this%n-1,k) - this%LU1(this%n-3,9)*y(:,this%n,k) ) * this%LU1(this%n-3,5)
             do j = this%n-4,1,-1
-                y(:,j,k) = ( y(:,j,k) - this%LU1(j,6)*y(:,j+1,k) - this%LU1(j,7)*y(:,j+2,k) - this%LU1(j,8)*y(:,this%n-1,k) - this%LU1(j,9)*y(:,this%n,k) ) * this%LU1(j,5)
+                y(:,j,k) = ( y(:,j,k) - this%LU1(j,6)*y(:,j+1,k) - this%LU1(j,7)*y(:,j+2,k) - &
+                  this%LU1(j,8)*y(:,this%n-1,k) - this%LU1(j,9)*y(:,this%n,k) ) * this%LU1(j,5)
             end do
         end do
     
@@ -812,10 +818,13 @@ contains
     
         ! Step 11
         y(:,:,this%n-1) = ( y(:,:,this%n-1) - this%LU1(this%n-1,9)*y(:,:,this%n) ) * this%LU1(this%n-1,5)
-        y(:,:,this%n-2) = ( y(:,:,this%n-2) - this%LU1(this%n-2,8)*y(:,:,this%n-1) - this%LU1(this%n-2,9)*y(:,:,this%n) ) * this%LU1(this%n-2,5)
-        y(:,:,this%n-3) = ( y(:,:,this%n-3) - this%LU1(this%n-3,6)*y(:,:,this%n-2) - this%LU1(this%n-3,8)*y(:,:,this%n-1) - this%LU1(this%n-3,9)*y(:,:,this%n) ) * this%LU1(this%n-3,5)
+        y(:,:,this%n-2) = ( y(:,:,this%n-2) - this%LU1(this%n-2,8)*y(:,:,this%n-1) - &
+          this%LU1(this%n-2,9)*y(:,:,this%n) ) * this%LU1(this%n-2,5)
+        y(:,:,this%n-3) = ( y(:,:,this%n-3) - this%LU1(this%n-3,6)*y(:,:,this%n-2) - &
+          this%LU1(this%n-3,8)*y(:,:,this%n-1) - this%LU1(this%n-3,9)*y(:,:,this%n) ) * this%LU1(this%n-3,5)
         do k = this%n-4,1,-1
-            y(:,:,k) = ( y(:,:,k) - this%LU1(k,6)*y(:,:,k+1) - this%LU1(k,7)*y(:,:,k+2) - this%LU1(k,8)*y(:,:,this%n-1) - this%LU1(k,9)*y(:,:,this%n) ) * this%LU1(k,5)
+            y(:,:,k) = ( y(:,:,k) - this%LU1(k,6)*y(:,:,k+1) - this%LU1(k,7)*y(:,:,k+2) - &
+              this%LU1(k,8)*y(:,:,this%n-1) - this%LU1(k,9)*y(:,:,this%n) ) * this%LU1(k,5)
         end do
     
     end subroutine
@@ -930,10 +939,13 @@ contains
     
                 ! Step 11
                 y(this%n-1,j,k) = ( y(this%n-1,j,k) - this%LU2(this%n-1,9)*y(this%n,j,k) ) * this%LU2(this%n-1,5)
-                y(this%n-2,j,k) = ( y(this%n-2,j,k) - this%LU2(this%n-2,8)*y(this%n-1,j,k) - this%LU2(this%n-2,9)*y(this%n,j,k) ) * this%LU2(this%n-2,5)
-                y(this%n-3,j,k) = ( y(this%n-3,j,k) - this%LU2(this%n-3,6)*y(this%n-2,j,k) - this%LU2(this%n-3,8)*y(this%n-1,j,k) - this%LU2(this%n-3,9)*y(this%n,j,k) ) * this%LU2(this%n-3,5)
+                y(this%n-2,j,k) = ( y(this%n-2,j,k) - this%LU2(this%n-2,8)*y(this%n-1,j,k) - &
+                  this%LU2(this%n-2,9)*y(this%n,j,k) ) * this%LU2(this%n-2,5)
+                y(this%n-3,j,k) = ( y(this%n-3,j,k) - this%LU2(this%n-3,6)*y(this%n-2,j,k) - &
+                  this%LU2(this%n-3,8)*y(this%n-1,j,k) - this%LU2(this%n-3,9)*y(this%n,j,k) ) * this%LU2(this%n-3,5)
                 do i = this%n-4,1,-1
-                    y(i,j,k) = ( y(i,j,k) - this%LU2(i,6)*y(i+1,j,k) - this%LU2(i,7)*y(i+2,j,k) - this%LU2(i,8)*y(this%n-1,j,k) - this%LU2(i,9)*y(this%n,j,k) ) * this%LU2(i,5)
+                    y(i,j,k) = ( y(i,j,k) - this%LU2(i,6)*y(i+1,j,k) - this%LU2(i,7)*y(i+2,j,k) - &
+                      this%LU2(i,8)*y(this%n-1,j,k) - this%LU2(i,9)*y(this%n,j,k) ) * this%LU2(i,5)
                 end do
             end do
         end do
@@ -968,10 +980,13 @@ contains
     
             ! Step 11
             y(:,this%n-1,k) = ( y(:,this%n-1,k) - this%LU2(this%n-1,9)*y(:,this%n,k) ) * this%LU2(this%n-1,5)
-            y(:,this%n-2,k) = ( y(:,this%n-2,k) - this%LU2(this%n-2,8)*y(:,this%n-1,k) - this%LU2(this%n-2,9)*y(:,this%n,k) ) * this%LU2(this%n-2,5)
-            y(:,this%n-3,k) = ( y(:,this%n-3,k) - this%LU2(this%n-3,6)*y(:,this%n-2,k) - this%LU2(this%n-3,8)*y(:,this%n-1,k) - this%LU2(this%n-3,9)*y(:,this%n,k) ) * this%LU2(this%n-3,5)
+            y(:,this%n-2,k) = ( y(:,this%n-2,k) - this%LU2(this%n-2,8)*y(:,this%n-1,k) - &
+              this%LU2(this%n-2,9)*y(:,this%n,k) ) * this%LU2(this%n-2,5)
+            y(:,this%n-3,k) = ( y(:,this%n-3,k) - this%LU2(this%n-3,6)*y(:,this%n-2,k) - &
+              this%LU2(this%n-3,8)*y(:,this%n-1,k) - this%LU2(this%n-3,9)*y(:,this%n,k) ) * this%LU2(this%n-3,5)
             do j = this%n-4,1,-1
-                y(:,j,k) = ( y(:,j,k) - this%LU2(j,6)*y(:,j+1,k) - this%LU2(j,7)*y(:,j+2,k) - this%LU2(j,8)*y(:,this%n-1,k) - this%LU2(j,9)*y(:,this%n,k) ) * this%LU2(j,5)
+                y(:,j,k) = ( y(:,j,k) - this%LU2(j,6)*y(:,j+1,k) - this%LU2(j,7)*y(:,j+2,k) - &
+                  this%LU2(j,8)*y(:,this%n-1,k) - this%LU2(j,9)*y(:,this%n,k) ) * this%LU2(j,5)
             end do
         end do
     
@@ -1004,10 +1019,13 @@ contains
     
         ! Step 11
         y(:,:,this%n-1) = ( y(:,:,this%n-1) - this%LU2(this%n-1,9)*y(:,:,this%n) ) * this%LU2(this%n-1,5)
-        y(:,:,this%n-2) = ( y(:,:,this%n-2) - this%LU2(this%n-2,8)*y(:,:,this%n-1) - this%LU2(this%n-2,9)*y(:,:,this%n) ) * this%LU2(this%n-2,5)
-        y(:,:,this%n-3) = ( y(:,:,this%n-3) - this%LU2(this%n-3,6)*y(:,:,this%n-2) - this%LU2(this%n-3,8)*y(:,:,this%n-1) - this%LU2(this%n-3,9)*y(:,:,this%n) ) * this%LU2(this%n-3,5)
+        y(:,:,this%n-2) = ( y(:,:,this%n-2) - this%LU2(this%n-2,8)*y(:,:,this%n-1) - &
+          this%LU2(this%n-2,9)*y(:,:,this%n) ) * this%LU2(this%n-2,5)
+        y(:,:,this%n-3) = ( y(:,:,this%n-3) - this%LU2(this%n-3,6)*y(:,:,this%n-2) - &
+          this%LU2(this%n-3,8)*y(:,:,this%n-1) - this%LU2(this%n-3,9)*y(:,:,this%n) ) * this%LU2(this%n-3,5)
         do k = this%n-4,1,-1
-            y(:,:,k) = ( y(:,:,k) - this%LU2(k,6)*y(:,:,k+1) - this%LU2(k,7)*y(:,:,k+2) - this%LU2(k,8)*y(:,:,this%n-1) - this%LU2(k,9)*y(:,:,this%n) ) * this%LU2(k,5)
+            y(:,:,k) = ( y(:,:,k) - this%LU2(k,6)*y(:,:,k+1) - this%LU2(k,7)*y(:,:,k+2) - &
+              this%LU2(k,8)*y(:,:,this%n-1) - this%LU2(k,9)*y(:,:,this%n) ) * this%LU2(k,5)
         end do
    
    end subroutine 

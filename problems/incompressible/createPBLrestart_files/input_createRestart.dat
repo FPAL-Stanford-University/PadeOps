@@ -1,0 +1,12 @@
+&INPUT
+nx                    = 384         ! Number of points in X
+ny                    = 384         ! Number of points in Y
+nz                    = 128        ! Number of points in Z
+Lx                    = 18.849555921538759d0 ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly                    = 9.424777960769379d0 ! Domain Width (appropriate dimesnions/non-dimensionalized)
+Lz                    = 1.d0                ! Domain Height (appropriate dimesnions/non-dimensionalized)
+outputdir             = "/projects/windFlowModeling/PadeOps/HIT_testing/output/"   ! Directory for all output files
+TID                   = 0          ! TimeID of the restart file for the original data
+RID                   = 1          ! RunID of the restart file for the original data
+matlabfile             = "/projects/windFlowModeling/PadeOps/HIT_testing/output/myfile.txt"   ! Directory for all output files
+/

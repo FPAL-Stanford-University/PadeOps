@@ -17,7 +17,11 @@ contains
 
     subroutine doTemporalStuff(igp)
         class(igrid), intent(inout) :: igp 
+<<<<<<< HEAD
         real(rkind) :: maxnusgs, maxkappasgs
+=======
+        real(rkind) :: maxnusgs!, maxkappasgs
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
       
         if (mod(igp%step,nt_print2screen) == 0) then
             maxDiv = maxval(igp%divergence)
@@ -37,9 +41,15 @@ contains
             call message(1,"G_geostrophic:",igp%G_geostrophic)
             call message(1,"G_alpha:",igp%G_alpha)
             maxnusgs = p_maxval(igp%nu_SGS)
+<<<<<<< HEAD
             maxkappasgs = p_maxval(igp%kappaSGS)
             call message(1,"Maximum SGS viscosity:", maxnusgs)
             call message(1,"Maximum SGS scalar kappa:", maxkappasgs)
+=======
+            !maxkappasgs = p_maxval(igp%kappaSGS)
+            call message(1,"Maximum SGS viscosity:", maxnusgs)
+            !call message(1,"Maximum SGS scalar kappa:", maxkappasgs)
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
             if (igp%useCFL) then
                 call message(1,"Current dt:",igp%dt)
             end if

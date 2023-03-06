@@ -394,7 +394,20 @@ contains
                end do 
             end do 
          end do
+         deallocate(z1, z2, S1, S2, Fringe_func)
 
+         allocate(z1         (this%gpE%xsz(3)))
+         allocate(z2         (this%gpE%xsz(3)))
+         allocate(S1         (this%gpE%xsz(3)))
+         allocate(S2         (this%gpE%xsz(3)))
+         allocate(Fringe_func(this%gpE%xsz(3)))
+     
+         z1 = ((z -  Fringe_zst)/Fringe_delta_st_z)
+         z2 = ((z -  Fringe_zen)/Fringe_delta_en_z) + 1.d0
+         call S_fringe(z1, S1)
+         call S_fringe(z2, S2)
+         Fringe_func = S1 - S2
+         
          do k = 1,this%gpE%xsz(3)
             do j = 1,this%gpE%xsz(2)
                do i = 1,nx

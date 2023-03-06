@@ -69,6 +69,28 @@
 
    end subroutine
 
+   ! NOTE: If you want to dump an edge field, you need to call in dumpFullField
+   ! routine with this%gpE passed in as the 3rd argument. If it's a cell field,
+   ! then you don't need to pass in any gp since the default gp is this%gpC
+   subroutine dumpSpectralField(this,arr,label,gp2use)
+       use decomp_2d_io
+       use mpi
+       use exits, only: message
+       class(igrid), intent(in) :: this
+       character(len=clen) :: tempname, fname
+       real(rkind), dimension(:,:,:), intent(in) :: arr
+       character(len=4), intent(in) :: label
+       type(decomp_info), intent(in), optional :: gp2use
+
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+        if (present(gp2use)) then
+           call decomp_2d_write_one(2,arr,fname,gp2use)
+        else
+           call decomp_2d_write_one(2,arr,fname,this%gpC)
+        end if
+
+   end subroutine
 
    subroutine dumpVisualizationInfo(this)
        class(igrid), intent(in) :: this
@@ -726,7 +748,6 @@
        if (nrank == 0) then
            write(tempname,"(A3,I2.2,A6,A4)") "Run", runIDX, "HEADER",".txt"
            fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-
            open (this%headerfid, file=trim(fname), FORM='formatted', STATUS='replace',ACTION='write')
            write(this%headerfid,*)"========================================================================="
            write(this%headerfid,*)"---------------------  Header file for MATLAB ---------------------------"
@@ -765,6 +786,7 @@
                call message(0,"Done with the initialization data dump.")
            end if
        end if
+       call message(0,"Done with io_startup stuff")
    end subroutine
    
    subroutine readField3D(RunID, TIDX, inputDir, label, field, gpC)

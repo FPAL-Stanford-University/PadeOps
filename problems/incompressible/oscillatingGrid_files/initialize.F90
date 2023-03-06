@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 module convective_igrid_parameters
 
       ! TAKE CARE OF TIME NON-DIMENSIONALIZATION IN THIS MODULE
@@ -19,6 +20,94 @@ end module
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use convective_igrid_parameters
+=======
+module oscillating_grid_parameters
+    use exits, only: message
+    use kind_parameters,  only: rkind, clen
+    use constants, only: zero, kappa, one
+    implicit none
+    
+    real(rkind) :: omega = 1.d0     ! Oscillating frequency of the grid
+    real(rkind) :: stroke = 0.1d0   ! Amplitude of the grid (i.e. "stroke length")
+    real(rkind) :: lxbar = 0.1d0, &
+                   lybar = 0.1d0, &
+                   lzbar = 0.1d0    ! The width of each "bar"
+    integer :: Nbx = 2, Nby = 2     ! The number of bars in x and y (homogeneous grid only)
+    real(rkind) :: z0 = 0.5d0       ! z-location of the center of the grid at t=0
+    real(rkind) :: Lx = one, Ly = one, Lz = one
+    logical :: filterMask = .false.
+
+    ! Grid types
+    integer, parameter :: homogeneous = 1
+    integer, parameter :: fractal = 2
+    integer :: gridType = homogeneous
+
+    ! If adding breaks in the grid
+    logical :: useGridBreaks = .false.
+    character(len=clen) :: gridBreakDatdir
+    real(rkind), dimension(:), allocatable :: omega1, omega2, phi1, phi2
+    real(rkind), dimension(:), allocatable, private :: sideDouble
+    integer, dimension(:), allocatable :: side
+    real(rkind) :: breakSzY, breakSzX
+    
+    ! Used for fractal grid
+    real(rkind) :: width1 = 0.1d0, length1 = 1.d0
+    real(rkind) :: widthFact = 0.5d0, lengthFact = 0.5d0
+    integer :: levels = 2
+    integer :: NbarsTotal = 1
+
+    ! GlobalDomainStuff
+    integer :: nx, ny, nz
+
+    ! IO stuff
+    integer :: dumpMaskFreq = 100
+
+    contains
+
+      subroutine getGridBreakParameters()
+        use basic_io, only: read_1d_ascii
+        integer :: n
+        select case (gridType)
+        case (homogeneous)
+          allocate(omega1(Nbx))
+          allocate(omega2(Nby))
+          allocate(phi1(Nbx))
+          allocate(phi2(Nby))
+          call read_1d_ascii(omega1,trim(gridBreakDatDir)//'/omega1.txt')
+          call read_1d_ascii(omega2,trim(gridBreakDatDir)//'/omega2.txt')
+          call read_1d_ascii(phi1,trim(gridBreakDatDir)//'/phi1.txt')
+          call read_1d_ascii(phi2,trim(gridBreakDatDir)//'/phi2.txt')
+        case (fractal)
+          NbarsTotal = 0
+          do n = 0,levels-1
+            NbarsTotal = NbarsTotal + 4**n
+          end do
+          allocate(omega1(NbarsTotal))
+          allocate(phi1(NbarsTotal))
+          allocate(sideDouble(NbarsTotal))
+          allocate(side(NbarsTotal))
+          call read_1d_ascii(omega1,trim(gridBreakDatDir)//'/omega1.txt')
+          call read_1d_ascii(phi1,trim(gridBreakDatDir)//'/phi1.txt')
+          call read_1d_ascii(sideDouble,trim(gridBreakDatDir)//'/side.txt')
+          side = nint(sideDouble)
+          deallocate(sideDouble)
+        end select
+      end subroutine
+
+      subroutine finalizeProblem()
+        if (allocated(omega1))     deallocate(omega1)
+        if (allocated(omega2))     deallocate(omega2)
+        if (allocated(phi1))       deallocate(phi1)
+        if (allocated(phi2))       deallocate(phi2)
+        if (allocated(sideDouble)) deallocate(sideDouble)
+        if (allocated(side))       deallocate(side)
+      end subroutine
+    
+end module     
+
+subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
+    use oscillating_grid_parameters
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half, three
     use gridtools,          only: alloc_buffs
@@ -59,9 +148,14 @@ end subroutine
 
 subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     use kind_parameters,    only: rkind
+<<<<<<< HEAD
     use convective_igrid_parameters
     use constants, only: one, zero 
     use diurnalBCsmod
+=======
+    use oscillating_grid_parameters
+    use constants, only: one, zero 
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
     implicit none
     real(rkind), intent(inout) :: wTh_surf
     character(len=*),                intent(in)    :: inputfile
@@ -74,13 +168,21 @@ end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     use kind_parameters,    only: rkind
+<<<<<<< HEAD
     use convective_igrid_parameters
+=======
+    use oscillating_grid_parameters
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
     use constants, only: one, zero 
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=*),                intent(in)    :: inputfile
     integer :: ioUnit 
+<<<<<<< HEAD
     real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, z0init = 1.d-4, Tsurf0 = 290.0d0
+=======
+    real(rkind)  :: Tref = zero, wTh_surf0 = one, z0init = 1.d-4, Tsurf0 = 290.0d0
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
     namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, Tsurf0 
      
     ioUnit = 11
@@ -94,6 +196,10 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 end subroutine
 
 subroutine set_planes_io(xplanes, yplanes, zplanes)
+<<<<<<< HEAD
+=======
+    use oscillating_grid_parameters, only: nx, ny, nz
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
     implicit none
     integer, dimension(:), allocatable,  intent(inout) :: xplanes
     integer, dimension(:), allocatable,  intent(inout) :: yplanes
@@ -102,9 +208,15 @@ subroutine set_planes_io(xplanes, yplanes, zplanes)
 
     allocate(xplanes(nxplanes), yplanes(nyplanes), zplanes(nzplanes))
 
+<<<<<<< HEAD
     xplanes = [64]
     yplanes = [64]
     zplanes = [256]
+=======
+    xplanes = [nx/2]
+    yplanes = [ny/2]
+    zplanes = [nz/2]
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
 
 end subroutine
 
@@ -136,7 +248,11 @@ end subroutine
 
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
+<<<<<<< HEAD
     use convective_igrid_parameters    
+=======
+    use oscillating_grid_parameters    
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
     use kind_parameters,  only: rkind
     use constants,        only: one,two
     use decomp_2d,        only: decomp_info
@@ -148,21 +264,40 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
+<<<<<<< HEAD
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     namelist /PROBLEM_INPUT/ Lx, Ly, Lz
+=======
+    integer :: nxg, nyg, nzg
+    real(rkind) :: z0fact = 0.5d0
+    
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, lxbar, lybar, lzbar, z0fact, omega, &
+      stroke, Nbx, Nby, filterMask, gridType, width1, length1, widthFact, &
+      lengthFact, levels, useGridBreaks, gridBreakDatDir, breakSzY, breakSzX, &
+      dumpMaskFreq
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBLEM_INPUT)
     close(ioUnit)    
 
+<<<<<<< HEAD
     !Lx = two*pi; Ly = two*pi; Lz = one
 
+=======
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
 
     ! If base decomposition is in Y
     ix1 = decomp%xst(1); iy1 = decomp%xst(2); iz1 = decomp%xst(3)
     ixn = decomp%xen(1); iyn = decomp%xen(2); izn = decomp%xen(3)
+<<<<<<< HEAD
+=======
+
+    ! Compute the physical z0
+    z0 = z0fact*Lz
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
     
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
@@ -187,6 +322,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 
     end associate
 
+<<<<<<< HEAD
+=======
+    nx = decomp%xsz(1)
+    ny = decomp%ysz(2)
+    nz = decomp%zsz(3)
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
 end subroutine
 
 subroutine set_Reference_Temperature(inputfile, Thetaref)
@@ -243,9 +384,22 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
 
     scalarSource = 0.d0
 end subroutine 
+<<<<<<< HEAD
 
 
 
 
 
 
+=======
+subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
+    use kind_parameters, only: rkind
+    real(rkind),                     intent(in)    :: tsim, Re
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:),   intent(inout) :: urhs, vrhs, wrhs
+    
+    urhs = urhs + 0.d0
+    vrhs = vrhs + 0.d0
+    wrhs = wrhs + 0.d0
+  end subroutine
+>>>>>>> bca0e56daec689d11e59fe4531fb699163924c45

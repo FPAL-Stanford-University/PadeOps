@@ -10,6 +10,7 @@ module spectralMod
     use mpi
     use reductions, only: p_sum 
     use numerics, only: use3by2rule
+    use fortran_assert, only: assert
  
     implicit none
     private
@@ -153,6 +154,7 @@ module spectralMod
             procedure, private :: modify_my_xy_wavenumbers            
             !procedure, private  :: upsample_Fhat
             !procedure, private  :: downsample_Fhat
+            procedure          :: fix_kx0
 
     end type
 
@@ -978,7 +980,7 @@ contains
          use constants, only: imi
          class(spectral),  intent(inout)         :: this
          real(rkind), intent(in) :: dx, dy, dz
-         real(rkind), dimension(:,:,:),  allocatable :: rbuffz, rbuffz1
+         real(rkind), dimension(:,:,:),  allocatable :: rbuffz, rbuffz1, tmpbuffz
          real(rkind), dimension(:), allocatable :: k3_1d
          complex(rkind), dimension(:,:,:), allocatable :: cbuffz
          real(rkind) :: kdealiasx, kdealiasy, kdealiasz
@@ -1001,6 +1003,7 @@ contains
          allocate(this%ctmpz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
          allocate(rbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
          allocate(cbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
+         allocate(tmpbuffz(this%spectdecomp%zsz(1),this%spectdecomp%zsz(2),this%spectdecomp%zsz(3)))
 
          this%Gdealias = one 
 
@@ -1012,6 +1015,8 @@ contains
          select case (this%dealiasType)
          case (1)
             this%Gdealias = this%Gdealias*exp(-36.d0*((abs(rbuffz)/(pi/dx))**36))
+         case (2)
+            tmpbuffz = rbuffz**2
          case default
             where (abs(rbuffz) >= kdealiasx)    
                this%Gdealias = zero
@@ -1032,6 +1037,8 @@ contains
          select case (this%dealiasType)
          case (1)
             this%Gdealias = this%Gdealias*exp(-36.d0*((abs(rbuffz)/(pi/dy))**36))
+         case (2)
+            tmpbuffz = tmpbuffz + rbuffz**2
          case default
             where (abs(rbuffz) >= kdealiasx)    
                this%Gdealias = zero
@@ -1050,6 +1057,8 @@ contains
          select case (this%dealiasType)
          case (1)
             this%Gdealias = this%Gdealias*exp(-36.d0*((abs(rbuffz)/(pi/dz))**36))
+         case (2)
+            tmpbuffz = tmpbuffz + rbuffz**2
          case default
             where (abs(rbuffz) >= kdealiasx)    
                this%Gdealias = zero
@@ -1058,6 +1067,13 @@ contains
          allocate(this%k3inZ(size(rbuffz,3)))
          allocate(this%zshiftfact(size(rbuffz,3)))
          this%k3inZ = rbuffz(1,1,:)
+
+         if (this%dealiasType == 2) then
+           call assert(dx == dy,'dx == dy -- spectral.F90')
+           call assert(dx == dz,'dx == dz -- spectral.F90')
+           where (tmpbuffz > kdealiasx**2) this%Gdealias = zero
+         end if
+         deallocate(tmpbuffz)
          
          call dfftw_plan_many_dft(this%plan_c2c_fwd_z_ip, 1, nz,nxT*nyT, this%ctmpz, nz, &
                       nxT*nyT, 1, this%ctmpz, nz,nxT*nyT, 1, FFTW_FORWARD , FFTW_EXHAUSTIVE)   
@@ -1775,6 +1791,14 @@ contains
                call this%FT%ifft2_y2x(arr_in,arr_out,.false.)
             end if
         end if 
+    end subroutine
+
+    subroutine fix_kx0(this,arr)
+        class(spectral), intent(inout) :: this
+        complex(rkind), dimension(this%nx_c,this%ny_c,this%nz_c), intent(inout) :: arr
+
+        call this%FT%fix_kx0(arr)
+
     end subroutine
    
     subroutine fft_y2z(this, arr_in, arr_out)

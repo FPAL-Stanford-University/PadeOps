@@ -201,6 +201,14 @@ contains
         this%splitPressureDNS = this%igrid_sim%computeDNSPressure
 
         this%HaveScalars = this%igrid_sim%useScalars
+        
+        if (.not. this%igrid_sim%fastCalcPressure) then
+            if (this%do_budgets) then
+              call GracefulExit("Cannot perform budget calculaitons if IGRID"//&
+                " is initialized with FASTCALCPRESSURE=.false.", ierr)
+            end if
+        end if
+
 
         if((this%tidx_budget_start > 0) .and. (this%time_budget_start > 0.0d0)) then
             call GracefulExit("Both tidx_budget_start and time_budget_start in budget_time_avg are positive. Turn one negative", 100)
@@ -283,6 +291,7 @@ contains
             endif
 
         end if
+        call message("Budget_time_avg initialized successfully!")
 
     end subroutine 
 

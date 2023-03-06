@@ -20,6 +20,7 @@ program test_HITforcing
    integer, parameter :: scheme = 2
    complex(rkind), dimension(:,:,:,:), allocatable :: cbuffzC
    complex(rkind), dimension(:,:,:), allocatable :: cbuffzE1, cbuffyE, cbuffyC
+   real(rkind), dimension(:,:,:), allocatable :: rbuffxC
 
    integer, parameter :: nx = 64, ny = 64, nz = 128
    real(rkind), parameter :: dx = two*pi/real(nx,rkind), dy = two*pi/real(ny,rkind), dz = 4.d0*pi/real(nz,rkind) 
@@ -87,9 +88,11 @@ program test_HITforcing
    allocate(cbuffyE(spectE%spectdecomp%ysz(1),spectE%spectdecomp%ysz(2), spectE%spectdecomp%ysz(3)  ))
    allocate(cbuffyC(spectC%spectdecomp%ysz(1),spectC%spectdecomp%ysz(2), spectC%spectdecomp%ysz(3)  ))
 
+   allocate(rbuffxC(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
+
    call HITForce%init("/anvil/projects/x-atm170028/ryanhass/LES/HITforced"//&
-     "/HITforcingDebug/HIT_forcing_input_test.dat", spectC%spectdecomp, &
-     spectE%spectdecomp, spectC, cbuffyE, cbuffyC, cbuffzE1, cbuffzC, tidStart)  
+     "/HITforcingDebug/HIT_forcing_input_test.dat", gp, spectC%spectdecomp, &
+     spectE%spectdecomp, spectC, cbuffyE, cbuffyC, cbuffzE1, cbuffzC, rbuffxC, tidStart)  
    call message(0, "Initialized HIT Forcing")
 
    urhs = im0; vrhs = im0; wrhs = im0
@@ -149,12 +152,13 @@ program test_HITforcing
      call message(0, "fzfz: ", p_mean(wC*wC))
 
      if (mod(i,dumpFreq) == 0) then
-       write(fname,'(A,I5.5,A)')trim(outputdir)//'u_HITforcing_128_',i,'.dat'
-       call decomp_2d_write_one(1,u ,trim(fname), gp)
-       write(fname,'(A,I5.5,A)')trim(outputdir)//'v_HITforcing_128_',i,'.dat'
-       call decomp_2d_write_one(1,v ,trim(fname), gp)
-       write(fname,'(A,I5.5,A)')trim(outputdir)//'w_HITforcing_128_',i,'.dat'
-       call decomp_2d_write_one(1,wC,trim(fname), gp)
+       call HITForce%dumpForcing(outputdir,0,i)
+       !write(fname,'(A,I5.5,A)')trim(outputdir)//'u_HITforcing_128_',i,'.dat'
+       !call decomp_2d_write_one(1,u ,trim(fname), gp)
+       !write(fname,'(A,I5.5,A)')trim(outputdir)//'v_HITforcing_128_',i,'.dat'
+       !call decomp_2d_write_one(1,v ,trim(fname), gp)
+       !write(fname,'(A,I5.5,A)')trim(outputdir)//'w_HITforcing_128_',i,'.dat'
+       !call decomp_2d_write_one(1,wC,trim(fname), gp)
      end if
      if (i < Nrealizations) then
        u = 0.d0; v = 0.d0; wC = 0.d0

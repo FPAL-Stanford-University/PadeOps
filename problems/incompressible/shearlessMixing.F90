@@ -14,17 +14,18 @@ program shearlessMixing
     use constants,                           only: one, zero
     use shearlessMixing_interact_parameters, only: simulationID, &
                                              streamWiseCoord, nxHIT, nyHIT, nzHIT, &
-                                             nxSM, nySM, nzSM, copyHITfieldsToSM
+                                             nxSM, nySM, nzSM, copyHITfieldsToSM, &
+                                             MMS, finalizeSimulation, checkMMS
     use fof_mod,                             only: fof
 
     implicit none
 
-    type(igrid), allocatable, target :: hit, SM
+    type(igrid), allocatable, target :: HIT, SM
     character(len=clen) :: inputfile, HIT_InputFile, SM_InputFile, fof_dir, filoutdir
     integer :: ierr, ioUnit
 
     real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0, Ttarget0
-    real(rkind), dimension(:,:,:), allocatable :: uhitFilt, vhitFilt, whitFilt
+    real(rkind), dimension(:,:,:), allocatable :: uHITFilt, vHITFilt, wHITFilt
     
     real(rkind) :: dt1, dt2, dt
     real(rkind) :: k_bandpass_left = 10.d0, k_bandpass_right = 64.d0
@@ -34,13 +35,14 @@ program shearlessMixing
     logical :: applyFilters = .false. 
     logical, parameter :: synchronize_RK_substeps = .true.
 
-    namelist /concurrent/ HIT_InputFile, SM_InputFile, k_bandpass_left, k_bandpass_right
+    namelist /concurrent/ HIT_InputFile, SM_InputFile, k_bandpass_left, &
+      k_bandpass_right, MMS
 
     call MPI_Init(ierr)                                                
 
     call GETARG(1,inputfile)                                            
 
-    allocate(hit)                                                       
+    allocate(HIT)                                                       
     allocate(SM)                                                     
     
     ioUnit = 11
@@ -49,21 +51,21 @@ program shearlessMixing
     close(ioUnit)    
 
     simulationID = 1
-    call SM%init(SM_InputFile, .true.)                               
+    call SM%init(SM_InputFile, .true.)                              
     call SM%start_io(.true.)                                          
     call SM%printDivergence()
    
     call mpi_barrier(mpi_comm_world, ierr)
 
     simulationID = 2
-    call hit%init(HIT_InputFile, .false.)                                           
-    hit%Am_I_Primary = .false. 
-    call hit%start_io(.true.)                                           
-    call hit%printDivergence()
+    call HIT%init(HIT_InputFile, .false.)                                           
+    HIT%Am_I_Primary = .false. 
+    call HIT%start_io(.true.)                                           
+    call HIT%printDivergence()
 
-    allocate(uhitFilt(hit%gpC%xsz(1),hit%gpC%xsz(2),hit%gpC%xsz(3)))
-    allocate(vhitFilt(hit%gpC%xsz(1),hit%gpC%xsz(2),hit%gpC%xsz(3)))
-    allocate(whitFilt(hit%gpE%xsz(1),hit%gpE%xsz(2),hit%gpE%xsz(3)))
+    allocate(uHITFilt(HIT%gpC%xsz(1),HIT%gpC%xsz(2),HIT%gpC%xsz(3)))
+    allocate(vHITFilt(HIT%gpC%xsz(1),HIT%gpC%xsz(2),HIT%gpC%xsz(3)))
+    allocate(wHITFilt(HIT%gpE%xsz(1),HIT%gpE%xsz(2),HIT%gpE%xsz(3)))
     
     call SM%fringe_x%allocateTargetArray_Cells(utarget0)                
     call SM%fringe_x%allocateTargetArray_Cells(vtarget0)                
@@ -73,21 +75,21 @@ program shearlessMixing
     call SM%fringe_x%associateFringeTarget_scalar(Ttarget0) 
 
 
-    nxHIT = hit%gpC%xsz(1)
-    nyHIT = hit%gpC%ysz(2)
-    nzHIT = hit%gpC%zsz(3)
+    nxHIT = HIT%gpC%xsz(1)
+    nyHIT = HIT%gpC%ysz(2)
+    nzHIT = HIT%gpC%zsz(3)
     nxSM  = SM%gpC%xsz(1)
     nySM  = SM%gpC%ysz(2)
     nzSM  = SM%gpC%zsz(3)
 
-    call hit%spectC%init_bandpass_filter(k_bandpass_left, k_bandpass_right, hit%cbuffzC(:,:,:,1), hit%cbuffyC(:,:,:,1))
+    call HIT%spectC%init_bandpass_filter(k_bandpass_left, k_bandpass_right, HIT%cbuffzC(:,:,:,1), HIT%cbuffyC(:,:,:,1))
 
     ! Set the true target field for AD simulation
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC , uhitFilt, zero, streamWiseCoord)
-    call hit%interpolate_cellField_to_edgeField(uhitFilt,whitFilt,0,0)
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat  , uhitFilt, zero, streamWiseCoord)
-    call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat  , vhitFilt, zero, streamWiseCoord)
-    call copyHITfieldsToSM(uhitFilt,vhitFilt,whitFilt,utarget0,vtarget0,wtarget0,hit,SM,streamWiseCoord)
+    call HIT%spectC%bandpassFilter_and_phaseshift(HIT%whatC , uHITFilt, zero, streamWiseCoord)
+    call HIT%interpolate_cellField_to_edgeField(uHITFilt,wHITFilt,0,0)
+    call HIT%spectC%bandpassFilter_and_phaseshift(HIT%uhat  , uHITFilt, zero, streamWiseCoord)
+    call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat  , vHITFilt, zero, streamWiseCoord)
+    call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,wtarget0,HIT,SM,streamWiseCoord)
 
     ! Initialize the filters
     if (applyfilters) then
@@ -107,76 +109,120 @@ program shearlessMixing
     call tic() 
     do while (SM%tsim < SM%tstop) 
        dt1 = SM%get_dt(recompute=.true.)
-       dt2 = hit%get_dt(recompute=.true.)
+       dt2 = HIT%get_dt(recompute=.true.)
        dt = min(dt1, dt2)
       
        SM%dt = dt
-       hit%dt = dt
-       ! Stage 1
-       call SM%advance_SSP_RK45_Stage_1()
-       call hit%advance_SSP_RK45_Stage_1()
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC, uhitFilt, zero, streamWiseCoord)
-       call hit%interpolate_cellField_to_edgeField(uhitFilt, whitFilt,0,0)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat, uhitFilt, zero, streamWiseCoord)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat, vhitFilt, zero, streamWiseCoord)
-       call copyHITfieldsToSM(uhitFilt,vhitFilt,whitFilt,utarget0,vtarget0,wtarget0,hit,SM,streamWiseCoord)
+       HIT%dt = dt
 
-       ! Stage 2
-       call SM%advance_SSP_RK45_Stage_2()
-       call hit%advance_SSP_RK45_Stage_2()
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC, uhitFilt, zero, streamWiseCoord)
-       call hit%interpolate_cellField_to_edgeField(uhitFilt, whitFilt,0,0)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat, uhitFilt, zero, streamWiseCoord)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat, vhitFilt, zero, streamWiseCoord)
-       call copyHITfieldsToSM(uhitFilt,vhitFilt,whitFilt,utarget0,vtarget0,wtarget0,hit,SM,streamWiseCoord)
+       select case (HIT%TimeSteppingScheme)
+       case (0)
+         call assert(SM%TimeSteppingScheme == 0, 'SM%TimeSteppingScheme == 0')
+         call SM%timeAdvance(dt)
+         call HIT%timeAdvance(dt)
 
-       ! Stage 3
-       call SM%advance_SSP_RK45_Stage_3()
-       call hit%advance_SSP_RK45_Stage_3()
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC, uhitFilt, zero, streamWiseCoord)
-       call hit%interpolate_cellField_to_edgeField(uhitFilt, whitFilt,0,0)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat, uhitFilt, zero, streamWiseCoord)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat, vhitFilt, zero, streamWiseCoord)
-       call copyHITfieldsToSM(uhitFilt,vhitFilt,whitFilt,utarget0,vtarget0,wtarget0,hit,SM,streamWiseCoord)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%whatC, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%interpolate_cellField_to_edgeField(uHITFilt, wHITFilt,0,0)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%uhat, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
+           zero, streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
+           wtarget0,HIT,SM,streamWiseCoord)
+       case (2)
+         ! Stage 1
+         call SM%advance_SSP_RK45_Stage_1()
+         call HIT%advance_SSP_RK45_Stage_1()
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%whatC, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%interpolate_cellField_to_edgeField(uHITFilt, wHITFilt,0,0)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%uhat, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
+           zero, streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
+           wtarget0,HIT,SM,streamWiseCoord)
 
-       ! Stage 4
-       call SM%advance_SSP_RK45_Stage_4()
-       call hit%advance_SSP_RK45_Stage_4()
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC, uhitFilt, zero, streamWiseCoord)
-       call hit%interpolate_cellField_to_edgeField(uhitFilt, whitFilt,0,0)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat, uhitFilt, zero, streamWiseCoord)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat, vhitFilt, zero, streamWiseCoord)
-       call copyHITfieldsToSM(uhitFilt,vhitFilt,whitFilt,utarget0,vtarget0,wtarget0,hit,SM,streamWiseCoord)
+         ! Stage 2
+         call SM%advance_SSP_RK45_Stage_2()
+         call HIT%advance_SSP_RK45_Stage_2()
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%whatC, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%interpolate_cellField_to_edgeField(uHITFilt, wHITFilt,0,0)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%uhat, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
+           zero, streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
+           wtarget0,HIT,SM,streamWiseCoord)
 
-       ! Stage 5
-       call SM%advance_SSP_RK45_Stage_5()
-       call hit%advance_SSP_RK45_Stage_5()
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%whatC, uhitFilt, zero, streamWiseCoord)
-       call hit%interpolate_cellField_to_edgeField(uhitFilt, whitFilt,0,0)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%uhat, uhitFilt, zero, streamWiseCoord)
-       call hit%spectC%bandpassFilter_and_phaseshift(hit%vhat, vhitFilt, zero, streamWiseCoord)
-       call copyHITfieldsToSM(uhitFilt,vhitFilt,whitFilt,utarget0,vtarget0,wtarget0,hit,SM,streamWiseCoord)
+         ! Stage 3
+         call SM%advance_SSP_RK45_Stage_3()
+         call HIT%advance_SSP_RK45_Stage_3()
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%whatC, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%interpolate_cellField_to_edgeField(uHITFilt, wHITFilt,0,0)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%uhat, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
+           zero, streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
+           wtarget0,HIT,SM,streamWiseCoord)
+
+         ! Stage 4
+         call SM%advance_SSP_RK45_Stage_4()
+         call HIT%advance_SSP_RK45_Stage_4()
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%whatC, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%interpolate_cellField_to_edgeField(uHITFilt, wHITFilt,0,0)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%uhat, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
+           zero, streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
+           wtarget0,HIT,SM,streamWiseCoord)
+
+         ! Stage 5
+         call SM%advance_SSP_RK45_Stage_5()
+         call HIT%advance_SSP_RK45_Stage_5()
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%whatC, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%interpolate_cellField_to_edgeField(uHITFilt, wHITFilt,0,0)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%uhat, uHITFilt, &
+           zero, streamWiseCoord)
+         call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
+           zero, streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
+           wtarget0,HIT,SM,streamWiseCoord)
 
        ! Call wrap up 
-       call SM%wrapup_timestep()
-       call hit%wrapup_timestep() 
+         call SM%wrapup_timestep()
+         call HIT%wrapup_timestep() 
+       case default
+         call gracefulExit('Time stepping scheme not supported for this problem',ierr)
+       end select
 
+       if (MMS) then
+         call checkMMS(SM%u, SM%v, SM%w, SM%mesh, SM%tsim)
+       end if
 
        call doTemporalStuff(SM, 1)                                        
-       call doTemporalStuff(hit  , 2)                                        
+       call doTemporalStuff(HIT  , 2)                                        
      
     end do
 
-    deallocate(uhitFilt, vhitFilt, whitFilt)
+    deallocate(uHITFilt, vHITFilt, wHITFilt)
     deallocate(utarget0, vtarget0, wtarget0)
-    
-    call hit%finalize_io()
+    call HIT%finalize_io()
     call SM%finalize_io()
 
-    call hit%destroy()
+    call HIT%destroy()
     call SM%destroy()
    
-    deallocate(hit, SM)
+    deallocate(HIT, SM)
+
+    call finalizeSimulation
     
     call MPI_Finalize(ierr)
 

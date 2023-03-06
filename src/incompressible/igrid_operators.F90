@@ -10,6 +10,8 @@ module igrid_Operators
    use gaussianstuff, only: gaussian  
    use PadePoissonMod, only: padepoisson
    use turbineMod, only: turbineArray
+   use fortran_assert, only: assert
+   use interpolatorMod, only: interpolator
    implicit none
    
    private
@@ -19,27 +21,31 @@ module igrid_Operators
       private
       complex(rkind), dimension(:,:,:), allocatable, public :: cbuffy1, cbuffy2, cbuffy3
       real(rkind),    dimension(:,:,:), allocatable :: rbuffx, rbuffy, rbuffz1, rbuffz2
-      type(decomp_info), public :: gp, gpE
+      type(decomp_info), public :: gp, gpE, gp_D
       type(spectral), public  :: spect, spectE
       type(Pade6stagg), public :: derZ
       type(cd06stagg) :: derZ1d
       real(rkind), dimension(:,:,:), allocatable :: zarr1d_1, zarr1d_2
 
       type(PoissonPeriodic) :: poiss_periodic
-      real(rkind) :: dx, dy, dz, Lx, Ly, Lz
+      real(rkind) :: dx, dy, dz, dxD, dyD, dzD, Lx, Ly, Lz
       character(len=clen), public ::  inputdir, outputdir, RestartDir
       real(rkind) :: mfact_xy
     
-      logical :: PeriodicInZ, PoissonSolverInitiatized = .false. 
+      logical :: PeriodicInZ, PoissonSolverInitiatized = .false.
+      logical :: do3DFFT = .false. 
       integer :: RunID, vfilt_times 
     
-      real(rkind), dimension(:), allocatable :: gxfilt, gyfilt
+      real(rkind), dimension(:), allocatable :: gxfilt, gyfilt, gzfilt
       type(gaussian) :: gfilt 
+      type(interpolator) :: interp
       
       complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffyE, cbuffzC, cbuffzE  ! Actuator disk buffers
-      real(rkind), dimension(:,:,:,:), allocatable :: mesh, rbuffyC, rbuffzC, rbuffyE, rbuffzE 
+      real(rkind), dimension(:,:,:,:), allocatable :: mesh, meshD, rbuffyC, rbuffzC, rbuffyE, rbuffzE 
+      real(rkind), dimension(:,:,:), pointer :: x, y, z, xD, yD, zD ! "D" denotes down-sampled grid
       complex(rkind), dimension(:,:,:), allocatable :: urhshat, vrhshat, wrhshat
       type(turbineArray), allocatable :: turbArray
+
       contains
          procedure :: init
          procedure :: destroy
@@ -54,6 +60,7 @@ module igrid_Operators
          procedure :: getFluct_from_MeanZ
          procedure :: ReadField3D
          procedure :: WriteField3D
+         procedure :: WriteDownsampledField3D
          procedure :: WriteSummingRestart 
          procedure :: ReadSummingRestart 
          procedure :: WriteSummingRestartInfo
@@ -74,13 +81,22 @@ module igrid_Operators
          procedure :: alloc_cbuffz
          procedure :: Read_VizSummary
          procedure :: alloc_zvec
-         procedure :: initFilter
+         procedure :: down_sample
+
+         ! Initialize filters
+         procedure, private :: initFilter_gaus
+         procedure, private :: initFilter_sharp3
+         generic :: initFilter => initFilter_gaus, initFilter_sharp3
+         
+         ! Filter fields
          procedure :: FilterField
          procedure :: FilterField_inplace
+
          procedure :: Project_DivergenceFree_BC
          procedure :: create_turbine_array
          procedure :: destroy_turbine_array
-         procedure :: get_turbine_RHS 
+         procedure :: get_turbine_RHS
+
      end type 
 
 contains
@@ -90,32 +106,34 @@ subroutine create_turbine_array(this, inputfile)
     class(igrid_ops), intent(inout), target :: this
     character(len=*), intent(in) :: inputfile
     integer :: i, j, k, ix1, iy1, iz1, ixn, iyn, izn, hubIndex
-    real(rkind), dimension(:,:,:), pointer :: x, y, z
-
+    
     ix1 = this%gp%xst(1); iy1 = this%gp%xst(2); iz1 = this%gp%xst(3)
     ixn = this%gp%xen(1); iyn = this%gp%xen(2); izn = this%gp%xen(3)
+
+!    call assert(.not. allocated(this%mesh),'.not. allocated(this%mesh)'//&
+!      ' -- igrid_operators.F90')
     allocate(this%mesh(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3),3))
     !associate( x => this%mesh(:,:,:,1), y => this%mesh(:,:,:,2), z => this%mesh(:,:,:,3) )
-    x => this%mesh(:,:,:,1)
-    y => this%mesh(:,:,:,2)
-    z => this%mesh(:,:,:,3)
+    this%x => this%mesh(:,:,:,1)
+    this%y => this%mesh(:,:,:,2)
+    this%z => this%mesh(:,:,:,3)
         do k=1,size(this%mesh,3)
             do j=1,size(this%mesh,2)
                 do i=1,size(this%mesh,1)
-                    x(i,j,k) = real( ix1 + i - 1, rkind ) * this%dx
-                    y(i,j,k) = real( iy1 + j - 1, rkind ) * this%dy
-                    z(i,j,k) = real( iz1 + k - 1, rkind ) * this%dz + this%dz/two
+                    this%x(i,j,k) = real( ix1 + i - 1, rkind ) * this%dx
+                    this%y(i,j,k) = real( iy1 + j - 1, rkind ) * this%dy
+                    this%z(i,j,k) = real( iz1 + k - 1, rkind ) * this%dz + this%dz/two
                 end do
             end do
         end do
 
         ! Shift everything to the origin 
-        x = x - this%dx
-        y = y - this%dy
-        z = z - this%dz 
+        this%x = this%x - this%dx
+        this%y = this%y - this%dy
+        this%z = this%z - this%dz 
 
     !end associate
-    
+
     allocate(this%turbArray)
     allocate(this%cbuffyC(this%spect%spectdecomp%ysz(1),this%spect%spectdecomp%ysz(2),this%spect%spectdecomp%ysz(3),1))
     allocate(this%cbuffyE(this%spectE%spectdecomp%ysz(1),this%spectE%spectdecomp%ysz(2),this%spectE%spectdecomp%ysz(3),1))
@@ -208,25 +226,33 @@ subroutine FilterField(this, f, fout)
    integer :: fid, j, k
 
    call this%spect%fft(f,this%cbuffy1)
-   do k = 1,size(this%cbuffy1,3)
-       do j = 1,size(this%cbuffy1,2)
-          this%cbuffy1(:,j,k) = this%gyfilt(j)*this%gxfilt*this%cbuffy1(:,j,k)
+
+   if (this%PeriodicInZ) then
+       do k = 1,size(this%cbuffy1,3)
+           do j = 1,size(this%cbuffy1,2)
+              this%cbuffy1(:,j,k) = this%gzfilt(k)*this%gyfilt(j)*this%gxfilt*&
+                this%cbuffy1(:,j,k)
+           end do 
+       end do
+       call this%spect%ifft(this%cbuffy1,fout)
+   else
+       do k = 1,size(this%cbuffy1,3)
+           do j = 1,size(this%cbuffy1,2)
+              this%cbuffy1(:,j,k) = this%gyfilt(j)*this%gxfilt*this%cbuffy1(:,j,k)
+           end do 
+       end do
+       call this%spect%ifft(this%cbuffy1,fout)
+
+       call transpose_x_to_y(fout,this%rbuffy,this%gp)
+       call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
+       do fid = 1,this%vfilt_times
+            call this%gfilt%filter3(this%rbuffz1,this%rbuffz2,size(this%rbuffz1,1),&
+              size(this%rbuffz1,2))
+            this%rbuffz1 = this%rbuffz2
        end do 
-   end do 
-    
-   call this%spect%ifft(this%cbuffy1,fout)
-
-   call transpose_x_to_y(fout,this%rbuffy,this%gp)
-   call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
-   do fid = 1,this%vfilt_times
-        call this%gfilt%filter3(this%rbuffz1,this%rbuffz2,size(this%rbuffz1,1),size(this%rbuffz1,2))
-        this%rbuffz1 = this%rbuffz2
-   end do 
-   call transpose_z_to_y(this%rbuffz2,this%rbuffy,this%gp)
-   call transpose_y_to_x(this%rbuffy,fout,this%gp)
-
-   
-
+       call transpose_z_to_y(this%rbuffz2,this%rbuffy,this%gp)
+       call transpose_y_to_x(this%rbuffy,fout,this%gp)
+   end if 
 end subroutine 
 
 subroutine FilterField_inplace(this, f)
@@ -238,7 +264,7 @@ subroutine FilterField_inplace(this, f)
 
 end subroutine
 
-subroutine initFilter(this, nx_filt, ny_filt, vfilt_times) 
+subroutine initFilter_gaus(this, nx_filt, ny_filt, vfilt_times) 
     use constants, only: pi
     class(igrid_ops), intent(inout) :: this
     integer, intent(in) :: nx_filt, ny_filt, vfilt_times
@@ -273,7 +299,52 @@ subroutine initFilter(this, nx_filt, ny_filt, vfilt_times)
     this%vfilt_times = vfilt_times
     
     ierr = this%gfilt%init(this%gp%zsz(3),.false.) 
+
+end subroutine 
+
+subroutine initFilter_sharp3(this, nx_filt, ny_filt, nz_filt, vfilt_times) 
+    use constants, only: pi
+    class(igrid_ops), intent(inout) :: this
+    integer, intent(in) :: nx_filt, ny_filt, nz_filt, vfilt_times
+    real(rkind) :: kx_co, ky_co, kz_co, dxf, dyf, dzf
+    integer :: i, j, k
+
+    allocate(this%gxfilt(this%spect%spectdecomp%ysz(1)))
+    allocate(this%gyfilt(this%spect%spectdecomp%ysz(2)))
+    allocate(this%gzfilt(this%spect%spectdecomp%ysz(3)))
+
+    dxf = this%Lx/nx_filt
+    dyf = this%Ly/ny_filt
+    dzf = this%Lz/nz_filt
+    kx_co = ((2.d0/3.d0)*pi/dxf)  
+    ky_co = ((2.d0/3.d0)*pi/dyf)  
+    kz_co = ((2.d0/3.d0)*pi/dzf)  
+
+    do i = 1,size(this%gxfilt)
+        if (abs(this%spect%k1(i,1,1)) < kx_co) then
+            this%gxfilt(i) = 1.d0 
+        else
+            this%gxfilt(i) = 0.d0 
+        end if
+    end do 
     
+    do j = 1,size(this%gyfilt)
+        if (abs(this%spect%k2(1,j,1)) < ky_co) then
+            this%gyfilt(j) = 1.d0 
+        else
+            this%gyfilt(j) = 0.d0 
+        end if
+    end do 
+
+    do k = 1,size(this%gzfilt)
+        if (abs(this%spect%k3(1,1,k)) < kz_co) then
+            this%gzfilt(k) = 1.d0 
+        else
+            this%gzfilt(k) = 0.d0 
+        end if
+    end do 
+
+    this%vfilt_times = vfilt_times
 end subroutine 
 
 subroutine alloc_zvec(this, vec)
@@ -425,24 +496,49 @@ function getCenterlineQuantity(this, vec) result(val)
 
 end function
 
-subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeriodicinZ, NumericalSchemeZ, RestartDir)
+subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, &
+    OutputDir, RunID, isPeriodicinZ, NumericalSchemeZ, RestartDir,&
+    FFT3D, nxD, nyD, nzD, dxD, dyD, dzD, reset2decomp) 
    class(igrid_ops), intent(out), target :: this
    integer, intent(in) :: nx, ny, nz
+   integer, intent(in), optional :: nxD, nyD, nzD ! Size of down-sampled grid
    real(rkind), intent(in) :: dx, dy, dz
+   real(rkind), intent(in), optional :: dxD, dyD, dzD
    character(len=clen), intent(in) ::  inputdir, outputdir
    character(len=clen), intent(in), optional :: RestartDir
    logical, intent(in) :: isPeriodicinZ
    integer, intent(in) :: RunID, NumericalSchemeZ
    logical, dimension(3) :: periodicbcs
+   logical, intent(in), optional :: FFT3D, reset2decomp
 
-   periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = isPeriodicinZ
-   call decomp_2d_init(nx, ny, nz, 0, 0, periodicbcs)
-   call get_decomp_info(this%gp)
-   
+   if (present(reset2decomp)) then
+     if (reset2decomp) then
+       periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = isPeriodicInZ   
+       call decomp_2d_init(nx, ny, nz, 0, 0, periodicbcs)
+       call get_decomp_info(this%gp)
+     else
+       call decomp_info_init(nx, ny, nz, this%gp)
+     end if
+   else
+       call decomp_info_init(nx, ny, nz, this%gp)    
+   end if
    call decomp_info_init(nx,ny,nz+1,this%gpE)
 
-   call this%spect%init("x",nx,ny,nz,dx, dy, dz, "FOUR", "2/3rd", 2 , fixOddball=.false., &
-                  exhaustiveFFT=.TRUE., init_periodicInZ=isPeriodicinZ, dealiasF=(2.d0/3.d0))
+   if (present(nxD)) then
+     call assert(present(nyD),'present(nyD) -- igrid_operators.F90')
+     call assert(present(nzD),'present(nzD) -- igrid_operators.F90')
+     call decomp_info_init(nxD,nyD,nzD,this%gp_D)
+   end if
+
+   if (present(FFT3D)) this%do3DFFT = FFT3D
+   if (this%do3DFFT) then
+       call this%spect%init("x",nx,ny,nz,dx, dy, dz, "FOUR", "2/3rd", 3 , fixOddball=.false., &
+                      exhaustiveFFT=.TRUE., init_periodicInZ=isPeriodicinZ, dealiasF=(2.d0/3.d0))
+   else
+       call this%spect%init("x",nx,ny,nz,dx, dy, dz, "FOUR", "2/3rd", 2 , fixOddball=.false., &
+                      exhaustiveFFT=.TRUE., init_periodicInZ=isPeriodicinZ, dealiasF=(2.d0/3.d0))
+   end if
+
    call this%spectE%init("x",nx,ny,nz+1,dx, dy, dz, "FOUR", "2/3rd", 2 , fixOddball=.false., &
                   exhaustiveFFT=.TRUE., init_periodicInZ=.FALSE., dealiasF=(2.d0/3.d0))
   
@@ -466,7 +562,14 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
    this%dx = dx
    this%dy = dy
    this%dz = dz
-    
+
+   if (present(dxD)) then  
+     call assert(present(dyD), 'present(dyD) -- igrid_operators.F90') 
+     call assert(present(dzD), 'present(dzD) -- igrid_operators.F90') 
+     this%dxD = dxD
+     this%dyD = dyD
+     this%dzD = dzD
+   end if
    this%PeriodicInZ = isPeriodicInZ
 
    this%mfact_xy = 1.d0/(real(nx,rkind)*real(ny,rkind))
@@ -477,6 +580,7 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, OutputDir, RunID, isPeri
 
    allocate(this%zarr1d_1(1,1,nz))
    allocate(this%zarr1d_2(1,1,nz))
+   
 end subroutine 
 
 subroutine destroy(this)
@@ -511,13 +615,23 @@ subroutine ddz(this, f, dfdz, botBC, topBC)
    class(igrid_ops), intent(inout) :: this
    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(in)  :: f
    real(rkind), dimension(this%gp%xsz(1),this%gp%xsz(2),this%gp%xsz(3)), intent(out) :: dfdz
-   integer, intent(in) :: botBC, topBC
+   integer, intent(in), optional :: botBC, topBC
 
-   call transpose_x_to_y(f,this%rbuffy,this%gp)
-   call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
-   call this%derZ%ddz_C2C(this%rbuffz1,this%rbuffz2, botBC, topBC)
-   call transpose_z_to_y(this%rbuffz2,this%rbuffy,this%gp)
-   call transpose_y_to_x(this%rbuffy,dfdz,this%gp)
+   if (this%periodicInZ .and. this%do3DFFT) then
+       call this%spect%fft(f,this%cbuffy1)
+       call this%spect%mtimes_ik3_ip(this%cbuffy1)
+       this%cbuffy1(:,:,size(this%cbuffy1,3)/2+1) = 0.d0 ! need to set the oddball to zero 
+       call this%spect%ifft(this%cbuffy1,dfdz)
+   else
+       call assert(present(botBC))
+       call assert(present(topBC))
+
+       call transpose_x_to_y(f,this%rbuffy,this%gp)
+       call transpose_y_to_z(this%rbuffy,this%rbuffz1,this%gp)
+       call this%derZ%ddz_C2C(this%rbuffz1,this%rbuffz2, botBC, topBC)
+       call transpose_z_to_y(this%rbuffz2,this%rbuffy,this%gp)
+       call transpose_y_to_x(this%rbuffy,dfdz,this%gp)
+   end if
 end subroutine 
 
 subroutine d2dz2(this, f, d2fdz2, botBC, topBC)
@@ -669,7 +783,21 @@ subroutine WriteField3D(this, field, label, tidx)
    
    call decomp_2d_write_one(1,field,fname,this%gp)
 end subroutine  
+         
+subroutine WriteDownsampledField3D(this, field, label, tidx)
+   use decomp_2d_io
+   class(igrid_ops), intent(inout) :: this
+   real(rkind), dimension(this%gp_D%xsz(1),this%gp_D%xsz(2),this%gp_D%xsz(3)), intent(in)  :: field
+   character(len=clen) :: tempname, fname
+   character(len=*), intent(in) :: label
+   integer, intent(in) :: tidx
+         
+   write(tempname,"(A,I2.2,A,A,A,I6.6,A)") "Run",this%runID, "_",trim(label),"_t",tidx,".out"
+   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+   
+   call decomp_2d_write_one(1,field,fname,this%gp_D)
 
+end subroutine
 
 subroutine WriteSummingRestart(this, field, label, tidx)
    use decomp_2d_io
@@ -804,6 +932,29 @@ subroutine dump_plane(this, field, dir_id, plane_id, tid, label)
 
 end subroutine 
 
+subroutine down_sample(this, u, v, w, uD, vD, wD, x, y, z, xrng, yrng, zrng)
+  use gridtools, only: linspace
+  class(igrid_ops), intent(inout) :: this
+  real(rkind), dimension(:), intent(in) :: x, y, z
+  real(rkind), dimension(2), intent(in) :: xrng, yrng, zrng
+  real(rkind), dimension(:,:,:), intent(in) :: u, v, w
+  real(rkind), dimension(:,:,:), intent(inout) :: uD, vD, wD
+  real(rkind), dimension(this%gp_D%xsz(1)) :: xD
+  real(rkind), dimension(this%gp_D%ysz(2)) :: yD
+  real(rkind), dimension(this%gp_D%zsz(3)) :: zD
+
+
+  !call this%generate_mesh()
+  !call this%generate_course_mesh()
+  xD = linspace(xrng(1),xrng(2),size(xD))
+  yD = linspace(yrng(1),yrng(2),size(yD))
+  zD = linspace(zrng(1),zrng(2),size(zD))
+
+  call this%interp%init(this%gp, this%gp_D, x, y, z, xD, yD, zD)
+  call this%interp%LinInterp3D(u, uD)
+  call this%interp%LinInterp3D(v, vD)
+  call this%interp%LinInterp3D(w, wD)
+end subroutine
 !subroutine interpolate_cellField_to_edgeField(this, rxC, rxE, bc1, bc2)
 !   class(igrid_ops), intent(inout) :: this
 !   real(rkind), intent(in),  dimension(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)) :: rxC

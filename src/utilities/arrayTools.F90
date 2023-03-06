@@ -8,8 +8,47 @@ module arrayTools
   interface findGL
     module procedure findGL3
   end interface
+  interface findLE
+    module procedure findLE1first
+  end interface
+  interface findGE
+    module procedure findGE1first
+  end interface
  
 contains
+  
+  pure subroutine findGE1first(xin,xcompare,idx)
+    ! Returns array with the index of every item (or the first N)
+    ! in xin that is greater than or equal to xcompare
+    real(rkind), dimension(:), intent(in) :: xin 
+    real(rkind), intent(in) :: xcompare
+    integer,  intent(out) :: idx
+    integer :: i
+    
+    do i = 1,size(xin)
+      if (xin(i) >= xcompare) then
+        idx = i 
+        exit
+      end if
+    end do
+  end subroutine
+
+  pure subroutine findLE1first(xin,xcompare,idx)
+    ! Returns array with the index of every item (or the first N)
+    ! in xin that is less than or equal to xcompare
+    real(rkind), dimension(:), intent(in) :: xin 
+    real(rkind), intent(in) :: xcompare
+    integer,  intent(out) :: idx
+    integer :: i
+    
+    do i = 1,size(xin)
+      if (xin(i) <= xcompare) then
+        idx = i 
+        exit
+      end if
+    end do
+  end subroutine
+
   pure subroutine findEQ1(xin,xcompare,xout)
     ! Returns array with the index of every item in xin that is equal to
     ! xcompare

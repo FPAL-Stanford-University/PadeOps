@@ -1,0 +1,7 @@
+&concurrent
+HIT_InputFile                 = "/home5/aghate/fpal_padeops/PadeOps/bin/skylake/channel_ad/input_files/input_hit.dat"
+SM_InputFile                  = "/home5/aghate/fpal_padeops/PadeOps/bin/skylake/channel_ad/input_files/input_AD.dat"
+k_bandpass_left               = 4.0d0
+k_bandpass_right              = 128.d0
+/
+/

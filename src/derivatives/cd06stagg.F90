@@ -192,6 +192,9 @@ contains
         if(allocated( this%LU_interp )) deallocate( this%LU_interp ); allocate( this%LU_interp(this%n,5) )
         call ComputeLU(this%LU_interp,nx,alpha06stagg_interp,one,alpha06stagg_interp)
 
+        ! Need this for ddz_C2C_CMPLX for periodic domains
+        allocate(this%TriD1_C2C(nx, 3))
+
     end subroutine 
 
     subroutine init_nonperiodic(this, nx, dx, isTopEven, isBotEven, isTopSided, isBotSided) 
@@ -235,6 +238,7 @@ contains
         class( cd06stagg ), intent(inout) :: this
         if (this%AmIperiodic) then
             deallocate(this%LU_D1, this%LU_D2, this%LU_interp)
+            deallocate(this%TriD1_C2C)
         else
             deallocate( this%TriD1_E2C, this%TriD1_C2E, this%TriD1_E2E, this%TriD1_C2C )
             deallocate( this%TriInterp_E2C, this%TriInterp_C2E)
