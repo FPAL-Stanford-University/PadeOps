@@ -33,7 +33,7 @@ module sgsmod_cgrid
         real(rkind), dimension(:,:,:  ), pointer     :: dvFildx, dvFildy, dvFildz
         real(rkind), dimension(:,:,:  ), pointer     :: dwFildx, dwFildy, dwFildz
         real(rkind), dimension(:,:,:  ), pointer     :: dTFildx, dTFildy, dTFildz, nusgsFil, SiiFil, modSFil_sq, qtkeFil! , kapsgsFil
-        real(rkind) :: cmodel_global, cmodel_global_Qjsgs, DeltaRatioSq
+        real(rkind) :: cmodel_global, cmodel_global_Qjsgs, deltaRatioSq
         logical ::  isPeriodic = .false., periodicx = .true., periodicy = .true., periodicz = .true.
         integer, dimension(2) :: x_bc, y_bc, z_bc
         logical :: filter_in_x = .true., filter_in_y = .false., filter_in_z = .true., preComputed_SFil_duFil
@@ -129,7 +129,7 @@ subroutine init(this, der, decomp, Cp, Pr, dx, dy, dz, inputfile, xbuf, ybuf, zb
   integer, intent(in) :: z_bc1, z_bcn
 
   integer :: SGSmodelID = 0, DynProcFreq = 1, DynamicProcedureType = 0, ierr
-  real(rkind) :: Csgs = 1.0_rkind, Ctke = 0.003_rkind, ncWall = 1.0_rkind, PrSGS = 1.0_rkind, DeltaRatio = 2.0_rkind
+  real(rkind) :: Csgs = 1.0_rkind, Ctke = 0.003_rkind, ncWall = 1.0_rkind, PrSGS = 1.0_rkind, deltaRatio = 2.0_rkind
   logical :: useWallDamping = .false., useSGSDynamicRestartFile = .false. 
   logical :: DomainAveraged_DynProc = .false., useDynamicProcedureScalar = .false.
   logical :: isEddyViscosityModel = .false., isEddyDiffmodel = .true., isTurbPrandtlconst = .true.
@@ -143,7 +143,7 @@ subroutine init(this, der, decomp, Cp, Pr, dx, dy, dz, inputfile, xbuf, ybuf, zb
                   DomainAveraged_DynProc, SGSDynamicRestartFile, &
                   useDynamicProcedureScalar, PrSGS,              &
                   filter_in_x, filter_in_y, filter_in_z,         &
-                  testfilter_x, testfilter_y, testfilter_z, DeltaRatio, &
+                  testfilter_x, testfilter_y, testfilter_z, deltaRatio, &
                   isEddyViscosityModel, isEddyDiffmodel, isTurbPrandtlconst
 
    open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -204,7 +204,7 @@ subroutine init(this, der, decomp, Cp, Pr, dx, dy, dz, inputfile, xbuf, ybuf, zb
       call GracefulExit("Incorrect choice for SGS model ID.", 213)
    end select
 
-   call this%init_dynamic_procedure(testfilter_x, testfilter_y, testfilter_z, DeltaRatio)
+   call this%init_dynamic_procedure(testfilter_x, testfilter_y, testfilter_z, deltaRatio)
 
     !!!! Safeguards against wrong inputs !!!!!
     if(this%isEddyDiffModel) then
@@ -355,7 +355,7 @@ subroutine getQjSGS(this, newTimeStep, duidxj, rho, u, v, w, T, gradT, Qjsgs)
      !    Qjsgs(:,:,:,k) = - rho * this%Cp * this%kapsgs * gradT(:,:,:,k)
      ! end do
      !!! Above copied here
-     call this%get_Qjsgs_eddy_kernel(rho, this%nusgs, gradT, Qjsgs)
+     call this%get_Qjsgs_eddy_kernel(rho, this%nusgs, duidxj, gradT, Qjsgs)
 
      !! Dynam Procedure
      if( (newTimeStep) .and. (mod(this%mstep, this%DynProcFreq) == 0) ) then

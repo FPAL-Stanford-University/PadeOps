@@ -279,20 +279,19 @@ subroutine doLocalDynamicProcedure_eddy(this, rho, u, v, w, nusgs, Sij, Sii, mod
   ! ---11 component--
   call this%filter_xyz(rho*u*u, this%Lij);      this%Lij = this%Lij - this%uFil*this%uFil/this%rhoFil
   call this%filter_xyz(qtke, this%Mij);         this%Mij = this%Mij - this%qtkeFil
-  this%numer = this%Lij * this%Mij;             this%denom = this%Mij * this%Mij
+  this%numer = this%Lij;                        this%denom = -this%Mij
 
   ! ---22 component--
   call this%filter_xyz(rho*v*v, this%Lij);      this%Lij = this%Lij - this%vFil*this%vFil/this%rhoFil
-  !call this%filter_xyz(qtke, this%Mij);         this%Mij = this%Mij - this%qtkeFil
-  this%numer = this%numer + this%Lij*this%Mij;  this%denom = this%denom + this%Mij*this%Mij
+  this%numer = this%numer + this%Lij;  
   
   ! ---33 component--
   call this%filter_xyz(rho*w*w, this%Lij);      this%Lij = this%Lij - this%wFil*this%wFil/this%rhoFil
-  !call this%filter_xyz(qtke, this%Mij);         this%Mij = this%Mij - this%qtkeFil
-  this%numer = this%numer + this%Lij*this%Mij;  this%denom = this%denom + this%Mij*this%Mij
+  this%numer = this%numer + this%Lij;  
   
   do j = 1, this%nyL
-      this%cmodel_local_tke(j) = max(-p_sum(sum(this%numer(:,j,:))), zero) / (p_sum(sum(this%denom(:,j,:))) + 1.0d-18)
+      !this%cmodel_local_tke(j) = max(p_sum(sum(this%numer(:,j,:))), zero) / (p_sum(sum(this%denom(:,j,:))) + 1.0d-18)
+      this%cmodel_local_tke(j) = max(p_sum(sum(this%numer(:,j,:)))/ (p_sum(sum(this%denom(:,j,:))) + 1.0d-18),zero)
   enddo
 
   !!!!!!!--------- To find C-----------------------!!!!!!!! 
@@ -331,11 +330,17 @@ subroutine doLocalDynamicProcedure_eddy(this, rho, u, v, w, nusgs, Sij, Sii, mod
   mij_part1 = rho*nusgs*(Sij(:,:,:,6)-Sii);           mij_part2= this%rhoFil*this%nusgsFil*(this%SFil_ij(:,:,:,6)-this%SiiFil)          
   call this%filter_xyz(mij_part1, this%Mij);          this%Mij = this%Mij - mij_part2
   this%numer = this%numer + this%Lij*this%Mij;        this%denom = this%denom + this%Mij*this%Mij
-  this%denom = two*this%denom;               
-  
+  this%denom = two*this%denom;    !-ve sign ??           
+
   do j = 1, this%nyL
-      this%cmodel_local(j) = max(-p_sum(sum(this%numer(:,j,:))), zero) / (p_sum(sum(this%denom(:,j,:))) + 1.0d-18)
+      this%cmodel_local(j) = max(p_sum(sum(this%numer(:,j,:))), zero) / (p_sum(sum(this%denom(:,j,:))) + 1.0d-18)
   enddo
+
+  if(nrank==0) then
+    do j=1,this%nyL
+    write(100,'(i5,1x,2(e19.12,1x))') j, this%cmodel_local_tke(j), this%cmodel_local(j)
+    end do
+  endif
 
   !! allows reuse of several filtered fields for calcualtion of Qjsgs coefficient
   this%preComputed_SFil_duFil = .true.
@@ -374,8 +379,8 @@ subroutine doLocalDynamicProcedure_eddy_Qjsgs(this, rho, u, v, w, T, Qjsgs)
         this%nusgsFil(:,j,k) = this%cmodel_local(j) * this%nusgsFil(:,j,k)
      end do
   end do
-  call this%get_Qjsgs_eddy_kernel(this%rhoFil, this%nusgsFil, this%gradTFil, this%QjsgsFil)
-  this%QjsgsFil = this%QjsgsFil !*this%deltaRatioSq   !!nusgsFil already contains deltaRatioSq 
+  call this%get_Qjsgs_eddy_kernel(this%rhoFil, this%nusgsFil, this%duiFildxj, this%gradTFil, this%QjsgsFil, this%DeltaRatioSq)
+  !this%QjsgsFil = this%QjsgsFil !*this%deltaRatioSq   !!nusgsFil already contains deltaRatioSq 
 
   ! compute filtered density-velocity products \hat{rho*u} -- this is needed to compute L_ij
   call this%filter_xyz(rho*u, this%uFil);
@@ -400,7 +405,7 @@ subroutine doLocalDynamicProcedure_eddy_Qjsgs(this, rho, u, v, w, T, Qjsgs)
   this%numer = this%numer* this%Cp      !M_ij consists of Cp. So, include Cp in numer
   
   do j = 1, this%nyL     
-      this%cmodel_local_Qjsgs(j) = max(-p_sum(sum(this%numer(:,j,:))), zero) / (p_sum(sum(this%denom(:,j,:))) + 1.0d-18)
+      this%cmodel_local_Qjsgs(j) = max(p_sum(sum(this%numer(:,j,:))), zero) / (p_sum(sum(this%denom(:,j,:))) + 1.0d-18)
   enddo
 
   this%preComputed_SFil_duFil = .false.

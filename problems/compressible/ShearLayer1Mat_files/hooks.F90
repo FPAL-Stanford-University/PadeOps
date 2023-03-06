@@ -556,7 +556,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
     integer :: ny  , j
     integer :: iounit = 229
     character(len=clen) :: outputfile
-    real(rkind), dimension(decomp%ysz(2)) :: cmodel_loc, cmodel_loc_Qjsgs
+    real(rkind), dimension(decomp%ysz(2)) :: cmodel_loc, cmodel_loc_Qjsgs, cmodel_loc_tke
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -574,7 +574,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
 
         !if(useSGS)
           !if(sgsmodel%DynamicProcedureType==1) then
-             call message_min_max(2,"Bounds for LD-Coeff-tke      : ",     &
+             call message_min_max(2,"Bounds for LD-Coeff-tke  : ",     &
                     sgsmodel%get_Max_LocalDynamicProcedure_Coeff_tke(),   &
                     sgsmodel%get_Min_LocalDynamicProcedure_Coeff_tke())
              call message_min_max(2,"Bounds for LD-Coeff      : ",     &
@@ -588,11 +588,12 @@ subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
            if(mod(step,100)==0) then
               cmodel_loc = sgsmodel%get_LocalDynamicProcedure_Coeff()
               cmodel_loc_Qjsgs = sgsmodel%get_LocalDynamicProcedure_Coeff_Qjsgs()
+              cmodel_loc_tke   = sgsmodel%get_LocalDynamicProcedure_Coeff_tke()
               if(nrank==0) then
                   write(outputfile, '(a,i5.5,a)') 'cmodel_', step, '.dat'
                   open(10,file=outputfile,status='unknown')
                   do j=1,decomp%ysz(2)
-                     write(10,'(3(e19.12),1x)') y(1,j,1), cmodel_loc(j), cmodel_loc_Qjsgs(j)
+                     write(10,'(4(e19.12),1x)') y(1,j,1), cmodel_loc(j), cmodel_loc_Qjsgs(j), cmodel_loc_tke(j)
                   enddo
                   close(10)
               endif

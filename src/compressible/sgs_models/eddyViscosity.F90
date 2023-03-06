@@ -73,22 +73,27 @@ subroutine get_SGS_kernel(this,duidxj, Sij, modS_sq, nusgs)
 
 end subroutine
 
-subroutine get_Qjsgs_eddy_kernel(this, rho, nusgs, gradT, Qjsgs)
+subroutine get_Qjsgs_eddy_kernel(this, rho, nusgs, duidxj, gradT, Qjsgs, dynFactor)
    class(sgs_cgrid), intent(inout) :: this
    real(rkind), dimension(this%nxL,this%nyL,this%nzL),   intent(in)  :: rho, nusgs
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL,6), intent(in)  :: duidxj
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(in)  :: gradT
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(out) :: Qjsgs
+   real(rkind), optional                               , intent(in ) :: dynFactor
    integer :: i,j,k
-  
-  ! if (this%isTurbPrandtlconst) then
-  !    this%kapsgs = nusgs ! /this%PrSGS
-  ! else
-  !   ! call this%get_amd_Dkernel(duidxj, gradT, this%kapsgs)
-  ! endif
-  !    
+
+   if (this%isTurbPrandtlconst) then
+      this%kapsgs = nusgs !/ this%PrSGS !! --done in multiply_by_coeff
+   else
+      call this%get_amd_Dkernel(duidxj, gradT, this%kapsgs)
+      if(present(dynfactor)) then
+        this%kapsgs = dynFactor * this%kapsgs
+      endif
+   endif
+
    do k = 1, 3
-      !Qjsgs(:,:,:,k) = - rho * this%Cp * this%kapsgs * gradT(:,:,:,k)
-      Qjsgs(:,:,:,k) = - rho * this%Cp * nusgs * gradT(:,:,:,k)
+      Qjsgs(:,:,:,k) = - rho * this%kapsgs * gradT(:,:,:,k) * this%Cp
+      !Qjsgs(:,:,:,k) = - rho * nusgs * gradT(:,:,:,k)
    end do
 
 end subroutine
@@ -109,10 +114,11 @@ subroutine multiply_by_model_constant(this,qtke)
       do k = 1, this%nzL
          do j = 1, this%nyL
             this%nusgs(:,j,k) = this%cmodel_local(j)     * this%nusgs(:,j,k)
-            qtke(:,j,k)       = this%cmodel_local_tke(j) * qtke(:,j,k)
+            !qtke(:,j,k)       = this%cmodel_local_tke(j) * qtke(:,j,k)
          end do
       end do
    endif
+   qtke       = this%Ctke  * qtke
      
 end subroutine
 
@@ -132,7 +138,8 @@ subroutine multiply_by_model_coefficient_eddy_Qjsgs(this, Qjsgs)
       do ii = 1, 3
         do k = 1, this%nzL
           do j = 1, this%nyL
-            Qjsgs(:,j,k,ii) = this%cmodel_local_Qjsgs(j) * Qjsgs(:,j,k,ii)
+            !Qjsgs(:,j,k,ii) = this%cmodel_local_Qjsgs(j) * Qjsgs(:,j,k,ii)
+             Qjsgs(:,j,k,ii) =  Qjsgs(:,j,k,ii)/this%PrSGS
           end do
         end do
       end do

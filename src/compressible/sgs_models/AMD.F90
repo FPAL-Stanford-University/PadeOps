@@ -14,7 +14,7 @@ subroutine init_amd(this)
    this%camd_y = 1.5d0*this%dy!*sqrt(1.d0/12.0d0)*this%Csgs
    this%camd_z = 1.5d0*this%dz!*sqrt(1.d0/12.0d0)*this%Csgs           !this%PadeDer%getApproxPoincareConstant()
    this%cmodel_global = this%Csgs ! one                               ! Anisotropic model constants 
-   this%cmodel_global_Qjsgs =  this%Csgs/this%Prsgs
+   this%cmodel_global_Qjsgs =  this%Csgs/this%Prsgs * this%Cp
    call message(1,"AMD model initialized")
 
 end subroutine
