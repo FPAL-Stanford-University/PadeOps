@@ -266,6 +266,36 @@ subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
 
 end subroutine
 
+subroutine getDomainBoundaries(xDom,yDom,zDom,mesh)
+  use kind_parameters, only: rkind
+  use reductions, only: p_maxval, p_minval
+  real(rkind), dimension(2), intent(out) :: xDom, yDom, zDom
+  real(rkind), dimension(:,:,:,:), intent(in), target :: mesh
+  real(rkind) :: dx, dy, dz
+  real(rkind), dimension(:,:,:), pointer :: x, y, z
+
+  x => mesh(:,:,:,1)
+  y => mesh(:,:,:,2)
+  z => mesh(:,:,:,3)
+ 
+  dx = x(2,1,1) - x(1,1,1)
+  dy = y(1,2,1) - y(1,1,1) 
+  dz = z(1,1,2) - z(1,1,1)
+
+  xDom(1) = p_minval(minval(x))
+  yDom(1) = p_minval(minval(y))
+  zDom(1) = p_minval(minval(z)) - dz/2
+
+  xDom(2) = p_maxval(maxval(x)) + dx
+  yDom(2) = p_maxval(maxval(y)) + dy
+  zDom(2) = p_maxval(maxval(z)) + dz/2
+
+  print*, "xDom:", xDom
+  print*, "yDom:", yDom
+  print*, "zDom:", zDom
+  nullify(x,y,z)
+end subroutine
+
 subroutine getLargeScaleParams(KE,L,LES)
   use kind_parameters,    only: rkind
   use incompressibleGrid, only: igrid

@@ -8,6 +8,7 @@ program landingGear
   use mpi
   use interpolatorMod,         only: interpolator
   use reductions, only: p_sum
+  use exits, only: gracefulExit
   implicit none
 
   character(len=clen) :: inputS1, inputS2, inputS3, inputG12, inputG23
@@ -48,6 +49,11 @@ program landingGear
   call enrich12%renderVelocity()
   call S2%ComputeCD06Gradients([.false.,.false.,.false.])
   if (dumpIndividualScales) call enrich12%dumpSmallScales()
+
+  print*, p_sum(sum(abs(S2%u)))
+  print*, p_sum(sum(abs(S2%v)))
+  print*, p_sum(sum(abs(S2%wC)))
+call gracefulExit('stop',ierr)
 
   !! Update Scale 2 for Scale 3
   call interpAndAddGrids(S1, S2, interpS1ToS2)

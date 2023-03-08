@@ -38,7 +38,7 @@ subroutine generateIsotropicModes(this)
   ! Misc
   integer :: ierr, kst, ken, n
   integer :: nxQH, nyQH, istQH, jstQH, kstQH
-  integer :: ii, jj, kk, nside, iter, iter2
+  integer :: ii, jj, kk, nside, iter
   real(rkind) :: dxsub, dysub, dzsub
 
   call message("                                                                ")
@@ -91,8 +91,6 @@ subroutine generateIsotropicModes(this)
   jstQH = this%QHgrid%gpC%xst(2)
   kstQH = this%QHgrid%gpC%xst(3)
   
-  !call initializeSeeds(seedFact, istQH, jstQH, kstQH, nxQH, nyQH)
-iter2 = 1
   do k = 1,this%QHgrid%gpC%xsz(3)
     zmin = this%QHgrid%zE(k)
     do j = 1,this%QHgrid%gpC%xsz(2)
@@ -118,22 +116,24 @@ iter2 = 1
         call uniform_random(rand1,0.d0,1.d0,(seedFact(3)))
         gmz(:,i,j,k) = zmin + this%QHgrid%dz*rand1
 
-        nside = nint(real(this%nk*this%ntheta,rkind)**(1.d0/3.d0))
-        call assert(nside**3 == this%nk*this%ntheta, "nk*ntheta should form a cube.")
-        iter = 0
-        dxsub = this%QHgrid%dx/nside
-        dysub = this%QHgrid%dy/nside
-        dzsub = this%QHgrid%dz/nside
-        do kk = 1,nside
-          do jj = 1,nside
-            do ii = 1,nside
-              iter = iter + 1
-              gmx(iter,i,j,k) = xmin + dxsub*(ii - 1) + dxsub/2.d0
-              gmy(iter,i,j,k) = ymin + dysub*(jj - 1) + dysub/2.d0
-              gmz(iter,i,j,k) = zmin + dzsub*(kk - 1) + dzsub/2.d0
+        if (this%genModesOnUniformGrid) then
+          nside = nint(real(this%nk*this%ntheta,rkind)**(1.d0/3.d0))
+          call assert(nside**3 == this%nk*this%ntheta, "nk*ntheta should form a cube.")
+          iter = 0
+          dxsub = this%QHgrid%dx/nside
+          dysub = this%QHgrid%dy/nside
+          dzsub = this%QHgrid%dz/nside
+          do kk = 1,nside
+            do jj = 1,nside
+              do ii = 1,nside
+                iter = iter + 1
+                gmx(iter,i,j,k) = xmin + dxsub*(ii - 1)! + dxsub/2.d0
+                gmy(iter,i,j,k) = ymin + dysub*(jj - 1)! + dysub/2.d0
+                gmz(iter,i,j,k) = zmin + dzsub*(kk - 1) + dzsub/2.d0
+              end do
             end do
           end do
-        end do
+        end if
           
         call uniform_random(thetaVel,0.d0,2.d0*pi,(seedFact(6)))
         call uniform_random(rand2,0.d0,1.d0/sqrt(3.d0),(seedFact(7)))
@@ -159,8 +159,7 @@ iter2 = 1
           k2(kst:ken,i,j,k) = kmag(kid)*r*sin(theta(:,kid))
           dkmodes(kst:ken) = dk(kid)
         end do
-  !print*, theta, kztemp, seedFact(4), seedFact(5)
-  iter2 = iter2 + 1
+        
         do n = 1,this%nk*this%ntheta
 
           ! get KE_loc and L_loc
@@ -218,15 +217,6 @@ iter2 = 1
           wI(n,i,j,k) = uImag*orientationZ
         end do
        
-        !if (nrank == 0) then 
-        !    print*, "QHloc:", this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k)
-        !    print*, "Seeds:", seedFact
-        !    print*, "Locs:", gmx(:,i,j,k), gmy(:,i,j,k), gmz(:,i,j,k) 
-        !    print*, "Wavenums:", k1(:,i,j,k), k2(:,i,j,k), k3(:,i,j,k) 
-        !    print*, "kztemp/theta:", kzTemp, theta
-        !    print*, "thetavel/rand2:", thetaVel, rand2
-        !end if 
-        !stop 
       end do
     end do
   end do
@@ -254,13 +244,6 @@ iter2 = 1
 
   this%KE_loc = reshape(KE_loc,(/nmodes/))
   this%L_loc = reshape(L_loc,(/nmodes/))
-
-  !print*, "ke_loc:", p_sum(sum(abs(this%KE_loc)))
-  !print*, "L_loc:", p_sum(sum(abs(this%L_loc)))
-  !print*, "x:", p_sum(sum(abs(this%x)))
-  !print*, "kx:", p_sum(sum(abs(this%kx)))
-  !print*, "uhat:", p_sum(sum(abs(this%uhatR)))
-  !stop 
 
   ! Confirm modes are divergence free
   call assert(isOrthogonal(this%uhatR,this%vhatR,this%whatR,&

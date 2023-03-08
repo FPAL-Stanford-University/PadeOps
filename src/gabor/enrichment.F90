@@ -80,6 +80,9 @@ module enrichmentMod
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
 
+    ! TESTING
+    logical :: genModesOnUniformGrid
+
     integer :: activeIndex 
     contains
       procedure          :: init
@@ -99,18 +102,20 @@ module enrichmentMod
       procedure          :: generateModes  
       procedure, private :: doDebugChecks
       procedure, private :: applyPeriodicOffsets
+      procedure, private :: togglePointer
 
       ! MPI communication stuff
       procedure, private :: sendRecvHaloModes
-      procedure, private :: sortAndExchangeModes 
+      procedure, private :: sortAndExchangeModes
   end type
 
 contains
-  include 'enrichment_files/initializeGaborModes.F90'
-  include 'enrichment_files/renderVelocity.F90'
-  include 'enrichment_files/gaborIO.F90'
-  include 'enrichment_files/debugChecks.F90'
-  include 'enrichment_files/MPIstuff.F90'
+#include "enrichment_files/initializeGaborModes.F90"
+#include "enrichment_files/renderVelocity.F90"
+#include "enrichment_files/gaborIO.F90"
+#include "enrichment_files/debugChecks.F90"
+#include "enrichment_files/MPIstuff.F90"
+#include "enrichment_files/togglePointer.F90"
 
   subroutine init(this,smallScales,largeScales,inputfile)
     use GaborModeRoutines, only: computeKminKmax
@@ -135,6 +140,7 @@ contains
     real(rkind) :: strainClipXmax, strainClipXmin
     real(rkind) :: strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax
     logical :: readGradients = .false.
+    logical :: genModesOnUniformGrid = .false.
     
     namelist /IO/      outputdir, writeIsotropicModes, readGradients
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
@@ -143,6 +149,7 @@ contains
       strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
+    namelist /TESTING/ genModesOnUniformGrid
 
     kminFact = 1.d0 
     strainClipXmin = -1.D99; strainClipXmax = 1.D99
@@ -156,6 +163,7 @@ contains
     read(unit=ioUnit, NML=IO)
     read(unit=ioUnit, NML=GABOR)
     read(unit=ioUnit, NML=CONTROL)
+    read(unit=ioUnit, NML=TESTING)
     close(ioUnit)
 
     this%largeScales => largeScales 
@@ -188,6 +196,9 @@ contains
     this%outputdir = outputdir
     this%writeIsotropicModes = writeIsotropicModes
 
+    ! TESTING
+    this%genModesOnUniformGrid = genModesOnUniformGrid
+
     ! Get domain boundaries
     call getDomainBoundaries(xDom,yDom,zDom,largeScales%mesh)
 
@@ -208,7 +219,7 @@ contains
     npad_ForinitModes = max(ceiling(real(smallScales%ny)/real(largeScales%ny)), & 
         ceiling(real(smallScales%nz)/real(largeScales%nz))) 
     call this%pgForInitModes%init(prow,pcol,smallScales%nx,smallScales%ny,smallScales%nz,npad_ForinitModes)
-    call this%QHgrid%init(inputfile, this%largeScales)
+    call this%QHgrid%init(inputfile, this%largeScales, xDom, yDom, zDom)
 
     this%nxsupp = nint(2*this%QHgrid%dx/this%smallScales%dx)
     this%nysupp = nint(2*this%QHgrid%dy/this%smallScales%dy)
@@ -240,7 +251,7 @@ contains
     !allocate(this%rawData(this%nmodes,this%nvars))
     allocate(this%rawModeData(this%nmodes,this%nvars,0:1))
     this%activeIndex = 0
-#include "enrichment_files/togglePointer.F90"
+    call this%togglePointer
    
     ! Allocate extra memory for velocity rendering
     ist = this%smallScales%gpC%xst(1) 
@@ -299,7 +310,7 @@ contains
     if (allocated(this%rawModeData)) deallocate(this%rawModeData)
     allocate(this%rawModeData(this%nmodes,this%nvars,0:1))
     this%activeIndex = 0
-#include "enrichment_files/togglePointer.F90"
+    call this%togglePointer()
    
     ! Initialize the Gabor modes
     call this%generateIsotropicModes()
@@ -559,195 +570,6 @@ contains
       
     end do
   end subroutine
-
-  subroutine sortAndExchangeModes(this, coor, coorMin, coorMax, neighLo, neighHi)
-    class(enrichmentOperator), intent(inout), target :: this
-    integer :: n, inactiveIndex, iterSelf, iterLo, iterHi
-    integer :: howmanyLo, howmanyHi
-    real(rkind), dimension(:), intent(in) :: coor
-    real(rkind), intent(in) :: coorMin, coorMax
-    integer, intent(in) :: neighLo, neighHi
-    real(rkind), dimension(:,:), allocatable :: sendBufferLo, sendBufferHi
-    real(rkind), dimension(:,:), allocatable :: recvBufferLo, recvBufferHi
-    real(rkind), dimension(:,:,:), allocatable :: tmp
-    integer, dimension(4) :: sendReq, recvReq, requests
-    integer :: tag, ierr, sz1
-
-    inactiveIndex = mod(this%activeIndex+1,2)
-    
-    allocate(sendBufferLo(this%nmodes,this%nvars))
-    allocate(sendBufferHi(this%nmodes,this%nvars))
-
-    iterSelf = 0
-    iterLo = 0
-    iterHi = 0
-
-    do n = 1,this%nModes
-        
-        if ((coor(n) <= coorMax) .and. (coor(n) > coorMin)) then 
-            iterSelf = iterSelf + 1
-            this%rawModedata(iterSelf,:,inactiveIndex) = this%rawModedata(n,:,this%activeIndex) 
-        else
-            if (coor(n) > coorMax) then 
-                iterHi = iterHi + 1
-                sendBufferHi(iterHi,:) = this%rawModedata(n,:,this%activeIndex) 
-
-            else if (coor(n) <= coorMin) then 
-                iterLo = iterLo + 1
-                sendBufferLo(iterLo,:) = this%rawModedata(n,:,this%activeIndex) 
-            
-            else
-                print*, coor(n), coorMax, coorMin
-                print*, "This should not happen"
-                stop 
-            end if 
-        end if 
-
-    end do
-
-
-    ! isend howmany to hi
-    ! isend howmany to lo
-    tag = 0 
-    ! Send to lower rank
-    call MPI_ISend(iterLo,1,MPI_INTEGER,neighLo,tag,&
-      DECOMP_2D_COMM_CART_X,sendReq(1),ierr)
-    ! Send to higher rank
-    call MPI_ISend(iterHi,1,MPI_INTEGER,neighHi,tag,&
-      DECOMP_2D_COMM_CART_X,sendReq(2),ierr)
-    
-    ! irecv howmany from lo
-    ! irecv howmany from hi
-    call MPI_IRecv(howManyLo,1,MPI_INTEGER,neighLo,tag,&
-      DECOMP_2D_COMM_CART_X,recvReq(1),ierr)
-    ! Receive from higher rank
-    call MPI_IRecv(howManyHi,1,MPI_INTEGER,neighHi,tag,&
-      DECOMP_2D_COMM_CART_X,recvReq(2),ierr)
-    
-    ! isend data to lo
-    ! isend data to hi 
-    call MPI_ISend(sendBufferLo(1:iterLo,:),this%nvars*iterLo,mpirkind,neighLo,tag,&
-        DECOMP_2D_COMM_CART_X,sendReq(3),ierr) 
-    call MPI_ISend(sendBufferHi(1:iterHi,:),this%nvars*iterHi,mpirkind,neighHi,tag,&
-        DECOMP_2D_COMM_CART_X,sendReq(4),ierr) 
-    
-    requests(1:2) = recvReq(1:2)
-    requests(3:4) = sendReq(1:2)
-    call MPI_WaitAll(4,requests,MPI_STATUSES_IGNORE,ierr)
-
-    allocate(recvBufferLo(howmanyLo,this%nvars))
-    allocate(recvBufferHi(howmanyHi,this%nvars))
-
-    ! irecv data from lo
-    ! irecv data from hi 
-    call MPI_IRecv(recvBufferLo,size(recvBufferLo),mpirkind,neighLo,tag,&
-      DECOMP_2D_COMM_CART_X,recvReq(3),ierr)
-    call MPI_IRecv(recvBufferHi,size(recvBufferHi),mpirkind,neighHi,tag,&
-      DECOMP_2D_COMM_CART_X,recvReq(4),ierr)
-  
-    requests(1:2) = recvReq(3:4)
-    requests(3:4) = sendReq(3:4)
-    call MPI_WaitAll(4,requests, MPI_STATUSES_IGNORE,ierr)
-
-    if (size(this%rawModedata,1) < iterSelf+howmanyLo+howmanyHi) then
-        sz1 = size(this%rawModeData,1)
-        
-        ! Temporarily copy rawModeData to tmp array
-        allocate(tmp(sz1,size(this%rawModeData,2),size(this%rawModeData,3)))
-        tmp = this%rawModeData
-
-        ! Deallocate and reallocate rawModeData
-        deallocate(this%rawModeData)
-        allocate(this%rawModeData(iterSelf+howManyLo+howManyHi,this%nvars,0:1))
-
-        ! Copy tmp data back to rawModeData
-        this%rawModeData(1:sz1,:,:) = tmp
-
-        ! Clear memory
-        deallocate(tmp)
-    end if 
-
-    this%rawModedata(iterSelf+1:iterSelf+howmanyLo,:,inactiveIndex) = recvBufferLo 
-    this%rawModedata(iterSelf+howmanyLo+1:iterSelf+howmanyLo+howmanyHi,:,inactiveIndex) = recvBufferHi 
-
-    this%nModes = iterSelf+howmanyLo+howmanyHi
-
-#include "enrichment_files/togglePointer.F90"
-
-    deallocate(sendBufferLo, sendBufferHi, recvBufferLo, recvBufferHi)
-
-  end subroutine 
-
-  subroutine renderVelocity(this)
-    class(enrichmentOperator), intent(inout), target :: this
-    real(rkind) :: Lx
-    real(rkind), dimension(:,:), pointer :: haloBuffY, haloBuffZ 
-    
-    call message(1,"Rendering the Gabor-induced velocity field")
-   
-    haloBuffY => null()
-    haloBuffZ => null()
-
-    Lx = xDom(2) - xDom(1)
-    
-    ! Zero the velocity arrays
-    this%smallScales%u  = 0.d0
-    this%smallScales%v  = 0.d0
-    this%smallScales%wC = 0.d0
-     
-    ! STEP 1: Exchange Gabor modes from neighbors that have influence on your domain 
-    if (allocated(this%renderModeData)) deallocate(this%renderModedata)
-    allocate(this%renderModeData(this%nmodes, size(this%ModeData,2)))
-    !allocate(this%renderModeData(size(this%modeData,1), size(this%ModeData,2)))
-    this%renderModeData = this%modeData
-    call this%sendRecvHaloModes(this%renderModeData, 'y')
-    call this%sendRecvHaloModes(this%renderModeData, 'z')
-    
-    ! Step 2: Render velocity 
-      call this%renderLocalVelocity(this%renderModeData(:,1), &
-        this%renderModeData(:,2),  this%renderModeData(:,3), &
-        this%renderModeData(:,4),  this%renderModeData(:,5), &
-        this%renderModeData(:,6),  this%renderModeData(:,7), &
-        this%renderModeData(:,8),  this%renderModeData(:,9), &
-        this%renderModeData(:,10), this%renderModeData(:,11), &
-        this%renderModeData(:,12))
-
-    ! Step 3: Add x-periodic contribution
-    if (periodicBCs(1)) then
-      call this%renderLocalVelocity(this%renderModeData(:,1) + Lx, &
-        this%renderModeData(:,2),  this%renderModeData(:,3), &
-        this%renderModeData(:,4),  this%renderModeData(:,5), &
-        this%renderModeData(:,6),  this%renderModeData(:,7), &
-        this%renderModeData(:,8),  this%renderModeData(:,9), &
-        this%renderModeData(:,10), this%renderModeData(:,11), &
-        this%renderModeData(:,12))
-      call this%renderLocalVelocity(this%renderModeData(:,1) - Lx, &
-        this%renderModeData(:,2),  this%renderModeData(:,3), &
-        this%renderModeData(:,4),  this%renderModeData(:,5), &
-        this%renderModeData(:,6),  this%renderModeData(:,7), &
-        this%renderModeData(:,8),  this%renderModeData(:,9), &
-        this%renderModeData(:,10), this%renderModeData(:,11), &
-        this%renderModeData(:,12))
-    end if
-
-    ! TODO:
-    ! Step 2.b: interpolate wC to w. Do we need to get uhat, vhat, what from u,
-    ! v, w? 
-
-    ! Aditya
-    ! STEP 3: Impose boundary condition (no-penetration BC)
-    if (this%imposeNoPenetrationBC) then
-      call this%smallScales%projectToFixBC()
-    end if
-
-    ! Aditya 
-    ! STEP 4: Compute pressure (in needed)
-    if (this%renderPressure) then 
-      call this%smallScales%computePressure()
-    end if 
-
-    nullify(haloBuffY,haloBuffZ)
-  end subroutine  
 
   subroutine wrapupTimeStep(this,doNotRender)
     class(enrichmentOperator), intent(inout) :: this

@@ -23,11 +23,12 @@ module QHmeshMod
 
   contains
 
-    subroutine init(this,inputfile,largeScales)
+    subroutine init(this,inputfile,largeScales,xDom,yDom,zDom)
       use QHmeshRoutines, only: getMeshEdgeValues
       class(QHmesh), intent(inout) :: this
       character(len=clen), intent(in) :: inputfile
       class(igrid), intent(in), target :: largeScales
+      real(rkind), dimension(2), intent(in) :: xDom, yDom, zDom
       integer :: ist, ien, jst, jen, kst, ken, isz, jsz, ksz
       integer :: nxLESperQH, nyLESperQH, nzLESperQH
       integer :: ioUnit, ierr
@@ -78,12 +79,9 @@ module QHmeshMod
 
 
       ! Define the mesh           
-      this%xE = getMeshEdgeValues(ist,isz+1,this%dx,&
-        p_minval(this%LES%mesh(1,1,1,1))-this%LES%dx/2.d0)
-      this%yE = getMeshEdgeValues(jst,jsz+1,this%dy,&
-        p_minval(this%LES%mesh(1,1,1,2))-this%LES%dy/2.d0)
-      this%zE = getMeshEdgeValues(kst,ksz+1,this%dz,&
-        p_minval(this%LES%mesh(1,1,1,3))-this%LES%dz/2.d0)
+      this%xE = getMeshEdgeValues(ist,isz+1,this%dx,xDom(1))
+      this%yE = getMeshEdgeValues(jst,jsz+1,this%dy,yDom(1))
+      this%zE = getMeshEdgeValues(kst,ksz+1,this%dz,zDom(1))
       
       this%xC = 0.5d0*(this%xE(2:isz+1)+this%xE(1:isz))
       this%yC = 0.5d0*(this%yE(2:jsz+1)+this%yE(1:jsz))

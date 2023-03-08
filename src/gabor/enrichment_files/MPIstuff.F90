@@ -1,207 +1,138 @@
-subroutine sendRecvHaloModes(this,modeData,coordinate,haloBuff)
+subroutine sendRecvHaloModes(this,modeData)
   ! Send and recieve Gabor modes in the halo region of the MPI ranks
-  ! Inputs:
-  !     modeData --> all mode attributes, i.e. physical location, wave-vecotr
-  !                  components, and vector component amplitudes
-  !     coordinate --> "y" or "z" specifying which component of the halo is
-  !                    being transferred
-  !                                  modes not native to the MPI rank
   ! In/Out:
-  !     haloBuff --> buffer array to store the halo mode info
-  !
+  !     modeData --> all mode attributes, i.e. physical location, wave-vector
+  !                  components, and vector component amplitudes
+  
   class(enrichmentOperator), intent(inout) :: this
   real(rkind), dimension(:,:), intent(inout), allocatable, target :: modeData
-  character(len=1), intent(in) :: coordinate
-  real(rkind), dimension(:,:), allocatable, intent(inout), optional :: haloBuff
 
-  integer :: coordID
-  real(rkind), dimension(:), pointer :: loc
-  real(rkind) :: haloMin, haloMax
-  integer :: sendCount1, sendCount2, recvCount1, recvCount2
+  real(rkind), dimension(:), pointer :: yloc, zloc
+  real(rkind) :: haloMinY, haloMaxY, haloMinZ, haloMaxZ
+  integer :: sendCount
+  integer, dimension(nproc) :: recvCount, displs
   integer :: ierr
-  integer :: tag1, tag2
-  integer, dimension(2) :: sendReq, recvReq
-  integer, dimension(4) :: requests  
   real(rkind) :: Ly, Lz
-  real(rkind) :: PEmin, PEmax
-  real(rkind), dimension(3) :: periodicCorrection
-  real(rkind), dimension(2) :: Dom
-  real(rkind), dimension(:,:), allocatable :: sendBuff1, sendBuff2, recvBuff1, recvBuff2, tmpData
+  real(rkind) :: PEminY, PEmaxY, PEminZ, PEmaxZ
+  real(rkind), dimension(3) :: periodicShiftY, periodicShiftZ
+  real(rkind), dimension(:,:), allocatable :: sendBuff, recvBuff, newModes
+  integer :: numNewModes, st, stg, en, eng, n
 
-  ! The following are a subset of the MPI cartesion communicator attributes
-  real(rkind) :: coord, dim
-  logical :: periodic
-  integer, dimension(2) :: neigh
-
-  call assert(coordinate == 'y' .or. coordinate == 'z','Must select'//&
-    ' coordinate to be "y" or "z"')
-
-  Ly = yDom(2) - yDom(1)
-  Lz = zDom(2) - zDom(1)
+  !PEminY = this%sd%PEybound(1)
+  !PEmaxY = this%sd%PEybound(2)
+  !PEminZ = this%sd%PEzbound(1)
+  !PEmaxZ = this%sd%PEzbound(2)
+  PEminY = this%PEybound(1)
+  PEmaxY = this%PEybound(2)
+  PEminZ = this%PEzbound(1)
+  PEmaxZ = this%PEzbound(2)
+    
+  ! Define the cutoff location for halo modes
+  haloMinY = PEminY + real(this%nysupp/2,rkind)*this%smallScales%dy
+  haloMaxY = PEmaxY - real(this%nysupp/2,rkind)*this%smallScales%dy
+  haloMinZ = PEminZ + real(this%nzsupp/2,rkind)*this%smallScales%dz
+  haloMaxZ = PEmaxZ - real(this%nzsupp/2,rkind)*this%smallScales%dz
+  
+  yloc => modeData(:,2)
+  zloc => modeData(:,3)
     
   ! Periodic correction if using periodic boundaries
-  periodicCorrection = 0.d0
-
-  select case (coordinate)
-  case ('y')
-    coordID = 2
-
-    PEmin = this%QHgrid%yE(1)
-    PEmax = this%QHgrid%yE(this%QHgrid%gpC%xsz(2)+1)
-  
-    ! Define the cutoff location for halo modes
-    haloMin = this%Qhgrid%yE(1) + &
-      & real(this%nysupp/2,rkind)*this%smallScales%dy
-    haloMax = this%Qhgrid%yE(this%QHgrid%gpC%xsz(2)+1) - &
-      & real(this%nysupp/2,rkind)*this%smallScales%dy
-    
-    if (periodicBCs(2)) periodicCorrection  = [0.d0, Ly, 0.d0]
-    
-    Dom      = yDom
-    coord    = coords(1)
-    dim      = dims(1)
-    periodic = periodicBCs(2)
-    neigh    = [neighbor(1), neighbor(2)]
-    loc      => modeData(:,2)
-  case ('z')
-    coordID = 3
-
-    PEmin = this%QHgrid%zE(1)
-    PEmax = this%QHgrid%zE(this%QHgrid%gpC%xsz(3)+1)
-  
-    ! Define the cutoff location for halo modes
-    haloMin = this%Qhgrid%zE(1) + &
-      & real(this%nzsupp/2,rkind)*this%smallScales%dz
-    haloMax = this%Qhgrid%zE(this%QHgrid%gpC%xsz(3)+1) - &
-      & real(this%nzsupp/2,rkind)*this%smallScales%dz
-
-    if (periodicBCs(3)) periodicCorrection  = [0.d0, 0.d0, Lz]
-    
-    Dom      = zDom
-    coord    = coords(2)
-    dim      = dims(2)
-    periodic = periodicBCs(3)
-    neigh    = [neighbor(3), neighbor(4)]
-    loc      => modeData(:,3)
-  end select
+  periodicShiftY = 0.d0
+  periodicShiftZ = 0.d0
+  Ly = yDom(2) - yDom(1)
+  Lz = zDom(2) - zDom(1)
+  if (periodicBCs(2)) periodicShiftY  = [0.d0, Ly, 0.d0]
+  if (periodicBCs(3)) periodicShiftZ  = [0.d0, 0.d0, Lz]
 
   ! Find all modes inside halo regions
-  sendCount1 = 0
-  sendCount2 = 0
-  call getSendCount(loc,haloMin,haloMax,sendCount1,sendCount2)
+  sendCount = 0
+  call getSendCount(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,sendCount)
 
-  allocate(sendBuff1(sendCount1,12))
-  allocate(sendBuff2(sendCount2,12))
+  allocate(sendBuff(sendCount,this%nvars))
 
-  ! Pack the send buffers
-  ! We must check for two different cases:
-  ! --> Case 1: is the mode within the halo region?
-  ! --> Case 2: If so, does the halo-region correspond to a periodic
-  !             boundary?
-  ! If Case 2 is true then we must shift the mode location by one
-  ! domain length for the velocity rendering routine to work
-  call packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,modeData,&
-    periodicCorrection,sendBuff1,sendBuff2)
-  
-  ! Let your neighbors know how much data you will be sending
-  tag1 = 0
-  tag2 = 0
+  call packSendBuffer(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
+    PEminY,PEmaxY,PEminZ,PEmaxZ,yDom,zDom,modeData,periodicShiftY,&
+    periodicShiftZ,sendBuff)
+ 
+  ! Get the number of modes to be sent by each rank 
+  recvCount = 0
+  call MPI_Allgather(sendCount,1,MPI_INTEGER,recvCount,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
 
-  ! Set these to zero so that it is still set to something if getting from
-  ! mpi_proc_none
-  recvCount1 = 0
-  recvCount2 = 0 
+  ! Allocate memory for the recieve buffer
+  allocate(recvBuff(sum(recvCount),this%nvars))
+  recvBuff = 0.d0
 
-  ! Receive from lower rank
-  call MPI_IRecv(recvCount1,1,MPI_INTEGER,neigh(1),tag1,&
-    DECOMP_2D_COMM_CART_X,recvReq(1),ierr)
-  ! Receive from higher rank
-  call MPI_IRecv(recvCount2,1,MPI_INTEGER,neigh(2),tag2,&
-    DECOMP_2D_COMM_CART_X,recvReq(2),ierr)
-  
-  ! Send to lower rank
-  call MPI_ISend(sendCount1,1,MPI_INTEGER,neigh(1),tag1,&
-    DECOMP_2D_COMM_CART_X,sendReq(1),ierr)
-  ! Send to higher rank
-  call MPI_ISend(sendCount2,1,MPI_INTEGER,neigh(2),tag2,&
-    DECOMP_2D_COMM_CART_X,sendReq(2),ierr)
+  ! Compute the displacements for the receive buffer
+  displs = 0
+  do n = 2,nproc
+    displs(n) = displs(n-1) + recvCount(n-1)
+  end do
 
-  requests = [recvReq(1), recvReq(2), sendReq(1), sendReq(2)]
-  !call MPI_WaitAll(4,[recvReq, sendReq],MPI_STATUSES_IGNORE,ierr)
-  call MPI_WaitAll(4,requests,MPI_STATUSES_IGNORE,ierr)
+  ! Get all the modes from all other ranks
+  do n = 1,this%nvars
+    call MPI_AllgatherV(sendBuff(:,n),size(sendBuff,1),mpirkind,recvBuff(:,n),recvCount,&
+      displs,mpirkind,MPI_COMM_WORLD,ierr)
+  end do
 
-  ! Allocate memory for the recieve buffers
-  allocate(recvBuff1(recvCount1,12))
-  allocate(recvBuff2(recvCount2,12))
-  recvBuff1 = 0.d0
-  recvBuff2 = 0.d0
+  numNewModes = sum(recvCount(1:nrank)) + sum(recvCount(nrank+2:nproc))
+  allocate(newModes(numNewModes,this%nvars))
+  st = 1
+  stg = 1
+  do n = 1,nproc
+    eng = stg + recvCount(n) - 1
+    if (nrank == n-1) then
+      continue
+    else
+      en = st + recvCount(n) - 1
+      newModes(st:en,:) = recvBuff(stg:eng,:)
+      st = en + 1
+    end if
+    stg = eng + 1
+  end do
 
-  call MPI_IRecv(recvBuff1,size(recvBuff1),mpirkind,neigh(1),tag1,&
-    DECOMP_2D_COMM_CART_X,recvReq(1),ierr)
-  call MPI_IRecv(recvBuff2,size(recvBuff2),mpirkind,neigh(2),tag2,&
-    DECOMP_2D_COMM_CART_X,recvReq(2),ierr)
-  call MPI_ISend(sendBuff1,size(sendBuff1),mpirkind,neigh(1),tag1,&
-      DECOMP_2D_COMM_CART_X,sendReq(1),ierr) 
-  call MPI_ISend(sendBuff2,size(sendBuff2),mpirkind,neigh(2),tag2,&
-      DECOMP_2D_COMM_CART_X,sendReq(2),ierr) 
+  ! Append modeData
+  call mergeModes(modeData, newModes, this%nvars)
 
-  requests = [recvReq(1), recvReq(2), sendReq(1), sendReq(2)]
-  call MPI_WaitAll(4,requests, MPI_STATUSES_IGNORE,ierr)
-
-  if (present(haloBuff)) then 
-    if (allocated(haloBuff)) deallocate(haloBuff) 
-    call mergeModes(modeData, recvBuff1, recvBuff2, haloBuff) 
-  else ! We will append modeData
-    allocate(tmpData(size(modeData,1),12))
-    tmpData = modeData
-    deallocate(modeData)
-    call mergeModes(tmpData, recvBuff1, recvBuff2, modeData)
-  end if 
-
-  deallocate(recvBuff1,recvBuff2,sendBuff1,sendBuff2)
-  nullify(loc)
+  deallocate(recvBuff,sendBuff,newModes)
+  nullify(yloc, zloc)
 end subroutine
 
-subroutine mergeModes(Modes1, Modes2, Modes3, MergedModes)
-  real(rkind), dimension(:,:), intent(in) :: Modes1, Modes2, Modes3
-  real(rkind), dimension(:,:), allocatable, intent(out) :: MergedModes
-  integer :: n1, n2, n3 
+subroutine mergeModes(mergedModes, newModes, nvars)
+  real(rkind), dimension(:,:), intent(in) :: newModes
+  integer, intent(in) :: nvars
+  real(rkind), dimension(:,:), allocatable, intent(inout) :: mergedModes
+  integer :: n1, n2
+  real(rkind), dimension(:,:), allocatable :: tmpData
+  
+  allocate(tmpData(size(mergedModes,1),nvars))
+  tmpData = mergedModes
+  deallocate(mergedModes)
 
-  n1 = size(Modes1,1)
-  n2 = size(Modes2,1)
-  n3 = size(Modes3,1)
+  n1 = size(tmpData,1)
+  n2 = size(newModes,1)
 
-  allocate(MergedModes(n1 + n2 + n3,12))
-  MergedModes(1:n1,            :) = Modes1
-  MergedModes(n1+1:n1+n2,      :) = Modes2
-  MergedModes(n1+n2+1:n1+n2+n3,:) = Modes3
+  allocate(MergedModes(n1 + n2,nvars))
+  MergedModes(1:n1,      :) = tmpData
+  MergedModes(n1+1:n1+n2,:) = newModes
+
+  deallocate(tmpData)
 
 end subroutine 
 
 
-subroutine copyMode(modeData, cpyArr, periodicCorrection)
+subroutine copyMode(modeData, cpyArr, periodicShift)
   real(rkind), dimension(:), intent(in) :: modeData
   real(rkind), dimension(:), intent(inout) :: cpyArr
-  real(rkind), dimension(3), intent(in), optional :: periodicCorrection
-  real(rkind), dimension(3) :: PC
+  real(rkind), dimension(3), intent(in) :: periodicShift
+  integer :: n
 
-  PC = 0.d0
-  if (present(periodicCorrection)) PC = periodicCorrection
-
-  cpyArr(1)  = modeData(1)  + PC(1)
-  cpyArr(2)  = modeData(2)  + PC(2)
-  cpyArr(3)  = modeData(3)  + PC(3)
+  cpyArr(1)  = modeData(1) + periodicShift(1)
+  cpyArr(2)  = modeData(2) + periodicShift(2)
+  cpyArr(3)  = modeData(3) + periodicShift(3)
   
-  cpyArr(4)  = modeData(4) 
-  cpyArr(5)  = modeData(5) 
-  cpyArr(6)  = modeData(6) 
-
-  cpyArr(7)  = modeData(7) 
-  cpyArr(8)  = modeData(8) 
-  cpyArr(9)  = modeData(9) 
-  cpyArr(10) = modeData(10) 
-  cpyArr(11) = modeData(11) 
-  cpyArr(12) = modeData(12)
+  do n = 4,size(modeData)
+    cpyArr(n)  = modeData(n) 
+  end do
 
 end subroutine
   
@@ -310,53 +241,194 @@ subroutine testMPIsendRecv()
   call message('Test PASSED!')
 end subroutine
 
-subroutine getSendCount(loc,haloMin,haloMax,sendCount1,sendCount2)
-  real(rkind), dimension(:), intent(in) :: loc
-  real(rkind), intent(in) :: haloMin, haloMax
-  integer, intent(inout) :: sendCount1, sendCount2
+subroutine getSendCount(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,sendCount)
+  real(rkind), dimension(:), intent(in) :: yloc, zloc
+  real(rkind), intent(in) :: haloMinY, haloMaxY, haloMinZ, haloMaxZ
+  integer, intent(inout) :: sendCount
   integer :: n
 
-  do n = 1,size(loc)
-    if (loc(n) < haloMin) then
-      sendCount1 = sendCount1 + 1
-    else if (loc(n) > haloMax) then
-      sendCount2 = sendCount2 + 1
+  do n = 1,size(yloc)
+    if (yloc(n) < haloMinY .or. yloc(n) > haloMaxY .or. &
+        zloc(n) < haloMinZ .or. zloc(n) > haloMinZ) then
+      sendCount = sendCount + 1
     end if
   end do
 end subroutine
 
-subroutine packSendBuffer(loc,haloMin,haloMax,PEmin,PEmax,Dom,modeData,&
-    periodicCorrection,sendBuff1,sendBuff2)
-  real(rkind), dimension(:), intent(in) :: loc
-  real(rkind), intent(in) :: haloMin, haloMax, PEmin, PEmax
-  real(rkind), dimension(2), intent(in) :: Dom
+subroutine packSendBuffer(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
+    PEminY,PEmaxY,PEminZ,PEmaxZ,yDom,zDom,modeData,&
+    periodicShiftY,periodicShiftZ,sendBuff)
+  ! Pack the send buffers
+  ! We must check for two different cases:
+  ! --> Case 1: is the mode within the halo region?
+  ! --> Case 2: If so, does the halo-region correspond to a periodic
+  !             boundary?
+  ! If Case 2 is true then we must shift the mode location by one
+  ! domain length for the velocity rendering routine to work
+  real(rkind), dimension(:), intent(in) :: yloc, zloc
+  real(rkind), intent(in) :: haloMinY, haloMaxY, PEminY, PEmaxY
+  real(rkind), intent(in) :: haloMinZ, haloMaxZ, PEminZ, PEmaxZ
+  real(rkind), dimension(2), intent(in) :: yDom, zDom
   real(rkind), dimension(:,:), intent(in) :: modeData
-  real(rkind), dimension(3), intent(in) :: periodicCorrection
-  real(rkind), dimension(:,:), intent(inout) :: sendBuff1, sendBuff2
-  integer :: idx1, idx2
+  real(rkind), dimension(3), intent(in) :: periodicShiftY, periodicShiftZ
+  real(rkind), dimension(:,:), intent(inout) :: sendBuff
+  real(rkind), dimension(3) :: periodicShift
+  integer :: idx
   real(rkind) :: tol = 1.d-12
   integer :: n
 
-  idx1 = 1
-  idx2 = 1
-  do n = 1,size(loc)
-    if (loc(n) < haloMin) then
-      if (abs(PEmin - Dom(1)) < tol .and. periodicBCs(2)) then
-        call copyMode(modeData(n,:), sendBuff1(idx1,:), periodicCorrection)
-        idx1 = idx1 + 1
-      else
-        call copyMode(modeData(n,:), sendBuff1(idx1,:))
-        idx1 = idx1 + 1
-      end if
-    else if (loc(n) > haloMax) then
-      if (abs(PEmax - Dom(2)) < tol .and. periodicBCs(2)) then
-        call copyMode(modeData(n,:), sendBuff2(idx2,:), -periodicCorrection)
-        idx2 = idx2 + 1
-      else
-        call copyMode(modeData(n,:), sendBuff2(idx2,:))
-        idx2 = idx2 + 1
-      end if
+  idx = 0
+  periodicShift = 0.d0
+  do n = 1,size(yloc)
+    if (yloc(n) < haloMinY .or. yloc(n) > haloMaxY .or. &
+        zloc(n) < haloMinZ .or. zloc(n) > haloMaxZ) then
+      idx = idx + 1
+      if ( (yloc(n) < haloMinY) .and. (abs(PEminY - yDom(1)) < tol) ) &
+        periodicShift = periodicShift + periodicShiftY
+      if ( (yloc(n) > haloMaxY) .and. (abs(PEmaxY - yDom(2)) < tol) ) &
+        periodicShift = periodicShift - periodicShiftY
+      if ( (zloc(n) < haloMinZ) .and. (abs(PEminZ - zDom(1)) < tol) ) &
+        periodicShift = periodicShift + periodicShiftZ
+      if ( (zloc(n) > haloMaxZ) .and. (abs(PEmaxZ - zDom(2)) < tol) ) &
+        periodicShift = periodicShift - periodicShiftZ
+      call copyMode(modeData(n,:), sendBuff(idx,:), periodicShift)
     end if
   end do
+  !do n = 1,size(yloc)
+  !  if (yloc(n) < haloMinY) then
+  !    if (abs(PEmin - Dom(1)) < tol .and. periodic) then
+  !      call copyMode(modeData(n,:), sendBuff(idx,:), periodicShift)
+  !      idx = idx + 1
+  !    else
+  !      call copyMode(modeData(n,:), sendBuff(idx,:))
+  !      idx = idx + 1
+  !    end if
+  !  else if (loc(n) > haloMax) then
+  !    if (abs(PEmax - Dom(2)) < tol .and. periodic) then
+  !      call copyMode(modeData(n,:), sendBuff(idx,:), -periodicShift)
+  !      idx = idx + 1
+  !    else
+  !      call copyMode(modeData(n,:), sendBuff(idx,:))
+  !      idx = idx + 1
+  !    end if
+  !  end if
+  !end do
 end subroutine
 
+subroutine sortAndExchangeModes(this, coor, coorMin, coorMax, neighLo, neighHi)
+  class(enrichmentOperator), intent(inout), target :: this
+  integer :: n, inactiveIndex, iterSelf, iterLo, iterHi
+  integer :: howmanyLo, howmanyHi
+  real(rkind), dimension(:), intent(in) :: coor
+  real(rkind), intent(in) :: coorMin, coorMax
+  integer, intent(in) :: neighLo, neighHi
+  real(rkind), dimension(:,:), allocatable :: sendBufferLo, sendBufferHi
+  real(rkind), dimension(:,:), allocatable :: recvBufferLo, recvBufferHi
+  real(rkind), dimension(:,:,:), allocatable :: tmp
+  integer, dimension(4) :: sendReq, recvReq, requests
+  integer :: tag, ierr, sz1
+
+  inactiveIndex = mod(this%activeIndex+1,2)
+  
+  allocate(sendBufferLo(this%nmodes,this%nvars))
+  allocate(sendBufferHi(this%nmodes,this%nvars))
+
+  iterSelf = 0
+  iterLo = 0
+  iterHi = 0
+
+  do n = 1,this%nModes
+      
+      if ((coor(n) <= coorMax) .and. (coor(n) > coorMin)) then 
+          iterSelf = iterSelf + 1
+          this%rawModedata(iterSelf,:,inactiveIndex) = this%rawModedata(n,:,this%activeIndex) 
+      else
+          if (coor(n) > coorMax) then 
+              iterHi = iterHi + 1
+              sendBufferHi(iterHi,:) = this%rawModedata(n,:,this%activeIndex) 
+
+          else if (coor(n) <= coorMin) then 
+              iterLo = iterLo + 1
+              sendBufferLo(iterLo,:) = this%rawModedata(n,:,this%activeIndex) 
+          
+          else
+              print*, coor(n), coorMax, coorMin
+              print*, "This should not happen"
+              stop 
+          end if 
+      end if 
+
+  end do
+
+
+  ! isend howmany to hi
+  ! isend howmany to lo
+  tag = 0 
+  ! Send to lower rank
+  call MPI_ISend(iterLo,1,MPI_INTEGER,neighLo,tag,&
+    DECOMP_2D_COMM_CART_X,sendReq(1),ierr)
+  ! Send to higher rank
+  call MPI_ISend(iterHi,1,MPI_INTEGER,neighHi,tag,&
+    DECOMP_2D_COMM_CART_X,sendReq(2),ierr)
+  
+  ! irecv howmany from lo
+  ! irecv howmany from hi
+  call MPI_IRecv(howManyLo,1,MPI_INTEGER,neighLo,tag,&
+    DECOMP_2D_COMM_CART_X,recvReq(1),ierr)
+  ! Receive from higher rank
+  call MPI_IRecv(howManyHi,1,MPI_INTEGER,neighHi,tag,&
+    DECOMP_2D_COMM_CART_X,recvReq(2),ierr)
+  
+  ! isend data to lo
+  ! isend data to hi 
+  call MPI_ISend(sendBufferLo(1:iterLo,:),this%nvars*iterLo,mpirkind,neighLo,tag,&
+      DECOMP_2D_COMM_CART_X,sendReq(3),ierr) 
+  call MPI_ISend(sendBufferHi(1:iterHi,:),this%nvars*iterHi,mpirkind,neighHi,tag,&
+      DECOMP_2D_COMM_CART_X,sendReq(4),ierr) 
+  
+  requests(1:2) = recvReq(1:2)
+  requests(3:4) = sendReq(1:2)
+  call MPI_WaitAll(4,requests,MPI_STATUSES_IGNORE,ierr)
+
+  allocate(recvBufferLo(howmanyLo,this%nvars))
+  allocate(recvBufferHi(howmanyHi,this%nvars))
+
+  ! irecv data from lo
+  ! irecv data from hi 
+  call MPI_IRecv(recvBufferLo,size(recvBufferLo),mpirkind,neighLo,tag,&
+    DECOMP_2D_COMM_CART_X,recvReq(3),ierr)
+  call MPI_IRecv(recvBufferHi,size(recvBufferHi),mpirkind,neighHi,tag,&
+    DECOMP_2D_COMM_CART_X,recvReq(4),ierr)
+
+  requests(1:2) = recvReq(3:4)
+  requests(3:4) = sendReq(3:4)
+  call MPI_WaitAll(4,requests, MPI_STATUSES_IGNORE,ierr)
+
+  if (size(this%rawModedata,1) < iterSelf+howmanyLo+howmanyHi) then
+      sz1 = size(this%rawModeData,1)
+      
+      ! Temporarily copy rawModeData to tmp array
+      allocate(tmp(sz1,size(this%rawModeData,2),size(this%rawModeData,3)))
+      tmp = this%rawModeData
+
+      ! Deallocate and reallocate rawModeData
+      deallocate(this%rawModeData)
+      allocate(this%rawModeData(iterSelf+howManyLo+howManyHi,this%nvars,0:1))
+
+      ! Copy tmp data back to rawModeData
+      this%rawModeData(1:sz1,:,:) = tmp
+
+      ! Clear memory
+      deallocate(tmp)
+  end if 
+
+  this%rawModedata(iterSelf+1:iterSelf+howmanyLo,:,inactiveIndex) = recvBufferLo 
+  this%rawModedata(iterSelf+howmanyLo+1:iterSelf+howmanyLo+howmanyHi,:,inactiveIndex) = recvBufferHi 
+
+  this%nModes = iterSelf+howmanyLo+howmanyHi
+
+  call this%togglePointer()
+
+  deallocate(sendBufferLo, sendBufferHi, recvBufferLo, recvBufferHi)
+
+end subroutine 
