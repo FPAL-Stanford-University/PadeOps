@@ -290,9 +290,6 @@ subroutine getDomainBoundaries(xDom,yDom,zDom,mesh)
   yDom(2) = p_maxval(maxval(y)) + dy
   zDom(2) = p_maxval(maxval(z)) + dz/2
 
-  print*, "xDom:", xDom
-  print*, "yDom:", yDom
-  print*, "zDom:", zDom
   nullify(x,y,z)
 end subroutine
 

@@ -11,7 +11,7 @@ module exits
     interface message
         module procedure message_char, message_char_double, message_char_int, &
           message_level_char, message_level_char_double, message_level_char_int, &
-          message_char_int_char_int 
+          message_char_int_char_int, message_level_char_int3 
     end interface
 
     interface message_min_max
@@ -118,6 +118,23 @@ contains
 
         full_message = full_message // "> " // mess
         if (nrank == 0) write(stdout,'(A,A,I0)') full_message, " = ", val
+    end subroutine
+
+    subroutine message_level_char_int3(level,mess,val1,val2,val3)
+        integer, intent(in) :: level
+        character(len=*), intent(in) :: mess
+        integer, intent(in) :: val1, val2, val3
+        character(:), allocatable :: full_message
+        integer :: i
+        
+        full_message = ""
+        do i=1,level
+            full_message = full_message // "    "
+        end do
+
+        full_message = full_message // "> " // mess
+        if (nrank == 0) write(stdout,'(A,A,I0,A,I0,A,I0)') full_message, &
+          " = ", val1, ",", val2, ",", val3
     end subroutine
 
     subroutine message_minmax_int(level,mess,valmin, valmax)

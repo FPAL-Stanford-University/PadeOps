@@ -46,9 +46,11 @@ subroutine sendRecvHaloModes(this,modeData)
 
   ! Find all modes inside halo regions
   sendCount = 0
-  call getSendCount(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,sendCount)
+  call getSendCount(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
+    PEminY, PEmaxY, PEminZ, PEmaxZ, sendCount)
 
   allocate(sendBuff(sendCount,this%nvars))
+  sendBuff = 0.d0
 
   call packSendBuffer(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
     PEminY,PEmaxY,PEminZ,PEmaxZ,yDom,zDom,modeData,periodicShiftY,&
@@ -90,11 +92,11 @@ subroutine sendRecvHaloModes(this,modeData)
     stg = eng + 1
   end do
 
+  nullify(yloc, zloc)
   ! Append modeData
   call mergeModes(modeData, newModes, this%nvars)
 
   deallocate(recvBuff,sendBuff,newModes)
-  nullify(yloc, zloc)
 end subroutine
 
 subroutine mergeModes(mergedModes, newModes, nvars)
@@ -118,30 +120,12 @@ subroutine mergeModes(mergedModes, newModes, nvars)
   deallocate(tmpData)
 
 end subroutine 
-
-
-subroutine copyMode(modeData, cpyArr, periodicShift)
-  real(rkind), dimension(:), intent(in) :: modeData
-  real(rkind), dimension(:), intent(inout) :: cpyArr
-  real(rkind), dimension(3), intent(in) :: periodicShift
-  integer :: n
-
-  cpyArr(1)  = modeData(1) + periodicShift(1)
-  cpyArr(2)  = modeData(2) + periodicShift(2)
-  cpyArr(3)  = modeData(3) + periodicShift(3)
-  
-  do n = 4,size(modeData)
-    cpyArr(n)  = modeData(n) 
-  end do
-
-end subroutine
   
 subroutine getneighbors(neighbor,PEybound,PEzbound,periodic)
   integer, dimension(4), intent(out) :: neighbor
   real(rkind), dimension(2), intent(in) :: PEybound, PEzbound
   logical, dimension(3), intent(in) :: periodic
   integer :: ierr, i
-  real(rkind), parameter :: tol = 1.d-13
 
   ! For X-pencil
   call MPI_CART_SHIFT(DECOMP_2D_COMM_CART_X, 0, 1, &
@@ -241,18 +225,32 @@ subroutine testMPIsendRecv()
   call message('Test PASSED!')
 end subroutine
 
-subroutine getSendCount(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,sendCount)
+subroutine getSendCount(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
+    PEminY, PEmaxY, PEminZ, PEmaxZ, sendCount)
   real(rkind), dimension(:), intent(in) :: yloc, zloc
-  real(rkind), intent(in) :: haloMinY, haloMaxY, haloMinZ, haloMaxZ
+  real(rkind), intent(in) :: haloMinY, haloMaxY, haloMinZ, haloMaxZ, &
+    PEminY, PEmaxY, PEminZ, PEmaxZ
   integer, intent(inout) :: sendCount
-  integer :: n
-
+  integer :: n, sendCountAdd = 0
+  
   do n = 1,size(yloc)
-    if (yloc(n) < haloMinY .or. yloc(n) > haloMaxY .or. &
-        zloc(n) < haloMinZ .or. zloc(n) > haloMinZ) then
+    if (insideHaloRegion(yloc(n),zloc(n),haloMinY,haloMaxY,haloMinZ,haloMaxZ)) then 
+    !if (yloc(n) < haloMinY .or. yloc(n) > haloMaxY .or. &
+    !    zloc(n) < haloMinZ .or. zloc(n) > haloMaxZ) then
       sendCount = sendCount + 1
     end if
   end do
+
+  ! Need to account for periodic shifts as well. For example, if the problem is 
+  ! periodic in Y, each mode must be copied twice at y = y+Ly and y = y-Ly.
+  ! If it is periodic in Z there is another factor of two, and if both are 
+  ! periodic then another factor of 2 to account for (y,z) --> (y+/-Ly,z+/-Lz)
+  ! This is inefficient in terms of communication and storage, but simple
+  ! to implement. A future task can be to optimize this
+  if (periodicBCs(2))                      sendCountAdd = sendCountAdd + 2*sendCount
+  if (periodicBCs(3))                      sendCountAdd = sendCountAdd + 2*sendCount
+  if (periodicBCs(2) .and. periodicBCs(3)) sendCountAdd = sendCountAdd + 4*sendCount
+  sendCount = sendCount + sendCountAdd
 end subroutine
 
 subroutine packSendBuffer(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
@@ -265,6 +263,7 @@ subroutine packSendBuffer(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
   !             boundary?
   ! If Case 2 is true then we must shift the mode location by one
   ! domain length for the velocity rendering routine to work
+  use GaborModeRoutines, only: copyMode
   real(rkind), dimension(:), intent(in) :: yloc, zloc
   real(rkind), intent(in) :: haloMinY, haloMaxY, PEminY, PEmaxY
   real(rkind), intent(in) :: haloMinZ, haloMaxZ, PEminZ, PEmaxZ
@@ -272,47 +271,29 @@ subroutine packSendBuffer(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
   real(rkind), dimension(:,:), intent(in) :: modeData
   real(rkind), dimension(3), intent(in) :: periodicShiftY, periodicShiftZ
   real(rkind), dimension(:,:), intent(inout) :: sendBuff
-  real(rkind), dimension(3) :: periodicShift
+  real(rkind) :: sgnY = 1.d0, sgnZ = 1.d0
   integer :: idx
-  real(rkind) :: tol = 1.d-12
   integer :: n
 
   idx = 0
-  periodicShift = 0.d0
   do n = 1,size(yloc)
-    if (yloc(n) < haloMinY .or. yloc(n) > haloMaxY .or. &
-        zloc(n) < haloMinZ .or. zloc(n) > haloMaxZ) then
+    if (insideHaloRegion(yloc(n),zloc(n),haloMinY,haloMaxY,haloMinZ,haloMaxZ)) then 
+    !if (yloc(n) < haloMinY .or. yloc(n) > haloMaxY .or. &
+    !    zloc(n) < haloMinZ .or. zloc(n) > haloMaxZ) then
       idx = idx + 1
-      if ( (yloc(n) < haloMinY) .and. (abs(PEminY - yDom(1)) < tol) ) &
-        periodicShift = periodicShift + periodicShiftY
-      if ( (yloc(n) > haloMaxY) .and. (abs(PEmaxY - yDom(2)) < tol) ) &
-        periodicShift = periodicShift - periodicShiftY
-      if ( (zloc(n) < haloMinZ) .and. (abs(PEminZ - zDom(1)) < tol) ) &
-        periodicShift = periodicShift + periodicShiftZ
-      if ( (zloc(n) > haloMaxZ) .and. (abs(PEmaxZ - zDom(2)) < tol) ) &
-        periodicShift = periodicShift - periodicShiftZ
-      call copyMode(modeData(n,:), sendBuff(idx,:), periodicShift)
+      call copyMode(modeData(n,:), sendBuff(idx,:), [0.d0, 0.d0, 0.d0])
     end if
   end do
-  !do n = 1,size(yloc)
-  !  if (yloc(n) < haloMinY) then
-  !    if (abs(PEmin - Dom(1)) < tol .and. periodic) then
-  !      call copyMode(modeData(n,:), sendBuff(idx,:), periodicShift)
-  !      idx = idx + 1
-  !    else
-  !      call copyMode(modeData(n,:), sendBuff(idx,:))
-  !      idx = idx + 1
-  !    end if
-  !  else if (loc(n) > haloMax) then
-  !    if (abs(PEmax - Dom(2)) < tol .and. periodic) then
-  !      call copyMode(modeData(n,:), sendBuff(idx,:), -periodicShift)
-  !      idx = idx + 1
-  !    else
-  !      call copyMode(modeData(n,:), sendBuff(idx,:))
-  !      idx = idx + 1
-  !    end if
-  !  end if
-  !end do
+  if (periodicBCs(2)) then
+    call copyMode(sendBuff(1:idx,:), sendBuff(  idx+1:2*idx,:),  periodicShiftY)
+    call copyMode(sendbuff(1:idx,:), sendBuff(2*idx+1:3*idx,:), -periodicShiftY)
+    idx = 3*idx
+  end if
+  if (periodicBCs(3)) then
+    call copyMode(sendBuff(1:idx,:), sendBuff(  idx+1:2*idx,:),  periodicShiftZ)
+    call copyMode(sendbuff(1:idx,:), sendBuff(2*idx+1:3*idx,:), -periodicShiftZ)
+    idx = 3*idx
+  end if
 end subroutine
 
 subroutine sortAndExchangeModes(this, coor, coorMin, coorMax, neighLo, neighHi)
@@ -432,3 +413,12 @@ subroutine sortAndExchangeModes(this, coor, coorMin, coorMax, neighLo, neighHi)
   deallocate(sendBufferLo, sendBufferHi, recvBufferLo, recvBufferHi)
 
 end subroutine 
+function insideHaloRegion(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ) result (modeInside)
+  real(rkind), intent(in) :: yloc, zloc, haloMinY, haloMaxY, haloMinZ, haloMaxZ
+  logical :: modeInside
+  
+  modeInside = .false.  
+  if (yloc < haloMinY .or. yloc > haloMaxY .or. &
+      zloc < haloMinZ .or. zloc > haloMaxZ) modeInside = .true.
+
+end function

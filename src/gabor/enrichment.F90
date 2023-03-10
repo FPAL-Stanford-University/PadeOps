@@ -17,10 +17,10 @@ module enrichmentMod
   implicit none
 
   private
+  real(rkind), parameter :: tol = 1.d-13
   integer, dimension(4) :: neighbor
   integer, dimension(2) :: coords, dims
   logical, dimension(3) :: periodicBCs
-  real(rkind), parameter :: tol = 1.d-13
 
   real(rkind), dimension(2) :: xDom, yDom, zDom
 
@@ -98,7 +98,9 @@ module enrichmentMod
       procedure          :: wrapupTimeStep
       procedure          :: dumpSmallScales
       procedure          :: continueSimulation
-      procedure          :: dumpData
+      procedure, private :: dumpDataAll
+      procedure, private :: dumpDataLoc
+      generic            :: dumpData => dumpDataAll, dumpDataLoc
       procedure          :: generateModes  
       procedure, private :: doDebugChecks
       procedure, private :: applyPeriodicOffsets
@@ -141,6 +143,7 @@ contains
     real(rkind) :: strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax
     logical :: readGradients = .false.
     logical :: genModesOnUniformGrid = .false.
+    logical :: dumpMeshInfo = .false.
     
     namelist /IO/      outputdir, writeIsotropicModes, readGradients
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
@@ -149,7 +152,7 @@ contains
       strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
-    namelist /TESTING/ genModesOnUniformGrid
+    namelist /TESTING/ genModesOnUniformGrid, dumpMeshInfo
 
     kminFact = 1.d0 
     strainClipXmin = -1.D99; strainClipXmax = 1.D99
@@ -227,12 +230,12 @@ contains
 
     ! User safegaurds -- make sure the mode supports don't span more than two
     ! MPI ranks
-    call assert(p_minval(this%smallScales%gpC%xsz(2)) >= this%nysupp,&
-      'The mode support widths span more than one MPI rank. Use fewer ranks'//&
-      ' or adjust the topology -- xsz(2) >= nysupp')
-    call assert(p_minval(this%smallScales%gpC%xsz(3)) >= this%nzsupp,&
-      'The mode support widths span more than one MPI rank. Use fewer ranks'//&
-      ' or adjust the topology -- xsz(3) >= nzsupp')
+    !call assert(p_minval(this%smallScales%gpC%xsz(2)) >= this%nysupp,&
+    !  'The mode support widths span more than one MPI rank. Use fewer ranks'//&
+    !  ' or adjust the topology -- xsz(2) >= nysupp')
+    !call assert(p_minval(this%smallScales%gpC%xsz(3)) >= this%nzsupp,&
+    !  'The mode support widths span more than one MPI rank. Use fewer ranks'//&
+    !  ' or adjust the topology -- xsz(3) >= nzsupp')
 
     ! Compute the number of modes
     this%nmodes = this%nk*this%ntheta * &
@@ -274,6 +277,10 @@ contains
     periodicBCs(2) = yPeriodic
     periodicBCs(3) = zPeriodic
     call getneighbors(neighbor,this%PEybound,this%PEzbound,periodicBCs)
+
+    if (dumpMeshInfo) call dumpMeshDetails(this%QHgrid%xE, this%QHgrid%yE, &
+      this%QHgrid%zE, this%largeScales%mesh, this%smallScales%mesh, &
+      this%outputdir)
    
   end subroutine
 

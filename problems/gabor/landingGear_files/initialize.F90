@@ -1,4 +1,4 @@
-module HIT_Periodic_parameters
+module LandingGearParameters
     use exits,            only: message
     use kind_parameters,  only: rkind
     use constants,        only: two, pi
@@ -7,11 +7,12 @@ module HIT_Periodic_parameters
     real(rkind) :: xmin = 0.d0, xmax = 1.d0
     real(rkind) :: ymin = 0.d0, ymax = 1.d0
     real(rkind) :: zmin = 0.d0, zmax = 1.d0
+    logical :: genScale3 = .true.
 
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use HIT_Periodic_parameters    
+    use LandingGearParameters    
     use kind_parameters,  only: rkind, clen
     use constants,        only: one
     use decomp_2d,        only: decomp_info
@@ -23,7 +24,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn, nxg, nyg, nzg
-    namelist /landingGearINPUT/ xmin, xmax, ymin, ymax, zmin, zmax
+    namelist /landingGearINPUT/ xmin, xmax, ymin, ymax, zmin, zmax, genScale3
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11
@@ -58,7 +59,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use HIT_Periodic_parameters
+    use LandingGearParameters
     use PadeDerOps, only: Pade6Stagg
     use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one, two, pi, half
@@ -127,7 +128,7 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 end subroutine
 
 subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
-    use HIT_Periodic_parameters    
+    use LandingGearParameters    
     use kind_parameters,    only: rkind, clen 
     use constants, only: one, zero
     implicit none
@@ -141,7 +142,7 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
-    use HIT_Periodic_parameters    
+    use LandingGearParameters    
     use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one
     implicit none
@@ -159,7 +160,7 @@ end subroutine
 
 
 subroutine set_Reference_Temperature(inputfile, Tref)
-    use HIT_Periodic_parameters    
+    use LandingGearParameters    
     use kind_parameters,    only: rkind, clen 
     implicit none 
     character(len=*),                intent(in)    :: inputfile

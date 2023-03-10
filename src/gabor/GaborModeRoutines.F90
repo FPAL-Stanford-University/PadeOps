@@ -13,6 +13,10 @@ module GaborModeRoutines
   ! generated or not
   real(rkind), parameter :: logMapFact = 4.d0
   real(rkind), parameter :: initFact = 8.145d0
+
+  interface copyMode
+    module procedure copyModeSingle, copyModeMultiple
+  end interface
   
   contains
   
@@ -163,5 +167,37 @@ module GaborModeRoutines
       Z_ACT = real(HF,rkind)
       RETURN
     END SUBROUTINE PFQ 
+
+    subroutine copyModeSingle(modeData, cpyArr, periodicShift)
+      real(rkind), dimension(:), intent(in) :: modeData
+      real(rkind), dimension(:), intent(inout) :: cpyArr
+      real(rkind), dimension(3), intent(in) :: periodicShift
+      integer :: n
+    
+      cpyArr(1)  = modeData(1) + periodicShift(1)
+      cpyArr(2)  = modeData(2) + periodicShift(2)
+      cpyArr(3)  = modeData(3) + periodicShift(3)
+      
+      do n = 4,size(modeData)
+        cpyArr(n)  = modeData(n) 
+      end do
+    
+    end subroutine
+      
+    subroutine copyModeMultiple(modeData, cpyArr, periodicShift)
+      real(rkind), dimension(:,:), intent(in) :: modeData
+      real(rkind), dimension(:,:), intent(inout) :: cpyArr
+      real(rkind), dimension(3), intent(in) :: periodicShift
+      integer :: n
+    
+      cpyArr(:,1)  = modeData(:,1) + periodicShift(1)
+      cpyArr(:,2)  = modeData(:,2) + periodicShift(2)
+      cpyArr(:,3)  = modeData(:,3) + periodicShift(3)
+      
+      do n = 4,size(modeData,2)
+        cpyArr(:,n)  = modeData(:,n) 
+      end do
+    
+    end subroutine
 
 end module

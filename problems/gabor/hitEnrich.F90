@@ -8,6 +8,7 @@ program hitEnrich
   use mpi
   use reductions
   use decomp_2d,               only: nrank, nproc
+  use exits,                   only: message
   implicit none
 
   character(len=clen) :: inputfileLS, inputfileSS, inputfileGM 
@@ -33,8 +34,11 @@ program hitEnrich
   call enrich%generateModes()
   call enrich%renderVelocity()
   call enrich%dumpSmallScales()
-  print*, p_sum(sum(abs(smallScales%u))) 
-  
+  print*, p_sum(sum(abs(smallScales%u)))
+  call message(0,'Problem summary:')
+  call message(1,'nxsupp,nysupp,nzsupp:', enrich%nxsupp, enrich%nysupp, enrich%nzsupp) 
+  call message(1,'max(u)',p_maxval(maxval(smallscales%u)))  
+  call message(1,'min(u)',p_minval(minval(smallscales%u)))  
   !do while (enrich%continueSimulation())
   !  call enrich%updateLargeScales(timeAdvance=.true.)
   !  call enrich%advanceTime()

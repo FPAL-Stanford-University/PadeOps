@@ -20,6 +20,7 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     real(single_kind) :: wxSupport, wySupport, wzSupport, du, dv, dw
     real(single_kind), parameter :: pi_single = 4.0*atan(1.0)
     integer, dimension(2) :: shift
+    real(rkind) :: xtgt, ytgt, ztgt, distance
     
     this%utmp = 0.e0
     this%vtmp = 0.e0
@@ -43,102 +44,112 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     ken = this%smallScales%gpC%xen(3)
 
     if (this%genModesOnUniformGrid) then
-      shift = [2,0]
-    else
       shift = [1,1]
-    end if
-
-    do n = 1,size(x) 
-      ! NOTE: These are global indices of the physical domain
-      ! NOTE: The contribution of Gabor modes on neighboring processes is not
-      ! accounted for here, nor is the periodic contribution for periodic
-      ! directions whose data resides exlusively on the process (e.g. in x)
-      !iist = max(ceiling((x(n) - xDom(1))/this%smallScales%dx) - this%nxsupp/2 - 1, ist)
-      !iien = min(floor(  (x(n) - xDom(1))/this%smallScales%dx) + this%nxsupp/2 + 1, ien)
-
-      !jjst = max(ceiling((y(n) - yDom(1))/this%smallScales%dy) - this%nysupp/2 - 1, jst)
-      !jjen = min(floor(  (y(n) - yDom(1))/this%smallScales%dy) + this%nysupp/2 + 1, jen)
-
-      !kkst = max(ceiling((z(n) - zDom(1))/this%smallScales%dz) - this%nzsupp/2 - 1, kst)
-      !kken = min(floor(  (z(n) - zDom(1))/this%smallScales%dz) + this%nzsupp/2 + 1, ken)
       
-      iist = max(nint((x(n) - xDom(1) - wxSupport/2 - this%smallScales%dx/2)/this%smallScales%dx) + shift(1), ist)
-      iien = min(nint((x(n) - xDom(1) + wxSupport/2 - this%smallScales%dx/2)/this%smallScales%dx) + shift(2), ien)
-
-      jjst = max(nint((y(n) - yDom(1) - wySupport/2 - this%smallScales%dy/2)/this%smallScales%dy) + shift(1), jst)
-      jjen = min(nint((y(n) - yDom(1) + wySupport/2 - this%smallScales%dy/2)/this%smallScales%dy) + shift(2), jen)
-
-      kkst = max(nint((z(n) - zDom(1) - wzSupport/2 - this%smallScales%dz/2)/this%smallScales%dz) + shift(1), kst)
-      kken = min(nint((z(n) - zDom(1) + wzSupport/2 - this%smallScales%dz/2)/this%smallScales%dz) + shift(2), ken)
-      
-      !iist = max(floor(  x(n)/this%smallScales%dx) - this%nxsupp/2, ist)
-      !iien = min(ceiling(x(n)/this%smallScales%dx) + this%nxsupp/2, ien)
-
-      !jjst = max(floor(  y(n)/this%smallScales%dy) - this%nysupp/2, jst)
-      !jjen = min(ceiling(y(n)/this%smallScales%dy) + this%nysupp/2, jen)
-      !
-      !kkst = max(floor(  z(n)/this%smallScales%dz) - this%nzsupp/2, kst)
-      !kken = min(ceiling(z(n)/this%smallScales%dz) + this%nzsupp/2, ken)
-      
-      if (iien < iist .or. jjen < jjst .or. kken < kkst) then
-        continue
-      else
-        ! Cast variables to single precision
-        kxs = 0.e0!castSingle(kx(n))
-        kys = 0.e0!castSingle(ky(n))
-        kzs = 0.e0!castSingle(kz(n))
+      do n = 1,size(x) 
+        ! NOTE: These are global indices of the physical domain
+        ! NOTE: The contribution of Gabor modes on neighboring processes is not
+        ! accounted for here, nor is the periodic contribution for periodic
+        ! directions whose data resides exlusively on the process (e.g. in x)
+        call getStartEndGlobalIndices(x(n), xDom(1), wxSupport, this%smallScales%dx, &
+          shift, ist, ien, iist, iien)
+        call getStartEndGlobalIndices(y(n), yDom(1), wySupport, this%smallScales%dy, &
+          shift, jst, jen, jjst, jjen)
+        call getStartEndGlobalIndices(z(n), zDom(1), wzSupport, this%smallScales%dz, &
+          shift, kst, ken, kkst, kken)
         
-        xs  = castSingle(x(n))
-        ys  = castSingle(y(n))
-        zs  = castSingle(z(n))
+        if (iien < iist .or. jjen < jjst .or. kken < kkst) then
+          continue
+        else
 
-        uRs = 0.5e0!castSingle(uR(n))
-        uIs = 0.e0!castSingle(uI(n))
-        vRs = 0.e0!castSingle(vR(n))
-        vIs = 0.e0!castSingle(vI(n))
-        wRs = 0.e0!castSingle(wR(n))
-        wIs = 0.e0!castSingle(wI(n))
-
-
-        do k = kkst,kken
-          zF = real(zDom(1),kind=4) + dz*castSingle(k - 1)
-          kdotx3 = kzs*(zF - zs)
-          !fz = max(cos(pi_single*(zF - zs)/wzSupport), 0.e0)
-          fz = 1.e0
-          do j = jjst,jjen
-            yF = real(yDom(1),kind=4) + dy*castSingle(j - 1)
-            kdotx2 = kys*(yF - ys)
-            !fy = max(cos(pi_single*(yF - ys)/wySupport), 0.e0)
-            fy = 1.e0
-            do i = iist,iien
-              xF = real(xDom(1),kind=4) + dx*castSingle(i - 1)
-              kdotx = kdotx2 + kdotx3 + kxs*(xF - xs)
-
-              cs = cos(kdotx)
-              ss = sin(kdotx)
-
-              !fx = max(cos(pi_single*(xF - xs)/wxSupport), 0.e0)
-              fx = 1.e0
-              f = fx*fy*fz
-
-              du = 2*f*(uRs*cs - uIs*ss)
-              dv = 2*f*(vRs*cs - vIs*ss)
-              dw = 2*f*(wRs*cs - wIs*ss)
-
-              this%utmp(i,j,k) = this%utmp(i,j,k) + du 
-              this%vtmp(i,j,k) = this%vtmp(i,j,k) + dv 
-              this%wtmp(i,j,k) = this%wtmp(i,j,k) + dw
-              
+          do k = kkst,kken
+            ztgt = (k-1)*dz
+            do j = jjst,jjen
+              ytgt = (j-1)*dy
+              do i = iist,iien
+                xtgt = (i-1)*dx
+                distance = sqrt( (x(n) - xtgt)**2 + (y(n) - ytgt)**2 + (z(n) - ztgt)**2)
+                du = ceiling(wxSupport/2 - distance) ! 1 for modes inside and 0 for modes outside
+                this%utmp(i,j,k) = this%utmp(i,j,k) + du 
+              end do
             end do
           end do
-        end do
-      end if
-      if (mod(n,100000) == 0) then
-        write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
-        call message(trim(mssg))
-      end if
-    end do
+        end if
+        if (mod(n,100000) == 0) then
+          write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
+          call message(trim(mssg))
+        end if
+      end do
+    else
+      shift = [1,1]
+      do n = 1,size(x) 
+        ! NOTE: These are global indices of the physical domain
+        ! NOTE: The contribution of Gabor modes on neighboring processes is not
+        ! accounted for here, nor is the periodic contribution for periodic
+        ! directions whose data resides exlusively on the process (e.g. in x)
+        
+        call getStartEndGlobalIndices(x(n), xDom(1), wxSupport, this%smallScales%dx, &
+          shift, ist, ien, iist, iien)
+        call getStartEndGlobalIndices(y(n), yDom(1), wySupport, this%smallScales%dy, &
+          shift, jst, jen, jjst, jjen)
+        call getStartEndGlobalIndices(z(n), zDom(1), wzSupport, this%smallScales%dz, &
+          shift, kst, ken, kkst, kken)
+        
+        if (iien < iist .or. jjen < jjst .or. kken < kkst) then
+          continue
+        else
+          ! Cast variables to single precision
+          kxs = castSingle(kx(n))
+          kys = castSingle(ky(n))
+          kzs = castSingle(kz(n))
+          
+          xs  = castSingle(x(n))
+          ys  = castSingle(y(n))
+          zs  = castSingle(z(n))
 
+          uRs = castSingle(uR(n))
+          uIs = castSingle(uI(n))
+          vRs = castSingle(vR(n))
+          vIs = castSingle(vI(n))
+          wRs = castSingle(wR(n))
+          wIs = castSingle(wI(n))
+
+          do k = kkst,kken
+            zF = real(zDom(1),kind=4) + dz*castSingle(k - 1)
+            kdotx3 = kzs*(zF - zs)
+            fz = max(cos(pi_single*(zF - zs)/wzSupport), 0.e0)
+            do j = jjst,jjen
+              yF = real(yDom(1),kind=4) + dy*castSingle(j - 1)
+              kdotx2 = kys*(yF - ys)
+              fy = max(cos(pi_single*(yF - ys)/wySupport), 0.e0)
+              do i = iist,iien
+                xF = real(xDom(1),kind=4) + dx*castSingle(i - 1)
+                kdotx = kdotx2 + kdotx3 + kxs*(xF - xs)
+
+                cs = cos(kdotx)
+                ss = sin(kdotx)
+
+                fx = max(cos(pi_single*(xF - xs)/wxSupport), 0.e0)
+                f = fx*fy*fz
+
+                du = 2*f*(uRs*cs - uIs*ss)
+                dv = 2*f*(vRs*cs - vIs*ss)
+                dw = 2*f*(wRs*cs - wIs*ss)
+
+                this%utmp(i,j,k) = this%utmp(i,j,k) + du 
+                this%vtmp(i,j,k) = this%vtmp(i,j,k) + dv 
+                this%wtmp(i,j,k) = this%wtmp(i,j,k) + dw
+                
+              end do
+            end do
+          end do
+        end if
+        if (mod(n,100000) == 0) then
+          write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
+          call message(trim(mssg))
+        end if
+      end do
+    end if
     this%smallScales%u  = this%smallScales%u  + real(this%utmp,rkind)
     this%smallScales%v  = this%smallScales%v  + real(this%vtmp,rkind)
     this%smallScales%wC = this%smallScales%wC + real(this%wtmp,rkind)
@@ -213,3 +224,13 @@ subroutine renderVelocity(this)
   nullify(haloBuffY,haloBuffZ)
 end subroutine  
 
+subroutine getstartEndGlobalIndices(loc, domst, wSupport, delta, shift, st, en, stg, eng)
+  real(rkind), intent(in) :: loc, delta, domst
+  real(single_kind), intent(in) :: wSupport
+  integer, dimension(2), intent(in) :: shift
+  integer, intent(in) :: st, en
+  integer, intent(out) :: stg, eng
+
+  stg = max(ceiling((loc - domst - wSupport/2 - delta/2)/delta) + shift(1), st)
+  eng = min(ceiling((loc - domst + wSupport/2 - delta/2)/delta) + shift(2), en)
+end subroutine

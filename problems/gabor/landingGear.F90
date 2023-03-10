@@ -9,6 +9,7 @@ program landingGear
   use interpolatorMod,         only: interpolator
   use reductions, only: p_sum
   use exits, only: gracefulExit
+  use LandingGearParameters,   only: genScale3
   implicit none
 
   character(len=clen) :: inputS1, inputS2, inputS3, inputG12, inputG23
@@ -53,7 +54,8 @@ program landingGear
   print*, p_sum(sum(abs(S2%u)))
   print*, p_sum(sum(abs(S2%v)))
   print*, p_sum(sum(abs(S2%wC)))
-call gracefulExit('stop',ierr)
+
+  if (.not. genScale3) call gracefulExit('stop',ierr)
 
   !! Update Scale 2 for Scale 3
   call interpAndAddGrids(S1, S2, interpS1ToS2)
@@ -64,6 +66,9 @@ call gracefulExit('stop',ierr)
   call S3%ComputeCD06Gradients([.false.,.false.,.false.])
   if (dumpIndividualScales) call enrich23%dumpSmallScales()
 
+  print*, p_sum(sum(abs(S3%u)))
+  print*, p_sum(sum(abs(S3%v)))
+  print*, p_sum(sum(abs(S3%wC)))
 
   call enrich12%destroy()
   call enrich23%destroy()
