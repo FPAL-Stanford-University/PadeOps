@@ -220,7 +220,21 @@ contains
     npad_ForinitModes = max(ceiling(real(smallScales%ny)/real(largeScales%ny)), & 
         ceiling(real(smallScales%nz)/real(largeScales%nz))) 
     call this%pgForInitModes%init(prow,pcol,smallScales%nx,smallScales%ny,smallScales%nz,npad_ForinitModes)
-    call this%QHgrid%init(inputfile, this%largeScales, this%smallScales, xDom, yDom, zDom)
+    
+    ! Set things up for distributed memory
+    call MPI_Cart_Get(DECOMP_2D_COMM_CART_X,2,dims,periodicBCs(2:3),coords,ierr)
+    periodicBCs(1) = xPeriodic
+    periodicBCs(2) = yPeriodic
+    periodicBCs(3) = zPeriodic
+    call getneighbors(neighbor,this%PEybound,this%PEzbound,periodicBCs)
+
+    ! Initialize QH grid
+    call this%QHgrid%init(inputfile, this%largeScales, this%smallScales, xDom, yDom, zDom, dims, coords)
+    
+    ! Physical edges of the MPI rank
+    this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%isz + 1)]
+    this%PEybound = [this%QHgrid%yE(1), this%QHgrid%yE(this%QHgrid%jsz + 1)]
+    this%PEzbound = [this%QHgrid%zE(1), this%QHgrid%zE(this%QHgrid%ksz + 1)]
 
     this%nxsupp = p_maxval(nint(2*this%QHgrid%dx/this%smallScales%dx))
     this%nysupp = p_maxval(nint(2*this%QHgrid%dy/this%smallScales%dy))
@@ -256,16 +270,6 @@ contains
     allocate(this%utmp(ist:ien,jst:jen,kst:ken))
     allocate(this%vtmp(ist:ien,jst:jen,kst:ken))
     allocate(this%wtmp(ist:ien,jst:jen,kst:ken))
-
-    ! Set things up for distributed memory
-    this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%isz + 1)]
-    this%PEybound = [this%QHgrid%yE(1), this%QHgrid%yE(this%QHgrid%jsz + 1)]
-    this%PEzbound = [this%QHgrid%zE(1), this%QHgrid%zE(this%QHgrid%ksz + 1)]
-    call MPI_Cart_Get(DECOMP_2D_COMM_CART_X,2,dims,periodicBCs(2:3),coords,ierr)
-    periodicBCs(1) = xPeriodic
-    periodicBCs(2) = yPeriodic
-    periodicBCs(3) = zPeriodic
-    call getneighbors(neighbor,this%PEybound,this%PEzbound,periodicBCs)
 
     if (dumpMeshInfo) call dumpMeshDetails(this%QHgrid%xE, this%QHgrid%yE, &
       this%QHgrid%zE, this%QHgrid%gID, this%largeScales%mesh, this%smallScales%mesh, &
