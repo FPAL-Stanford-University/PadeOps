@@ -66,12 +66,14 @@ subroutine dumpDataLoc(this,x,y,z,fdesc)
   end if
 end subroutine
 
-subroutine dumpMeshDetails(QHxE, QHyE, QHzE, largeScalesMesh, smallScalesMesh, outputdir)
+subroutine dumpMeshDetails(QHxE, QHyE, QHzE, QHgID, largeScalesMesh, smallScalesMesh, outputdir)
   use basic_io,  only: write_1D_ascii
   real(rkind), dimension(:), intent(in) :: QHxE, QHyE, QHzE
+  integer, dimension(:,:,:), intent(in) :: QHgID
   real(rkind), dimension(:,:,:,:), intent(in), target :: largeScalesMesh, smallScalesMesh
   character(len=*), intent(in) :: outputdir
   real(rkind), dimension(:), pointer :: xL, yL, zL, xS, yS, zS
+  real(rkind), dimension(:), allocatable :: QHgIDvec
   character(len=clen) :: fname
 
   xL => largeScalesMesh(:,1,1,1)
@@ -82,12 +84,15 @@ subroutine dumpMeshDetails(QHxE, QHyE, QHzE, largeScalesMesh, smallScalesMesh, o
   yS => smallScalesMesh(1,:,1,2)
   zS => smallScalesMesh(1,1,:,3)
 
+  QHgIDvec = real(reshape(QHgID,[size(QHgID)]),rkind)
   write(fname,'(A,I2.2,A)')trim(outputdir)//'/rank',nrank,'_QHxE.txt'
   call write_1D_ascii(QHxE,fname)
   write(fname,'(A,I2.2,A)')trim(outputdir)//'/rank',nrank,'_QHyE.txt'
   call write_1D_ascii(QHyE,fname)
   write(fname,'(A,I2.2,A)')trim(outputdir)//'/rank',nrank,'_QHzE.txt'
   call write_1D_ascii(QHzE,fname)
+  write(fname,'(A,I2.2,A)')trim(outputdir)//'/rank',nrank,'_QHgID.txt'
+  call write_1D_ascii(QHgIDvec,fname)
 
   write(fname,'(A,I2.2,A)')trim(outputdir)//'/rank',nrank,'_xL.txt'
   call write_1D_ascii(xL,fname)
@@ -104,4 +109,5 @@ subroutine dumpMeshDetails(QHxE, QHyE, QHzE, largeScalesMesh, smallScalesMesh, o
   call write_1D_ascii(zS,fname)
 
   nullify(xL, yL, zL, xS, yS, zS)
+  deallocate(QHgIDvec)
 end subroutine

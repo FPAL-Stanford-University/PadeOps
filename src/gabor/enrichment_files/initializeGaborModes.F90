@@ -37,7 +37,6 @@ subroutine generateIsotropicModes(this)
 
   ! Misc
   integer :: ierr, kst, ken, n
-  integer :: nxQH, nyQH, istQH, jstQH, kstQH
   integer :: ii, jj, kk, nside, iter
   real(rkind) :: dxsub, dysub, dzsub
 
@@ -60,9 +59,9 @@ subroutine generateIsotropicModes(this)
   ! Allocate memory
   nk = this%nk
   ntheta = this%ntheta 
-  isz = this%QHgrid%gpC%xsz(1) 
-  jsz = this%QHgrid%gpC%xsz(2)
-  ksz = this%QHgrid%gpC%xsz(3)
+  isz = this%QHgrid%isz 
+  jsz = this%QHgrid%jsz
+  ksz = this%QHgrid%ksz
 
   allocate(kedge(nk+1))
   allocate(kmag(nk),dk(nk),dkmodes(nk*ntheta))
@@ -84,18 +83,11 @@ subroutine generateIsotropicModes(this)
   allocate(KE_loc(nk*ntheta,isz,jsz,ksz))
   allocate( L_loc(nk*ntheta,isz,jsz,ksz))
 
-  nxQH = this%QHgrid%gpC%xsz(1)
-  nyQH = this%QHgrid%gpC%ysz(2)
-
-  istQH = this%QHgrid%gpC%xst(1)
-  jstQH = this%QHgrid%gpC%xst(2)
-  kstQH = this%QHgrid%gpC%xst(3)
-  
-  do k = 1,this%QHgrid%gpC%xsz(3)
+  do k = 1,this%QHgrid%ksz
     zmin = this%QHgrid%zE(k)
-    do j = 1,this%QHgrid%gpC%xsz(2)
+    do j = 1,this%QHgrid%jsz
       ymin = this%QHgrid%yE(j)
-      do i = 1,this%QHgrid%gpC%xsz(1)
+      do i = 1,this%QHgrid%isz
         xmin = this%QHgrid%xE(i)
         
         seedFact(1) = get_seed_from_location(this%QHgrid%xC(i),this%QHgrid%yC(j),this%QHgrid%zC(k),1.D18,this%QHgrid%gID(i,j,k),1) 

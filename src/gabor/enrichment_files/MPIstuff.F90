@@ -271,7 +271,6 @@ subroutine packSendBuffer(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
   real(rkind), dimension(:,:), intent(in) :: modeData
   real(rkind), dimension(3), intent(in) :: periodicShiftY, periodicShiftZ
   real(rkind), dimension(:,:), intent(inout) :: sendBuff
-  real(rkind) :: sgnY = 1.d0, sgnZ = 1.d0
   integer :: idx
   integer :: n
 

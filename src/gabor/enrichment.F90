@@ -53,7 +53,6 @@ module enrichmentMod
     type(igrid), pointer :: largeScales, smallScales
     type(QHmesh), public :: QHgrid 
     real(rkind), dimension(2) :: PExbound, PEybound, PEzbound ! MPI rank boundaries
-    real(rkind), dimension(:,:,:,:), pointer :: duidxj_LS
     real(rkind) :: kmin, kmax
     logical :: imposeNoPenetrationBC = .false.
 
@@ -205,7 +204,6 @@ contains
     ! Get domain boundaries
     call getDomainBoundaries(xDom,yDom,zDom,largeScales%mesh)
 
-    this%duidxj_LS => largeScales%duidxjC
     this%isStratified = this%largeScales%isStratified
     if (this%isStratified) then
       this%nvars = 13
@@ -222,24 +220,15 @@ contains
     npad_ForinitModes = max(ceiling(real(smallScales%ny)/real(largeScales%ny)), & 
         ceiling(real(smallScales%nz)/real(largeScales%nz))) 
     call this%pgForInitModes%init(prow,pcol,smallScales%nx,smallScales%ny,smallScales%nz,npad_ForinitModes)
-    call this%QHgrid%init(inputfile, this%largeScales, xDom, yDom, zDom)
+    call this%QHgrid%init(inputfile, this%largeScales, this%smallScales, xDom, yDom, zDom)
 
-    this%nxsupp = nint(2*this%QHgrid%dx/this%smallScales%dx)
-    this%nysupp = nint(2*this%QHgrid%dy/this%smallScales%dy)
-    this%nzsupp = nint(2*this%QHgrid%dz/this%smallScales%dz)
-
-    ! User safegaurds -- make sure the mode supports don't span more than two
-    ! MPI ranks
-    !call assert(p_minval(this%smallScales%gpC%xsz(2)) >= this%nysupp,&
-    !  'The mode support widths span more than one MPI rank. Use fewer ranks'//&
-    !  ' or adjust the topology -- xsz(2) >= nysupp')
-    !call assert(p_minval(this%smallScales%gpC%xsz(3)) >= this%nzsupp,&
-    !  'The mode support widths span more than one MPI rank. Use fewer ranks'//&
-    !  ' or adjust the topology -- xsz(3) >= nzsupp')
+    this%nxsupp = p_maxval(nint(2*this%QHgrid%dx/this%smallScales%dx))
+    this%nysupp = p_maxval(nint(2*this%QHgrid%dy/this%smallScales%dy))
+    this%nzsupp = p_maxval(nint(2*this%QHgrid%dz/this%smallScales%dz))
 
     ! Compute the number of modes
     this%nmodes = this%nk*this%ntheta * &
-      this%QHgrid%gpC%xsz(1)*this%QHgrid%gpC%xsz(2)*this%QHgrid%gpC%xsz(3)
+      this%QHgrid%isz*this%QHgrid%jsz*this%QHgrid%ksz
     this%nmodesGlobal = this%nk*this%ntheta * &
       this%QHgrid%nx*this%QHgrid%ny*this%QHgrid%nz
     
@@ -269,9 +258,9 @@ contains
     allocate(this%wtmp(ist:ien,jst:jen,kst:ken))
 
     ! Set things up for distributed memory
-    this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%gpC%xsz(1) + 1)]
-    this%PEybound = [this%QHgrid%yE(1), this%QHgrid%yE(this%QHgrid%gpC%xsz(2) + 1)]
-    this%PEzbound = [this%QHgrid%zE(1), this%QHgrid%zE(this%QHgrid%gpC%xsz(3) + 1)]
+    this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%isz + 1)]
+    this%PEybound = [this%QHgrid%yE(1), this%QHgrid%yE(this%QHgrid%jsz + 1)]
+    this%PEzbound = [this%QHgrid%zE(1), this%QHgrid%zE(this%QHgrid%ksz + 1)]
     call MPI_Cart_Get(DECOMP_2D_COMM_CART_X,2,dims,periodicBCs(2:3),coords,ierr)
     periodicBCs(1) = xPeriodic
     periodicBCs(2) = yPeriodic
@@ -279,7 +268,7 @@ contains
     call getneighbors(neighbor,this%PEybound,this%PEzbound,periodicBCs)
 
     if (dumpMeshInfo) call dumpMeshDetails(this%QHgrid%xE, this%QHgrid%yE, &
-      this%QHgrid%zE, this%largeScales%mesh, this%smallScales%mesh, &
+      this%QHgrid%zE, this%QHgrid%gID, this%largeScales%mesh, this%smallScales%mesh, &
       this%outputdir)
    
   end subroutine
@@ -310,7 +299,7 @@ contains
 
     ! Compute the number of modes
     this%nmodes = this%nk*this%ntheta * &
-      this%QHgrid%gpC%xsz(1)*this%QHgrid%gpC%xsz(2)*this%QHgrid%gpC%xsz(3)
+      this%QHgrid%isz*this%QHgrid%jsz*this%QHgrid%ksz
     
     ! Allocate memory for mode data
     !allocate(this%rawData(this%nmodes,this%nvars))
@@ -533,8 +522,8 @@ contains
       ! X
       if (this%x(n) < xDom(1)) then
         call assert(periodicBCs(1),'periodicBCs(1)')
-        call assert(abs(this%QHgrid%xE(this%QHgrid%gpC%xsz(1)+1) - xDom(2)) < tol,&
-          'abs(this%QHgrid%xE(this%QHgrid%gpC%xsz(1)+1) - xDom(2)) < tol')
+        call assert(abs(this%QHgrid%xE(this%QHgrid%isz+1) - xDom(2)) < tol,&
+          'abs(this%QHgrid%xE(this%QHgrid%isz+1) - xDom(2)) < tol')
         this%x(n) = this%x(n) + Lx
       end if
 
@@ -548,8 +537,8 @@ contains
       ! Y
       if (this%y(n) < yDom(1)) then
         call assert(periodicBCs(2),'periodicBCs(2)')
-        call assert(abs(this%QHgrid%yE(this%QHgrid%gpC%xsz(2)+1) - yDom(2)) < tol,&
-          'abs(this%QHgrid%yE(this%QHgrid%gpC%xsz(2)+1) - yDom(2)) < tol')
+        call assert(abs(this%QHgrid%yE(this%QHgrid%jsz+1) - yDom(2)) < tol,&
+          'abs(this%QHgrid%yE(this%QHgrid%jsz+1) - yDom(2)) < tol')
         this%y(n) = this%y(n) + Ly
       end if
 
@@ -563,8 +552,8 @@ contains
       ! Z
       if (this%z(n) < zDom(1)) then
         call assert(periodicBCs(3),'periodicBCs(3)')
-        call assert(abs(this%QHgrid%zE(this%QHgrid%gpC%xsz(3)+1) - zDom(2)) < tol,&
-          'abs(this%QHgrid%zE(this%QHgrid%gpC%xsz(3)+1) - zDom(2)) < tol')
+        call assert(abs(this%QHgrid%zE(this%QHgrid%ksz+1) - zDom(2)) < tol,&
+          'abs(this%QHgrid%zE(this%QHgrid%ksz+1) - zDom(2)) < tol')
         this%z(n) = this%z(n) + Lz
       end if
 
