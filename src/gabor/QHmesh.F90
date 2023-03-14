@@ -1,11 +1,11 @@
 module QHmeshMod
   use kind_parameters,    only: rkind, clen
-  use decomp_2d,          only: nproc, nrank
+  use decomp_2d,          only: nproc, nrank, decomp_info, decomp_info_init, &
+                                decomp_info_finalize
   use incompressibleGrid, only: igrid
   use exits,              only: message
   use reductions,         only: p_minval, p_sum
   use fortran_assert,     only: assert
-  use mpi
   implicit none
 
   type QHmesh
@@ -25,21 +25,17 @@ module QHmeshMod
 
   contains
 
-    subroutine init(this,inputfile,largeScales,smallScales,xDom,yDom,zDom,&
-        dims, coords)
-      use gridtools, only: linspace
+    subroutine init(this,inputfile,largeScales,smallScales,xDom,yDom,zDom)
+      use QHmeshRoutines, only: getMeshEdgeValues
       class(QHmesh), intent(inout) :: this
       character(len=clen), intent(in) :: inputfile
       class(igrid), intent(in)  :: smallScales, largeScales
       real(rkind), dimension(2), intent(in) :: xDom, yDom, zDom
-      integer, dimension(2), intent(in) :: dims, coords
+      class(decomp_info), allocatable :: gpC
       integer :: nxLESperQH, nyLESperQH, nzLESperQH, nx, ny, nz
       integer :: ioUnit, ierr, ntotal
       integer :: i, j, k, ig, jg, kg
-      integer, dimension(nproc) :: jszAll, kszAll
-      integer, dimension(:,:), allocatable :: jszAllArr, kszAllArr
       real(rkind) :: dx, dy, dz
-      real(rkind) :: xst, xen, yst, yen, zst, zen
 
       namelist /QHMESH/ nxLESperQH, nyLESperQH, nzLESperQH
 
@@ -66,48 +62,27 @@ module QHmeshMod
 
       call message('*** NOTE: QHmesh class assumes x-pencil decomposition ***')
 
+      allocate(gpC)
+      call decomp_info_init(this%nx, this%ny, this%nz, gpC)
+
       ! Get the local domain bounds based on the small scales mesh
       dx = smallScales%mesh(2,1,1,1) - smallScales%mesh(1,1,1,1)
       dy = smallScales%mesh(1,2,1,2) - smallScales%mesh(1,1,1,2)
       dz = smallScales%mesh(1,1,2,3) - smallScales%mesh(1,1,1,3)
+
+      this%isz = gpC%xsz(1)
+      this%jsz = gpC%xsz(2)
+      this%ksz = gpC%xsz(3)
+
+      this%ist = gpC%xst(1)
+      this%jst = gpC%xst(2)
+      this%kst = gpC%xst(3)
       
-      ! Shift cell data to edges if needed to get mesh start/end
-      shift = 0.d0
-      if (xDom(1) - p_minval(minval(smallScales%mesh(1,1,1,1))) > 1.d-13)&
-        shift(1) = dx/2
-      if (yDom(1) - p_minval(minval(smallScales%mesh(1,1,1,2))) > 1.d-13)&
-        shift(2) = dy/2
-      if (zDom(1) - p_minval(minval(smallScales%mesh(1,1,1,3))) > 1.d-13)&
-        shift(3) = dz/2
+      this%ien = gpC%xen(1)
+      this%jen = gpC%xen(2)
+      this%ken = gpC%xen(3)
 
-      xst = smallScales%mesh(1,1,1,1) - shift(1) 
-      yst = smallScales%mesh(1,1,1,2) - shift(2) 
-      zst = smallScales%mesh(1,1,1,3) - shift(3) 
-
-      xen = smallScales%mesh(smallScales%gpC%xsz(1),1,1,1) + shift(1) 
-      yen = smallScales%mesh(1,smallScales%gpC%xsz(2),1,2) + shift(2) 
-      zen = smallScales%mesh(1,1,smallScales%gpC%xsz(3),3) + shift(3) 
-
-      ! Get the number of QH regions on the current MPI proc based on the local
-      ! domain to domain size ratio
-      this%isz = ceiling((xen - xst)/(xDom(2) - xDom(1))*this%nx)
-      this%jsz = ceiling((yen - yst)/(yDom(2) - yDom(1))*this%ny)
-      this%ksz = ceiling((zen - zst)/(zDom(2) - zDom(1))*this%nz)
-
-      ! Now compute the global start and end indices
-      call MPI_Allgather(this%jsz,1,MPI_INTEGER,jszAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
-      call MPI_Allgather(this%ksz,1,MPI_INTEGER,kszAll,1,MPI_INTEGER,MPI_COMM_WORLD,ierr)
-
-      jszAllArr = reshape(jszAll,[dims(1),dims(2)])
-      kszAllArr = reshape(kszAll,[dims(1),dims(2)])
-
-      this%ist = 1
-      this%jst = sum(jszAllArr(1:coords(1),1)) + 1
-      this%kst = sum(kszAllArr(1,1:coords(2))) + 1
-    
-      ! Check to see if nx, ny, or nz should be updated
-      call assert(p_sum(this%isz*this%jsz*this%ksz) == ntotal,'Number of QH'//&
-        ' regions has changed. This needs to be implemented')
+      print*, "Number of QH regions:", this%nx, this%ny, this%nz
 
       ! Allocate memory
       allocate(this%xC(this%isz), this%yC(this%jsz), this%zC(this%ksz))
@@ -115,9 +90,9 @@ module QHmeshMod
       allocate(this%gID(this%isz,this%jsz,this%ksz))
 
       ! Define the mesh        
-      this%xE = linspace(xst,xen,this%isz+1)
-      this%yE = linspace(yst,yen,this%jsz+1) 
-      this%zE = linspace(zst,zen,this%ksz+1)
+      this%xE = getMeshEdgeValues(this%ist, this%isz+1, this%dx, xDom(1))
+      this%yE = getMeshEdgeValues(this%jst, this%jsz+1, this%dy, yDom(1))
+      this%zE = getMeshEdgeValues(this%kst, this%ksz+1, this%dz, zDom(1))
       
       this%xC = 0.5d0*(this%xE(2:this%isz+1)+this%xE(1:this%isz))
       this%yC = 0.5d0*(this%yE(2:this%jsz+1)+this%yE(1:this%jsz))
@@ -141,7 +116,8 @@ module QHmeshMod
       print*, nrank, "sizes:", this%isz, this%jsz, this%ksz
       print*, nrank, "starts:", this%ist, this%jst, this%kst
       print*, nrank, "max(gID):", maxval(this%gID)
-      deallocate(jszAllArr, kszAllArr)
+      call decomp_info_finalize(gpC)
+      deallocate(gpC)
     end subroutine
     
     subroutine destroy(this)
@@ -153,6 +129,7 @@ module QHmeshMod
       if (allocated(this%xC)) deallocate(this%xC)
       if (allocated(this%yC)) deallocate(this%yC)
       if (allocated(this%zC)) deallocate(this%zC)
+      if (allocated(this%gID)) deallocate(this%gID)
     end subroutine
     
 end module

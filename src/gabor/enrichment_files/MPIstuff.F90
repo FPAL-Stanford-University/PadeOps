@@ -28,10 +28,10 @@ subroutine sendRecvHaloModes(this,modeData)
   PEmaxZ = this%PEzbound(2)
     
   ! Define the cutoff location for halo modes
-  haloMinY = PEminY + real(this%nysupp/2,rkind)*this%smallScales%dy
-  haloMaxY = PEmaxY - real(this%nysupp/2,rkind)*this%smallScales%dy
-  haloMinZ = PEminZ + real(this%nzsupp/2,rkind)*this%smallScales%dz
-  haloMaxZ = PEmaxZ - real(this%nzsupp/2,rkind)*this%smallScales%dz
+  haloMinY = PEminY + real(this%nysupp/2 + this%haloPad,rkind)*this%smallScales%dy
+  haloMaxY = PEmaxY - real(this%nysupp/2 + this%haloPad,rkind)*this%smallScales%dy
+  haloMinZ = PEminZ + real(this%nzsupp/2 + this%haloPad,rkind)*this%smallScales%dz
+  haloMaxZ = PEmaxZ - real(this%nzsupp/2 + this%haloPad,rkind)*this%smallScales%dz
   
   yloc => modeData(:,2)
   zloc => modeData(:,3)

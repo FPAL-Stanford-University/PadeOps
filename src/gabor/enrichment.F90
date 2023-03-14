@@ -49,6 +49,9 @@ module enrichmentMod
     real(rkind), dimension(:,:,:,:), allocatable :: duidxj_h
     type(procgrid) :: pgForInitModes 
 
+    ! Padding for mode exchange to account for inconsistent grid partitions
+    integer :: haloPad
+
     integer, public :: nxsupp, nysupp, nzsupp
     type(igrid), pointer :: largeScales, smallScales
     type(QHmesh), public :: QHgrid 
@@ -143,12 +146,13 @@ contains
     logical :: readGradients = .false.
     logical :: genModesOnUniformGrid = .false.
     logical :: dumpMeshInfo = .false.
+    integer :: haloPad = 0
     
     namelist /IO/      outputdir, writeIsotropicModes, readGradients
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
       strainInitialCondition, doNotRenderInitialCondition, &
       xPeriodic, yPeriodic, zPeriodic, kminFact, strainClipXmin, strainClipXmax, & 
-      strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax
+      strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax, haloPad
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
     namelist /TESTING/ genModesOnUniformGrid, dumpMeshInfo
@@ -193,6 +197,7 @@ contains
     this%strainClipXmax = strainClipXmax
     this%strainClipYmax = strainClipYmax
     this%strainClipZmax = strainClipZmax
+    this%haloPad = haloPad
 
     ! IO
     this%outputdir = outputdir
@@ -221,15 +226,15 @@ contains
         ceiling(real(smallScales%nz)/real(largeScales%nz))) 
     call this%pgForInitModes%init(prow,pcol,smallScales%nx,smallScales%ny,smallScales%nz,npad_ForinitModes)
     
+    ! Initialize QH grid
+    call this%QHgrid%init(inputfile, this%largeScales, this%smallScales, xDom, yDom, zDom)
+    
     ! Set things up for distributed memory
     call MPI_Cart_Get(DECOMP_2D_COMM_CART_X,2,dims,periodicBCs(2:3),coords,ierr)
     periodicBCs(1) = xPeriodic
     periodicBCs(2) = yPeriodic
     periodicBCs(3) = zPeriodic
     call getneighbors(neighbor,this%PEybound,this%PEzbound,periodicBCs)
-
-    ! Initialize QH grid
-    call this%QHgrid%init(inputfile, this%largeScales, this%smallScales, xDom, yDom, zDom, dims, coords)
     
     ! Physical edges of the MPI rank
     this%PExbound = [this%QHgrid%xE(1), this%QHgrid%xE(this%QHgrid%isz + 1)]
