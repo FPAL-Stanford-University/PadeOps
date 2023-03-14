@@ -1,13 +1,19 @@
-Ryan: 
-[x] 1. Finish mpi-calls inside sortAndExhange (PRIORITY 1) 
-[x] 2. Periodic offsets as needed.  (PRIORITY 2) 
-[x] 3. Fix the spectral gap - play with kmin and nk (PRIORITY 3) 
-[x] 4. Run HIT - small scale with uniform velocity for large scale - ensure that mode advance works. (PRIORITY 4) 
-[x] 5. Update neighbor ranks to mpi_proc_null if periodicity is not present (LOWEST PRIORITY)
-[x] 6. set up domain min max user function
-[x] 7. Learn how to use interpolator and interp from S1 to S2 grid
-[_] 8. Large scale manipulation happens before enrich%init()
+Ryan:
+[_] 1. kmin should be a user-input, not computed from large-scales. 
+[_] 2. Get rid of QH region class -- use new class "spaceDecomposition" which gives local domain bounds
+[_] 3. Get rid of nk and ntheta -- use one global input, nmodes. Do logspace with nmodes. Each shell we sample one theta randomly
+[x] 4. Velocity rendering should allow for modes that span more than 2 ranks -- modes can be sent/recieved to any rank (MPI_AllToAllv() or loop with ISend/IRecv)
+[_] 5. Remove scale_fact (look into SGS equivalence for dissipation)
+[x] 6. Add dissipation range to model energy spectrum
+[_] 7. Do operator splitting on the viscous term in the evolution equations
 
-Aditya: 
-[x] 1. LG inputs
-[_] 2. Create small scale KE and Liso inputs 
+Aditya:
+[_] 1. Initialization straining takes way too long
+         Step 1: get velocity and gradient at each mode (vectorized)
+         Step 2: compute nsteps, fixed for each mode
+         And get rid of nested loops in RK4 code. Just write it out explicitly
+  --> The vectorized version takes longer than looping over modes!? 
+[_] 2. Use fast cosine/sine in rendering
+
+Extras:
+[_] 1. Add I/O checks to make sure the data being read-in is the correct size given nx/ny/nz in the input file.
