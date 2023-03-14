@@ -82,8 +82,6 @@ module QHmeshMod
       this%jen = gpC%xen(2)
       this%ken = gpC%xen(3)
 
-      print*, "Number of QH regions:", this%nx, this%ny, this%nz
-
       ! Allocate memory
       allocate(this%xC(this%isz), this%yC(this%jsz), this%zC(this%ksz))
       allocate(this%xE(this%isz+1), this%yE(this%jsz+1), this%zE(this%ksz+1))
@@ -113,9 +111,6 @@ module QHmeshMod
         end do
       end do
 
-      print*, nrank, "sizes:", this%isz, this%jsz, this%ksz
-      print*, nrank, "starts:", this%ist, this%jst, this%kst
-      print*, nrank, "max(gID):", maxval(this%gID)
       call decomp_info_finalize(gpC)
       deallocate(gpC)
     end subroutine

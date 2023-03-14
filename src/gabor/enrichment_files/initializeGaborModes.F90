@@ -171,7 +171,7 @@ subroutine generateIsotropicModes(this)
    
           myKmag = sqrt(k1(n,i,j,k)**2 + k2(n,i,j,k)**2 + k3(n,i,j,k)**2)
           
-          E = getModelSpectrum(myKmag,KE_loc(n,i,j,k),L_loc(n,i,j,k))
+          E = getModelSpectrum(myKmag,KE_loc(n,i,j,k),L_loc(n,i,j,k),this%numolec)
           
           ! Amplitude of each mode such that the sum of mode energies gives
           ! the correct kinetic energy

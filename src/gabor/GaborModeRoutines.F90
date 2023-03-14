@@ -24,12 +24,11 @@ module GaborModeRoutines
   include "GaborModeRoutines_files/interpolation.F90"
   include "GaborModeRoutines_files/updateSeeds.F90"
     
-    function getModelSpectrum(k,KE,L) result(E) 
+    function getModelSpectrum(k,KE,L,nu) result(E) 
       use exits, only: warning
-      real(rkind), intent(in) :: k
+      real(rkind), intent(in) :: k, KE, L, nu
       real(rkind) :: kL, fL, feta
-      real(rkind), intent(in) :: KE, L
-      real(rkind) :: C
+      real(rkind) :: C, beta, Cconv, eps, eta
       real(rkind) :: E
 
       ! Non-dimensional wavenumber
@@ -42,11 +41,14 @@ module GaborModeRoutines
       ! Energetic scalse
       fL = kL**4.d0/(1.d0 + kL*kL)**(17.d0/6.d0)
 
-      ! TODO: Dissipative scales
       feta = 1.d0
-      if (doWarning) then
-        call warning("WARNING: Finite Re model spectrum is not implemented")
-        doWarning = .false.
+      if (nu > 1.d-14) then
+        beta = 2.300066055743858d0  ! This is (2*alpha*gamma(4/3))**(3/4)
+        Cconv = 0.152054165300471d0 ! This is (C/1.7)**(3/2)
+        eps =  Cconv*((2.d0*KE)**3)/L ! Convert from KE to dissipation
+                                           ! using model spectra
+        eta = (nu**3/eps)**(0.25d0)
+        feta = exp(-beta*kL*(eta/L))
       end if
 
       ! Model spectrum
