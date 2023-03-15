@@ -1,6 +1,6 @@
 module IncompressibleGrid
     use kind_parameters, only: rkind, clen
-    use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa 
+    use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa, im0
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
     use igrid_hooks!, only: setDirichletBC_Temp, set_Reference_Temperature, meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
@@ -28,6 +28,7 @@ module IncompressibleGrid
     use PoissonPeriodicMod, only: PoissonPeriodic
     use procgrid_mod, only: procgrid
     use cd06stuff, only: cd06
+    use immersedbodyMod, only: immersedBody 
 
     implicit none
 
@@ -73,6 +74,7 @@ module IncompressibleGrid
         integer :: headerfid = 12345   
         integer :: clearRoundOffFreq
         type(procgrid) :: pg
+        integer :: NumericalSchemeVert = 0
 
         ! Variables common to grid
         integer :: nx, ny, nz, t_datadump, t_restartdump
@@ -101,10 +103,11 @@ module IncompressibleGrid
 
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsE
-
+        
+        type(immersedBody), dimension(:), allocatable :: immersedBodies 
 
         type(padepoisson), allocatable :: padepoiss
-        real(rkind), dimension(:,:,:), allocatable :: divergence
+        real(rkind), dimension(:,:,:), allocatable :: divergence, zE
 
         real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat, uEhat, vEhat
@@ -113,6 +116,8 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer :: uhat2, vhat2, what2, That2
         complex(rkind), dimension(:,:,:), pointer :: uhat3, vhat3, what3, That3
         complex(rkind), dimension(:,:,:), pointer :: uhat4, vhat4, what4, That4
+        complex(rkind), dimension(:,:,:), pointer :: ustar, vstar, wstar
+        complex(rkind), dimension(:,:,:), pointer :: du, dv, dw
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC2, SfieldsE2
         complex(rkind), dimension(:,:,:,:), allocatable :: uExtra, vExtra, wExtra, TExtra 
         complex(rkind), dimension(:,:,:,:), allocatable :: uRHSExtra, vRHSExtra, wRHSExtra, TRHSExtra 
@@ -331,7 +336,8 @@ module IncompressibleGrid
             procedure, private :: FwdEuler
             procedure, private :: TVD_RK3
             procedure, private :: SSP_RK45
-            procedure          :: ComputePressure
+            procedure, private :: RK4
+            procedure, private :: ComputePressure
             procedure, private :: interp_primitiveVars
             procedure          :: compute_duidxj
             procedure, private :: compute_Sijmean
@@ -392,6 +398,8 @@ module IncompressibleGrid
             procedure          :: advance_SSP_RK45_Stage_3 
             procedure          :: advance_SSP_RK45_Stage_4 
             procedure          :: advance_SSP_RK45_Stage_5
+            procedure, private :: advance_RK4_all_stages
+            procedure          :: advance_RK4_Stage 
             procedure          :: getMaxOddballModes 
             procedure          :: getPeriodicBCs
 
@@ -417,6 +425,7 @@ contains
 #include "igrid_files/popRHS_stuff.F90"
 #include "igrid_files/RK45_staging.F90"
 #include "igrid_files/gaborMode_helpers.F90"
+#include "igrid_files/RK4_staging.F90"
 
     subroutine init(this,inputfile, initialize2decomp, num_pad)
         class(igrid), intent(inout), target :: this        
@@ -461,7 +470,10 @@ contains
         character(len=clen) :: MeanFilesDir, powerDumpDir 
         logical :: WriteTurbineForce = .false., useforcedStratification = .false., useDynamicYaw = .FALSE. 
         integer :: buoyancyDirection = 3, yawUpdateInterval = 100000, dealiasType = 0
-        integer :: clearRoundOffFreq = 1000, npad 
+        integer :: numberOfImmersedBodies = 0
+        logical :: useImmersedBodies = .false. 
+        real(rkind) :: immersed_taufact = 1.d0 
+        integer :: clearRoundOffFreq = 1000
 
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -475,7 +487,8 @@ contains
           BuoyancyTermType,useforcedStratification, useGeostrophicForcing, &
           G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,&
           useHITForcing, useScalars, frameAngle, buoyancyDirection, &
-          useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm
+          useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm, &
+          useImmersedBodies, numberOfImmersedBodies, immersed_taufact  
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
@@ -533,6 +546,7 @@ contains
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
         this%donot_dealias = donot_dealias; this%ioType = ioType; this%HITForceTimeScale = HITForceTimeScale
         this%moistureFactor = moistureFactor; this%useHITRealSpaceLinearForcing = useHITRealSpaceLinearForcing
+        this%NumericalSchemeVert = NumericalSchemeVert
 
         if (this%CFL > zero) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
@@ -630,6 +644,7 @@ contains
        ! STEP 3: GENERATE MESH (CELL CENTERED) 
        if ( allocated(this%mesh) ) deallocate(this%mesh) 
        allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
+       allocate(this%zE(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
        call meshgen_WallM(this%gpC, this%dx, this%dy, &
            this%dz, this%mesh,inputfile) ! <-- this procedure is part of user defined HOOKS
        this%zTop = p_maxval(this%mesh(:,:,:,3)) + this%dz/2.d0
@@ -892,34 +907,29 @@ contains
            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
        end if  
 
+        ! First get z at edges
+        zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
+        zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
+        call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
+        call transpose_y_to_z(zinY,zinZ,this%gpC)
+        call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
+        zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
+        call transpose_z_to_y(zEinZ,zEinY,this%gpE)
+        call transpose_y_to_x(zEinY,this%zE, this%gpE)
+
         ! STEP 11: Initialize SGS model
         allocate(this%SGSmodel)
         if (this%useSGS) then
-            ! First get z at edges
-            zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
-            zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
-            call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
-            call transpose_y_to_z(zinY,zinZ,this%gpC)
-            call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
-            zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
-            call transpose_z_to_y(zEinZ,zEinY,this%gpE)
-            call transpose_y_to_x(zEinY,this%rbuffxE(:,:,:,1), this%gpE)
-
             if ((this%initSpinup) .or. (this%useScalars) .or. (this%isStratified)) then
                sgsmod_stratified = .true. 
             else
                sgsmod_stratified = .false. 
             end if 
-            call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, &
-                                    this%dx, this%dy, this%dz, inputfile, &
-                                    this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), &
-                                    this%fBody_x, this%fBody_y, this%fBody_z, &
-                                    this%storeFbody,this%Pade6opZ, this%cbuffyC, &
-                                    this%cbuffzC, this%cbuffyE, this%cbuffzE, &
-                                    this%rbuffxC, this%rbuffyC, this%rbuffzC, &
-                                    this%rbuffyE, this%rbuffzE, this%Tsurf, &
-                                    this%ThetaRef, this%wTh_surf, this%Fr, this%Re, &
-                                    this%isInviscid, sgsmod_stratified, &
+            call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
+                                    this%zE(1,1,:), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
+                                    this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
+                                    this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
+                                    this%ThetaRef, this%wTh_surf, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, &
                                     this%botBC_Temp, this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
             call message(0,"SGS model initialized successfully")
@@ -962,7 +972,7 @@ contains
             deallocate(tmpzE)
             nullify(zEinZ, zinZ)
 
-            zstSponge = zstSponge*(this%zTop - this%zBot)     !! <PERCENTAGE OF THE DOMAIN>
+            zstSponge = zstSponge*(this%zTop - this%zBot) + this%zBot  !! <PERCENTAGE OF THE DOMAIN>
             !zstSponge = zstSponge*this%zTop                   !! <PERCENTAGE OF THE DOMAIN>
             select case(sponge_type)
             case(1)
@@ -992,7 +1002,6 @@ contains
                 !   end where
                 !end if 
                 !!!!!!!!!!!!!!! OLD BLOCK -- assumes zBot = 0 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                
                 if (useTopAndBottomSymmetricSponge) then
                     ! Ensure zinY and zEinY are centered at 0 irrespective of this%zBot
                     zinY  = zinY  - this%zMid
@@ -1183,9 +1192,50 @@ contains
            call this%spectE%alloc_r2c_out(this%wRHSExtra,1)
            call this%spectC%alloc_r2c_out(this%TExtra,3)
            call this%spectC%alloc_r2c_out(this%TRHSExtra,1)
-        end if 
+        else if (timeSteppingScheme == 5 .or. timeSteppingScheme == 6) then
+           call this%spectC%alloc_r2c_out(this%uExtra,2)
+           call this%spectC%alloc_r2c_out(this%vExtra,2)
+           call this%spectE%alloc_r2c_out(this%wExtra,2)
 
-       if ((timeSteppingScheme .ne. 0) .and. (timeSteppingScheme .ne. 1) .and. (timeSteppingScheme .ne. 2)) then
+           !this%uhat1 => this%uExtra(:,:,:,1)
+           !this%vhat1 => this%vExtra(:,:,:,1)
+           !this%what1 => this%wExtra(:,:,:,1)
+
+           !this%uhat2 => this%uExtra(:,:,:,2)
+           !this%vhat2 => this%vExtra(:,:,:,2)
+           !this%what2 => this%wExtra(:,:,:,2)
+
+           !this%uhat3 => this%uExtra(:,:,:,3)
+           !this%vhat3 => this%vExtra(:,:,:,3)
+           !this%what3 => this%wExtra(:,:,:,3)
+
+           !this%uhat4 => this%uExtra(:,:,:,4)
+           !this%vhat4 => this%vExtra(:,:,:,4)
+           !this%what4 => this%wExtra(:,:,:,4)
+
+           this%ustar => this%uExtra(:,:,:,1)
+           this%vstar => this%vExtra(:,:,:,1)
+           this%wstar => this%wExtra(:,:,:,1)
+
+           this%du => this%uExtra(:,:,:,2)
+           this%dv => this%vExtra(:,:,:,2)
+           this%dw => this%wExtra(:,:,:,2)
+
+           this%ustar = im0
+           this%vstar = im0
+           this%wstar = im0
+
+           this%du = im0
+           this%dv = im0
+           this%dw = im0
+      end if 
+
+       if ((timeSteppingScheme .ne. 0) .and. &
+           (timeSteppingScheme .ne. 1) .and. &
+           (timeSteppingScheme .ne. 2) .and. &
+           (timeSteppingScheme .ne. 4) .and. &
+           (timeSteppingScheme .ne. 5) .and. &
+           (timeSteppingScheme .ne. 6)) then
            call GracefulExit("Invalid choice of TIMESTEPPINGSCHEME.",5235)
        end if 
 
@@ -1293,6 +1343,15 @@ contains
             call this%sgsModel%set_BuoyancyFactor(this%BuoyancyFact)
        end if 
 
+       ! STEP 22: immersedBodies 
+       if (useImmersedBodies) then 
+         allocate(this%immersedBodies(numberOfImmersedBodies))
+         do idx = 1, numberOfImmersedBodies 
+            call this%immersedBodies(idx)%init(this%spectC, this%spectE, this%gpC, this%gpE, this%sp_gpC, this%sp_gpE, immersed_taufact, & 
+                this%rbuffxC(:,:,:,1), this%rbuffxE(:,:,:,1), this%cbuffyC(:,:,:,1), this%cbuffyE(:,:,:,1))
+         end do 
+       end if 
+       
        ! STEP 22a: Set moisture
        if(this%useMoisture) then
          if(this%usescalars) then
@@ -1384,8 +1443,11 @@ contains
        if ((this%vizDump_Schedule == 1) .and. (.not. this%useCFL)) then
            call GracefulExit("Cannot use vizDump_Schedule=1 if using fixed dt.",123)
        end if 
-       if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
-           !call GracefulExit("fastCalcPressure feature is only supported with TVD RK3 or SSP RK45 time stepping.",123)
+       if ((this%fastCalcPressure) .and. ((TimeSteppingScheme .ne. 1) .and. &
+                                          (TimeSteppingScheme .ne. 2) .and. &
+                                          (TimeSteppingScheme .ne. 5) .and. &
+                                          (TimeSteppingScheme .ne. 6))) then
+           call GracefulExit("fastCalcPressure feature is only supported with TVD RK3, SSP RK45, or RK4 time stepping.",123)
        end if
 
        if ((this%usescalars) .and. ((TimeSteppingScheme .ne. 1) .and. (TimeSteppingScheme .ne. 2))) then
@@ -1449,6 +1511,18 @@ contains
            end if
         case(4)
             call this%FwdEuler()
+        case(5)
+           if(present(dtforced)) then
+             call this%RK4(dtforced)
+           else
+             call this%RK4()
+           endif
+        case(6)
+           if(present(dtforced)) then
+             call this%advance_RK4_all_stages(dtforced)
+           else
+             call this%advance_RK4_all_stages()
+           endif
         end select
 
    end subroutine
@@ -1607,6 +1681,16 @@ contains
            dUdzBC_bottom   =  0; dVdzBC_bottom   =  0;
            WdUdzBC_bottom  = -1; WdVdzBC_bottom  = -1;
            UWBC_bottom     = -1; VWBC_bottom     = -1;   
+        case(4)
+           call message(1,"Free boundary")
+           call gracefulExit("This boundary condition is not currently "//&
+             "supported in the Poisson solver",423)
+           uBC_bottom      = 0; vBC_bottom      = 0;
+           dUdzBC_bottom   = 0; dVdzBC_bottom   = 0;
+           WdUdzBC_bottom  = 0; WdVdzBC_bottom  = 0;
+           UWBC_bottom     = 0; VWBC_bottom     = 0;
+           wBC_bottom      = 0; WdWdzBC_bottom  = 0; 
+           WWBC_bottom     = 0; dwdzBC_bottom   = 0;
         case default
            call gracefulExit("Invalid choice for BOTTOM WALL BCs",423)
         end select
@@ -1638,6 +1722,16 @@ contains
            dUdzBC_top   =  0; dVdzBC_top   =  0;
            WdUdzBC_top  = -1; WdVdzBC_top  = -1;
            UWBC_top     = -1; VWBC_top     = -1;   
+        case(4)
+           call message(1,"Free boundary")
+           call gracefulExit("This boundary condition is not currently "//&
+             "supported in the Poisson solver",423)
+           uBC_top      = 0; vBC_top      = 0;
+           dUdzBC_top   = 0; dVdzBC_top   = 0;
+           WdUdzBC_top  = 0; WdVdzBC_top  = 0;
+           UWBC_top     = 0; VWBC_top     = 0;   
+           wBC_top      = 0; WdWdzBC_top  = 0; 
+           WWBC_top     = 0; dwdzBC_top   = 0;
         case default
            call gracefulExit("Invalid choice for TOP WALL BCs",13)
         end select
@@ -1655,6 +1749,9 @@ contains
         case (3)
            TBC_top = 0; dTdzBC_top = 0; WTBC_top = -1;
            WdTdzBC_top = 0;
+        case (4)
+           TBC_top = 0; dTdzBC_top = 0; WTBC_top = 0;
+           WdTdzBC_top = 0;
         end select 
         select case (botBC_Temp)
         case (0) ! Dirichlet BC for temperature at the bottom
@@ -1668,7 +1765,10 @@ contains
             WdTdzBC_bottom = 0;
         case (3) 
            TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = -1; 
-           WdTdzBC_bottom = 0;      
+           WdTdzBC_bottom = 0;
+        case (4) 
+           TBC_bottom = 0; dTdzBC_bottom = 0; WTBC_bottom = 0; 
+           WdTdzBC_bottom = 0;
         end select
 
    end subroutine

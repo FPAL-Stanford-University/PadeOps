@@ -1,7 +1,7 @@
 module timer
         use decomp_2d,       only: nrank 
         use mpi,             only: MPI_WTIME  
-        use kind_parameters, only: rkind
+        use kind_parameters, only: rkind, clen
         use reductions,      only: P_MAXVAL 
         implicit none
 
@@ -10,7 +10,7 @@ module timer
         double precision :: start, finish
 
         interface toc
-            module procedure toc1,toc2,toc3,toc4, tocall
+            module procedure toc1,toc2,toc3,toc4, tocall, toc5
         end interface
 
 contains 
@@ -71,4 +71,25 @@ contains
             val = P_MAXVAL(myval)
         end subroutine 
 
+        subroutine toc5(Nnow, Ntotal, whichMssg)
+            integer, intent(in) :: Nnow, Ntotal
+            character(len=clen) :: message
+            integer, intent(in), optional :: whichMssg
+            integer :: mssgID = 1
+
+            if (present(whichMssg)) mssgID = whichMssg
+
+            finish = MPI_WTIME()
+            if (nrank == 0) then   
+                if (mssgID == 1) then 
+                  write(message,'(I,A,I,A,F,A)') Nnow, ' of ', Ntotal, &
+                    ' took ', finish - start, ' seconds'
+                else
+                  write(message,'(F,A,F,A)') real(Nnow)/real(Ntotal)*100.d0, '% complete '// &
+                    'and took ', finish - start, ' seconds'
+                end if
+                print*, trim(message)
+            end if 
+
+        end subroutine
 end module timer

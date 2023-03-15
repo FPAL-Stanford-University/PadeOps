@@ -13,7 +13,7 @@ module shearlessMixing_interact_parameters
     logical :: MMS = .false.
     real(rkind), dimension(:,:,:), allocatable :: xE, yE, zE, uMMS, vMMS, wMMS
     real(rkind), dimension(:),     allocatable :: x1D, y1D, z1D
-    real(rkind) :: Fringe_zst = zero, LzSM = one
+    real(rkind) :: Fringe1_zst = zero, LzSM = one
 
 contains
 
@@ -45,7 +45,7 @@ contains
     type(igrid), intent(inout) :: hit, adsim
     integer :: ist, ien, jst, jen, kst, ken
     integer :: ierr
-        
+    
     select case (coord)
       case ('x')
         call gracefulExit('This has not be implemented yet. See "z" case for model',ierr)
@@ -80,7 +80,7 @@ contains
   
       case ('z')
         !kst = nzSM/2 - nzHIT/2 + 1
-        call findGE(z1D,Fringe_zst*LzSM,kst)
+        call findGE(z1D,Fringe1_zst*LzSM,kst)
         kst = kst - 1
         ken = kst + nzHIT - 1
   
@@ -183,21 +183,24 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: nxg, nyg, nzg
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind) :: zstSponge = one, Fringe_zen = zero
-    real(rkind) :: zmin = -pi
+    logical :: symmetricDomain = .true.
+    real(rkind) :: zstSponge = one, Fringe1_zen = zero
+    real(rkind) :: zmin = -one
     logical :: PeriodicInZ, useSpongeLayer, useTopAndBottomSymmetricSponge, &
       useFringe, usedoubleFringex, usecontrol, Apply_x_fringe, Apply_z_fringe
     integer :: botWall, topWall, sponge_type, botBC_Temp, topBC_temp
-    real(rkind) :: SpongeTscale, Fringe_delta_st_z, &
-      Fringe_delta_en_z, LambdaFact, LambdaFactPotTemp
+    real(rkind) :: SpongeTscale, Fringe1_delta_st_z, &
+      Fringe1_delta_en_z, LambdaFact, LambdaFactPotTemp, Fringe2_zst, &
+      Fringe2_zen, Fringe2_delta_st_z, Fringe2_delta_en_z, LambdaFact2
     
-    namelist /SMinput/ Lx, Ly, Lz 
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin 
     namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
     namelist /BCs/ PeriodicInZ, botWall, topWall, useSpongeLayer, zstSponge, &
       SpongeTscale, sponge_type, botBC_Temp, topBC_temp, useTopAndBottomSymmetricSponge, &
       useFringe, usedoubleFringex, usecontrol
-    namelist /FRINGE/ Fringe_zst, Fringe_zen, Fringe_delta_st_z, Fringe_delta_en_z, &
-      LambdaFact, LambdaFactPotTemp, Apply_x_fringe, Apply_z_fringe
+    namelist /FRINGE/ Fringe1_zst, Fringe1_zen, Fringe1_delta_st_z, Fringe1_delta_en_z, &
+      LambdaFact, LambdaFactPotTemp, Apply_x_fringe, Apply_z_fringe, Fringe2_zst, &
+      Fringe2_zen, Fringe2_delta_st_z, Fringe2_delta_en_z, LambdaFact2
 
     select case (simulationID) 
     case (1) 
@@ -206,13 +209,13 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
       read(unit=ioUnit, NML=BCs)
       read(unit=ioUnit, NML=FRINGE)
       read(unit=ioUnit, NML=SMinput)
-      close(ioUnit)    
+      close(ioUnit)   
+      LzSM = Lz 
     case (2)
       ioUnit = 11
       open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
       read(unit=ioUnit, NML=HIT_PeriodicINPUT)
       close(ioUnit)   
-      LzSM = Lz 
     end select
 
     nxg = decomp%xsz(1); nyg = decomp%ysz(2); nzg = decomp%zsz(3)
@@ -227,22 +230,36 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
         dy = Ly/real(nyg,rkind)
         select case (simulationID)
         case (1)
-          ! z goes from zmin to Lz where zmin = 0 - (size of forcing region) - (size of sponge)
-          !zmin = Lz*(zstSponge - Fringe_zen - 1.d0)/zstSponge
-          dz = (Lz - zmin)/real(nzg,rkind)
-          
-          do k=1,size(mesh,3)
-              do j=1,size(mesh,2)
-                  do i=1,size(mesh,1)
-                      x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
-                      y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
-                      !z(i,j,k) = real( -nzg/2, rkind ) * dz + &
-                      !  & real( iz1 + k - 1, rkind ) * dz + dz/two
-                      z(i,j,k) = zmin + real( iz1 + k - 1, rkind ) * dz + dz/two
-                  end do
-              end do
-          end do
-
+          if (symmetricDomain) then
+            ! z goes from -Lz to Lz
+            dz = 2.d0*Lz/real(nzg,rkind)
+            
+            do k=1,size(mesh,3)
+                do j=1,size(mesh,2)
+                    do i=1,size(mesh,1)
+                        x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
+                        y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
+                        z(i,j,k) = real( -nzg/2, rkind ) * dz + &
+                          & real( iz1 + k - 1, rkind ) * dz + dz/two
+                    end do
+                end do
+            end do
+          else
+            ! z goes from zmin to Lz where 
+            ! zmin = 0 - (size of forcing region) - (size of sponge):
+            ! zmin = Lz*(zstSponge - Fringe_zen - 1.d0)/zstSponge
+            dz = (Lz - zmin)/real(nzg,rkind)
+            
+            do k=1,size(mesh,3)
+                do j=1,size(mesh,2)
+                    do i=1,size(mesh,1)
+                        x(i,j,k) = real( ix1 + i - 1, rkind ) * dx
+                        y(i,j,k) = real( iy1 + j - 1, rkind ) * dy
+                        z(i,j,k) = zmin + real( iz1 + k - 1, rkind ) * dz + dz/two
+                    end do
+                end do
+            end do
+          end if
           allocate(x1D(nxg), y1D(nyg), z1D(nzg))
           do i = 1,nxg
             x1D(i) = real(i-1,rkind)*dx
@@ -498,7 +515,7 @@ subroutine hook_probes(inputfile, probe_locs)
     use kind_parameters,    only: rkind
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
-    integer, parameter :: nprobes = 9
+    integer, parameter :: nprobes = 40
     
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
     ! Example: If you have at least 3 probes:
@@ -513,49 +530,204 @@ subroutine hook_probes(inputfile, probe_locs)
     allocate(probe_locs(3,nprobes))
     
     ! Probe 1
-    probe_locs(1,1) = 0.1d0; 
-    probe_locs(2,1) = 3.141592653589d0; 
-    probe_locs(3,1) = 3.141592653589d0; 
-    
-    ! Probe 2 
-    probe_locs(1,2) = 5.783185307179d0; 
-    probe_locs(2,2) = 3.141592653589d0; 
-    probe_locs(3,2) = 3.141592653589d0; 
-
+    probe_locs(1,1) = 3.14159265358979d0
+    probe_locs(2,1) = 3.14159265358979d0
+    probe_locs(3,1) = 3.01592894744620d0
+     
+    ! Probe 2
+    probe_locs(1,2) = 9.42477796076938d0
+    probe_locs(2,2) = 3.14159265358979d0
+    probe_locs(3,2) = 3.01592894744620d0
+     
     ! Probe 3
-    probe_locs(1,3) = 6.783185307179d0; 
-    probe_locs(2,3) = 3.141592653589d0; 
-    probe_locs(3,3) = 3.141592653589d0; 
-    
+    probe_locs(1,3) = 3.14159265358979d0
+    probe_locs(2,3) = 9.42477796076938d0
+    probe_locs(3,3) = 3.01592894744620d0
+     
     ! Probe 4
-    probe_locs(1,4) = 10.28318530718d0; 
-    probe_locs(2,4) = 3.141592653589d0; 
-    probe_locs(3,4) = 3.141592653589d0; 
-
+    probe_locs(1,4) = 9.42477796076938d0
+    probe_locs(2,4) = 9.42477796076938d0
+    probe_locs(3,4) = 3.01592894744620d0
+     
     ! Probe 5
-    probe_locs(1,5) = 14.28318530718d0; 
-    probe_locs(2,5) = 3.141592653589d0; 
-    probe_locs(3,5) = 3.141592653589d0;
-
+    probe_locs(1,5) = 3.14159265358979d0
+    probe_locs(2,5) = 3.14159265358979d0
+    probe_locs(3,5) = 8.79645943005142d0
+     
     ! Probe 6
-    probe_locs(1,6) = 18.28318530718d0; 
-    probe_locs(2,6) = 3.141592653589d0; 
-    probe_locs(3,6) = 3.141592653589d0;
-
+    probe_locs(1,6) = 9.42477796076938d0
+    probe_locs(2,6) = 3.14159265358979d0
+    probe_locs(3,6) = 8.79645943005142d0
+     
     ! Probe 7
-    probe_locs(1,7) = 10.28318530718d0; 
-    probe_locs(2,7) = 3.141592653589d0; 
-    probe_locs(3,7) = 4.25d0; 
-
+    probe_locs(1,7) = 3.14159265358979d0
+    probe_locs(2,7) = 9.42477796076938d0
+    probe_locs(3,7) = 8.79645943005142d0
+     
     ! Probe 8
-    probe_locs(1,8) = 14.28318530718d0; 
-    probe_locs(2,8) = 3.141592653589d0; 
-    probe_locs(3,8) = 4.250;
-
+    probe_locs(1,8) = 9.42477796076938d0
+    probe_locs(2,8) = 9.42477796076938d0
+    probe_locs(3,8) = 8.79645943005142d0
+     
     ! Probe 9
-    probe_locs(1,9) = 18.28318530718d0; 
-    probe_locs(2,9) = 3.141592653589d0; 
-    probe_locs(3,9) = 4.25d0;
+    probe_locs(1,9) = 3.14159265358979d0
+    probe_locs(2,9) = 3.14159265358979d0
+    probe_locs(3,9) = 14.57698991265664d0
+     
+    ! Probe 10
+    probe_locs(1,10) = 9.42477796076938d0
+    probe_locs(2,10) = 3.14159265358979d0
+    probe_locs(3,10) = 14.57698991265664d0
+     
+    ! Probe 11
+    probe_locs(1,11) = 3.14159265358979d0
+    probe_locs(2,11) = 9.42477796076938d0
+    probe_locs(3,11) = 14.57698991265664d0
+     
+    ! Probe 12
+    probe_locs(1,12) = 9.42477796076938d0
+    probe_locs(2,12) = 9.42477796076938d0
+    probe_locs(3,12) = 14.57698991265664d0
+     
+    ! Probe 13
+    probe_locs(1,13) = 3.14159265358979d0
+    probe_locs(2,13) = 3.14159265358979d0
+    probe_locs(3,13) = 20.35752039526186d0
+     
+    ! Probe 14
+    probe_locs(1,14) = 9.42477796076938d0
+    probe_locs(2,14) = 3.14159265358979d0
+    probe_locs(3,14) = 20.35752039526186d0
+     
+    ! Probe 15
+    probe_locs(1,15) = 3.14159265358979d0
+    probe_locs(2,15) = 9.42477796076938d0
+    probe_locs(3,15) = 20.35752039526186d0
+     
+    ! Probe 16
+    probe_locs(1,16) = 9.42477796076938d0
+    probe_locs(2,16) = 9.42477796076938d0
+    probe_locs(3,16) = 20.35752039526186d0
+     
+    ! Probe 17
+    probe_locs(1,17) = 3.14159265358979d0
+    probe_locs(2,17) = 3.14159265358979d0
+    probe_locs(3,17) = 26.13805087786708d0
+     
+    ! Probe 18
+    probe_locs(1,18) = 9.42477796076938d0
+    probe_locs(2,18) = 3.14159265358979d0
+    probe_locs(3,18) = 26.13805087786708d0
+     
+    ! Probe 19
+    probe_locs(1,19) = 3.14159265358979d0
+    probe_locs(2,19) = 9.42477796076938d0
+    probe_locs(3,19) = 26.13805087786708d0
+     
+    ! Probe 20
+    probe_locs(1,20) = 9.42477796076938d0
+    probe_locs(2,20) = 9.42477796076938d0
+    probe_locs(3,20) = 26.13805087786708d0
+     
+    ! Probe 21
+    probe_locs(1,21) = 3.14159265358979d0
+    probe_locs(2,21) = 3.14159265358979d0
+    probe_locs(3,21) = 35.68849254478005d0
+     
+    ! Probe 22
+    probe_locs(1,22) = 9.42477796076938d0
+    probe_locs(2,22) = 3.14159265358979d0
+    probe_locs(3,22) = 35.68849254478005d0
+     
+    ! Probe 23
+    probe_locs(1,23) = 3.14159265358979d0
+    probe_locs(2,23) = 9.42477796076938d0
+    probe_locs(3,23) = 35.68849254478005d0
+     
+    ! Probe 24
+    probe_locs(1,24) = 9.42477796076938d0
+    probe_locs(2,24) = 9.42477796076938d0
+    probe_locs(3,24) = 35.68849254478005d0
+     
+    ! Probe 25
+    probe_locs(1,25) = 3.14159265358979d0
+    probe_locs(2,25) = 3.14159265358979d0
+    probe_locs(3,25) = 0.00000000000000d0
+     
+    ! Probe 26
+    probe_locs(1,26) = 9.42477796076938d0
+    probe_locs(2,26) = 3.14159265358979d0
+    probe_locs(3,26) = 0.00000000000000d0
+     
+    ! Probe 27
+    probe_locs(1,27) = 3.14159265358979d0
+    probe_locs(2,27) = 9.42477796076938d0
+    probe_locs(3,27) = 0.00000000000000d0
+     
+    ! Probe 28
+    probe_locs(1,28) = 9.42477796076938d0
+    probe_locs(2,28) = 9.42477796076938d0
+    probe_locs(3,28) = 0.00000000000000d0
+     
+    ! Probe 29
+    probe_locs(1,29) = 3.14159265358979d0
+    probe_locs(2,29) = 3.14159265358979d0
+    probe_locs(3,29) = -3.14159265358979d0
+     
+    ! Probe 30
+    probe_locs(1,30) = 9.42477796076938d0
+    probe_locs(2,30) = 3.14159265358979d0
+    probe_locs(3,30) = -3.14159265358979d0
+     
+    ! Probe 31
+    probe_locs(1,31) = 3.14159265358979d0
+    probe_locs(2,31) = 9.42477796076938d0
+    probe_locs(3,31) = -3.14159265358979d0
+     
+    ! Probe 32
+    probe_locs(1,32) = 9.42477796076938d0
+    probe_locs(2,32) = 9.42477796076938d0
+    probe_locs(3,32) = -3.14159265358979d0
+     
+    ! Probe 33
+    probe_locs(1,33) = 3.14159265358979d0
+    probe_locs(2,33) = 3.14159265358979d0
+    probe_locs(3,33) = -6.28318530717959d0
+     
+    ! Probe 34
+    probe_locs(1,34) = 9.42477796076938d0
+    probe_locs(2,34) = 3.14159265358979d0
+    probe_locs(3,34) = -6.28318530717959d0
+     
+    ! Probe 35
+    probe_locs(1,35) = 3.14159265358979d0
+    probe_locs(2,35) = 9.42477796076938d0
+    probe_locs(3,35) = -6.28318530717959d0
+     
+    ! Probe 36
+    probe_locs(1,36) = 9.42477796076938d0
+    probe_locs(2,36) = 9.42477796076938d0
+    probe_locs(3,36) = -6.28318530717959d0
+     
+    ! Probe 37
+    probe_locs(1,37) = 3.14159265358979d0
+    probe_locs(2,37) = 3.14159265358979d0
+    probe_locs(3,37) = -9.42477796076938d0
+     
+    ! Probe 38
+    probe_locs(1,38) = 9.42477796076938d0
+    probe_locs(2,38) = 3.14159265358979d0
+    probe_locs(3,38) = -9.42477796076938d0
+     
+    ! Probe 39
+    probe_locs(1,39) = 3.14159265358979d0
+    probe_locs(2,39) = 9.42477796076938d0
+    probe_locs(3,39) = -9.42477796076938d0
+     
+    ! Probe 40
+    probe_locs(1,40) = 9.42477796076938d0
+    probe_locs(2,40) = 9.42477796076938d0
+    probe_locs(3,40) = -9.42477796076938d0
 end subroutine
 
 subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)

@@ -1,18 +1,18 @@
 &INPUT
-inputdir              = "/anvil/scratch/x-ryanhass/HITdecay/SM7/output/SMdata"   ! Directory for any input files
-outputdir             = "/anvil/scratch/x-ryanhass/HITdecay/SM7/output/SMdata"   ! Directory for all output files
+inputdir              = "/scratch/06632/ryanhass/LES/HITdecay/randomJet/RJ1/output"   ! Directory for any input files
+outputdir             = "/scratch/06632/ryanhass/LES/HITdecay/randomJet/RJ1/output"   ! Directory for all output files
 nx                    = 128         ! Number of points in X
 ny                    = 128          ! Number of points in Y
-nz                    = 192          ! Number of points in Z
+nz                    = 128          ! Number of points in Z
 tstop                 = 12800.D6    ! Physical time to stop the simulation
 CFL                   = -0.8D0        ! CFL criterion for calculating the time step (Set to negative to disable)
-dt                    = 6.D-3        ! Fixed time step value (only used if CFL is set to negative)
+dt                    = 1.D-3        ! Fixed time step value (only used if CFL is set to negative)
 nsteps                = 999999 
-prow                  = 4            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-pcol                  = 64            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
-useRestartFile        = .TRUE.      ! Set to false if it's a fresh simulation 
-restartFile_TID       = 136000       ! TimeID of the restart file being used
-restartFile_RID       = 7            ! RunID of the restart file being used
+prow                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol                  = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+useRestartFile        = .false.      ! Set to false if it's a fresh simulation 
+restartFile_TID       = 0       ! TimeID of the restart file being used
+restartFile_RID       = 1            ! RunID of the restart file being used
 CviscDT               = 1.D0
 /
 /
@@ -22,7 +22,7 @@ ComputeStokesPressure = .TRUE.      ! This would be FALSE only is very special c
 NumericalSchemeVert   = 1           ! 0: Second order FD, 1: Sixth order Compact Difference (CD06), 2: Fourier Collocation
 useDealiasFilterVert  = .FALSE.     ! Dealiasing filter used in vertical direction
 t_DivergenceCheck     = 50          ! Check divergence every $ timesteps. Reproject if needed.
-TimeSteppingScheme    = 2           ! 0: Adams-Bashforth, 1: TVD-RK3, 2: SSP-RK45
+TimeSteppingScheme    = 5           ! 0: Adams-Bashforth, 1: TVD-RK3, 2: SSP-RK45, 5: RK4
 InitSpinUp            = .FALSE.     ! Use buoyancy forcing to initiate turbulence? 
 useExhaustiveFFT      = .TRUE. 
 dealiasFact           = 0.6667d0
@@ -32,7 +32,7 @@ clearRoundOffFreq     = 100
 /
 /
 &IO
-RunID                 = 7          ! Run Label (All output files will be tagged with this nubber)
+RunID                 = 1          ! Run Label (All output files will be tagged with this nubber)
 t_restartDump         = 1000       ! Restart File Dumping Frequency  (# of timesteps)
 t_dataDump            = 100       ! Data dumping frequency (# of timesteps)
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
@@ -47,7 +47,7 @@ dump_NU_SGS           = .TRUE.    ! Dump nu_sgs?
 dump_KAPPA_SGS        = .FALSE.    ! Dump kappa_sgs?
 t_start_pointProbe    = 1          ! When do you want to start recording data?
 t_stop_pointProbe     = 200000     ! When do you want to end recording data?
-t_pointProbe          = 1000       ! How often do you want to write probe data to disk? 
+t_pointProbe          = 200       ! How often do you want to write probe data to disk? 
 /
 /
 &STATS
@@ -68,12 +68,12 @@ deleteInstructions    = .false.     ! Do you want to delete instruction after re
 /
 /
 &PHYSICS
-isInviscid            = .FALSE.      ! Is this an inviscid simulation?
+isInviscid            = .TRUE.      ! Is this an inviscid simulation?
 useCoriolis           = .FALSE.      ! Activate the coriolis term? 
 useExtraForcing       = .FALSE.     ! Is an extra forcing term being used? (non-Geostrophic forcing only)
 isStratified          = .FALSE.     ! Use Stratification / active scalar in momentum
 useMoisture           = .FALSE.     ! Include moisture (passive scalar) transport?
-Re                    = 1164.D0       ! Reynolds Number; used when isInvisid is FALSE
+Re                    = 106.5224034D0       ! Reynolds Number; used when isInvisid is FALSE
 Ro                    = 1.D10       ! Rossby Number used when Coriolis is ON
 Pr                    = 0.6D0       ! Turbulent Prandtl Number; used when 
 Fr                    = 1.D10       ! Froude number; used when isStratified is TRUE
@@ -83,7 +83,7 @@ PrandtlFluid          = 7.0D0       ! ?????
 BulkRichardson        = 0.0D0       ! Used if isStratified is TRUE && BuoyancyTermType==2
 BuoyancyTermType      = 2           ! Used if isStratified is TRUE. 1: (Fr, ThetaRef); 2:BulkRichardson; 3: (Ra, Re)
 useforcedStratification = .FALSE.   ! ????
-useGeostrophicForcing = .FALSE.      ! This is true if forcing is provided using the coriolis term  
+useGeostrophicForcing   = .FALSE.      ! This is true if forcing is provided using the coriolis term  
 G_geostrophic         = 0.D0        ! Geostrophic wind speed 
 G_alpha               = 0.D0        ! Geostrophic wind angle (degrees, from +x axis)
 dPfdx                 = 0.D0        ! Additional Acceleration in X; used if useExtraForcing is ON
@@ -95,12 +95,15 @@ frameAngle            = 0.D0        ! Mean wind direction; important if assume_f
 useHITforcing         = .false.     ! Use additional HIT forcing? 
 useScalars            = .false.     ! Do you want to use scalars? --Why was this true for AD????
 buoyancyDirection     = 3           ! Are 1 and 2 implemented????
+useImmersedBodies     = .true.
+numberOfImmersedBodies = 1
+immersed_taufact       = 5.d0
 /
 /
 &PRESSURE_CALC
 fastCalcPressure      = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
 storePressure         = .TRUE.     ! Would you like to compute and store pressure?
-P_dumpFreq            = 20         ! How often (timesteps) do you want to dump pressure?
+P_dumpFreq            = 100         ! How often (timesteps) do you want to dump pressure?
 P_compFreq            = 10          ! How often (timesteps) do you want to compute pressure? 
 computeDNSPressure    = .TRUE.
 computeFringePressure = .TRUE.
@@ -111,13 +114,13 @@ PeriodicInZ           = .FALSE.      ! Is the problem periodic in Z? If yes, the
 botWall               = 2           ! no_slip = 1, slip = 2
 topWall               = 2           ! no_slip = 1, slip = 2
 useSpongeLayer        = .TRUE.     ! Use a sponge layer at the top 
-zstSponge             = 0.92d0       ! Height above which the sponge layer is active
+zstSponge             = 0.8d0       ! Height above which the sponge layer is active
 SpongeTscale          = 10.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 sponge_type           = 1           ! 1 or 2; used if useSpongeLayer is TRUE
 botBC_Temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
 topBC_temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
-useTopAndBottomSymmetricSponge = .TRUE. 
-useFringe             = .TRUE.     ! Use Fringe/Buffer region in x or y directions?
+useTopAndBottomSymmetricSponge = .FALSE. 
+useFringe             = .FALSE.     ! Use Fringe/Buffer region in x or y directions?
 usedoubleFringex      = .FALSE.      ! Use two fringes (in x)?
 usecontrol            = .FALSE.     ! Use frame angle controller?
 /
@@ -159,14 +162,14 @@ ADM_Type              = 2         ! 1 or 2. 2 is optimized and well tested. Use 
 /
 /
 &FRINGE
-Fringe_zst           = 0.000d0         
-Fringe_zen           = 0.100d0
+Fringe_zst           = -1.d0         
+Fringe_zen           = 0.2d0
 Fringe_delta_st_z    = 0.02d0
-Fringe_delta_en_z    = 0.02d0
+Fringe_delta_en_z    = 0.2d0
 LambdaFact           = 0.75d0
 LambdaFactPotTemp    = 0.d0
 Apply_x_fringe       = .FALSE.
-Apply_z_fringe       = .TRUE.
+Apply_z_fringe       = .FALSE.
 /
 /
 &BUDGET_TIME_AVG
@@ -210,10 +213,26 @@ moistureFactor    = 0.61D0
 moisture_info_dir = "null"
 /
 /
-&SMinput
-Lx                    = 12.566370614359172d0           ! Domain Length  (appropriate dimesions/non-dimensionalized)
-Ly                    = 12.566370614359172d0          ! Domain Width  (appropriate dimesions/non-dimensionalized)
-Lz                    = 15.707963267948966d0       ! Domain Half-height (appropriate dimesnions/non-dimensionalized)
-symmetricDomain       = .false.
-zmin                  = -3.141592653589793d0
+&PROBLEM_INPUT
+Lx                     = 12.566370614359172d0           ! Domain Length  (appropriate dimesions/non-dimensionalized)
+Ly                     = 12.566370614359172d0          ! Domain Width  (appropriate dimesions/non-dimensionalized)
+Lz                     = 12.566370614359172d0         ! Domain Height  (appropriate dimesions/non-dimensionalized)
+filterMaskHowManyTimes = 0
+dumpMaskFreq           = 100
+NjetsX                 = 6
+NjetsY                 = 6
+jetXsz                 = 0.4908738521234052d0
+jetYsz                 = 0.4908738521234052d0
+jetZsz                 = 1.9634954084936207d0
+/
+/
+&JET_INPUT
+muOn                  = 3.d0
+sourceFraction        = 0.125d0
+sigmaFact             = 0.3333333333333333d0
+dumpJetInfo           = .false.
+rampOnOffFact         = 200.d0                    ! Determines how fast a jet turns on/off (tanh profile). 
+                                                  ! (Larger=faster)
+uHjet                 = 0.d0    ! The maximum possible (absolute) horizontal velocity
+wJet                  = 1.d0    ! The maximum possible velocity in z (note jet vertical velocity is always >= 0)
 /

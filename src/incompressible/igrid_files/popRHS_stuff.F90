@@ -298,8 +298,16 @@
        if (this%isStratified .and. this%useforcedStratification) then
             call this%addForcedStratification()
        end if
+       
+       ! Step 12: Immersed Bodies 
+       if (allocated(this%immersedBodies)) then 
+         do idx = 1, size(this%immersedBodies)
+            call this%immersedBodies(idx)%updateRHS(this%u, this%v, this%w, &
+              this%u_rhs, this%v_rhs, this%w_rhs, this%dt) 
+         end do 
+       end if 
 
-      ! Step 12: Add user-defined source term
+      ! Step 13: Add user-defined source term
       if (this%addExtraSourceTerm) then
         ! Take IFFT
         call this%spectC%ifft(this%u_rhs,this%rbuffxC(:,:,:,1))

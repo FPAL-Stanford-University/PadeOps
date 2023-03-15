@@ -498,7 +498,7 @@ end function
 
 subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, &
     OutputDir, RunID, isPeriodicinZ, NumericalSchemeZ, RestartDir,&
-    FFT3D, nxD, nyD, nzD, dxD, dyD, dzD) 
+    FFT3D, nxD, nyD, nzD, dxD, dyD, dzD, reset2decomp) 
    class(igrid_ops), intent(out), target :: this
    integer, intent(in) :: nx, ny, nz
    integer, intent(in), optional :: nxD, nyD, nzD ! Size of down-sampled grid
@@ -509,11 +509,19 @@ subroutine init(this, nx, ny, nz, dx, dy, dz, InputDir, &
    logical, intent(in) :: isPeriodicinZ
    integer, intent(in) :: RunID, NumericalSchemeZ
    logical, dimension(3) :: periodicbcs
-   logical, intent(in), optional :: FFT3D
+   logical, intent(in), optional :: FFT3D, reset2decomp
 
-   periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = isPeriodicinZ 
-   call decomp_2d_init(nx, ny, nz, 0, 0, periodicbcs)
-   call get_decomp_info(this%gp)
+   if (present(reset2decomp)) then
+     if (reset2decomp) then
+       periodicbcs(1) = .true.; periodicbcs(2) = .true.; periodicbcs(3) = isPeriodicInZ   
+       call decomp_2d_init(nx, ny, nz, 0, 0, periodicbcs)
+       call get_decomp_info(this%gp)
+     else
+       call decomp_info_init(nx, ny, nz, this%gp)
+     end if
+   else
+       call decomp_info_init(nx, ny, nz, this%gp)    
+   end if
    call decomp_info_init(nx,ny,nz+1,this%gpE)
 
    if (present(nxD)) then

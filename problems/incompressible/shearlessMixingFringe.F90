@@ -1,7 +1,7 @@
 ! Template for PadeOps
 
-#include "shearlessMixing_files/initialize.F90"       
-#include "shearlessMixing_files/temporalHook.F90"  
+#include "shearlessMixingFringe_files/initialize.F90"       
+#include "shearlessMixingFringe_files/temporalHook.F90"  
 
 program shearlessMixing
     use mpi
@@ -24,7 +24,8 @@ program shearlessMixing
     character(len=clen) :: inputfile, HIT_InputFile, SM_InputFile, fof_dir, filoutdir
     integer :: ierr, ioUnit
 
-    real(rkind), dimension(:,:,:), allocatable :: utarget0, vtarget0, wtarget0, Ttarget0
+    real(rkind), dimension(:,:,:), allocatable :: utarget1, vtarget1, wtarget1, Ttarget1
+    real(rkind), dimension(:,:,:), allocatable :: utarget2, vtarget2, wtarget2, Ttarget2
     real(rkind), dimension(:,:,:), allocatable :: uHITFilt, vHITFilt, wHITFilt
     
     real(rkind) :: dt1, dt2, dt
@@ -51,7 +52,7 @@ program shearlessMixing
     close(ioUnit)    
 
     simulationID = 1
-    call SM%init(SM_InputFile, .true.)                              
+    call SM%init(SM_InputFile, .true.)                               
     call SM%start_io(.true.)                                          
     call SM%printDivergence()
    
@@ -67,13 +68,24 @@ program shearlessMixing
     allocate(vHITFilt(HIT%gpC%xsz(1),HIT%gpC%xsz(2),HIT%gpC%xsz(3)))
     allocate(wHITFilt(HIT%gpE%xsz(1),HIT%gpE%xsz(2),HIT%gpE%xsz(3)))
     
-    call SM%fringe_x%allocateTargetArray_Cells(utarget0)                
-    call SM%fringe_x%allocateTargetArray_Cells(vtarget0)                
-    call SM%fringe_x%allocateTargetArray_Cells(Ttarget0)                
-    call SM%fringe_x%allocateTargetArray_Edges(wtarget0)                
-    call SM%fringe_x%associateFringeTargets(utarget0, vtarget0, wtarget0) 
-    call SM%fringe_x%associateFringeTarget_scalar(Ttarget0) 
+    call SM%fringe_x1%allocateTargetArray_Cells(utarget1)                
+    call SM%fringe_x1%allocateTargetArray_Cells(vtarget1)                
+    call SM%fringe_x1%allocateTargetArray_Cells(Ttarget1)                
+    call SM%fringe_x1%allocateTargetArray_Edges(wtarget1)                
+    call SM%fringe_x1%associateFringeTargets(utarget1, vtarget1, wtarget1) 
+    call SM%fringe_x1%associateFringeTarget_scalar(Ttarget1) 
 
+    call SM%fringe_x2%allocateTargetArray_Cells(utarget2)                
+    call SM%fringe_x2%allocateTargetArray_Cells(vtarget2)                
+    call SM%fringe_x2%allocateTargetArray_Cells(Ttarget2)                
+    call SM%fringe_x2%allocateTargetArray_Edges(wtarget2)                
+    call SM%fringe_x2%associateFringeTargets(utarget2, vtarget2, wtarget2) 
+    call SM%fringe_x2%associateFringeTarget_scalar(Ttarget2)
+
+    utarget2 = 0.d0 
+    vtarget2 = 0.d0 
+    wtarget2 = 0.d0 
+    Ttarget2 = 0.d0 
 
     nxHIT = HIT%gpC%xsz(1)
     nyHIT = HIT%gpC%ysz(2)
@@ -89,7 +101,7 @@ program shearlessMixing
     call HIT%interpolate_cellField_to_edgeField(uHITFilt,wHITFilt,0,0)
     call HIT%spectC%bandpassFilter_and_phaseshift(HIT%uhat  , uHITFilt, zero, streamWiseCoord)
     call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat  , vHITFilt, zero, streamWiseCoord)
-    call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,wtarget0,HIT,SM,streamWiseCoord)
+    call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget1,vtarget1,wtarget1,HIT,SM,streamWiseCoord)
 
     ! Initialize the filters
     if (applyfilters) then
@@ -128,8 +140,8 @@ program shearlessMixing
            zero, streamWiseCoord)
          call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
            zero, streamWiseCoord)
-         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
-           wtarget0,HIT,SM,streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget1,vtarget1,&
+           wtarget1,HIT,SM,streamWiseCoord)
        case (2)
          ! Stage 1
          call SM%advance_SSP_RK45_Stage_1()
@@ -141,8 +153,8 @@ program shearlessMixing
            zero, streamWiseCoord)
          call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
            zero, streamWiseCoord)
-         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
-           wtarget0,HIT,SM,streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget1,vtarget1,&
+           wtarget1,HIT,SM,streamWiseCoord)
 
          ! Stage 2
          call SM%advance_SSP_RK45_Stage_2()
@@ -154,8 +166,8 @@ program shearlessMixing
            zero, streamWiseCoord)
          call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
            zero, streamWiseCoord)
-         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
-           wtarget0,HIT,SM,streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget1,vtarget1,&
+           wtarget1,HIT,SM,streamWiseCoord)
 
          ! Stage 3
          call SM%advance_SSP_RK45_Stage_3()
@@ -167,8 +179,8 @@ program shearlessMixing
            zero, streamWiseCoord)
          call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
            zero, streamWiseCoord)
-         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
-           wtarget0,HIT,SM,streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget1,vtarget1,&
+           wtarget1,HIT,SM,streamWiseCoord)
 
          ! Stage 4
          call SM%advance_SSP_RK45_Stage_4()
@@ -180,8 +192,8 @@ program shearlessMixing
            zero, streamWiseCoord)
          call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
            zero, streamWiseCoord)
-         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
-           wtarget0,HIT,SM,streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget1,vtarget1,&
+           wtarget1,HIT,SM,streamWiseCoord)
 
          ! Stage 5
          call SM%advance_SSP_RK45_Stage_5()
@@ -193,8 +205,8 @@ program shearlessMixing
            zero, streamWiseCoord)
          call HIT%spectC%bandpassFilter_and_phaseshift(HIT%vhat, vHITFilt, &
            zero, streamWiseCoord)
-         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget0,vtarget0,&
-           wtarget0,HIT,SM,streamWiseCoord)
+         call copyHITfieldsToSM(uHITFilt,vHITFilt,wHITFilt,utarget1,vtarget1,&
+           wtarget1,HIT,SM,streamWiseCoord)
 
        ! Call wrap up 
          call SM%wrapup_timestep()
@@ -213,7 +225,8 @@ program shearlessMixing
     end do
 
     deallocate(uHITFilt, vHITFilt, wHITFilt)
-    deallocate(utarget0, vtarget0, wtarget0)
+    deallocate(utarget1, vtarget1, wtarget1)
+    deallocate(utarget2, vtarget2, wtarget2)
     call HIT%finalize_io()
     call SM%finalize_io()
 

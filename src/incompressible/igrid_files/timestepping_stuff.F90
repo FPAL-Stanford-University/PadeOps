@@ -767,3 +767,52 @@
        end if 
 
    end subroutine
+   
+   subroutine RK4(this, dtforced)
+       class(igrid), intent(inout), target :: this
+       real(rkind), intent(in), optional :: dtforced
+       integer :: idx
+       real(rkind), dimension(4) :: a, b
+
+       if(present(dtforced)) then
+         this%dt = dtforced
+       else
+         ! Step 0: Compute TimeStep 
+         call this%compute_deltaT
+       endif
+
+       this%du = im0
+       this%dv = im0
+       this%dw = im0
+       
+       a = [0.d0, 0.5d0, 0.5d0, 1.d0]
+       b = [1.d0, 2.d0, 2.d0, 1.d0]/6.d0
+   
+       do idx = 1,4
+         this%ustar = this%uhat + a(idx)*this%dt*this%u_rhs
+         this%vstar = this%vhat + a(idx)*this%dt*this%v_rhs
+         this%wstar = this%what + a(idx)*this%dt*this%w_rhs
+         
+         this%uhat => this%ustar
+         this%vhat => this%vstar
+         this%what => this%wstar
+         
+         call this%project_and_prep(.false.)
+         call this%populate_rhs()
+         call this%reset_pointers()
+
+         this%du = this%du + b(idx)*this%dt*this%u_rhs
+         this%dv = this%dv + b(idx)*this%dt*this%v_rhs
+         this%dw = this%dw + b(idx)*this%dt*this%w_rhs
+       end do
+
+       this%uhat = this%uhat + this%du 
+       this%vhat = this%vhat + this%dv 
+       this%what = this%what + this%dw 
+       
+       call this%project_and_prep(.false.)
+
+       ! Wrap up this time step 
+       call this%wrapup_timestep() 
+   
+   end subroutine

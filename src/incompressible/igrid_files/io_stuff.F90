@@ -748,7 +748,6 @@
        if (nrank == 0) then
            write(tempname,"(A3,I2.2,A6,A4)") "Run", runIDX, "HEADER",".txt"
            fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-
            open (this%headerfid, file=trim(fname), FORM='formatted', STATUS='replace',ACTION='write')
            write(this%headerfid,*)"========================================================================="
            write(this%headerfid,*)"---------------------  Header file for MATLAB ---------------------------"
