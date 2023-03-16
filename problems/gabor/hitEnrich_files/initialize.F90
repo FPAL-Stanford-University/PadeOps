@@ -1,4 +1,4 @@
-module HIT_Periodic_parameters
+module HITenrich_parameters
     use exits,            only: message
     use kind_parameters,  only: rkind
     use constants,        only: two, pi
@@ -9,7 +9,7 @@ module HIT_Periodic_parameters
 end module     
 
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
-    use HIT_Periodic_parameters    
+    use HITenrich_parameters    
     use kind_parameters,  only: rkind, clen
     use constants,        only: one
     use decomp_2d,        only: decomp_info
@@ -21,12 +21,12 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn, nxg, nyg, nzg
-    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
+    namelist /HITenrichINPUT/ Lx, Ly, Lz
 
     !Lx = two*pi; Ly = two*pi; Lz = one
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
+    read(unit=ioUnit, NML=HITenrichINPUT)
     close(ioUnit)    
 
     !Lx = two*pi; Ly = two*pi; Lz = two*pi
@@ -62,7 +62,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
-    use HIT_Periodic_parameters
+    use HITenrich_parameters
     use PadeDerOps, only: Pade6Stagg
     use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one, two, pi, half
@@ -82,11 +82,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
     real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z
-    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
+    namelist /HITenrichINPUT/ Lx, Ly, Lz
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
+    read(unit=ioUnit, NML=HITenrichINPUT)
     close(ioUnit)    
 
 
@@ -138,7 +138,7 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 end subroutine
 
 subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
-    use HIT_Periodic_parameters    
+    use HITenrich_parameters    
     use kind_parameters,    only: rkind, clen 
     use constants, only: one, zero
     implicit none
@@ -146,11 +146,11 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     character(len=clen),                intent(in)    :: inputfile
     integer :: ioUnit 
     character(len=clen)  :: ufname, vfname, wfname 
-    namelist /HIT_PeriodicINPUT/  Lx, Ly, Lz
+    namelist /HITenrichINPUT/  Lx, Ly, Lz
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
+    read(unit=ioUnit, NML=HITenrichINPUT)
     close(ioUnit)    
 
     wTh_surf = zero 
@@ -158,7 +158,7 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
-    use HIT_Periodic_parameters    
+    use HITenrich_parameters    
     use kind_parameters,    only: rkind, clen 
     use constants,          only: zero, one
     implicit none
@@ -168,14 +168,14 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     real(rkind) :: ThetaRef
     integer :: iounit 
     character(len=clen)  :: ufname, vfname, wfname 
-    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
+    namelist /HITenrichINPUT/ Lx, Ly, Lz
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
+    read(unit=ioUnit, NML=HITenrichINPUT)
     close(ioUnit)    
 
     ! Do nothing really since this is an unstratified simulation
@@ -183,17 +183,17 @@ end subroutine
 
 
 subroutine set_Reference_Temperature(inputfile, Tref)
-    use HIT_Periodic_parameters    
+    use HITenrich_parameters    
     use kind_parameters,    only: rkind, clen 
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
     integer :: iounit
-    namelist /HIT_PeriodicINPUT/ Lx, Ly, Lz
+    namelist /HITenrichINPUT/ Lx, Ly, Lz
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=HIT_PeriodicINPUT)
+    read(unit=ioUnit, NML=HITenrichINPUT)
     close(ioUnit)    
      
     Tref = 0.d0
@@ -293,15 +293,17 @@ subroutine getDomainBoundaries(xDom,yDom,zDom,mesh)
   nullify(x,y,z)
 end subroutine
 
-subroutine getLargeScaleParams(KE,L,LES)
+subroutine getLargeScaleParams(KE,Liso,LES,datadir)
   use kind_parameters,    only: rkind
-  use incompressibleGrid, only: igrid
-  real(rkind), dimension(:,:,:), intent(out) :: KE, L
+  use incompressibleGrid, only: igrid, readField3D
+  real(rkind), dimension(:,:,:), intent(out) :: KE, Liso
   type(igrid), intent(in) :: LES
-  real(rkind) :: dx
+  character(len=*), intent(in) :: datadir
+  real(rkind) :: disp
+  real(rkind), parameter :: kconst = 1.7d0
 
-  dx = LES%dx
-  KE = 1.d0
-  L = 1.d0
+  call readField3D(LES%runID, LES%step, datadir, "Liso", Liso, LES%gpC) 
+  disp = LES%hitforce%EpsAmplitude
+  KE = (disp**(2.d0/3.d0))*(Liso**(5.d0/3.d0))*1.03252d0*kconst
 
 end subroutine

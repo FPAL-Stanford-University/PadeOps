@@ -130,8 +130,6 @@ subroutine ComputeCD06Gradients(this,periodicBCs)
     ierr = this%cd6opZ%init(this%nz, this%dz, periodicBCs(3), 0, 0)
   end if
 
-  ! x - derivatives
-  
   call this%cd6opX%dd1(this%u,this%duidxjC(:,:,:,1),this%gpC%xsz(2),this%gpC%xsz(3))
   call this%dfdyC2CinX(this%u,this%duidxjC(:,:,:,2))
   call this%dfdzC2CinX(this%u,this%duidxjC(:,:,:,3))

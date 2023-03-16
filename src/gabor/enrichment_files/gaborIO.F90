@@ -1,3 +1,23 @@
+subroutine dumpSmallScales(this,uname,vname,wname)
+  class(enrichmentOperator), intent(inout) :: this
+  character(len=4), intent(in), optional :: uname, vname, wname
+  character(len=4) :: f1name, f2name, f3name
+  
+  f1name = "uVel"
+  f2name = "vVel"
+  f3name = "wVel"
+  if (present(uname)) then
+    call assert(present(vname),'present(vname)') 
+    call assert(present(wname),'present(wname)')
+    f1name = uname
+    f2name = vname
+    f3name = wname
+  end if
+  call this%smallScales%dumpFullField(this%smallScales%u ,f1name)
+  call this%smallScales%dumpFullField(this%smallScales%v ,f2name)
+  call this%smallScales%dumpFullField(this%smallScales%wC,f3name)
+end subroutine
+
 subroutine dumpDataAll(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI,KE,L)
   use decomp_2d, only: nrank
   use basic_io,  only: write_1D_ascii
@@ -111,3 +131,4 @@ subroutine dumpMeshDetails(QHxE, QHyE, QHzE, QHgID, largeScalesMesh, smallScales
   nullify(xL, yL, zL, xS, yS, zS)
   deallocate(QHgIDvec)
 end subroutine
+

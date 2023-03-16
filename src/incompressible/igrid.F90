@@ -337,7 +337,7 @@ module IncompressibleGrid
             procedure, private :: TVD_RK3
             procedure, private :: SSP_RK45
             procedure, private :: RK4
-            procedure, private :: ComputePressure
+            procedure          :: computePressure
             procedure, private :: interp_primitiveVars
             procedure          :: compute_duidxj
             procedure, private :: compute_Sijmean
@@ -474,6 +474,7 @@ contains
         logical :: useImmersedBodies = .false. 
         real(rkind) :: immersed_taufact = 1.d0 
         integer :: clearRoundOffFreq = 1000
+        integer :: npad = 1
 
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
@@ -526,7 +527,7 @@ contains
          read(unit=ioUnit, NML=SCALARS)
         end if
         close(ioUnit)
-        npad = 1 
+        
         if (present(num_pad)) npad = num_pad 
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%Re = Re; this%useSponge = useSpongeLayer

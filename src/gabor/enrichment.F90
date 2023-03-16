@@ -69,7 +69,7 @@ module enrichmentMod
     real(rkind) :: strainClipXmax, strainClipYmax, strainClipZmax
 
     ! Data IO
-    character(len=clen) :: outputdir
+    character(len=clen) :: outputdir, inputdir
     logical :: writeIsotropicModes
     
     ! Extra memory for velocity rendering
@@ -81,6 +81,7 @@ module enrichmentMod
     ! Misc
     logical :: debugChecks = .false.
     logical :: strainInitialCondition = .true.
+    logical :: renderBeforeStraining
 
     ! TESTING
     logical :: genModesOnUniformGrid
@@ -127,7 +128,7 @@ contains
     class(enrichmentOperator), intent(inout), target :: this 
     class(igrid), intent(inout), target :: smallScales, largeScales
     character(len=*), intent(in) :: inputfile
-    character(len=clen) :: outputdir
+    character(len=clen) :: outputdir, inputdir
     integer :: ierr, ioUnit
     integer :: nk, ntheta
     integer :: tidRender, tio, tidStop, tidInit = 0
@@ -147,12 +148,14 @@ contains
     logical :: genModesOnUniformGrid = .false.
     logical :: dumpMeshInfo = .false.
     integer :: haloPad = 0
+    logical :: renderBeforeStraining = .false.
     
-    namelist /IO/      outputdir, writeIsotropicModes, readGradients
+    namelist /IO/      inputdir, outputdir, writeIsotropicModes, readGradients
     namelist /GABOR/   nk, ntheta, scalefact, ctauGlobal, Anu, numolec, &
       strainInitialCondition, doNotRenderInitialCondition, &
       xPeriodic, yPeriodic, zPeriodic, kminFact, strainClipXmin, strainClipXmax, & 
-      strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax, haloPad
+      strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax, haloPad, &
+      renderBeforeStraining
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
     namelist /TESTING/ genModesOnUniformGrid, dumpMeshInfo
@@ -198,8 +201,10 @@ contains
     this%strainClipYmax = strainClipYmax
     this%strainClipZmax = strainClipZmax
     this%haloPad = haloPad
+    this%renderBeforeStraining = renderBeforeStraining
 
     ! IO
+    this%inputdir = inputdir
     this%outputdir = outputdir
     this%writeIsotropicModes = writeIsotropicModes
 
@@ -220,7 +225,7 @@ contains
       this%smallScales%gpC%xsz(3)))
     allocate(this%L(this%smallScales%gpC%xsz(1),this%smallScales%gpC%xsz(2),&
       this%smallScales%gpC%xsz(3)))
-    call getLargeScaleParams(this%KE,this%L,this%smallScales)
+    call getLargeScaleParams(this%KE,this%L,this%smallScales, this%inputdir)
 
     npad_ForinitModes = max(ceiling(real(smallScales%ny)/real(largeScales%ny)), & 
         ceiling(real(smallScales%nz)/real(largeScales%nz))) 
@@ -297,13 +302,17 @@ contains
         this%uhatR,this%uhatI,this%vhatR,this%vhatI,this%whatR,this%whatI, &
         this%KE_loc, this%L_loc)
     end if
+    if (this%renderBeforeStraining .and. (mod(this%tid,this%tio) == 0)) then
+      call this%renderVelocity()
+      call this%dumpSmallScales("uIso","vIso","wIso")
+    end if
     if (this%strainInitialCondition) call this%strainModes()
   end subroutine 
 
   subroutine reinit(this)
     class(enrichmentOperator), intent(inout), target :: this 
     
-    call getLargeScaleParams(this%KE,this%L,this%largeScales)
+    call getLargeScaleParams(this%KE,this%L,this%largeScales, this%inputdir)
     !call this%updateLargeScales(timeAdvance=.false.,initializing=.true.) 
 
     ! Compute the number of modes
@@ -600,13 +609,6 @@ contains
     this%tid = this%tid + 1
 
 
-  end subroutine
-
-  subroutine dumpSmallScales(this)
-    class(enrichmentOperator), intent(inout) :: this 
-    call this%smallScales%dumpFullField(this%smallScales%u,"uVel")
-    call this%smallScales%dumpFullField(this%smallScales%v,"vVel")
-    call this%smallScales%dumpFullField(this%smallScales%wC,"wVel")
   end subroutine
 
   function continueSimulation(this) result(doIcontinue)
