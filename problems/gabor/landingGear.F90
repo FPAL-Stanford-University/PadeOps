@@ -51,9 +51,9 @@ program landingGear
   call S2%ComputeCD06Gradients([.false.,.false.,.false.])
   if (dumpIndividualScales) call enrich12%dumpSmallScales()
 
-  print*, p_sum(sum(abs(S2%u)))
-  print*, p_sum(sum(abs(S2%v)))
-  print*, p_sum(sum(abs(S2%wC)))
+!  print*, p_sum(sum(abs(S2%u)))
+!  print*, p_sum(sum(abs(S2%v)))
+!  print*, p_sum(sum(abs(S2%wC)))
 
   if (.not. genScale3) call gracefulExit('stop',ierr)
 
@@ -66,9 +66,9 @@ program landingGear
   call S3%ComputeCD06Gradients([.false.,.false.,.false.])
   if (dumpIndividualScales) call enrich23%dumpSmallScales()
 
-  print*, p_sum(sum(abs(S3%u)))
-  print*, p_sum(sum(abs(S3%v)))
-  print*, p_sum(sum(abs(S3%wC)))
+!  print*, p_sum(sum(abs(S3%u)))
+!  print*, p_sum(sum(abs(S3%v)))
+!  print*, p_sum(sum(abs(S3%wC)))
 
   call enrich12%destroy()
   call enrich23%destroy()

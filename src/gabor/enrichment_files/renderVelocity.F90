@@ -18,9 +18,9 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     real(single_kind) :: cs, ss, fx, fy, fz, f, xF, yF, zF, kxs, kys, kzs
     real(single_kind) :: uRs, uIs, vRs, vIs, wRs, wIs, xs, ys, zs, dx, dy, dz
     real(single_kind) :: wxSupport, wySupport, wzSupport, du, dv, dw
-    real(single_kind), parameter :: pi_single = 4.0*atan(1.0)
     integer, dimension(2) :: shift
     real(rkind) :: xtgt, ytgt, ztgt, distance
+    integer :: nmodesPrintStatus = 500000
     
     this%utmp = 0.e0
     this%vtmp = 0.e0
@@ -43,9 +43,10 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     kst = this%smallScales%gpC%xst(3) 
     ken = this%smallScales%gpC%xen(3)
 
+    shift = [1,1]
+
+    call tic()
     if (this%genModesOnUniformGrid) then
-      shift = [1,1]
-      
       do n = 1,size(x) 
         ! NOTE: These are global indices of the physical domain
         ! NOTE: The contribution of Gabor modes on neighboring processes is not
@@ -75,13 +76,12 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
             end do
           end do
         end if
-        if (mod(n,100000) == 0) then
+        if (mod(n,nmodesPrintStatus) == 0) then
           write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
           call message(trim(mssg))
         end if
       end do
-    else
-      shift = [1,1]
+    else if (this%useFastTrigFunctions) then
       do n = 1,size(x) 
         ! NOTE: These are global indices of the physical domain
         ! NOTE: The contribution of Gabor modes on neighboring processes is not
@@ -99,20 +99,70 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
           continue
         else
           ! Cast variables to single precision
-          kxs = castSingle(kx(n))
-          kys = castSingle(ky(n))
-          kzs = castSingle(kz(n))
-          
-          xs  = castSingle(x(n))
-          ys  = castSingle(y(n))
-          zs  = castSingle(z(n))
+          kxs = castSingle(kx(n)); kys = castSingle(ky(n)); kzs = castSingle(kz(n))
+          xs  = castSingle(x(n));  ys  = castSingle(y(n)); zs  = castSingle(z(n))
 
-          uRs = castSingle(uR(n))
-          uIs = castSingle(uI(n))
-          vRs = castSingle(vR(n))
-          vIs = castSingle(vI(n))
-          wRs = castSingle(wR(n))
-          wIs = castSingle(wI(n))
+          uRs = castSingle(uR(n)); vRs = castSingle(vR(n)); wRs = castSingle(wR(n))
+          uIs = castSingle(uI(n)); vIs = castSingle(vI(n)); wIs = castSingle(wI(n))
+
+          do k = kkst,kken
+            zF = real(zDom(1),kind=4) + dz*castSingle(k - 1)
+            kdotx3 = kzs*(zF - zs)
+            fz = max(fastcos(pi_single*(zF - zs)/wzSupport), 0.e0)
+            do j = jjst,jjen
+              yF = real(yDom(1),kind=4) + dy*castSingle(j - 1)
+              kdotx2 = kys*(yF - ys)
+              fy = max(fastcos(pi_single*(yF - ys)/wySupport), 0.e0)
+              do i = iist,iien
+                xF = real(xDom(1),kind=4) + dx*castSingle(i - 1)
+                kdotx = kdotx2 + kdotx3 + kxs*(xF - xs)
+
+                cs = fastcos(kdotx)
+                ss = fastsin(kdotx)
+
+                fx = max(fastcos(pi_single*(xF - xs)/wxSupport), 0.e0)
+                f = fx*fy*fz
+
+                du = 2*f*(uRs*cs - uIs*ss)
+                dv = 2*f*(vRs*cs - vIs*ss)
+                dw = 2*f*(wRs*cs - wIs*ss)
+
+                this%utmp(i,j,k) = this%utmp(i,j,k) + du 
+                this%vtmp(i,j,k) = this%vtmp(i,j,k) + dv 
+                this%wtmp(i,j,k) = this%wtmp(i,j,k) + dw
+                
+              end do
+            end do
+          end do
+        end if
+        if (mod(n,nmodesPrintStatus) == 0) then
+          write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
+          call message(trim(mssg))
+        end if
+      end do
+    else
+      do n = 1,size(x) 
+        ! NOTE: These are global indices of the physical domain
+        ! NOTE: The contribution of Gabor modes on neighboring processes is not
+        ! accounted for here, nor is the periodic contribution for periodic
+        ! directions whose data resides exlusively on the process (e.g. in x)
+        
+        call getStartEndGlobalIndices(x(n), xDom(1), wxSupport, this%smallScales%dx, &
+          shift, ist, ien, iist, iien)
+        call getStartEndGlobalIndices(y(n), yDom(1), wySupport, this%smallScales%dy, &
+          shift, jst, jen, jjst, jjen)
+        call getStartEndGlobalIndices(z(n), zDom(1), wzSupport, this%smallScales%dz, &
+          shift, kst, ken, kkst, kken)
+        
+        if (iien < iist .or. jjen < jjst .or. kken < kkst) then
+          continue
+        else
+          ! Cast variables to single precision
+          kxs = castSingle(kx(n)); kys = castSingle(ky(n)); kzs = castSingle(kz(n))
+          xs  = castSingle(x(n));  ys  = castSingle(y(n)); zs  = castSingle(z(n))
+
+          uRs = castSingle(uR(n)); vRs = castSingle(vR(n)); wRs = castSingle(wR(n))
+          uIs = castSingle(uI(n)); vIs = castSingle(vI(n)); wIs = castSingle(wI(n))
 
           do k = kkst,kken
             zF = real(zDom(1),kind=4) + dz*castSingle(k - 1)
@@ -144,7 +194,7 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
             end do
           end do
         end if
-        if (mod(n,100000) == 0) then
+        if (mod(n,nmodesPrintStatus) == 0) then
           write(mssg,'(F7.4,A10)')real(n,rkind)/real(size(x),rkind)*100.d0,'% Complete'
           call message(trim(mssg))
         end if
@@ -153,6 +203,7 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     this%smallScales%u  = this%smallScales%u  + real(this%utmp,rkind)
     this%smallScales%v  = this%smallScales%v  + real(this%vtmp,rkind)
     this%smallScales%wC = this%smallScales%wC + real(this%wtmp,rkind)
+    call toc('Finished rendering velocity')
 end subroutine
   
 subroutine renderVelocity(this)
@@ -234,3 +285,30 @@ subroutine getstartEndGlobalIndices(loc, domst, wSupport, delta, shift, st, en, 
   stg = max(ceiling((loc - domst - wSupport/2 - delta/2)/delta) + shift(1), st)
   eng = min(ceiling((loc - domst + wSupport/2 - delta/2)/delta) + shift(2), en)
 end subroutine
+
+recursive function fastsin(xin) result (y)
+  real(single_kind), intent(in) :: xin
+  real(single_kind) :: y, x
+
+  x = xin
+
+  ! Shift all negative x-values to the positive x-axis
+  x = abs(x + 0.5e0*pi_single) - 0.5e0*pi_single;
+
+  ! Wrap x-values that are greater than pi
+  if (x > 2.e0*pi_single) then
+      y = fastsin(x - 2.e0*pi_single);
+  else if (x > pi_single) then
+      y = -fastsin(x - pi_single);
+  else
+      y = 1.2732e0*x - 0.4053e0*x*abs(x);
+      y = 0.225e0*(y*abs(y) - y) + y;
+  end if
+end function
+
+function fastcos(xin) result(y)
+  real(single_kind), intent(in) :: xin
+  real(single_kind) :: y, x
+  x = xin
+  y = fastsin(x + 0.5e0*pi_single)
+end function

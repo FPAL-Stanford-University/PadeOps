@@ -23,6 +23,7 @@ module enrichmentMod
   logical, dimension(3) :: periodicBCs
 
   real(rkind), dimension(2) :: xDom, yDom, zDom
+  real(single_kind), parameter :: pi_single = 4.0*atan(1.0)
 
   public :: enrichmentOperator, xDom, yDom, zDom, interpAndAddGrids 
 
@@ -85,6 +86,7 @@ module enrichmentMod
 
     ! TESTING
     logical :: genModesOnUniformGrid
+    logical :: useFastTrigFunctions
 
     integer :: activeIndex 
     contains
@@ -145,7 +147,7 @@ contains
     real(rkind) :: strainClipXmax, strainClipXmin
     real(rkind) :: strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax
     logical :: readGradients = .false.
-    logical :: genModesOnUniformGrid = .false.
+    logical :: genModesOnUniformGrid = .false., useFastTrigFunctions = .false.
     logical :: dumpMeshInfo = .false.
     integer :: haloPad = 0
     logical :: renderBeforeStraining = .false.
@@ -158,7 +160,7 @@ contains
       renderBeforeStraining
     namelist /CONTROL/ tidRender, tio, tidStop, tidInit, debugChecks
     namelist /INPUT/ dt
-    namelist /TESTING/ genModesOnUniformGrid, dumpMeshInfo
+    namelist /TESTING/ genModesOnUniformGrid, dumpMeshInfo, useFastTrigFunctions
 
     kminFact = 1.d0 
     strainClipXmin = -1.D99; strainClipXmax = 1.D99
@@ -210,6 +212,7 @@ contains
 
     ! TESTING
     this%genModesOnUniformGrid = genModesOnUniformGrid
+    this%useFastTrigFunctions = useFastTrigFunctions
 
     ! Get domain boundaries
     call getDomainBoundaries(xDom,yDom,zDom,largeScales%mesh)
