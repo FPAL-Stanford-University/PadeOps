@@ -361,14 +361,118 @@ contains
             E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_xi',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
 
+            call update_halo(mix%material(imat)%VF_int(:,:,:,1),tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_VFintx',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+           
+            call update_halo(mix%material(imat)%VF_int(:,:,:,2),tmp1,1,gp,.FALSE.)
+            E_IO =VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_VFinty',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%VF_int(:,:,:,3),tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_VFintz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%Ys_int(:,:,:,1),tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_Ysintx',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%Ys_int(:,:,:,2),tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_Ysinty',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%Ys_int(:,:,:,3),tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_Ysintz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%rho_int(:,:,:,1),tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_rhointx',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%rho_int(:,:,:,2),tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_rhointy',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%rho_int(:,:,:,3),tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_rhointz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+            
+            call update_halo(mix%material(imat)%u_int,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_uint',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%v_int,tmp1,1,gp,.FALSE.)
+            E_IO = VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_vint',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+
+            call update_halo(mix%material(imat)%w_int,tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_wint',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+            call update_halo(mix%material(imat)%fluxYs,tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_fluxYs',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
+
+
+
+
          !   call update_halo(mix%VF_fil(:,:,:,imat),tmp1,1,gp,.FALSE.)
          !   E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_VFfil',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
          !   if( allocated(tmp1) ) deallocate(tmp1)
 
                
          end do
+
+         call update_halo(mix%DerX,tmp1,1,gp,.FALSE.)
+         E_IO = VTK_VAR_XML(NC_NN=nn,varname='DerX',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         if( allocated(tmp1) ) deallocate(tmp1)
+
+         call update_halo(mix%DerY,tmp1,1,gp,.FALSE.)
+         E_IO = VTK_VAR_XML(NC_NN=nn,varname='DerY',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         if( allocated(tmp1) ) deallocate(tmp1)
+
+          call update_halo(mix%intX_error,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='intX_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
+
+          call update_halo(mix%intY_error,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='intY_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
+
+          call update_halo(mix%VF_intx,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='VFintX',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
+
+          call update_halo(mix%VF_inty,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='VFinty',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
+
+          call update_halo(mix%derX_error,tmp1,1,gp,.FALSE.)
+          E_IO =VTK_VAR_XML(NC_NN=nn,varname='derX_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
+
+          call update_halo(mix%derY_error,tmp1,1,gp,.FALSE.)
+          E_IO =VTK_VAR_XML(NC_NN=nn,varname='derY_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+
+          call update_halo(mix%ddx_exact,tmp1,1,gp,.FALSE.)
+          E_IO=VTK_VAR_XML(NC_NN=nn,varname='derX_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
+
+          call update_halo(mix%ddy_exact,tmp1,1,gp,.FALSE.)
+          E_IO =VTK_VAR_XML(NC_NN=nn,varname='derY_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+ 
+          call update_halo(mix%intx_exact,tmp1,1,gp,.FALSE.)
+          E_IO=VTK_VAR_XML(NC_NN=nn,varname='intX_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
+
+          call update_halo(mix%inty_exact,tmp1,1,gp,.FALSE.)
+          E_IO=VTK_VAR_XML(NC_NN=nn,varname='intY_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+
+
+
          
-       !  if((mix%use_surfaceTension) .OR. (mix%use_CnsrvSurfaceTension)) then
+         if((mix%use_surfaceTension) ) then
             call update_halo(mix%kappa,tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='kappa',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
@@ -510,7 +614,7 @@ contains
             if( allocated(tmp1) ) deallocate(tmp1)
 
        
-!       endif
+       endif
 
 
 
@@ -603,11 +707,38 @@ contains
                 E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_diff_pe', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_rhom', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_xi', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_VFintx',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_VFinty',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_VFintz',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_Ysintx',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_Ysinty',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_Ysintz',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_rhointx',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_rhointy',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_rhointz',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_uint', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_vint', tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_wint',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_fluxYs',tp='Float64')
 
 
             end do
 
-           !  if((mix%use_surfaceTension) .OR. (mix%use_CnsrvSurfaceTension)) then
+            E_IO = PVTK_VAR_XML(varname='DerX', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='DerY', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='intX_error', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='intY_error', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='VF_intx', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='VF_inty', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='derX_error', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='derY_error', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='derX_exact', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='derY_exact', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='intX_exact', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='intY_exact', tp='Float64')
+
+
+            if((mix%use_surfaceTension) ) then
                 E_IO = PVTK_VAR_XML(varname='kappa', tp='Float64') 
                 E_IO = PVTK_VAR_XML(varname='maskKappa', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='fmask', tp='Float64')
@@ -641,7 +772,7 @@ contains
                 E_IO = PVTK_VAR_XML(varname='surfaceTension_fxz', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='surfaceTension_fxy', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='surfaceTension_fyz', tp='Float64')
-       !     endif
+           endif
 
 
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='close')

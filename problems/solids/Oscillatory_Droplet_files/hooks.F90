@@ -19,7 +19,7 @@ module Oscillatory_Droplet_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 8, Lx = 8, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 1
+    real(rkind) :: Ly = 6, Lx = 6, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 1
     real(rkind) :: tau0_2=1d0, Nvel=1d0, minYs,etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
 
 
@@ -153,8 +153,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = Lx/real(nx-1,rkind)
-        dy = Ly/real(ny-1,rkind)
+        dx = Lx/real(nx,rkind)
+        dy = Ly/real(ny,rkind)
         dz = dx
 
         if(abs(dx-dy)>1.0d-13) then
@@ -164,7 +164,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx   ! x \in (-2,4]
+                    x(i,j,k) = real( ix1  + i - 1, rkind ) * dx   ! x \in (-2,4]
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -286,7 +286,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
        ! p = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = sqrt(((x - 4)**2)/(1.25)**2 + ((y - 4)**2)/(0.8)**2)
+	eta = sqrt(((x - 3)**2)/(1.25)**2 + ((y - 3)**2)/(0.8)**2)
 
         !eta = ((x-2)**2 + (y-0.5)**2)	
 
@@ -295,13 +295,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         !set mixture Volume fraction
         !eta = (x - 1)**2 + (y - 0.75)**2
 
-        open (unit=8, file="P.txt", status='old', action='read' )
+!        open (unit=8, file="P.txt", status='old', action='read' )
 
-        do ix = 1,nx
-          read(8,*) p(ix,:)
-        end do
+!        do ix = 1,nx
+!          read(8,*) p(ix,:)
+!        end do
 
-        open (unit=12, file="Fx.txt", status='old', action='read' )
+!        open (unit=12, file="Fx.txt", status='old', action='read' )
 
 !        do ix = 1,nx
 !          read(12,*) Fx(ix,:)
@@ -352,8 +352,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
 
         !set mixture pressure (uniform)
-	mix%material(1)%p(:,:,1) =  p !p_ten*mix%material(1)%VF + p_amb
-	mix%material(2)%p(:,:,1)  = mix%material(1)%p(:,:,1)
+	mix%material(1)%p =  p_ten*mix%material(1)%Ys + p_amb
+	mix%material(2)%p = mix%material(1)%p
 
        !mix%surfaceTension_f(:,:,1,1) = Fx
        !mix%surfaceTension_f(:,:,1,2) = Fy
@@ -784,10 +784,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !dx = x(2,1,1) - x(1,1,1)
         !dum = half*(one - tanh( (x-xspng)/(tspng) ))
 
-        xspngL = 0.70
+        xspngL = 0.45
         xspngR = Lx -xspngL
         dx = x(2,1,1) - x(1,1,1)
-        tspng = 8*dx
+        tspng = 5*dx
         dumL = half*(one - tanh( (x-xspngL)/(tspng) ))+ half*(one - tanh((y-xspngL)/(tspng) ))
         dumR = half*(one + tanh( (x-xspngR)/(tspng) )) + half*(one + tanh((y-xspngR)/(tspng) ))       
         dum  = dumL+dumR

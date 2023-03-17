@@ -531,7 +531,8 @@ contains
         real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: fF !fFace
         integer, optional, intent(in) :: bc1, bcn
 
-        select case (this%xmethod)
+      
+       select case (this%xmethod)
         case (1)
             if (present(bc1) .AND. present(bcn)) then
                 call this%xcd10 % dd1(fN,fF,this%xsz(2),this%xsz(3),bc1,bcn)
@@ -561,6 +562,7 @@ contains
                 call this%xei06 % iN2F1(fN,fF,this%xsz(2),this%xsz(3),bc1,bcn)
             else
                 call this%xei06 % iN2F1(fN,fF,this%xsz(2),this%xsz(3))
+
             end if
         end select 
 
@@ -571,6 +573,7 @@ contains
         real(rkind), intent(in), dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: fN !fNode
         real(rkind), intent(out),dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: fF !fFace
         integer, optional, intent(in) :: bc1, bcn
+
 
         select case (this%ymethod)
         case (1)
@@ -600,8 +603,10 @@ contains
         case (7)
             if (present(bc1) .AND. present(bcn)) then
                 call this%yei06 % iN2F2(fN,fF,this%ysz(1),this%ysz(3),bc1,bcn)
+
             else
                 call this%yei06 % iN2F2(fN,fF,this%ysz(1),this%ysz(3))
+
             end if
         end select 
 
@@ -641,6 +646,7 @@ contains
         case (7)
             if (present(bc1) .AND. present(bcn)) then
                 call this%zei06 % iN2F3(fN,fF,this%zsz(1),this%zsz(2),bc1,bcn)
+
             else
                 call this%zei06 % iN2F3(fN,fF,this%zsz(1),this%zsz(2))
             end if
@@ -681,6 +687,7 @@ contains
         case (7)
             if (present(bc1) .AND. present(bcn)) then
                 call this%xei06 % iF2N1(fF,fN,this%xsz(2),this%xsz(3),bc1,bcn)
+
             else
                 call this%xei06 % iF2N1(fF,fN,this%xsz(2),this%xsz(3))
             end if
@@ -722,6 +729,7 @@ contains
         case (7)
             if (present(bc1) .AND. present(bcn)) then
                 call this%yei06 % iF2N2(fF,fN,this%ysz(2),this%ysz(3),bc1,bcn)
+
             else
                 call this%yei06 % iF2N2(fF,fN,this%ysz(2),this%ysz(3))
             end if

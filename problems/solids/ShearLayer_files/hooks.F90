@@ -19,7 +19,7 @@ module ShearLayer_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 20D-3, Lx = 20D-3, interface_init = 5d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 20D-3, Lx = 20D-3, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -274,7 +274,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 	!delta_rho = Nrho*0.275d0
         eta =(x-interface_init-eta0k*sin(2*pi*y/kwave))
 
-	tmp = (half ) * ( one - erf( (eta)/(2*delta_rho) ) )
+	tmp = (half ) * ( one - erf( (eta)/(delta_rho) ) )
 	
 	!set mixture Volume fraction
 	mix%material(1)%VF = minVF + tmp
@@ -291,16 +291,17 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
        ! kwave = ksize*delta
         m = p_mu2/p_mu
         U0 = delta_d*(p_mu2*v0_2 +p_mu*v0)/(delta*(p_mu+p_mu2))
-        eta2 = eta-6*delta_rho
+        eta2 = eta-3*delta_rho
+        
 
         !set velocities based on mass fraction
-        u   = v_disturb*exp(-abs((eta2/(delta))))*(alpha4*sin(alpha4*y)) !sin(alpha4*(2/3)*y)+alpha4*sin(alpha4/3*y)+alpha4*sin(alpha4*y))
+        u   = v_disturb*exp(-abs((eta2/(1.5*delta))))*(alpha4*sin(alpha4*y)+alpha4*sin(alpha4*(2/3)*y)+alpha4*sin(alpha4/3*y)+alpha4*sin(alpha4*(3/4)*y)+ alpha4*sin(alpha4/2*y))
 
 
         where(eta2 .ge. 0)
-            v = v0_2*erf(eta2/delta) + v_disturb*-eta2/delta*exp(-abs((eta2/(delta))))*cos(alpha4*y) ! (3/2*cos(alpha4*(2/3)*y)+3*cos(alpha4/3*y)+cos(alpha4*y)) ! + U0*(1 - erf(eta/delta_d))
+            v = v0_2*erf(eta2/delta) + v_disturb*-eta2/delta*3/2*exp(-abs((eta2/(1.5*delta))))*(3/2*cos(alpha4*(2/3)*y)+3*cos(alpha4/3*y)+cos(alpha4*y)+ 4/3*cos(alpha4*(3/4)*y)+2*cos(alpha4/2*y) )   ! + U0*(1 - erf(eta/delta_d))
         elsewhere(eta2 .lt. 0 )
-            v = v0*erf(eta2/delta) + v_disturb*-eta2/delta*exp(-abs((eta2/(delta))))*cos(alpha4*y) !3/2*cos(alpha4*(2/3)*y)+3*cos(alpha4/3*y)+cos(alpha4*y))  !!+ !U0*(1 + erf(eta/delta_d))
+            v = v0*erf(eta2/delta) + v_disturb*-eta2/delta*3/2*exp(-abs((eta2/(1.5*delta))))*(3/2*cos(alpha4*(2/3)*y)+3*cos(alpha4/3*y)+cos(alpha4*y)+ 4/3*cos(alpha4*(3/4)*y)+2*cos(alpha4/2*y))  !!+ !U0*(1 + erf(eta/delta_d))
         endwhere
         w   = zero
 

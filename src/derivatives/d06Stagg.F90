@@ -12,9 +12,9 @@ module d06Staggstuff
     public :: d06Stagg, aD06d1, bD06d1, cD06d1
     ! 2nd order first derivative explicit centeral difference coefficients
         !see table VI of Lele 1992 for alpha=beta=0
-    real(rkind), parameter :: aD06d1     =  225.d0/192.0d0  
-    real(rkind), parameter :: bD06d1     = -25.0d0/128.0d0
-    real(rkind), parameter :: cD06d1     =  9.0d0/384.0d0
+    real(rkind), parameter :: aD06d1     = 75.0/64.0 !225.d0/192.0d0  
+    real(rkind), parameter :: bD06d1     = -25.0/128.0 !-25.0d0/128.0d0
+    real(rkind), parameter :: cD06d1     =  3.0/128.0 !9.0d0/384.0d0
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
     !! NOTE : The following variables are used for non-periodic 1st derivative evaluation !!

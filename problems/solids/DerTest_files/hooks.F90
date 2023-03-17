@@ -1,6 +1,6 @@
-module MultiphaseFluid_shock_data
+module DerTest_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight,three,six,sixth,zero,four
+    use constants,        only: one,two,eight,three,six,sixth,zero,four,pi
     use FiltersMod,       only: filters
     implicit none
 
@@ -19,7 +19,7 @@ module MultiphaseFluid_shock_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = one, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = 2*pi, Lx = 2*pi, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
 
     type(filters) :: mygfil
 
@@ -129,7 +129,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
 
@@ -162,7 +162,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx !- two  ! x \in (-2,4]
+                    x(i,j,k) = real( ix1  + i - 1, rkind ) * dx !- two  ! x \in (-2,4]
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -183,7 +183,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
     
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -369,15 +369,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
 
         u   = 0 !(u2-u1)*dum
-        v   = v0
+        v   = 0
         w   = zero
 
         
 
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
         !tmp = half * ( one - erf((0.25 - (x-interface_init)*(x-interface_init) - (y-3.0_rkind)*(y-3.0_rkind))/(thick*dx) ) )
-        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
-
+        tmp = sin(2.0*x)*cos(y)
        ! tmp = half * ( one - erf((0.35**2 - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
 
 
@@ -400,7 +399,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         mix%material(1)%p  = p_amb!p2*dum + p1*(one-dum)
         mix%material(2)%p  = mix%material(1)%p
 
-        mix%material(1)%VF = minVF + (one-two*minVF)*tmp
+        mix%material(1)%VF = tmp
         mix%material(2)%VF = one - mix%material(1)%VF
 
 
@@ -458,7 +457,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use operators,        only: curl
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
 
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -507,7 +506,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        ! if (decomp%ysz(2) == 1) then
-       !     write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/MultiphaseFluid_shock_"//trim(str)//"_", vizcount, ".dat"
+       !     write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/DerTest_"//trim(str)//"_", vizcount, ".dat"
 
        !     open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
        !     write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
@@ -583,7 +582,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        curl_p = P_MEAN(mix%material(1)%curl_p)*six*one
 
           
-       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/MultiphaseFluid_shock_statistics.dat"
+       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/DerTest_statistics.dat"
 
        if (vizcount == 0) then
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
@@ -730,7 +729,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -938,7 +937,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -982,7 +981,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1008,7 +1007,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1028,7 +1027,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1048,7 +1047,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1068,7 +1067,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use MultiphaseFluid_shock_data
+    use DerTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

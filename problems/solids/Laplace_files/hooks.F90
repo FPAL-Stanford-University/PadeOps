@@ -364,7 +364,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
        ! end do
 
         !set mixture pressure (uniform)
-	mix%material(1)%p = p_ten*mix%material(1)%VF + p_amb
+	mix%material(1)%p = p_ten*mix%material(1)%Ys + p_amb
 	mix%material(2)%p = mix%material(1)%p
 
         mix%surfaceTension_f(:,:,:,1) = 0.3/(thick*dx)*(-(x-1)* exp( (eta-R)/(thick*dx))/ ( eta**2 * (1 + exp( (eta - R)/(thick*dx)))**2))

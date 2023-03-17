@@ -11,9 +11,9 @@ module ei06stuff
     private
     public :: ei06, aI02 !TODO Rename this last var
     ! 2nd order first derivative explicit centeral difference coefficients
-    real(rkind), parameter :: aI02     =  75.0d0/64.0d0
-    real(rkind), parameter :: bI02     = -25.0d0/128.0d0
-    real(rkind), parameter :: cI02     =   3.0d0/128.0d0
+    real(rkind), parameter :: aI02     =  150.0/256.0 !75.0d0/64.0d0
+    real(rkind), parameter :: bI02     =  -25.0/256.0!-25.0d0/128.0d0
+    real(rkind), parameter :: cI02     =  3.0/256.0 ! 3.0d0/128.0d0
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
     !! NOTE : The following variables are used for non-periodic 1st derivative evaluation !!
@@ -103,7 +103,6 @@ contains
         this%onebydx2 = this%onebydx/dx_
 
         this%periodic = periodic_
-
         this%bc1 = bc1_
         this%bcn = bcn_
 
@@ -139,9 +138,9 @@ contains
 
         select case (this%periodic)
         case (.TRUE.)
-            a10 = aI02 * half
-            b10 = bI02 * half
-            c10 = cI02 * half
+            a10 = aI02 ! half
+            b10 = bI02 ! half
+            c10 = cI02 ! half
             RHS = 0.0d0
             select case (dir)
                 case ("N2F")
@@ -150,10 +149,13 @@ contains
                                                               + b10 * (f(5:this%n-1,:,:) + f(2:this%n-4,:,:)) &
                                                               + c10 * (f(6:this%n,  :,:) + f(1:this%n-5,:,:))
 
+                    
+
                     !left boundary
                     RHS(1,:,:) = RHS(1,:,:) + a10 * (f(2,:,:) + f(1,       :,:)) &
                                             + b10 * (f(3,:,:) + f(this%n,  :,:)) &
                                             + c10 * (f(4,:,:) + f(this%n-1,:,:))
+
                     RHS(2,:,:) = RHS(2,:,:) + a10 * (f(3,:,:) + f(2,       :,:)) &
                                             + b10 * (f(4,:,:) + f(1,       :,:)) &
                                             + c10 * (f(5,:,:) + f(this%n,  :,:))
@@ -165,9 +167,11 @@ contains
                                                           + b10 * (f(1,       :,:) + f(this%n-2,  :,:)) &
                                                           + c10 * (f(2,       :,:) + f(this%n-3,  :,:))
                     RHS(this%n,  :,:) = RHS(this%n,  :,:) + a10 * (f(1,       :,:) + f(this%n,    :,:)) &
-                                                          + b10 * (f(2,       :,:) + f(this%n-1,  :,:)) &
-                                                          + c10 * (f(3,       :,:) + f(this%n-2,  :,:))
+                                                     + b10 * (f(2,       :,:) + f(this%n-1,  :,:)) &
+                                                     + c10 * (f(3,       :,:) + f(this%n-2,  :,:))
 
+
+                     
                 case ("F2N")
                     !interior    
                     RHS(4:this%n-2,:,:) = RHS(4:this%n-2,:,:) + a10 * (f(4:this%n-2,:,:) + f(3:this%n-3,:,:)) &
@@ -341,9 +345,9 @@ contains
 
         select case (this%periodic)
         case (.TRUE.)
-            a10 = aI02 * half
-            b10 = bI02 * half
-            c10 = cI02 * half
+            a10 = aI02 ! * half
+            b10 = bI02 !* half
+            c10 = cI02 !* half
             RHS = 0.0d0
             select case (dir)
                 case ("N2F")
@@ -542,9 +546,9 @@ contains
 
         select case (this%periodic)
         case (.TRUE.)
-            a10 = aI02 * half
-            b10 = bI02 * half
-            c10 = cI02 * half
+            a10 = aI02 !* half
+            b10 = bI02 !* half
+            c10 = cI02 !* half
             RHS = 0.0d0
             select case (dir)
                 case ("N2F")

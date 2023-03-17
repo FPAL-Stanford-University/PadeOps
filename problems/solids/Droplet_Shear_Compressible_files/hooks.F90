@@ -286,9 +286,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = (x - 0.5)**2 + (y - 0.75)**2
+	eta = sqrt((x - 0.5)**2 + (y - 0.75)**2)
 
-	tmp = (half-minVF)  * ( one - erf( (eta-(R**2))/(thick) ) )
+	tmp = (half-minVF)  * ( one - erf( (eta-(R))/(thick*dx) ) )
 	
 	!set mixture Volume fraction
 	!eta = (x - 0.5)**2 + (y - 0.75)**2
@@ -664,11 +664,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
-    integer :: nx, i, j
+    integer :: nx, i, j, ny
     real(rkind) :: dx, xspng, tspng
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     
     nx = decomp%ysz(1)
+
+    ny = decomp%ysz(2)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -695,10 +697,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !      mix%material(1)%p(1,:,:) = p_amb
         !      mix%material(2)%p(1,:,:) = p_amb
         !      
-              mix%material(2)%VF ( 1,:,:) = minVF
-              mix%material(1)%VF ( 1,:,:) = one - minVF
-              mix%material(2)%Ys ( 1,:,:) = minVF
-              mix%material(1)%Ys ( 1,:,:) = one - minVF
+              mix%material(1)%VF ( 1,:,:) = minVF
+              mix%material(2)%VF ( 1,:,:) = one - minVF
+              mix%material(1)%Ys ( 1,:,:) = minVF
+              mix%material(2)%Ys ( 1,:,:) = one - minVF
           end if
         endif
 
@@ -711,10 +713,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !      mix%material(1)%p(nx,:,:) = p_amb
         !      mix%material(2)%p(nx,:,:) = p_amb
         !      
-              mix%material(2)%VF ( nx,:,:) = minVF
-              mix%material(1)%VF ( nx,:,:) = one - minVF
-              mix%material(2)%Ys ( nx,:,:) = minVF
-              mix%material(1)%Ys ( nx,:,:) = one - minVF
+              mix%material(1)%VF ( nx,:,:) = minVF
+              mix%material(2)%VF ( nx,:,:) = one - minVF
+              mix%material(1)%Ys ( nx,:,:) = minVF
+              mix%material(2)%Ys ( nx,:,:) = one - minVF
           end if
         endif
         if(decomp%yst(2)==1) then
@@ -726,10 +728,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !      mix%material(1)%p(1,:,:) = p_amb
         !      mix%material(2)%p(1,:,:) = p_amb
         !
-              mix%material(2)%VF ( :,1,:) = minVF
-              mix%material(1)%VF ( :,1,:) = one - minVF
-              mix%material(2)%Ys ( :,1,:) = minVF
-              mix%material(1)%Ys ( :,1,:) = one - minVF
+              mix%material(1)%VF ( :,1,:) = minVF
+              mix%material(2)%VF ( :,1,:) = one - minVF
+              mix%material(1)%Ys ( :,1,:) = minVF
+              mix%material(2)%Ys ( :,1,:) = one - minVF
           end if
         endif
 
@@ -742,10 +744,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !      mix%material(1)%p(nx,:,:) = p_amb
         !      mix%material(2)%p(nx,:,:) = p_amb
         !
-              mix%material(2)%VF ( :,ny,:) = minVF
-              mix%material(1)%VF ( :,ny,:) = one - minVF
-              mix%material(2)%Ys ( :,ny,:) = minVF
-              mix%material(1)%Ys ( :,ny,:) = one - minVF
+              mix%material(1)%VF ( :,ny,:) = minVF
+              mix%material(2)%VF ( :,ny,:) = one - minVF
+              mix%material(1)%Ys ( :,ny,:) = minVF
+              mix%material(2)%Ys ( :,ny,:) = one - minVF
           end if
         endif
 
@@ -950,8 +952,8 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
 	v =  ((sin(pi*y))**2)*(sin(2*pi*x))*(cos(pi*tsim/Tp))+(-x-y+1)*cos(pi*tsim/Tp)
 	w = 0   
         p = p_amb
-	T = one
-	e = 2.5
+        !T = 10
+        !e = 2.941
         ! ! determine interface velocity
         ! ind = minloc(abs(mix%material(1)%VF(:,1,1)-0.5d0))
         ! imin = ind(1)
