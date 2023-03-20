@@ -594,6 +594,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
                   open(10,file=outputfile,status='unknown')
                   do j=1,decomp%ysz(2)
                      write(10,'(4(e19.12),1x)') y(1,j,1), cmodel_loc(j), cmodel_loc_Qjsgs(j), cmodel_loc_tke(j)
+                     !write(10,'(3(e19.12),1x)') y(1,j,1), cmodel_loc(j), cmodel_loc_Qjsgs(j)
                   enddo
                   close(10)
               endif

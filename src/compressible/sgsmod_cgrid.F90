@@ -29,10 +29,12 @@ module sgsmod_cgrid
         real(rkind), dimension(:),       allocatable :: cmodel_local, cmodel_local_Qjsgs, cmodel_local_tke
         real(rkind), dimension(:,:,:,:), pointer     :: xbuf, ybuf, zbuf, duiFildxj, SFil_ij, tausgsFil, gradTFil, QjsgsFil
         real(rkind), dimension(:,:,:  ), pointer     :: uFil, vFil, wFil, rhoFil, TFil, numer, denom
+        real(rkind), dimension(:,:,:  ), pointer     :: mij_part1, mij_part2, Qj_part1, Qj_part2
         real(rkind), dimension(:,:,:  ), pointer     :: duFildx, duFildy, duFildz, Lij, Mij
         real(rkind), dimension(:,:,:  ), pointer     :: dvFildx, dvFildy, dvFildz
         real(rkind), dimension(:,:,:  ), pointer     :: dwFildx, dwFildy, dwFildz
-        real(rkind), dimension(:,:,:  ), pointer     :: dTFildx, dTFildy, dTFildz, nusgsFil, SiiFil, modSFil_sq, qtkeFil! , kapsgsFil
+        real(rkind), dimension(:,:,:  ), pointer     :: dTFildx, dTFildy, dTFildz
+        real(rkind), dimension(:,:,:  ), pointer     :: nusgsFil, SiiFil, modSFil_sq, qtkeFil, kapsgsFil
         real(rkind) :: cmodel_global, cmodel_global_Qjsgs, deltaRatioSq
         logical ::  isPeriodic = .false., periodicx = .true., periodicy = .true., periodicz = .true.
         integer, dimension(2) :: x_bc, y_bc, z_bc
@@ -58,10 +60,11 @@ module sgsmod_cgrid
             procedure, private :: init_mgm
             procedure, private :: init_dynamic_procedure
             !! ALL SGS SOURCE/SINK PROCEDURES
+            procedure          :: getTauijQjSGS
             procedure          :: getQjSGS
             procedure          :: getTauSGS
             procedure          :: get_qtke
-            procedure, private :: get_SGS_kernel
+            procedure, private :: get_SGS_kernels
             procedure, private :: get_smagorinsky_kernel
             procedure, private :: get_sigma_kernel
             procedure, private :: get_amd_kernel
@@ -269,6 +272,138 @@ subroutine getTauSGS(this, newTimeStep, duidxj, rho, u, v, w, tausgs)
    real(rkind), dimension(this%nxL, this%nyL, this%nzL   ), intent(in)  :: rho, u, v, w
    real(rkind), dimension(this%nxL, this%nyL, this%nzL, 6), intent(out) :: tausgs
 
+!!   !real(rkind) :: S, CI = 0.003_rkind, deltaLES
+!!   real(rkind), dimension(this%nxL, this%nyL, this%nzL)  :: modS_sq, qtke, Sii
+!!   integer :: i,j,k
+!!
+!!   if (this%isEddyViscosityModel) then
+!!
+!!      ! Step 0: Compute Sij
+!!      call this%get_Sij_from_duidxj(duidxj, this%S_ij) 
+!!      
+!!      ! Step 1: Get mag-square and trace of S_ij
+!!      call this%get_modS_Sii(this%S_ij,modS_sq, Sii)
+!!
+!!      ! Step 2: Get TKE (q)
+!!      call this%get_qtke(rho, modS_sq, qtke)
+!!      !qtke = twothird * (this%deltaLES**2) * rho * modS_sq
+!!
+!!      ! Step 4: Get nusgs
+!!      call this%get_SGS_kernel(duidxj, this%S_ij, modS_sq, this%nusgs)
+!!
+!!      ! Step 5: Dynamic Procedure 
+!!      if( (newTimeStep) .and. (mod(this%mstep, this%DynProcFreq) == 0) ) then
+!!        if(this%DynamicProcedureType==1) then
+!!            call this%doLocalDynamicProcedure_eddy(rho, u, v, w, this%nusgs, this%S_ij, Sii, modS_sq, qtke)
+!!        elseif(this%DynamicProcedureType==2) then
+!!            !! not yet implemented
+!!        endif
+!!      endif
+!!      
+!!      ! Step 6: Multiply by model constant     
+!!      call this%multiply_by_model_constant(qtke)
+!!     
+!!      ! Step 7: Get tau_sgs    
+!!      tausgs(:,:,:,1) = -two * rho * this%nusgs * (this%S_ij(:,:,:,1)-Sii) + qtke
+!!      tausgs(:,:,:,2) = -two * rho * this%nusgs * this%S_ij(:,:,:,2)
+!!      tausgs(:,:,:,3) = -two * rho * this%nusgs * this%S_ij(:,:,:,3)
+!!      tausgs(:,:,:,4) = -two * rho * this%nusgs * (this%S_ij(:,:,:,4)-Sii) + qtke
+!!      tausgs(:,:,:,5) = -two * rho * this%nusgs * this%S_ij(:,:,:,5)
+!!      tausgs(:,:,:,6) = -two * rho * this%nusgs * (this%S_ij(:,:,:,6)-Sii) + qtke
+!!  
+!!   else
+!!     !!!! call MGM model from here
+!!     !!call this%get_Sij_from_duidxj(duidxj)
+!!     !!call this%get_tausgs_mgm(rho, duidxj, tausgs)
+!!   
+!!     !!! new way of writing MGM !!!
+!!     call this%get_Sij_from_duidxj(duidxj, this%S_ij)
+!!     call this%get_mgm_kernel(rho, duidxj, this%S_ij, tausgs)
+!! 
+!!     !! Dynam Procedure
+!!     if( (newTimeStep) .and. (mod(this%mstep, this%DynProcFreq) == 0) ) then
+!!       if(this%DynamicProcedureType==1) then
+!!           call this%doLocalDynamicProcedure_mgm(rho, u, v, w, tausgs)
+!!       elseif(this%DynamicProcedureType==2) then
+!!           !! not yet implemented
+!!       endif
+!!     endif
+!!
+!!     call this%multiply_by_model_coefficient_MGM(tausgs)
+!! 
+!!   end if
+!!
+!!   if(newTimeStep) this%mstep = this%mstep + 1
+
+end subroutine
+
+subroutine getQjSGS(this, newTimeStep, duidxj, rho, u, v, w, T, gradT, Qjsgs)
+   class(sgs_cgrid), intent(inout) :: this
+   logical, intent(in) :: newTimeStep
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL,9), intent(in)  :: duidxj
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL  ), intent(in)  :: rho, u, v, w, T
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL,3), intent(in)  :: gradT
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL,3), intent(out) :: Qjsgs
+
+!!   integer :: k
+!!
+!!   if (this%isEddyDiffModel) then
+!!     ! if (this%isTurbPrandtlconst) then
+!!     !     this%kapsgs = this%nusgs ! /this%PrSGS
+!!     ! else
+!!     !     call this%get_amd_Dkernel(duidxj, gradT, this%kapsgs)
+!!     ! endif
+!!     ! 
+!!     ! do k = 1, 3
+!!     !    Qjsgs(:,:,:,k) = - rho * this%Cp * this%kapsgs * gradT(:,:,:,k)
+!!     ! end do
+!!     !!! Above copied here
+!!     call this%get_Qjsgs_eddy_kernel(rho, this%nusgs, duidxj, gradT, Qjsgs)
+!!
+!!     !! Dynam Procedure
+!!     if( (newTimeStep) .and. (mod(this%mstep, this%DynProcFreq) == 0) ) then
+!!       if(this%DynamicProcedureType==1) then
+!!           call this%doLocalDynamicProcedure_eddy_Qjsgs(rho, u, v, w, T, Qjsgs)
+!!       elseif(this%DynamicProcedureType==2) then
+!!           !! not yet implemented
+!!       endif
+!!     endif
+!!
+!!     call this%multiply_by_model_coefficient_eddy_Qjsgs(Qjsgs) 
+!!      
+!!   else
+!!     !!!! MGM model
+!!     !!call this%get_Sij_from_duidxj(duidxj) 
+!!     !!call this%get_Qjsgs_mgm(rho, duidxj, gradT, Qjsgs)
+!!   
+!!     !!! new way of writing MGM !!!
+!!     call this%get_Sij_from_duidxj(duidxj, this%S_ij)
+!!     call this%get_Qjsgs_mgm_kernel(rho, duidxj, this%S_ij, gradT, Qjsgs)
+!! 
+!!     !! Dynam Procedure
+!!     if( (newTimeStep) .and. (mod(this%mstep, this%DynProcFreq) == 0) ) then
+!!       if(this%DynamicProcedureType==1) then
+!!           call this%doLocalDynamicProcedure_mgm_Qjsgs(rho, u, v, w, T, Qjsgs)
+!!       elseif(this%DynamicProcedureType==2) then
+!!           !! not yet implemented
+!!       endif
+!!     endif
+!!
+!!     call this%multiply_by_model_coefficient_mgm_Qjsgs(Qjsgs)
+!! 
+!!   end if
+end subroutine
+
+subroutine getTauijQjSGS(this, newTimeStep, duidxj, gradT, rho, u, v, w, T, tausgs, Qjsgs)
+   use constants, only : third, twothird 
+   class(sgs_cgrid), intent(inout) :: this
+   logical, intent(in) :: newTimeStep
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL, 9), intent(in)  :: duidxj
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL, 3), intent(in)  :: gradT
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL   ), intent(in)  :: rho, u, v, w, T
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL, 6), intent(out) :: tausgs
+   real(rkind), dimension(this%nxL, this%nyL, this%nzL, 3), intent(out) :: Qjsgs
+
    !real(rkind) :: S, CI = 0.003_rkind, deltaLES
    real(rkind), dimension(this%nxL, this%nyL, this%nzL)  :: modS_sq, qtke, Sii
    integer :: i,j,k
@@ -285,13 +420,15 @@ subroutine getTauSGS(this, newTimeStep, duidxj, rho, u, v, w, tausgs)
       call this%get_qtke(rho, modS_sq, qtke)
       !qtke = twothird * (this%deltaLES**2) * rho * modS_sq
 
-      ! Step 4: Get nusgs
-      call this%get_SGS_kernel(duidxj, this%S_ij, modS_sq, this%nusgs)
+      ! Step 4: Get nusgs and kapsgs
+      call this%get_SGS_kernels(duidxj, this%S_ij, modS_sq, gradT, this%nusgs, this%kapsgs)
 
       ! Step 5: Dynamic Procedure 
       if( (newTimeStep) .and. (mod(this%mstep, this%DynProcFreq) == 0) ) then
         if(this%DynamicProcedureType==1) then
-            call this%DoLocalDynamicProcedure_eddy(rho, u, v, w, this%nusgs, this%S_ij, Sii, modS_sq, qtke)
+           call this%doLocalDynamicProcedure_eddy(rho, u, v, w, T, this%nusgs, &
+                     this%kapsgs, this%S_ij, Sii, modS_sq, qtke, gradT)
+           !call this%doLocalDynamicProcedure_eddy_Qjsgs(rho, u, v, w, T, Qjsgs)
         elseif(this%DynamicProcedureType==2) then
             !! not yet implemented
         endif
@@ -300,7 +437,7 @@ subroutine getTauSGS(this, newTimeStep, duidxj, rho, u, v, w, tausgs)
       ! Step 6: Multiply by model constant     
       call this%multiply_by_model_constant(qtke)
      
-      ! Step 7: Get tau_sgs    
+      ! Step 7a: Get tau_sgs    
       tausgs(:,:,:,1) = -two * rho * this%nusgs * (this%S_ij(:,:,:,1)-Sii) + qtke
       tausgs(:,:,:,2) = -two * rho * this%nusgs * this%S_ij(:,:,:,2)
       tausgs(:,:,:,3) = -two * rho * this%nusgs * this%S_ij(:,:,:,3)
@@ -308,6 +445,10 @@ subroutine getTauSGS(this, newTimeStep, duidxj, rho, u, v, w, tausgs)
       tausgs(:,:,:,5) = -two * rho * this%nusgs * this%S_ij(:,:,:,5)
       tausgs(:,:,:,6) = -two * rho * this%nusgs * (this%S_ij(:,:,:,6)-Sii) + qtke
   
+      ! Step 7b: Get tau_sgs    
+      do k = 1, 3
+         Qjsgs(:,:,:,k) = - rho * this%kapsgs * gradT(:,:,:,k) * this%Cp
+      end do
    else
      !!!! call MGM model from here
      !!call this%get_Sij_from_duidxj(duidxj)
@@ -315,80 +456,26 @@ subroutine getTauSGS(this, newTimeStep, duidxj, rho, u, v, w, tausgs)
    
      !!! new way of writing MGM !!!
      call this%get_Sij_from_duidxj(duidxj, this%S_ij)
-     call this%get_mgm_kernel(rho, duidxj, this%S_ij, tausgs)
+     call this%get_mgm_kernel(rho, duidxj, this%S_ij, gradT, tausgs, Qjsgs)
+     !call this%get_Qjsgs_mgm_kernel(rho, duidxj, this%S_ij, gradT, Qjsgs)
  
      !! Dynam Procedure
      if( (newTimeStep) .and. (mod(this%mstep, this%DynProcFreq) == 0) ) then
        if(this%DynamicProcedureType==1) then
-           call this%DoLocalDynamicProcedure_mgm(rho, u, v, w, tausgs)
+           call this%doLocalDynamicProcedure_mgm(rho, u, v, w, T, tausgs, Qjsgs)
+           !call this%doLocalDynamicProcedure_mgm_Qjsgs(rho, u, v, w, T, Qjsgs)
        elseif(this%DynamicProcedureType==2) then
            !! not yet implemented
        endif
      endif
 
-     call this%multiply_by_model_coefficient_MGM(tausgs)
+     call this%multiply_by_model_coefficient_MGM(tausgs, Qjsgs)
+     !call this%multiply_by_model_coefficient_mgm_Qjsgs(Qjsgs)
  
    end if
 
    if(newTimeStep) this%mstep = this%mstep + 1
 
-end subroutine
-
-subroutine getQjSGS(this, newTimeStep, duidxj, rho, u, v, w, T, gradT, Qjsgs)
-   class(sgs_cgrid), intent(inout) :: this
-   logical, intent(in) :: newTimeStep
-   real(rkind), dimension(this%nxL, this%nyL, this%nzL,9), intent(in)  :: duidxj
-   real(rkind), dimension(this%nxL, this%nyL, this%nzL  ), intent(in)  :: rho, u, v, w, T
-   real(rkind), dimension(this%nxL, this%nyL, this%nzL,3), intent(in)  :: gradT
-   real(rkind), dimension(this%nxL, this%nyL, this%nzL,3), intent(out) :: Qjsgs
-
-   integer :: k
-
-   if (this%isEddyDiffModel) then
-     ! if (this%isTurbPrandtlconst) then
-     !     this%kapsgs = this%nusgs ! /this%PrSGS
-     ! else
-     !     call this%get_amd_Dkernel(duidxj, gradT, this%kapsgs)
-     ! endif
-     ! 
-     ! do k = 1, 3
-     !    Qjsgs(:,:,:,k) = - rho * this%Cp * this%kapsgs * gradT(:,:,:,k)
-     ! end do
-     !!! Above copied here
-     call this%get_Qjsgs_eddy_kernel(rho, this%nusgs, duidxj, gradT, Qjsgs)
-
-     !! Dynam Procedure
-     if( (newTimeStep) .and. (mod(this%mstep, this%DynProcFreq) == 0) ) then
-       if(this%DynamicProcedureType==1) then
-           call this%DoLocalDynamicProcedure_eddy_Qjsgs(rho, u, v, w, T, Qjsgs)
-       elseif(this%DynamicProcedureType==2) then
-           !! not yet implemented
-       endif
-     endif
-
-     call this%multiply_by_model_coefficient_eddy_Qjsgs(Qjsgs) 
-      
-   else
-     !!!! MGM model
-     !!call this%get_Sij_from_duidxj(duidxj) 
-     !!call this%get_Qjsgs_mgm(rho, duidxj, gradT, Qjsgs)
-   
-     !!! new way of writing MGM !!!
-     call this%get_Sij_from_duidxj(duidxj, this%S_ij)
-     call this%get_Qjsgs_mgm_kernel(rho, duidxj, this%S_ij, gradT, Qjsgs)
- 
-     !! Dynam Procedure
-     if( (newTimeStep) .and. (mod(this%mstep, this%DynProcFreq) == 0) ) then
-       if(this%DynamicProcedureType==1) then
-           call this%DoLocalDynamicProcedure_mgm_Qjsgs(rho, u, v, w, T, Qjsgs)
-       elseif(this%DynamicProcedureType==2) then
-           !! not yet implemented
-       endif
-     endif
-
-     call this%multiply_by_model_coefficient_mgm_Qjsgs(Qjsgs)
- 
-   end if
 end subroutine
 
 end module 

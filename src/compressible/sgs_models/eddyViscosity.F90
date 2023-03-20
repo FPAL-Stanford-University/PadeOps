@@ -50,25 +50,32 @@ subroutine get_qtke(this, rho, modS_sq, qtke)
 
 end subroutine
 
-!subroutine get_SGS_kernel(this,duidxj, modS_sq)
-subroutine get_SGS_kernel(this,duidxj, Sij, modS_sq, nusgs)
+subroutine get_SGS_kernels(this,duidxj, Sij, modS_sq, gradT, nusgs, kapsgs)
    class(sgs_cgrid), intent(inout) :: this
-   real(rkind), dimension(this%nxL,this%nyL,this%nzL,9), intent(in) :: duidxj
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL,9), intent(in)  :: duidxj
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,6), intent(in)  :: Sij
-   real(rkind), dimension(this%nxL,this%nyL,this%nzL),   intent(in) :: modS_sq
-   real(rkind), dimension(this%nxL,this%nyL,this%nzL),   intent(out) :: nusgs
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL),   intent(in)  :: modS_sq
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(in)  :: gradT
+   real(rkind), dimension(this%nxL,this%nyL,this%nzL),   intent(out) :: nusgs, kapsgs
 
    select case(this%SGSmodelID) 
    case (0)
       ! Smagorinsky
       call this%get_smagorinsky_kernel(modS_sq, nusgs)
+      kapsgs = nusgs
    case (1)
       ! Sigma
       call this%get_sigma_kernel(duidxj, nusgs)
+      kapsgs = nusgs
    case (2)
       ! AMD  
-     !call this%get_amd_kernel(duidxj)
       call this%get_amd_kernel(duidxj, Sij, nusgs)
+      call this%get_amd_Dkernel(duidxj, gradT, kapsgs)
+     ! if (this%isTurbPrandtlconst) then
+     !     kapsgs = nusgs 
+     ! else
+     !    call this%get_amd_Dkernel(duidxj, gradT, kapsgs)
+     ! endif
    end select
 
 end subroutine
@@ -80,21 +87,21 @@ subroutine get_Qjsgs_eddy_kernel(this, rho, nusgs, duidxj, gradT, Qjsgs, dynFact
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(in)  :: gradT
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(out) :: Qjsgs
    real(rkind), optional                               , intent(in ) :: dynFactor
-   integer :: i,j,k
-
-   if (this%isTurbPrandtlconst) then
-      this%kapsgs = nusgs !/ this%PrSGS !! --done in multiply_by_coeff
-   else
-      call this%get_amd_Dkernel(duidxj, gradT, this%kapsgs)
-      if(present(dynfactor)) then
-        this%kapsgs = dynFactor * this%kapsgs
-      endif
-   endif
-
-   do k = 1, 3
-      Qjsgs(:,:,:,k) = - rho * this%kapsgs * gradT(:,:,:,k) * this%Cp
-      !Qjsgs(:,:,:,k) = - rho * nusgs * gradT(:,:,:,k)
-   end do
+!!   integer :: i,j,k
+!!
+!!   if (this%isTurbPrandtlconst) then
+!!      this%kapsgs = nusgs !/ this%PrSGS !! --done in multiply_by_coeff
+!!   else
+!!      call this%get_amd_Dkernel(duidxj, gradT, this%kapsgs)
+!!      if(present(dynfactor)) then
+!!        this%kapsgs = dynFactor * this%kapsgs
+!!      endif
+!!   endif
+!!
+!!   do k = 1, 3
+!!      Qjsgs(:,:,:,k) = - rho * this%kapsgs * gradT(:,:,:,k) * this%Cp
+!!      !Qjsgs(:,:,:,k) = - rho * nusgs * gradT(:,:,:,k)
+!!   end do
 
 end subroutine
 
@@ -107,18 +114,20 @@ subroutine multiply_by_model_constant(this,qtke)
 
    if( (this%DynamicProcedureType==0) .or. (this%DynamicProcedureType==2)) then
       !! constant coefficient or Global-Dynamic Procedure
-      this%nusgs = this%cmodel_global * this%nusgs
-      qtke       = this%Ctke  * qtke
+      this%nusgs  = this%cmodel_global       * this%nusgs
+      qtke        = this%Ctke                * qtke
+      this%kapsgs = this%cmodel_global_Qjsgs * this%kapsgs
    elseif(this%DynamicProcedureType==1) then
       !! Local-Dynamic Procedure - averaged in (x,z); function of (y)
       do k = 1, this%nzL
          do j = 1, this%nyL
-            this%nusgs(:,j,k) = this%cmodel_local(j)     * this%nusgs(:,j,k)
+            this%nusgs(:,j,k)  = this%cmodel_local(j)     * this%nusgs(:,j,k)
             !qtke(:,j,k)       = this%cmodel_local_tke(j) * qtke(:,j,k)
+            qtke = this%Ctke  * qtke
+            this%kapsgs(:,j,k) = this%cmodel_local_Qjsgs(j)* this%kapsgs(:,j,k)
          end do
       end do
    endif
-   qtke       = this%Ctke  * qtke
      
 end subroutine
 
@@ -126,23 +135,23 @@ subroutine multiply_by_model_coefficient_eddy_Qjsgs(this, Qjsgs)
    class(sgs_cgrid), intent(inout) :: this
    real(rkind), dimension(this%nxL,this%nyL,this%nzL,3), intent(inout)  :: Qjsgs
 
-   integer  :: ii, j, k
-
-   if( (this%DynamicProcedureType==0) .or. (this%DynamicProcedureType==2)) then
-      !! constant coefficient or Global-Dynamic Procedure
-      do ii = 1, 3
-          Qjsgs(:,:,:,ii) = this%cmodel_global_Qjsgs * Qjsgs(:,:,:,ii)
-      enddo 
-   elseif(this%DynamicProcedureType==1) then
-      !! Local-Dynamic Procedure - averaged in (x,z); function of (y)
-      do ii = 1, 3
-        do k = 1, this%nzL
-          do j = 1, this%nyL
-            !Qjsgs(:,j,k,ii) = this%cmodel_local_Qjsgs(j) * Qjsgs(:,j,k,ii)
-             Qjsgs(:,j,k,ii) =  Qjsgs(:,j,k,ii)/this%PrSGS
-          end do
-        end do
-      end do
-   endif
+!!   integer  :: ii, j, k
+!!
+!!   if( (this%DynamicProcedureType==0) .or. (this%DynamicProcedureType==2)) then
+!!      !! constant coefficient or Global-Dynamic Procedure
+!!      do ii = 1, 3
+!!          Qjsgs(:,:,:,ii) = this%cmodel_global_Qjsgs * Qjsgs(:,:,:,ii)
+!!      enddo 
+!!   elseif(this%DynamicProcedureType==1) then
+!!      !! Local-Dynamic Procedure - averaged in (x,z); function of (y)
+!!      do ii = 1, 3
+!!        do k = 1, this%nzL
+!!          do j = 1, this%nyL
+!!            !Qjsgs(:,j,k,ii) = this%cmodel_local_Qjsgs(j) * Qjsgs(:,j,k,ii)
+!!             Qjsgs(:,j,k,ii) =  Qjsgs(:,j,k,ii)/this%PrSGS
+!!          end do
+!!        end do
+!!      end do
+!!   endif
 
 end subroutine

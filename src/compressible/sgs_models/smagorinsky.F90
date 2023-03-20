@@ -10,7 +10,7 @@ subroutine init_smagorinsky(this)
    !this%cmodel_global = (this%Csgs*this%deltaLES)**2
    this%isEddyViscosityModel = .true. 
    this%cmodel_global = this%Csgs !* this%deltaLES**2 ! one       
-   this%cmodel_global_Qjsgs =  one/this%Prsgs*this%Cp  ! this%Csgs gets incorporated when you use nusgs
+   this%cmodel_global_Qjsgs =  this%Csgs/this%Prsgs !*this%Cp
 
    call message(1,"Smagorinsky model initialized")
 end subroutine

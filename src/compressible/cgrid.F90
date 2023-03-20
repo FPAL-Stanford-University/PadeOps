@@ -1290,8 +1290,10 @@ contains
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
 
         if(this%useSGS) then
-            call this%sgsmodel%getTauSGS(newTimeStep, duidxj, this%rho, this%u, this%v, this%w, this%tausgs)
-            call this%sgsmodel%getQjSGS (newTimeStep, duidxj, this%rho, this%u, this%v, this%w, this%T, gradT, this%Qjsgs )
+            !call this%sgsmodel%getTauSGS(newTimeStep, duidxj, this%rho, this%u, this%v, this%w, this%tausgs)
+            !call this%sgsmodel%getQjSGS (newTimeStep, duidxj, this%rho, this%u, this%v, this%w, this%T, gradT, this%Qjsgs )
+            call this%sgsmodel%getTauijQjSGS (newTimeStep, duidxj, gradT, this%rho, &
+                            this%u, this%v, this%w, this%T, this%tausgs, this%Qjsgs )
         endif
 
         if (this%mix%ns .GT. 1) then
