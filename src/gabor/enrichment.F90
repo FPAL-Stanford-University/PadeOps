@@ -143,7 +143,7 @@ contains
     logical :: strainInitialCondition = .true.
     logical :: doNotRenderInitialCondition = .false.
     logical :: xPeriodic = .true., yPeriodic = .true., zPeriodic = .true.
-    real(rkind) :: kminFact
+    real(rkind) :: kminFact = 1.d0
     real(rkind) :: strainClipXmax, strainClipXmin
     real(rkind) :: strainClipYmin, strainClipYmax, strainClipZmin, strainClipZmax
     logical :: readGradients = .false.
@@ -162,7 +162,6 @@ contains
     namelist /INPUT/ dt
     namelist /TESTING/ genModesOnUniformGrid, dumpMeshInfo, useFastTrigFunctions
 
-    kminFact = 1.d0 
     strainClipXmin = -1.D99; strainClipXmax = 1.D99
     strainClipYmin = -1.D99; strainClipYmax = 1.D99
     strainClipZmin = -1.D99; strainClipZmax = 1.D99

@@ -208,7 +208,7 @@ end subroutine
   
 subroutine renderVelocity(this)
   class(enrichmentOperator), intent(inout), target :: this
-  real(rkind) :: Lx
+  real(rkind) :: Lx, Ly, Lz
   real(rkind), dimension(:,:), pointer :: haloBuffY, haloBuffZ 
   
   call message(1,"Rendering the Gabor-induced velocity field")
@@ -217,6 +217,8 @@ subroutine renderVelocity(this)
   haloBuffZ => null()
 
   Lx = xDom(2) - xDom(1)
+  Ly = yDom(2) - yDom(1)
+  Lz = zDom(2) - zDom(1)
   
   ! Zero the velocity arrays
   this%smallScales%u  = 0.d0
@@ -239,22 +241,7 @@ subroutine renderVelocity(this)
       this%renderModeData(:,12))
 
   ! Step 3: Add x-periodic contribution
-  if (periodicBCs(1)) then
-    call this%renderLocalVelocity(this%renderModeData(:,1) + Lx, &
-      this%renderModeData(:,2),  this%renderModeData(:,3), &
-      this%renderModeData(:,4),  this%renderModeData(:,5), &
-      this%renderModeData(:,6),  this%renderModeData(:,7), &
-      this%renderModeData(:,8),  this%renderModeData(:,9), &
-      this%renderModeData(:,10), this%renderModeData(:,11), &
-      this%renderModeData(:,12))
-    call this%renderLocalVelocity(this%renderModeData(:,1) - Lx, &
-      this%renderModeData(:,2),  this%renderModeData(:,3), &
-      this%renderModeData(:,4),  this%renderModeData(:,5), &
-      this%renderModeData(:,6),  this%renderModeData(:,7), &
-      this%renderModeData(:,8),  this%renderModeData(:,9), &
-      this%renderModeData(:,10), this%renderModeData(:,11), &
-      this%renderModeData(:,12))
-  end if
+  include "enrichment_files/periodicContribution.F90"
 
   ! TODO:
   ! Step 2.b: interpolate wC to w. Do we need to get uhat, vhat, what from u,
