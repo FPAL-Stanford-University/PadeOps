@@ -41,7 +41,7 @@ program HIT_Periodic
 !    call budg_volavg%init(inputfile, igp)   !<-- Budget class initialization 
   
     call tic() 
-    do while (igp%tsim < igp%tstop) 
+    do while (igp%tsim < igp%tstop .and. igp%step < igp%nsteps) 
       
        call igp%timeAdvance()     !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
  !      call budg_volavg%doBudgets()       
