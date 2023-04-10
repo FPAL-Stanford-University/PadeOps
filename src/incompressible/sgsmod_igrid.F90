@@ -45,7 +45,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:,:), allocatable :: tau_ij
         real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
         real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
-        real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
+        real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E, R_ij_C, R_ij_E
         real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffyE, rbuffzE
         real(rkind), dimension(:,:,:), allocatable :: rbuffxE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
@@ -102,6 +102,7 @@ module sgsmod_igrid
             procedure, private :: init_sigma
             procedure, private :: init_amd
             procedure, private :: init_ballouz
+            procedure, private :: init_SGSnn
             procedure, private :: allocateMemory_EddyViscosity
             procedure          :: setTauBC
 
@@ -136,6 +137,7 @@ module sgsmod_igrid
             procedure          :: getQjSGS
             procedure          :: getTauSGS
             procedure, private :: compute_tauij_ballouz
+            procedure, private :: compute_tauij_NN
             procedure          :: getRHS_SGS
             procedure          :: getRHS_SGS_Scalar
             procedure, private :: get_SGS_kernel
@@ -180,6 +182,7 @@ contains
 #include "sgs_models/sigma.F90"
 #include "sgs_models/AMD.F90"
 #include "sgs_models/ballouz.F90"
+#include "sgs_models/SGSnn.F90"
 #include "sgs_models/eddyViscosity.F90"
 #include "sgs_models/dynamicProcedure_sgs_igrid.F90"
 #include "sgs_models/standardDynamicProcedure.F90"
@@ -267,7 +270,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
       this%tau_22 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,4)
       this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
-   else
+  elseif (this%mid == 3) then
       ! Ballouz & Ouellette model
       ! Step 0: Compute Sij
       call get_Sij_from_duidxj(duidxjC, this%S_ij_C, this%gpC%xsz(1),&
@@ -277,6 +280,14 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
       
       ! Step 1: Get tau_sgs 
       call this%compute_tauij_ballouz()
+   elseif (this%mid == 4) then
+      ! Step 0: Compute Sij
+      call getSijRijforNNmod(duidxjC, this%S_ij_C, this%R_ij_C, this%gpC%xsz(1), & 
+        this%gpC%xsz(2), this%gpC%xsz(3))
+      call getSijRijforNNmod(duidxjE, this%S_ij_E, this%R_ij_E, this%gpE%xsz(1), & 
+        this%gpE%xsz(2), this%gpE%xsz(3))
+
+      call this%compute_tauij_NN()
    end if
 
 

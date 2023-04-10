@@ -18,6 +18,8 @@ subroutine destroy(this)
   deallocate(this%tau_13, this%tau_23)
   if (allocated(this%S_ij_C)) deallocate(this%S_ij_C)
   if (allocated(this%S_ij_E)) deallocate(this%S_ij_E)
+  if (allocated(this%R_ij_C)) deallocate(this%R_ij_C)
+  if (allocated(this%R_ij_E)) deallocate(this%R_ij_E)
 end subroutine
 
 
@@ -196,15 +198,32 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
      call this%init_AMD(dx, dy, dz, Csgs)
   case (3) 
      call this%init_ballouz(Csgs)
+  case (4)
+     !TODO: Andy populate initializer
+     call this%init_SGSnn()
   case default
      call GracefulExit("Incorrect choice for SGS model ID.", 213)
   end select
 
   if (this%isEddyViscosityModel) then
     call this%allocateMemory_EddyViscosity()
-  else
+  end if
+
+  if (SGSmodelID == 3) then
+    ! Strain rate tensor
     allocate(this%S_ij_C(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
     allocate(this%S_ij_E(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),6))
+  end if
+  if (SGSmodelID == 4) then
+    ! Need all 9 components of each tensor to easily compute invariants
+
+    ! Strain rate tensor
+    allocate(this%S_ij_C(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
+    allocate(this%S_ij_E(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9))
+    
+    ! Rotation rate tensor
+    allocate(this%R_ij_C(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
+    allocate(this%R_ij_E(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9))
   end if
   
   if (this%useScalarBounding) then 
