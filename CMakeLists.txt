@@ -48,9 +48,10 @@ if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
 	else()
 	    set(OPTFLAG $ENV{ARCH_OPT_FLAG})
 	endif()
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -mkl -heap-arrays 1024 -warn all ${OPTFLAG} -dynamic -qopt-report=2 -qopt-report-phase=vec -qopenmp")
+        #set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -qmkl -heap-arrays 1024 -warn all ${OPTFLAG} -dynamic -qopt-report=2 -qopt-report-phase=vec -qopenmp")
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -qmkl -heap-arrays 1024 ${OPTFLAG} -qopenmp")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -traceback -g -mkl -heap-arrays 1024 -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -traceback -g -qmkl -heap-arrays 1024 -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
     endif()
 
 # GNU compiler on OSX

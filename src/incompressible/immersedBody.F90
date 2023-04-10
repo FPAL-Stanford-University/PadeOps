@@ -62,10 +62,6 @@ contains
     subroutine destroy(this)
         class(immersedBody), intent(inout) :: this 
         
-<<<<<<< HEAD
-        if (allocated(this%RbodyC)) deallocate(this%RbodyC)
-        ! TO DO (Ryan) : finish deallocating everything 
-=======
         if (allocated(this%RbodyC))   deallocate(this%RbodyC)
         if (allocated(this%RbodyE))   deallocate(this%RbodyE)
         if (allocated(this%utarget))  deallocate(this%utarget)
@@ -81,7 +77,6 @@ contains
         if (associated(this%rbuffxE)) nullify(this%rbuffxE)
         if (associated(this%cbuffyE)) nullify(this%cbuffyE)
         if (associated(this%cbuffyC)) nullify(this%cbuffyC)
->>>>>>> bca0e56daec689d11e59fe4531fb699163924c45
     end subroutine
 
     subroutine updateRHS(this, uC, vC, wE, urhs, vrhs, wrhs, dt) 
