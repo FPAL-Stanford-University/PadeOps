@@ -414,8 +414,17 @@ contains
             E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_fluxYs',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
 
+            call update_halo(mix%material(imat)%intSharp_aFV,tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_aFV',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
 
+            call update_halo(mix%material(imat)%intSharp_a(:,:,:,2),tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_a',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
 
+            call update_halo(mix%material(imat)%intSharp_aDiff(:,:,:,2),tmp1,1,gp,.FALSE.)
+            E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_aDiff',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+            if( allocated(tmp1) ) deallocate(tmp1)
 
          !   call update_halo(mix%VF_fil(:,:,:,imat),tmp1,1,gp,.FALSE.)
          !   E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_VFfil',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
@@ -468,8 +477,6 @@ contains
 
           call update_halo(mix%inty_exact,tmp1,1,gp,.FALSE.)
           E_IO=VTK_VAR_XML(NC_NN=nn,varname='intY_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-
-
 
          
          if((mix%use_surfaceTension) ) then
@@ -720,6 +727,9 @@ contains
                 E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_vint', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_wint',tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_fluxYs',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_aFV',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_a',tp='Float64')
+                E_IO = PVTK_VAR_XML(varname='mat'//trim(strz(2,imat))//'_aDiff',tp='Float64')
 
 
             end do

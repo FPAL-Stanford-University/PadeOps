@@ -3,7 +3,7 @@ module InterpolatorsMod
         
     !TODO change names to be interpolators (get rid of all d's)
     use cd10stuff, only: cd10 !-> ci10
-    use cd06stuff, only: cd06 !-> ci06
+    use ci06stuff, only: ci06 !-> ci06
     use ei02stuff, only: ei02 !explicit interpolator, 2nd order
     use d04stuff,  only: d04 !-> ei04
     use ei06stuff, only: ei06
@@ -32,7 +32,7 @@ module InterpolatorsMod
 
         !TODO: change names to be interpolators, list out different ones
         type(cd10), allocatable :: xcd10, ycd10, zcd10 
-        type(cd06), allocatable :: xcd06, ycd06, zcd06 
+        type(ci06), allocatable :: xci06, yci06, zci06 
         type(ei02),  allocatable :: xei02, yei02, zei02 
         type(d04),  allocatable :: xd04, yd04, zd04 
         type(ei06),  allocatable :: xei06, yei06, zei06 
@@ -107,7 +107,7 @@ contains
         case (1)
             m = "cd10"
         case (2)
-            m = "cd06"
+            m = "ci06"
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -129,7 +129,7 @@ contains
         case (1)
             m = "cd10"
         case (2)
-            m = "cd06"
+            m = "ci06"
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -151,7 +151,7 @@ contains
         case (1)
             m = "cd10"
         case (2)
-            m = "cd06"
+            m = "ci06"
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -331,11 +331,11 @@ contains
                 call GracefulExit("Initializing cd10 failed in X ",11)
             end if
             this%xmethod = 1 
-        case ("cd06")
-            allocate(this%xcd06)
-            ierr = this % xcd06%init( this%xsz(1), dx, periodic_x, 0, 0)
+        case ("ci06")
+            allocate(this%xci06)
+            ierr = this % xci06%init( this%xsz(1), dx, periodic_x, 0, 0)
             if (ierr .ne. 0) then
-                call GracefulExit("Initializing cd06 failed in X ",12)
+                call GracefulExit("Initializing ci06 failed in X ",12)
             end if 
             this%xmethod = 2 
         case ("ei02")
@@ -372,11 +372,11 @@ contains
                 call GracefulExit("Initializing cd10 failed in Y ",11)
             end if 
             this%ymethod = 1 
-        case ("cd06")
-            allocate(this%ycd06)
-            ierr = this % ycd06%init( this%ysz(2), dy, periodic_y, 0, 0)
+        case ("ci06")
+            allocate(this%yci06)
+            ierr = this % yci06%init( this%ysz(2), dy, periodic_y, 0, 0)
             if (ierr .ne. 0) then
-                call GracefulExit("Initializing cd06 failed in Y",12)
+                call GracefulExit("Initializing ci06 failed in Y",12)
             end if 
             this%ymethod = 2 
         case ("ei02")
@@ -414,11 +414,11 @@ contains
                 call GracefulExit("Initializing cd10 failed in Z ",11)
             end if 
             this%zmethod = 1 
-        case ("cd06")
-            allocate(this%zcd06)
-            ierr = this % zcd06%init( this%zsz(3), dz, periodic_z, 0, 0)
+        case ("ci06")
+            allocate(this%zci06)
+            ierr = this % zci06%init( this%zsz(3), dz, periodic_z, 0, 0)
             if (ierr .ne. 0) then
-                call GracefulExit("Initializing cd06 failed in Z",12)
+                call GracefulExit("Initializing ci06 failed in Z",12)
             end if 
             this%zmethod = 2 
         case ("ei02")
@@ -457,8 +457,8 @@ contains
             call this%xcd10%destroy
             deallocate(this%xcd10)
         case (2)
-            call this%xcd06%destroy
-            deallocate(this%xcd06)
+            call this%xci06%destroy
+            deallocate(this%xci06)
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -479,8 +479,8 @@ contains
             call this%ycd10%destroy
             deallocate(this%ycd10)
         case (2)
-            call this%ycd06%destroy
-            deallocate(this%ycd06)
+            call this%yci06%destroy
+            deallocate(this%yci06)
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -501,8 +501,8 @@ contains
             call this%zcd10%destroy
             deallocate(this%zcd10)
         case (2)
-            call this%zcd06%destroy
-            deallocate(this%zcd06)
+            call this%zci06%destroy
+            deallocate(this%zci06)
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -540,7 +540,7 @@ contains
                 call this%xcd10 % dd1(fN,fF,this%xsz(2),this%xsz(3))
             end if
         case (2)
-            call this%xcd06 % dd1(fN,fF,this%xsz(2),this%xsz(3))
+            call this%xci06 % iN2F1(fN,fF,this%xsz(2),this%xsz(3))
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -583,7 +583,7 @@ contains
                 call this%ycd10 % dd2(fN,fF,this%ysz(1),this%ysz(3))
             end if
         case (2)
-            call this%ycd06 % dd2(fN,fF,this%ysz(1),this%ysz(3))
+            call this%yci06 % iN2F2(fN,fF,this%ysz(1),this%ysz(3))
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -626,7 +626,7 @@ contains
                 call this%zcd10 % dd3(fN,fF,this%zsz(1),this%zsz(2))
             end if
         case (2)
-            call this%zcd06 % dd3(fN,fF,this%zsz(1),this%zsz(2))
+            call this%zci06 % iN2F3(fN,fF,this%zsz(1),this%zsz(2))
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -667,7 +667,7 @@ contains
                 call this%xcd10 % dd1(fF,fN,this%xsz(2),this%xsz(3))
             end if
         case (2)
-            call this%xcd06 % dd1(fF,fN,this%xsz(2),this%xsz(3))
+            call this%xci06 % iF2N1(fF,fN,this%xsz(2),this%xsz(3))
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -709,7 +709,7 @@ contains
                 call this%ycd10 % dd2(fF,fN,this%ysz(2),this%ysz(3))
             end if
         case (2)
-            call this%ycd06 % dd2(fF,fN,this%ysz(2),this%ysz(3))
+            call this%yci06 % iF2N2(fF,fN,this%ysz(2),this%ysz(3))
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -751,7 +751,7 @@ contains
                 call this%zcd10 % dd3(fF,fN,this%zsz(2),this%zsz(3))
             end if
         case (2)
-            call this%zcd06 % dd3(fF,fN,this%zsz(2),this%zsz(3))
+            call this%zci06 % iF2N3(fF,fN,this%zsz(2),this%zsz(3))
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)

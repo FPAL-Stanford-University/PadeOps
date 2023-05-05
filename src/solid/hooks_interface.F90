@@ -18,11 +18,13 @@ module sgrid_hooks
     end interface
 
     interface initfields
-        subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+        subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             import :: rkind
             import :: decomp_info
             import :: solid_mixture
+            import :: derivatives
             type(decomp_info),               intent(in)    :: decomp
+            type(derivatives),               intent(in)    :: der
             real(rkind),                     intent(in)    :: dx, dy, dz
             character(len=*),                intent(in)    :: inputfile
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh

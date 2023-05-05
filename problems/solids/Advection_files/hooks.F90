@@ -175,7 +175,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index,rho_index
@@ -184,13 +184,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
-    
+    use DerivativesMod,   only: derivatives 
     use Advection_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
     type(decomp_info),               intent(in)    :: decomp
     real(rkind),                     intent(in)    :: dx,dy,dz
+    type(derivatives),               intent(in)    :: der
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
@@ -236,7 +237,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         end if
         
         !Ensure temperature equilibrium at start
-        if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+       if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
 
         ! speed of sound
         a0   = sqrt((gamma*(p_amb+p_infty) + 4.0d0/3.0d0*mu)/rho_0)
@@ -708,11 +709,12 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-      !  v = 100
+      !  v = 5
       !  u = 0
       !  w = 0
       !  p = p_amb
-      !  T = 914.127
+      !  T = 6000
+      !  e = 2500
         ! ! determine interface velocity
         ! ind = minloc(abs(mix%material(1)%VF(:,1,1)-0.5d0))
         ! imin = ind(1)

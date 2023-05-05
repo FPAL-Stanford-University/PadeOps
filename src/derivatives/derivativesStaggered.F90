@@ -4,6 +4,7 @@ module DerivativesStaggeredMod
     use cd06stuff, only: cd06
     use d02Staggstuff, only: d02Stagg
     use d06Staggstuff, only: d06Stagg
+    use cd06Staggerstuff, only: cd06Stagger
     use d04stuff, only: d04
     use fftstuff, only: ffts
     use dctstuff, only: dcts
@@ -23,7 +24,7 @@ module DerivativesStaggeredMod
         integer                :: xmethod, ymethod, zmethod 
 
         type(cd10), allocatable :: xcd10, ycd10, zcd10 
-        type(cd06), allocatable :: xcd06, ycd06, zcd06 
+        type(cd06Stagger), allocatable :: xcd06, ycd06, zcd06
         type(d02Stagg),  allocatable :: xd02, yd02, zd02 
         type(d04),  allocatable :: xd04, yd04, zd04 
         type(d06Stagg),  allocatable :: xd06, yd06, zd06 
@@ -581,7 +582,7 @@ contains
                 call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
             end if
         case (2)
-            call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+            call this%xcd06 % dd1N2F(f,dfdx,this%xsz(2),this%xsz(3))
         case (3)
             call this%xfour % dd1(f,dfdx)
         case (4)
@@ -622,7 +623,7 @@ contains
                 call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
             end if
         case (2)
-            call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+            call this%ycd06 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3))
         case (3)
             call this%yfour % dd2(f,dfdx)
         case (4)
@@ -663,7 +664,7 @@ contains
                 call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         case (2)
-            call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+            call this%zcd06 % dd3N2F(f,dfdx,this%zsz(1),this%zsz(2))
         case (3)
             call this%zfour % dd3(f,dfdx)
         case (4)
@@ -703,7 +704,7 @@ contains
                 call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
             end if
         case (2)
-            call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+            call this%xcd06 % dd1F2N(f,dfdx,this%xsz(2),this%xsz(3))
         case (3)
             call this%xfour % dd1(f,dfdx)
         case (4)
@@ -744,7 +745,7 @@ contains
                 call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
             end if
         case (2)
-            call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+            call this%ycd06 % dd2F2N(f,dfdx,this%ysz(1),this%ysz(3))
         case (3)
             call this%yfour % dd2(f,dfdx)
         case (4)
@@ -785,7 +786,7 @@ contains
                 call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         case (2)
-            call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+            call this%zcd06 % dd3F2N(f,dfdx,this%zsz(1),this%zsz(2))
         case (3)
             call this%zfour % dd3(f,dfdx)
         case (4)
