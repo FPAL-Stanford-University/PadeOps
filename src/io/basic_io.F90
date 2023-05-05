@@ -6,6 +6,17 @@ interface write_binary
 end interface
 
 contains
+    subroutine write_0d_ascii(raw_data,filename)
+        real(kind=rkind), intent(in) :: raw_data
+        character(len=*), intent(in) :: filename
+        character(len=30) :: rowfmt
+
+        write(rowfmt,'(A,I4,A)') '(',1,'(es25.17E3,1x))'
+        OPEN(UNIT=10, FILE=trim(filename))
+
+        write(10,FMT=rowfmt) raw_data
+        CLOSE(10)
+    end subroutine   
 
     subroutine write_1d_ascii(raw_data,filename)
         real(kind=rkind), intent(in) :: raw_data(:)
@@ -115,6 +126,18 @@ contains
         do i=1, nr
             read (10, *)  data2read (i)
         end do     
+
+        close(10)
+
+    end subroutine
+   
+    subroutine read_0d_ascii(data2read,filename)
+        implicit none 
+        real(rkind), intent(out)  :: data2read
+        character(len=*), intent(in) :: filename
+
+        open(unit=10,file=filename,access='sequential',form='formatted')
+        read (10, *)  data2read
 
         close(10)
 

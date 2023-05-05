@@ -26,7 +26,8 @@ module IncompressibleGrid
     use scalar_igridMod, only: scalar_igrid 
     use io_hdf5_stuff, only: io_hdf5 
     use PoissonPeriodicMod, only: PoissonPeriodic
-    use immersedbodyMod, only: immersedBody 
+    use immersedbodyMod, only: immersedBody
+    use forcingLayerMod, only: forcingLayer
 
     implicit none
 
@@ -126,8 +127,9 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:,:), allocatable, public :: rbuffxC, rbuffyC, rbuffzC
         real(rkind), dimension(:,:,:,:), allocatable :: rbuffxE, rbuffyE, rbuffzE
         
-        complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC!, cbuffxC
+        complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyC, cbuffzC
         complex(rkind), dimension(:,:,:,:), allocatable :: cbuffyE, cbuffzE
+        complex(rkind), dimension(:,:,:), allocatable :: cbuffxC, cbuffxE
 
         complex(rkind), dimension(:,:,:,:), allocatable :: rhsC, rhsE, OrhsC, OrhsE 
         real(rkind), dimension(:,:,:,:), allocatable :: duidxjC, duidxjE 
@@ -280,8 +282,10 @@ module IncompressibleGrid
         ! HIT Forcing
         logical :: useHITForcing = .false., useforcedStratification = .false.
         logical :: useHITRealSpaceLinearForcing = .false.
+        logical :: useLocalizedForceLayer = .false.
         type(HIT_shell_forcing), allocatable :: hitforce
         real(rkind) :: HITForceTimeScale 
+        type(forcingLayer), allocatable :: forceLayer 
 
         ! Scalars
         logical :: useScalars = .false. 
@@ -431,7 +435,7 @@ contains
         real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0, HITForceTimeScale = 10.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., &
           useFringe = .false., useHITForcing = .false., useControl = .false., &
-          useHITRealSpaceLinearForcing = .false.
+          useHITRealSpaceLinearForcing = .false., useLocalizedForceLayer = .false.
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
@@ -455,6 +459,8 @@ contains
         integer :: clearRoundOffFreq = 1000
 
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
+        real(rkind) :: Lx, Ly
+
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                         useRestartFile, restartFile_TID, restartFile_RID, CviscDT
         namelist /IO/ vizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
@@ -467,7 +473,8 @@ contains
           G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,&
           useHITForcing, useScalars, frameAngle, buoyancyDirection, &
           useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm, &
-          useImmersedBodies, numberOfImmersedBodies, immersed_taufact  
+          useImmersedBodies, numberOfImmersedBodies, immersed_taufact, &
+          useLocalizedForceLayer
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
@@ -518,6 +525,7 @@ contains
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact;this%useFringe = useFringe; this%useControl = useControl
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT 
+        this%useLocalizedForceLayer = useLocalizedForceLayer
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity 
         this%deleteInstructions = deleteInstructions; this%TopBC_Temp = TopBC_temp
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
@@ -618,9 +626,11 @@ contains
        ! STEP 3: GENERATE MESH (CELL CENTERED) 
        if ( allocated(this%mesh) ) deallocate(this%mesh) 
        allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
-       allocate(this%zE(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+       allocate(this%zE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
        call meshgen_WallM(this%gpC, this%dx, this%dy, &
            this%dz, this%mesh,inputfile) ! <-- this procedure is part of user defined HOOKS
+       Lx = p_maxval(this%mesh(:,:,:,1)) - p_minval(this%mesh(:,:,:,1)) + this%dx
+       Ly = p_maxval(this%mesh(:,:,:,2)) - p_minval(this%mesh(:,:,:,2)) + this%dy
        this%zTop = p_maxval(this%mesh(:,:,:,3)) + this%dz/2.d0
        this%zBot = p_minval(this%mesh(:,:,:,3)) - this%dz/2.d0
        this%zMid = half*(this%zTop + this%zBot)
@@ -629,6 +639,8 @@ contains
        call message(1,"dx:", this%dx)
        call message(1,"dy:", this%dy)
        call message(1,"dz:", this%dz)
+       call message(1,"Lx:", Lx)
+       call message(1,"Ly:", Ly)
        call message(1,"Lz:", Lz)
 
 
@@ -700,7 +712,6 @@ contains
        this%T_Orhs => this%OrhsC(:,:,:,3); this%TEhat => this%SfieldsE(:,:,:,2)
        !end if
 
-       !allocate(this%cbuffxC(this%sp_gpC%xsz(1),this%sp_gpC%xsz(2),this%sp_gpC%xsz(3),2))
        allocate(this%cbuffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),3))
        allocate(this%cbuffyE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),2))
        
@@ -711,7 +722,13 @@ contains
        allocate(this%rbuffyC(this%gpC%ysz(1),this%gpC%ysz(2),this%gpC%ysz(3),2))
        allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),4))
 
-       allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
+       if (this%useLocalizedForceLayer) then
+         allocate(this%cbuffxC(this%sp_gpC%xsz(1),this%sp_gpC%xsz(2),this%sp_gpC%xsz(3)))
+         allocate(this%cbuffxE(this%sp_gpE%xsz(1),this%sp_gpE%xsz(2),this%sp_gpE%xsz(3)))
+         allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),3))
+       else
+         allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
+       end if
        allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
        allocate(this%rbuffzE(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),4))
        if (.not.this%isinviscid) then
@@ -876,6 +893,7 @@ contains
         call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
         call transpose_y_to_z(zinY,zinZ,this%gpC)
         call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
+        zEinZ(:,:,1        ) = zEinZ(:,:,2      ) - this%dz
         zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
         call transpose_z_to_y(zEinZ,zEinY,this%gpE)
         call transpose_y_to_x(zEinY,this%zE, this%gpE)
@@ -1221,6 +1239,13 @@ contains
              this%spectC, this%spectE, this%cbuffyE(:,:,:,1), this%cbuffyC(:,:,:,1), &
              this%cbuffzE(:,:,:,1), this%cbuffzC, this%rbuffxC(:,:,:,1), this%step)
        end if
+
+       if (this%useLocalizedForceLayer) then
+           allocate(this%forceLayer)
+           call this%forceLayer%init(inputfile,Lx,Ly,this%mesh,this%zE,this%gpC,&
+             this%gpE,this%spectC,this%spectE,this%Pade6opZ,this%PadePoiss,&
+             useRestartFile,this%RunID, this%step,this%inputDir)
+       end if
        
        ! STEP 19: Set up storage for Pressure
        if ((this%storePressure) .or. (this%fastCalcPressure)) then
@@ -1483,6 +1508,10 @@ contains
          call this%hitforce%destroy()
          deallocate(this%hitforce)
        endif 
+       if (this%useLocalizedForceLayer) then
+         call this%forceLayer%destroy()
+         deallocate(this%forceLayer)
+       end if
        if (this%timeAvgFullFields) then
            call this%finalize_stats3d()
        else
@@ -1496,6 +1525,7 @@ contains
        call this%spectC%destroy()
        call this%spectE%destroy()
        deallocate(this%spectC, this%spectE)
+       deallocate(this%zE)
        nullify(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
        if (this%useSGS) then
           call this%sgsModel%destroy()
@@ -1508,6 +1538,7 @@ contains
            end do 
            deallocate(this%scalars)
        end if
+
    end subroutine
    
    subroutine printDivergence(this)
