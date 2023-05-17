@@ -5,7 +5,7 @@ module forcingLayerMod
   ! surface." Journal of Turbulence 11 (2010): N48.
     use kind_parameters, only: rkind, clen, mpirkind
     use decomp_2d, only: decomp_info, transpose_x_to_y, transpose_y_to_z, &
-        transpose_z_to_y, transpose_y_to_x, nrank
+        transpose_z_to_y, transpose_y_to_x, nrank, nproc
     use spectralMod, only: spectral
     use reductions, only: p_minval, p_maxval
     use PadeDerOps, only: Pade6Stagg
@@ -14,6 +14,7 @@ module forcingLayerMod
     use exits, only: message
     use basic_io, only: read_0d_ascii
     use mpi
+    use fortran_assert, only: assert
     
     implicit none
     private
@@ -24,9 +25,6 @@ module forcingLayerMod
     public :: forcingLayer
 
     type :: forcingLayer
-        ! TODO: 
-        !   [x] Dump seed as restart file (seed is the only information needed)
-        !   [_] Implement periodicity 
         integer :: nblocks ! The number of forcing blocks in each x,y direction
         real(rkind) :: lf  ! Physical size of forcing layer
         real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
@@ -37,7 +35,7 @@ module forcingLayerMod
         type(decomp_info), pointer :: gpC, gpE, sp_gpC, sp_gpE
         type(spectral), pointer :: spectC, spectE
         real(rkind), dimension(4) :: xs, ys, zs, vs ! Sample points for spline interpolation
-        real(rkind), dimension(:,:,:), pointer :: x, y, z, zE
+        real(rkind), dimension(:,:,:), pointer :: x, y, z, xE, yE, zE
         real(rkind) :: zgap, forceAmp
         type(Pade6Stagg), pointer :: Pade6opZ
         logical :: dumpForce, dumpSplines, checkDivergence
@@ -51,6 +49,7 @@ module forcingLayerMod
         real(rkind) :: Lx, Ly
         real(rkind), dimension(:,:,:), allocatable :: k1C, k1E
         real(rkind), dimension(:,:,:), allocatable :: sp_buffyC, sp_buffyE
+        integer :: version
         contains
           procedure :: init
           procedure :: destroy
@@ -62,13 +61,13 @@ module forcingLayerMod
 
     contains
 
-      subroutine init(this,inputfile,Lx,Ly,mesh,zE,gpC,gpE,spectC,spectE,Pade6opZ,PadePoiss,&
+      subroutine init(this,inputfile,Lx,Ly,mesh,xE,yE,zE,gpC,gpE,spectC,spectE,Pade6opZ,PadePoiss,&
           restartSim,runID,tsim,inputdir)
           class(forcingLayer), intent(inout) :: this
           character(len=*), intent(in) :: inputfile, inputdir
           real(rkind), intent(in) :: Lx, Ly
           real(rkind), dimension(:,:,:,:), intent(in), target :: mesh ! Cell-centered mesh (x,y,z)
-          real(rkind), dimension(:,:,:), intent(in), target :: zE ! Edge mesh (z only)
+          real(rkind), dimension(:,:,:), intent(in), target :: xE, yE, zE ! Edge mesh (z only)
           class(decomp_info), intent(in), target :: gpC, gpE
           class(spectral), intent(in), target :: spectC, spectE
           class(Pade6Stagg), intent(in), target :: Pade6opZ
@@ -82,9 +81,11 @@ module forcingLayerMod
           logical :: randomizeBlockPositions = .true.
           character(len=clen) :: tempname, fname
           real(rkind), dimension(:,:,:), allocatable :: tmp
+          integer :: version = 1
 
           namelist /localizedForceLayer/ nblocks, zgap, forceAmp, dumpForce, &
-            dumpSplines, checkDivergence, fixedForceType, randomizeBlockPositions
+            dumpSplines, checkDivergence, fixedForceType, randomizeBlockPositions, &
+            version
           
           ioUnit = 123
           open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -122,6 +123,8 @@ module forcingLayerMod
           this%x => mesh(:,:,:,1)
           this%y => mesh(:,:,:,2)
           this%z => mesh(:,:,:,3)
+          this%xE => xE
+          this%yE => yE
           this%zE => zE
 
           this%dumpForce = dumpForce
@@ -130,6 +133,7 @@ module forcingLayerMod
           this%randomizeBlockPositions = randomizeBlockPositions
 
           this%fixedForceType = fixedForceType
+          this%version = version
         
           allocate(this%forceType(this%nblocks,this%nblocks))
 
@@ -223,7 +227,7 @@ module forcingLayerMod
           real(rkind), dimension(:,:,:,:), intent(inout) :: rbuffxC, rbuffxE
           logical, intent(in) :: newTimeStep
           real(rkind) :: xst, yst, zst
-          integer :: i, j, n
+          integer :: i, j, n, ierr
           real(rkind) :: tmp, ampFact = 1.d0
           complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffzC, cbuffzE
           real(rkind), dimension(size(this%xs)) :: xmid, ymid
@@ -237,9 +241,11 @@ module forcingLayerMod
           if (newTimeStep) then
               if (this%randomizeBlockPositions) then
                   call this%updateSeed()
-                  call uniform_random(this%xshift,-0.5d0*this%Lx,0.5d0*this%Lx,this%seed)
+                  call uniform_random(this%xshift,-0.5d0*this%lf,0.5d0*this%lf,this%seed)
+                  !call uniform_random(this%xshift,-0.5d0*this%Lx,0.5d0*this%Lx,this%seed)
                   call this%updateSeed()
-                  call uniform_random(this%yshift,-0.5d0*this%Ly,0.5d0*this%Ly,this%seed)
+                  call uniform_random(this%yshift,-0.5d0*this%lf,0.5d0*this%lf,this%seed)
+                  !call uniform_random(this%yshift,-0.5d0*this%Ly,0.5d0*this%Ly,this%seed)
                   ! Randomly shift each block in z-direction
                   do j = 1,this%nblocks
                       do i = 1,this%nblocks
@@ -298,8 +304,8 @@ module forcingLayerMod
                         this%phixC = this%phixC + spline2(xmid,this%vs,this%x ,1,this%gpC)
                         this%phiyC = this%phiyC + spline2(ymid,this%vs,this%y ,2,this%gpC)
                         
-                        this%phixE = this%phixE + spline2(xmid,this%vs,this%x ,1,this%gpE)
-                        this%phiyE = this%phiyE + spline2(ymid,this%vs,this%y ,2,this%gpE)
+                        this%phixE = this%phixE + spline2(xmid,this%vs,this%xE,1,this%gpE)
+                        this%phiyE = this%phiyE + spline2(ymid,this%vs,this%yE,2,this%gpE)
                     end do
                     
                     this%phizC = spline2(this%zs + zst + this%zshift(i,j),this%vs,this%z ,3,this%gpC)
@@ -322,10 +328,10 @@ module forcingLayerMod
                     ! Randomly choose the force type
                     call getForceBlock(this%phixC,this%phiyC,this%phizC, &
                       this%dphixC, this%dphiyC, this%dphizC, this%forceType(i,j), &
-                      rbuffxC(:,:,:,1), rbuffxC(:,:,:,2), rbuffxC(:,:,:,3))
+                      rbuffxC(:,:,:,1), rbuffxC(:,:,:,2),rbuffxC(:,:,:,3),this%version)
                     call getForceBlock(this%phixE,this%phiyE,this%phizE, &
                       this%dphixE, this%dphiyE, this%dphizE, this%forceType(i,j), &
-                      rbuffxE(:,:,:,1), rbuffxE(:,:,:,2), rbuffxE(:,:,:,3))
+                      rbuffxE(:,:,:,1), rbuffxE(:,:,:,2), rbuffxE(:,:,:,3),this%version)
 
                     !call this%updateSeed()
                     !call uniform_random(ampFact,0.d0,2.d0,this%seed)
@@ -464,27 +470,46 @@ module forcingLayerMod
           this%seed = nint(rmaxInt*this%seedFact)
       end subroutine
 
-      subroutine getForceBlock(phix,phiy,phiz,dphix,dphiy,dphiz,forceType,fx,fy,fz)
+      subroutine getForceBlock(phix,phiy,phiz,dphix,dphiy,dphiz,forceType,fx,fy,fz,version)
           real(rkind), dimension(:,:,:), intent(in) :: phix, phiy, phiz, dphix, &
             dphiy, dphiz
           integer, intent(in) :: forcetype
           real(rkind), dimension(:,:,:), intent(out) :: fx, fy, fz
+          integer, intent(in) :: version
           
           fx = 0.d0; fy = 0.d0; fz = 0.d0
 
-          select case (forceType)
+          select case (version)
           case (1)
-              fx = phix*dphiy*phiz*dphiz
-              fy = -dphix*phiy*phiz*dphiz
-              fz = 0.d0
+              select case (forceType)
+              case (1)
+                  fx = phix*dphiy*phiz
+                  fy = -dphix*phiy*phiz
+                  fz = 0.d0
+              case (2)
+                  fx = -dphiz*phix*phiy
+                  fy = 0.d0
+                  fz = phiz*dphix*phiy
+              case (3)
+                  fx = 0.d0
+                  fy = phiy*dphiz*phix
+                  fz = -dphiy*phiz*phix
+              end select
           case (2)
-              fx = -dphiz*phix*phiy*dphiy
-              fy = 0.d0
-              fz = phiz*dphix*phiy*dphiy
-          case (3)
-              fx = 0.d0
-              fy = phiy*dphiz*phix*dphix
-              fz = -dphiy*phiz*phix*dphix
+              select case (forceType)
+              case (1)
+                  fx = phix*dphiy*phiz*dphiz
+                  fy = -dphix*phiy*phiz*dphiz
+                  fz = 0.d0
+              case (2)
+                  fx = -dphiz*phix*phiy*dphiy
+                  fy = 0.d0
+                  fz = phiz*dphix*phiy*dphiy
+              case (3)
+                  fx = 0.d0
+                  fy = phiy*dphiz*phix*dphix
+                  fz = -dphiy*phiz*phix*dphix
+              end select
           end select
       end subroutine
       
@@ -497,8 +522,8 @@ module forcingLayerMod
           real(rkind), dimension(gp%xsz(1),gp%xsz(2),gp%xsz(3)) :: vq
           real(rkind), dimension(size(xq,coord)) :: x1D
           real(rkind), dimension(size(xs)) :: weight
-          integer :: nknots, st, en
-          real(rkind) :: delta, n
+          integer :: nknots, st, en, ierr, n, m
+          real(rkind) :: delta
 
           select case (coord)
           case (1)
@@ -519,7 +544,7 @@ module forcingLayerMod
           weight = getWeights(vs,0.d0,delta)
 
           vq = 0.d0
-
+          
           ! Now assemble the spline function
           select case (coord)
           case (1)

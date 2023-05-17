@@ -102,7 +102,7 @@ module IncompressibleGrid
         type(immersedBody), dimension(:), allocatable :: immersedBodies 
 
         type(padepoisson), allocatable :: padepoiss
-        real(rkind), dimension(:,:,:), allocatable :: divergence, zE
+        real(rkind), dimension(:,:,:), allocatable :: divergence, xE, yE, zE
 
         real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat, uEhat, vEhat
@@ -428,6 +428,8 @@ contains
         logical :: addExtraSourceTerm = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
+        real(rkind), dimension(:,:,:), pointer :: xinZ, xinY, xEinY, xEinZ
+        real(rkind), dimension(:,:,:), pointer :: yinZ, yinY, yEinY, yEinZ
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
@@ -897,6 +899,8 @@ contains
         zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
         call transpose_z_to_y(zEinZ,zEinY,this%gpE)
         call transpose_y_to_x(zEinY,this%zE, this%gpE)
+        nullify(zinY, zinZ, zEinZ, zEinY)
+
 
         ! STEP 11: Initialize SGS model
         allocate(this%SGSmodel)
@@ -1240,11 +1244,34 @@ contains
              this%cbuffzE(:,:,:,1), this%cbuffzC, this%rbuffxC(:,:,:,1), this%step)
        end if
 
-       if (this%useLocalizedForceLayer) then
+       if (this%useLocalizedForceLayer) then ! See Bodart, Cazalbou, & Joly (2010)
+           ! Need xE and yE first
+           allocate(this%xE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+           allocate(this%yE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+           xinY  => this%rbuffyC(:,:,:,1); xinZ  => this%rbuffzC(:,:,:,1)
+           xEinY => this%rbuffyE(:,:,:,1); xEinZ => this%rbuffzE(:,:,:,1)
+           call transpose_x_to_y(this%mesh(:,:,:,1),xinY,this%gpC)
+           call transpose_y_to_z(xinY,xinZ,this%gpC)
+           xEinZ(:,:,1:this%nz) = xinZ
+           xEinZ(:,:,this%nz+1) = xinZ(:,:,1)
+           call transpose_z_to_y(xEinZ,xEinY,this%gpE)
+           call transpose_y_to_x(xEinY,this%xE,this%gpE)
+           nullify(xinY, xinZ, xEinY, xEinZ)
+           
+           yinY  => this%rbuffyC(:,:,:,1); yinZ  => this%rbuffzC(:,:,:,1)
+           yEinY => this%rbuffyE(:,:,:,1); yEinZ => this%rbuffzE(:,:,:,1)
+           call transpose_x_to_y(this%mesh(:,:,:,2),yinY,this%gpC)
+           call transpose_y_to_z(yinY,yinZ,this%gpC)
+           yEinZ(:,:,1:this%nz) = yinZ
+           yEinZ(:,:,this%nz+1) = yinZ(:,:,1)
+           call transpose_z_to_y(yEinZ,yEinY,this%gpE)
+           call transpose_y_to_x(yEinY,this%yE,this%gpE)
+           nullify(yinY, yinZ, yEinY, yEinZ)
+           
            allocate(this%forceLayer)
-           call this%forceLayer%init(inputfile,Lx,Ly,this%mesh,this%zE,this%gpC,&
-             this%gpE,this%spectC,this%spectE,this%Pade6opZ,this%PadePoiss,&
-             useRestartFile,this%RunID, this%step,this%inputDir)
+           call this%forceLayer%init(inputfile,Lx,Ly,this%mesh,this%xE,this%yE,&
+             this%zE,this%gpC,this%gpE,this%spectC,this%spectE,this%Pade6opZ,&
+             this%PadePoiss,useRestartFile,this%RunID, this%step,this%inputDir)
        end if
        
        ! STEP 19: Set up storage for Pressure

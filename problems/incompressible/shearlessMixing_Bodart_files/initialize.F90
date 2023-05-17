@@ -103,7 +103,7 @@ end subroutine
 
 subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use shearlessMixing_interact_parameters
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen
     use constants,          only: zero, one, two, pi, half
     use gridtools,          only: alloc_buffs
     use random,             only: gaussian_random
@@ -111,6 +111,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     use reductions,         only: p_maxval, p_minval
     use exits,              only: message_min_max, gracefulExit, message
     use cd06staggstuff,     only: cd06stagg
+    use basic_io,           only: read_1d_ascii
     implicit none
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
@@ -123,13 +124,56 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind)  :: Lx = one, Ly = one, Lz = one
 !    real(rkind)  :: zTop_cell, zBot_cell, zMid
     type(cd06stagg), allocatable :: der
-    real(rkind) :: dz
+    real(rkind) :: dz, zmin
     integer :: ioUnit, ierr
+    integer :: i, j
+    logical :: symmetricDomain
+    character(len=clen) :: fname
+    real(rkind), dimension(:), allocatable :: TinZ
+
+    ! INPUT namelist variables (only inputdir is needed)
+    integer :: nx, ny, nz, nsteps
+    real(rkind) :: tstop, dt, CFL, CviscDT
+    character(len=clen) :: inputdir, outputdir
+    integer :: prow, pcol, restartFile_TID, restartFile_RID
+    logical :: useRestartFile
+
+    ! PHYSICS namelist variables (only isStratified is needed)
+    logical :: isInviscid, useCoriolis, useExtraForcing, useMoisture, useSGS, &
+      useforcedStratification, useGeostrophicForcing, assume_fplane, &
+      useHITForcing,useScalars,useHITRealSpaceLinearForcing,addExtraSourceTerm, &
+      useImmersedBodies, useLocalizedForceLayer
+    real(rkind) :: Re, Ro, Pr, Fr, Ra, PrandtlFluid, BulkRichardson, &
+      G_geostrophic,G_alpha,dpFdx,dpFdy,dpFdz,latitude,frameAngle, &
+      HITForceTimeScale, immersed_taufact
+    integer :: BuoyancyTermType,buoyancyDirection,numberOfImmersedBodies
+    logical :: isStratified = .false.
+
+    ! Read input file
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
+    namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
+                    useRestartFile, restartFile_TID, restartFile_RID, CviscDT
+    namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,&
+      useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, &
+      BuoyancyTermType,useforcedStratification, useGeostrophicForcing, &
+      G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,&
+      useHITForcing, useScalars, frameAngle, buoyancyDirection, &
+      useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm, &
+      useImmersedBodies, numberOfImmersedBodies, immersed_taufact, &
+      useLocalizedForceLayer
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=INPUT)
+    read(unit=ioUnit, NML=PHYSICS)
+    read(unit=ioUnit, NML=SMinput)
+    close(ioUnit)    
    
     u  => fieldsC(:,:,:,1)
     v  => fieldsC(:,:,:,2)
     wC => fieldsC(:,:,:,3)
     w  => fieldsE(:,:,:,1)
+    T => fieldsC(:,:,:,7) 
       
     z => mesh(:,:,:,3)
     y => mesh(:,:,:,2)
@@ -139,8 +183,22 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     v = zero 
     w = zero 
     wC = zero
-    T => fieldsC(:,:,:,7) 
-    T = one ! Make this a function of Richardson number. 
+
+    ! Allocated TinZ and read in Tinit data
+    if (isStratified) then
+        allocate(TinZ(decompC%zsz(3)))
+        write(fname,'(A)')trim(inputdir)//'/Tinit.txt'
+        call read_1d_ascii(TinZ,trim(fname))
+        do j = 1,decompC%xsz(2)
+            do i = 1,decompC%xsz(1)
+                T(i,j,:) = TinZ(decompC%xst(3):decompC%xen(3))
+            end do
+        end do
+        deallocate(TinZ)
+    else
+        T = one ! Make this a function of Richardson number. 
+    end if
+    
     call message_min_max(1,"Bounds for u:", p_minval(minval(u)), p_maxval(maxval(u)))
     call message_min_max(1,"Bounds for v:", p_minval(minval(v)), p_maxval(maxval(v)))
     call message_min_max(1,"Bounds for w:", p_minval(minval(w)), p_maxval(maxval(w)))
@@ -179,15 +237,17 @@ subroutine set_KS_planes_io(planesCoarseGrid, planesFineGrid)
 end subroutine
 
 subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen
     use constants,          only: zero, one
     implicit none
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
-    real(rkind) :: ThetaRef, Lx, Ly, Lz
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, zmin
+    logical :: symmetricDomain
     integer :: iounit
-    namelist /SMinput/ Lx, Ly, Lz
+
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
     
     wTh_surf = zero
     
@@ -201,15 +261,16 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 end subroutine
 
 subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen
     use constants,          only: zero, one
     implicit none
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, zmin
+    logical :: symmetricDomain
     integer :: iounit
-    namelist /SMinput/ Lx, Ly, Lz
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -224,21 +285,22 @@ end subroutine
 
 
 subroutine set_Reference_Temperature(inputfile, Tref)
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, zmin
+    logical :: symmetricDomain
     integer :: iounit
     
-    namelist /SMinput/ Lx, Ly, Lz
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=SMinput)
     close(ioUnit)    
      
-    Tref = 0.d0
+    Tref = 1.d0
     
     ! Do nothing really since this is an unstratified simulation
 

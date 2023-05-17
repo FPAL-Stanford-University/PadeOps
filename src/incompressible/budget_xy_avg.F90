@@ -255,11 +255,11 @@ contains
                     call GracefulExit("restart budgets not supported with do_autocorrel. Set one of them to false", 100)
                 endif
                 call this%RestartBudget(restart_rid, restart_tid, restart_counter)
-                
+
                 ! Error handling
                 call assert(size(this%Budget_0,1) == this%nz, &
                   'size(this%Budget_0,1) == this%nz -- budget_xy_avg.F90')
-                write(mssg,'(A,I2,A,I2,A)')&
+                write(mssg,'(A,I4,A,I4,A)')&
                   'size(this%Budget_0,2) == 21 -- budget_xy_avg.F90'&
                   //' | shape(this%Budget_0) = (', size(this%Budget_0,1), &
                   ',', size(this%Budget_0,2), ')'
@@ -307,8 +307,9 @@ contains
             ! STEP 3: Now instrument igrid 
             call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
-                       & this%vcor, this%wcor, this%uturb) 
-            
+                       & this%vcor, this%wcor, this%uturb)
+
+            call assert(allocated(this%budget_0),'Budget_0 not allocated')
             call message("Budget_xy_avg initialized successfully!")
         end if 
 
@@ -1238,7 +1239,7 @@ contains
         ! Mean Quantities: 
         write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",rid,"_meanqty","_t",tid,"_n",cid,".stt"
         fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
-        if (allocated(this%budget_0)) deallocate(this%budget_0)
+        if (allocated(this%mean_qty)) deallocate(this%mean_qty)
         call read_2d_ascii(this%mean_qty, fname)
         this%mean_qty = this%mean_qty*(real(cid,rkind) + 1.d-18)
 
