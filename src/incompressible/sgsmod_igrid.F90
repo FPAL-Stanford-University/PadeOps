@@ -2,6 +2,7 @@ module sgsmod_igrid
     use kind_parameters, only: rkind, clen
     use constants, only: imi, pi, zero,one,two,three,half, four,eight, nine, six, kappa, piby2 
     use decomp_2d
+    use decomp_2d_io
     use exits, only: GracefulExit, message
     use spectralMod, only: spectral  
     use mpi 
@@ -11,6 +12,7 @@ module sgsmod_igrid
     use gaussianstuff, only: gaussian
     use lstsqstuff, only: lstsq
     use PadeDerOps, only: Pade6stagg
+    use fortran_assert, only: assert
     implicit none
 
     external :: MPI_BCAST, MPI_REDUCE
@@ -93,7 +95,16 @@ module sgsmod_igrid
 
         integer :: BC_tau13_top = 0, BC_tau13_bot = 0, BC_tau23_top = 0, BC_tau23_bot = 0, BC_tau33_top = 0, BC_tau33_bot = 0
         ! Buoyancy factor (needed for AMD model, set using the procedure:  setBuoyancyFact)
-        real(rkind) :: BuoyancyFact = 0.d0 
+        real(rkind) :: BuoyancyFact = 0.d0
+
+        ! Neural network SGS model
+        real(rkind), dimension(:,:,:,:,:), allocatable :: invariants, delta
+        real(rkind), dimension(:,:,:,:,:,:), allocatable :: invariantsLSTM, deltaLSTM
+        real(rkind), dimension(:,:,:,:,:,:), allocatable :: strain2, strain2_m, &
+          rot2, strainrot_m, rotstrainrot_m, strain2rot_m, rotstrain2_m
+        character(len=clen) :: datadir
+        integer :: NNtype
+        integer :: runID
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
@@ -228,7 +239,7 @@ subroutine setTauBC(this, botwall, topwall)
 end subroutine 
 
 
-subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, TC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE)
+subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, TC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE, tid)
    class(sgs_igrid), intent(inout) :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
@@ -238,6 +249,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdx, dTdy, dTdz
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdxE, dTdyE, dTdzE
    real(rkind) :: TwobyRe
+   integer, intent(in) :: tid
 
    if (this%useWallModel) call this%computeWallStress( uC, vC, TC, uhatC, vhatC, ThatC) 
 
@@ -287,7 +299,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
       call getSijRijforNNmod(duidxjE, this%S_ij_E, this%R_ij_E, this%gpE%xsz(1), & 
         this%gpE%xsz(2), this%gpE%xsz(3))
 
-      call this%compute_tauij_NN()
+      call this%compute_tauij_NN(tid)
    end if
 
 
@@ -309,7 +321,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
 end subroutine
 
 !subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, duidxjEhat, uhatE, vhatE, whatE, uhatC, vhatC, ThatC, uC, vC, uE, vE, wE, newTimeStep)
-subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, TC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE)
+subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, TC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE, tid)
    class(sgs_igrid), intent(inout), target :: this
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9), intent(in) :: duidxjE
@@ -321,12 +333,13 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
    complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
    logical, intent(in) :: newTimeStep
+   integer, intent(in) :: tid
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffy3, cbuffz1, cbuffz2
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdx, dTdy, dTdz
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdxE, dTdyE, dTdzE
 
 
-   call this%getTauSGS(duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, TC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE)
+   call this%getTauSGS(duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC, wC, TC, newTimeStep, dTdx, dTdy, dTdz, dTdxE, dTdyE, dTdzE, tid)
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
    cbuffz1 => this%cbuffzC(:,:,:,1); cbuffz2 => this%cbuffzE(:,:,:,1) 

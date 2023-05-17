@@ -51,7 +51,7 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
    end if
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp, datadir, runID)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
@@ -77,7 +77,9 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
   logical :: usePrSGS = .false., useFullyLocalWM = .false.  
   integer :: ierr, WM_matchingIndex = 1, WallFunctionType = 1 
-  real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 , SurfaceFilterFact = 1.d0 
+  real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 , SurfaceFilterFact = 1.d0
+  integer :: NNtype = 1, runID
+  character(len=*), intent(in) :: datadir 
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
@@ -86,7 +88,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, & 
-                 WallFunctionType, useFullyLocalWM, SurfaceFilterFact  
+                 WallFunctionType, useFullyLocalWM, SurfaceFilterFact, NNtype 
 
   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
   read(unit=123, NML=SGS_MODEL)
@@ -120,6 +122,9 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%dx = dx
   this%dy = dy
   this%dz = dz
+ 
+  this%runID = runID 
+  this%datadir = datadir
   this%DomainAveraged_DynProc = DomainAveraged_DynProc
 
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
@@ -176,6 +181,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
 
   this%WallModel  = WallModelType
   this%WM_matchingIndex = WM_matchingIndex
+
+  this%NNtype = NNtype
   if (this%WallModel .ne. 0) then
       if (this%PadeDer%isPeriodic) then
          call GracefulExit("You cannot use a wall model if the problem is periodic in Z",12)
@@ -200,7 +207,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
      call this%init_ballouz(Csgs)
   case (4)
      !TODO: Andy populate initializer
-     call this%init_SGSnn()
+     call this%init_SGSnn(NNtype)
   case default
      call GracefulExit("Incorrect choice for SGS model ID.", 213)
   end select
