@@ -16,7 +16,7 @@ subroutine init_SGSnn(this,NNtype)
    select case (NNtype)
    case (1) ! Unet
      allocate(this%invariants(1,this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
-     allocate(this%delta(1,this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),8))
+     allocate(this%delta(1,8,this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
    case (2) ! LSTM
      allocate(this%invariantsLSTM(1,10,this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),7))
      allocate(this%deltaLSTM(     1,10,this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),8))
@@ -94,17 +94,176 @@ subroutine writeInvariants(tid,runID,datadir,gp,dat)
 end subroutine
 
 subroutine compute_tauij_NN(this,tidNow)
+  use, intrinsic :: iso_c_binding
+  implicit none
+  type(c_ptr) :: c_p
+  real(c_float), pointer :: f_p(:,:,:,:,:)
+
   class(sgs_igrid), intent(inout) :: this
   integer, intent(in) :: tidNow
   integer :: tidPast, n
+  integer :: i, j, k
+  real, dimension(3, 3) :: arr_temp1
+  real, dimension(3, 3) :: arr_temp2
+  real, dimension(3, 3) :: arr_temp3
+  real, dimension(3, 3) :: arr_temp4
+  real, dimension(3, 3) :: arr_temp5
+  real, dimension(3, 3) :: arr_temp6
+  real, dimension(9) :: S_ij_a
+  real, dimension(9) :: R_ij_a
+  integer, dimension(9) :: timelist
+  real :: del
 
+  interface
+      function loadtensorflow(delta, train_load, strain2, strain2_m, rot2, strainrot_m, rotstrainrot_m, strain2rot_m, &
+        rotstrain2_m) bind(c)
+        import :: c_ptr
+        type(c_ptr) :: loadtensorflow
+          real, dimension(2) :: train_load
+          real, dimension(2) :: delta
+          real, dimension(2) :: strain2
+          real, dimension(2) :: strain2_m
+          real, dimension(2) :: rot2
+          real, dimension(2) :: strainrot_m
+          real, dimension(2) :: rotstrainrot_m
+          real, dimension(2) :: strain2rot_m
+          real, dimension(2) :: rotstrain2_m
+      end function loadtensorflow
+  end interface
+
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*7) :: train_loadin
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*8) :: deltain
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*7*10) :: train_loadinLSTM
+
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9) :: strain2in
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9) :: strain2_min
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9) :: rot2in
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9) :: strainrot_min
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9) :: rotstrainrot_min
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9) :: strain2rot_min
+  real, dimension(this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9) :: rotstrain2_min
+
+ 
+  del = 2*3.141592/1024*32
   ! TODO: Andy, compute your invariants, call your NN, compute tauij
+  do k = 1, this%gpC%xsz(3)
+    do j = 1, this%gpC%xsz(2)
+      do i = 1, this%gpC%xsz(1)
+        S_ij_a(1) = this%S_ij_C(i, j, k, 1)
+        S_ij_a(2) = this%S_ij_C(i, j, k, 2)
+        S_ij_a(3) = this%S_ij_E(i, j, k, 3)
+        S_ij_a(4) = this%S_ij_C(i, j, k, 2)
+        S_ij_a(5) = this%S_ij_C(i, j, k, 4)
+        S_ij_a(6) = this%S_ij_E(i, j, k, 5)
+        S_ij_a(7) = this%S_ij_E(i, j, k, 3)
+        S_ij_a(8) = this%S_ij_E(i, j, k, 5)
+        S_ij_a(9) = this%S_ij_C(i, j, k, 6)
+
+        R_ij_a(1) = this%R_ij_C(i, j, k, 1)
+        R_ij_a(2) = this%R_ij_C(i, j, k, 2)
+        R_ij_a(3) = this%R_ij_E(i, j, k, 3)
+        R_ij_a(4) = this%R_ij_C(i, j, k, 2)
+        R_ij_a(5) = this%R_ij_C(i, j, k, 4)
+        R_ij_a(6) = this%R_ij_E(i, j, k, 5)
+        R_ij_a(7) = this%R_ij_E(i, j, k, 3)
+        R_ij_a(8) = this%R_ij_E(i, j, k, 5)
+        R_ij_a(9) = this%R_ij_C(i, j, k, 6)
+
+        arr_temp1 = matmul(reshape(S_ij_a(:),[3,3]),reshape(S_ij_a(:),[3, 3]))
+        arr_temp3 = matmul(reshape(S_ij_a(:),[3,3]),arr_temp1)
+        arr_temp2 = matmul(reshape(R_ij_a(:),[3,3]),reshape(R_ij_a(:),[3, 3]))
+        arr_temp4 = matmul(reshape(S_ij_a(:),[3,3]),arr_temp2)
+        arr_temp5 = matmul(arr_temp1,arr_temp2)
+        arr_temp6 = matmul(matmul(arr_temp5,reshape(S_ij_a(:),[3,3])),reshape(R_ij_a(:),[3,3]))
+        if (this%NNtype == 1) then
+          this%invariants(1, i, j, k, 1) = S_ij_a(1)+S_ij_a(5)+S_ij_a(9)
+          this%invariants(1, i, j, k, 2) = arr_temp1(1,1)+arr_temp1(2,2)+arr_temp1(3,3)
+          this%invariants(1, i, j, k, 3) = arr_temp2(1,1)+arr_temp2(2,2)+arr_temp2(3,3)
+          this%invariants(1, i, j, k, 4) = arr_temp3(1,1)+arr_temp3(2,2)+arr_temp3(3,3)
+          this%invariants(1, i, j, k, 5) = arr_temp4(1,1)+arr_temp4(2,2)+arr_temp4(3,3)
+          this%invariants(1, i, j, k, 6) = arr_temp5(1,1)+arr_temp5(2,2)+arr_temp5(3,3)
+          this%invariants(1, i, j, k, 7) = arr_temp6(1,1)+arr_temp6(2,2)+arr_temp6(3,3)
+          this%strain2(1, i, j, k, :, :) = reshape(S_ij_a(:),[3, 3])
+          this%strain2_m(1, i, j, k, :, :) = matmul(reshape(S_ij_a(:),[3, 3]),reshape(S_ij_a(:),[3, 3]))
+          this%rot2(1, i, j, k, :, :) =  matmul(reshape(R_ij_a(:),[3, 3]),reshape(R_ij_a(:),[3, 3]))
+          this%strainrot_m(1, i, j, k, :, :) = matmul(reshape(S_ij_a(:),[3, 3]),reshape(R_ij_a(:),[3, 3]))
+          this%rotstrainrot_m(1, i, j, k, :, :) = matmul(matmul(reshape(R_ij_a(:),[3, 3]),reshape(S_ij_a(:),[3, 3])),reshape(R_ij_a(:),[3, 3]))
+          this%strain2rot_m(1, i, j, k, :, :) = matmul(matmul(reshape(S_ij_a(:),[3, 3]),reshape(S_ij_a(:),[3, 3])),reshape(R_ij_a(:),[3, 3]))
+          this%rotstrain2_m(1, i, j, k, :, :) = matmul(matmul(reshape(R_ij_a(:),[3, 3]),reshape(S_ij_a(:),[3, 3])),reshape(S_ij_a(:),[3, 3]))
+          this%delta(1, :, i, j, k) = (/del, del, del, del, del, del, del, del/)
+        end if
+        if (this%NNtype == 2) then
+          this%invariantsLSTM(1, 10, i, j, k, 1) = S_ij_a(1)+S_ij_a(5)+S_ij_a(9)
+          this%invariantsLSTM(1, 10, i, j, k, 2) = arr_temp1(1,1)+arr_temp1(2,2)+arr_temp1(3,3)
+          this%invariantsLSTM(1, 10, i, j, k, 3) = arr_temp2(1,1)+arr_temp2(2,2)+arr_temp2(3,3)
+          this%invariantsLSTM(1, 10, i, j, k, 4) = arr_temp3(1,1)+arr_temp3(2,2)+arr_temp3(3,3)
+          this%invariantsLSTM(1, 10, i, j, k, 5) = arr_temp4(1,1)+arr_temp4(2,2)+arr_temp4(3,3)
+          this%invariantsLSTM(1, 10, i, j, k, 6) = arr_temp5(1,1)+arr_temp5(2,2)+arr_temp5(3,3)
+          this%invariantsLSTM(1, 10, i, j, k, 7) = arr_temp6(1,1)+arr_temp6(2,2)+arr_temp6(3,3)
+          this%strain2(1, i, j, k, :, :) = reshape(S_ij_a(:),[3, 3])
+          this%strain2_m(1, i, j, k, :, :) = matmul(reshape(S_ij_a(:),[3, 3]),reshape(S_ij_a(:),[3, 3]))
+          this%rot2(1, i, j, k, :, :) =  matmul(reshape(R_ij_a(:),[3, 3]),reshape(R_ij_a(:),[3, 3]))
+          this%strainrot_m(1, i, j, k, :, :) = matmul(reshape(S_ij_a(:),[3, 3]),reshape(R_ij_a(:),[3, 3]))
+          this%rotstrainrot_m(1, i, j, k, :, :) = matmul(matmul(reshape(R_ij_a(:),[3, 3]),reshape(S_ij_a(:),[3, 3])),reshape(R_ij_a(:),[3, 3]))
+          this%strain2rot_m(1, i, j, k, :, :) = matmul(matmul(reshape(S_ij_a(:),[3, 3]),reshape(S_ij_a(:),[3, 3])),reshape(R_ij_a(:),[3, 3]))
+          this%rotstrain2_m(1, i, j, k, :, :) = matmul(matmul(reshape(R_ij_a(:),[3, 3]),reshape(S_ij_a(:),[3, 3])),reshape(S_ij_a(:),[3, 3]))
+        end if
+      end do
+    end do
+  end do
 
   if (this%NNtype == 2) then
-      do n = 1,size(this%invariantsLSTM,2)-1
-          ! TODO: Andy, compute tidPast based on simulation tid
-          call readInvariants(tidPast,this%runID,this%datadir,this%gpC,this%invariantsLSTM(1,n,:,:,:,:))
-      end do
+      if (tidNow < 512) then
+        ! call Unetand onlu feed in LSTM at time step "10"
+      end if
+      if (tidNow >= 512) then
+         timelist(1) = tidNow-511
+         timelist(2) = tidNow-256
+         timelist(3) = tidNow-64
+         timelist(4) = tidNow-32
+         timelist(5) = tidNow-16
+         timelist(6) = tidNow-8
+         timelist(7) = tidNow-4
+         timelist(8) = tidNow-2
+         timelist(9) = tidNow-1
+         do n = 1,size(this%invariantsLSTM,2)-1
+           call readInvariants(timelist(n),this%runID,this%datadir,this%gpC,this%invariantsLSTM(1,n,:,:,:,:))
+         end do
+      end if
       call writeInvariants(tidNow,this%runID,this%datadir,this%gpC,this%invariantsLSTM(1,10,:,:,:,:))
   end if
+
+  if (this%NNtype == 1) then
+    train_loadin = reshape(this%invariants,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*7])
+    deltain = reshape(this%delta,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*8])
+    strain2in = reshape(this%strain2,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    strain2_min = reshape(this%strain2_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    rot2in = reshape(this%rot2,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    strainrot_min = reshape(this%strainrot_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    rotstrainrot_min = reshape(this%rotstrainrot_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    strain2rot_min = reshape(this%strain2rot_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    rotstrain2_min = reshape(this%rotstrain2_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    c_p = loadtensorflow(deltain, train_loadin, strain2in, strain2_min, rot2in, strainrot_min, &
+        rotstrainrot_min, strain2rot_min, rotstrain2_min)
+    call c_f_pointer(c_p, f_p, [1, 6, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)])
+    f_p = reshape(f_p, [1, 6, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)], order=[5, 4, 3, 2, 1])
+  end if
+
+
+  if (this%NNtype == 2) then
+    train_loadin = reshape(this%invariantsLSTM,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*7*10])
+    deltain = reshape(this%delta,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*8])
+    strain2in = reshape(this%strain2,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    strain2_min = reshape(this%strain2_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    rot2in = reshape(this%rot2,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    strainrot_min = reshape(this%strainrot_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    rotstrainrot_min = reshape(this%rotstrainrot_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    strain2rot_min = reshape(this%strain2rot_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    rotstrain2_min = reshape(this%rotstrain2_m,[this%gpC%xsz(1)*this%gpC%xsz(2)*this%gpC%xsz(3)*9])
+    c_p = loadtensorflow(deltain, train_loadin, strain2in, strain2_min, rot2in, strainrot_min, &
+        rotstrainrot_min, strain2rot_min, rotstrain2_min)
+    call c_f_pointer(c_p, f_p, [1, 6, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)])
+    f_p = reshape(f_p, [1, 6, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)], order=[5, 4, 3, 2, 1])
+  end if
+
 end subroutine

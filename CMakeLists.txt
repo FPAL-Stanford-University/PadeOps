@@ -1,14 +1,18 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.21)
 project(PadeOps)
 
 enable_language(Fortran)
 
-set( CMAKE_MODULE_PATH ${PadeOps_SOURCE_DIR} )
+set( CMAKE_MODULE_PATH ${PadeOps_SOURCE_DIR} $ENV{PADEOPS_ROOT}/cmake)
+
+cmake_policy(SET CMP0074 NEW)
+find_package(TensorFlow REQUIRED)
 
 if (NOT CMAKE_BUILD_TYPE)
     message(STATUS "No build type selected, default to Release")
     set(CMAKE_BUILD_TYPE "Release")
 endif()
+
 
 # Where to look for FFTW
 set(FFTW_PATH $ENV{FFTW_PATH})
@@ -91,7 +95,10 @@ elseif ( CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
  
 endif()
 
+
+
 # Add source file directories
+add_subdirectory(TensorFlow)
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(problems)
