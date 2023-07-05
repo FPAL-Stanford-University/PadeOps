@@ -20,7 +20,7 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     real(single_kind) :: wxSupport, wySupport, wzSupport, du, dv, dw
     integer, dimension(2) :: shift
     real(rkind) :: xtgt, ytgt, ztgt, distance
-    integer :: nmodesPrintStatus = 500000
+    integer :: nmodesPrintStatus = 100000
     
     this%utmp = 0.e0
     this%vtmp = 0.e0
@@ -45,7 +45,6 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
 
     shift = [1,1]
 
-    call tic()
     if (this%genModesOnUniformGrid) then
       do n = 1,size(x) 
         ! NOTE: These are global indices of the physical domain
@@ -203,7 +202,6 @@ subroutine renderLocalVelocity(this,x,y,z,kx,ky,kz,uR,uI,vR,vI,wR,wI)
     this%smallScales%u  = this%smallScales%u  + real(this%utmp,rkind)
     this%smallScales%v  = this%smallScales%v  + real(this%vtmp,rkind)
     this%smallScales%wC = this%smallScales%wC + real(this%wtmp,rkind)
-    call toc('Finished rendering velocity')
 end subroutine
   
 subroutine renderVelocity(this)
@@ -230,7 +228,8 @@ subroutine renderVelocity(this)
   allocate(this%renderModeData(this%nmodes, size(this%ModeData,2)))
   this%renderModeData = this%modeData
   call this%sendRecvHaloModes(this%renderModeData)
-  
+
+  call tic()
   ! Step 2: Render velocity 
     call this%renderLocalVelocity(this%renderModeData(:,1), &
       this%renderModeData(:,2),  this%renderModeData(:,3), &
@@ -243,6 +242,8 @@ subroutine renderVelocity(this)
   ! Step 3: Add x-periodic contribution
   include "enrichment_files/periodicContribution.F90"
 
+  call toc('Finished rendering velocity')
+  
   ! TODO:
   ! Step 2.b: interpolate wC to w. Do we need to get uhat, vhat, what from u,
   ! v, w? 

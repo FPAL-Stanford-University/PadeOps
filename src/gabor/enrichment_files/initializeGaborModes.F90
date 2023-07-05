@@ -55,6 +55,8 @@ subroutine generateIsotropicModes(this)
   call message(                          trim(mssg3)                             )
   call message(                          trim(mssg4)                             )
   call message("                                                                ")
+  call message("kmin",this%kmin)
+  call message("kmax",this%kmax)
   
   ! Allocate memory
   nk = this%nk
@@ -280,7 +282,9 @@ subroutine strainModes(this)
   x     = 0.d0
 
  !print*, maxval(abs(this%uhatR)), maxval(abs(this%vhatR)), maxval(abs(this%whatR)) 
- !print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI)) 
+ !print*, maxval(abs(this%uhatI)), maxval(abs(this%vhatI)), maxval(abs(this%whatI))
+
+  call message("Begin straining. Using ctauGlobal",this%ctauGlobal) 
  
  do n = 1,this%nmodes
     if (      (this%x(n) > this%strainClipXmin) .and. (this%x(n) < this%strainClipXmax) & 
@@ -304,7 +308,8 @@ subroutine strainModes(this)
        end if
 
        tauMean = 1/(S*sqrt(0.18) + 1E-10)
-       if (tauEddy > tauMean) tauEddy = tauMean
+       !print*, "t1, t2:", tauEddy, tauMean
+       !if (tauEddy > tauMean) tauEddy = tauMean
        
        call getDtMax(dt,[this%uhatR(n), this%vhatR(n), this%whatR(n)],&
                         [this%uhatI(n), this%vhatI(n), this%whatI(n)],&
@@ -326,7 +331,7 @@ subroutine strainModes(this)
        this%whatR(n) = uRtmp(3)
        this%whatI(n) = uItmp(3)
        
-       if (mod(n,10000) == 0 .and. nrank == 0) then
+       if (mod(n,100000) == 0 .and. nrank == 0) then
          write(mssg,'(F8.5,A)') real(n,rkind)/real(this%nmodes,rkind)*100.d0,'% complete'
          print*, trim(mssg)
        end if

@@ -10,7 +10,7 @@ module enrichmentMod
   use timer,              only: tic, toc
   use decomp_2d,          only: DECOMP_2D_COMM_CART_X, nrank, nproc
   use mpi
-  use reductions,         only: p_maxval, p_minval
+  use reductions,         only: p_maxval, p_minval, p_sum
   use timer,              only: tic, toc
   use interpolatorMod,         only: interpolator
   use procgrid_mod, only: procgrid

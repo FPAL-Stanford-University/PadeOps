@@ -235,22 +235,10 @@ subroutine getSendCount(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
   
   do n = 1,size(yloc)
     if (insideHaloRegion(yloc(n),zloc(n),haloMinY,haloMaxY,haloMinZ,haloMaxZ)) then 
-    !if (yloc(n) < haloMinY .or. yloc(n) > haloMaxY .or. &
-    !    zloc(n) < haloMinZ .or. zloc(n) > haloMaxZ) then
       sendCount = sendCount + 1
     end if
   end do
 
-  ! Need to account for periodic shifts as well. For example, if the problem is 
-  ! periodic in Y, each mode must be copied twice at y = y+Ly and y = y-Ly.
-  ! If it is periodic in Z there is another factor of two, and if both are 
-  ! periodic then another factor of 2 to account for (y,z) --> (y+/-Ly,z+/-Lz)
-  ! This is inefficient in terms of communication and storage, but simple
-  ! to implement. A future task can be to optimize this
-  !if (periodicBCs(2))                      sendCountAdd = sendCountAdd + 2*sendCount
-  !if (periodicBCs(3))                      sendCountAdd = sendCountAdd + 2*sendCount
-  !if (periodicBCs(2) .and. periodicBCs(3)) sendCountAdd = sendCountAdd + 4*sendCount
-  !sendCount = sendCount + sendCountAdd
 end subroutine
 
 subroutine packSendBuffer(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
@@ -277,22 +265,10 @@ subroutine packSendBuffer(yloc,zloc,haloMinY,haloMaxY,haloMinZ,haloMaxZ,&
   idx = 0
   do n = 1,size(yloc)
     if (insideHaloRegion(yloc(n),zloc(n),haloMinY,haloMaxY,haloMinZ,haloMaxZ)) then 
-    !if (yloc(n) < haloMinY .or. yloc(n) > haloMaxY .or. &
-    !    zloc(n) < haloMinZ .or. zloc(n) > haloMaxZ) then
       idx = idx + 1
       call copyMode(modeData(n,:), sendBuff(idx,:), [0.d0, 0.d0, 0.d0])
     end if
   end do
-  !if (periodicBCs(2)) then
-  !  call copyMode(sendBuff(1:idx,:), sendBuff(  idx+1:2*idx,:),  periodicShiftY)
-  !  call copyMode(sendbuff(1:idx,:), sendBuff(2*idx+1:3*idx,:), -periodicShiftY)
-  !  idx = 3*idx
-  !end if
-  !if (periodicBCs(3)) then
-  !  call copyMode(sendBuff(1:idx,:), sendBuff(  idx+1:2*idx,:),  periodicShiftZ)
-  !  call copyMode(sendbuff(1:idx,:), sendBuff(2*idx+1:3*idx,:), -periodicShiftZ)
-  !  idx = 3*idx
-  !end if
 end subroutine
 
 subroutine sortAndExchangeModes(this, coor, coorMin, coorMax, neighLo, neighHi)

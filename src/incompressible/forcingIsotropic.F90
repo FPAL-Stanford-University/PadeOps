@@ -150,9 +150,9 @@ subroutine init(this, inputfile, gpC, sp_gpC, sp_gpE, spectC, spectE, cbuffyE, c
        allocate(this%wave_y(Nwaves))
        allocate(this%wave_z(Nwaves))
 
-       call message("Initializating VERSION 1 of HIT_shell_forcing")
+       call message("Initializing VERSION 1 of HIT_shell_forcing")
      case (2)
-       call message("Initializating VERSION 2 of HIT_shell_forcing")
+       call message("Initializing VERSION 2 of HIT_shell_forcing")
        allocate(this%k1  (nforce/2,nforce,nforce))
        allocate(this%k2  (nforce/2,nforce,nforce))
        allocate(this%k3  (nforce/2,nforce,nforce))

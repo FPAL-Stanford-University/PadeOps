@@ -35,6 +35,10 @@ program hitEnrich
   call enrich%renderVelocity()
   call enrich%dumpSmallScales()
 
+  call message("Max u", p_maxval(maxval(abs(smallScales%u))))
+  call message("Max v", p_maxval(maxval(abs(smallScales%v))))
+  call message("Max w", p_maxval(maxval(abs(smallScales%wC))))
+
   !do while (enrich%continueSimulation())
   !  call enrich%updateLargeScales(timeAdvance=.true.)
   !  call enrich%advanceTime()
