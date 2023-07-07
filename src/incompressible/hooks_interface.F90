@@ -200,11 +200,13 @@ module igrid_hooks
 !    end interface
 
     interface hook_source
-        subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
+        subroutine hook_source(tsim,mesh,Re,w,urhs,vrhs,wrhs,duidxjC,duidxjE)
             import :: rkind
-            real(rkind),                     intent(in)    :: tsim, Re
-            real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
-            real(rkind), dimension(:,:,:),   intent(inout) :: urhs, vrhs, wrhs
+            real(rkind),                        intent(in)    :: tsim, Re
+            real(rkind),    dimension(:,:,:,:), intent(in)    :: mesh
+            complex(rkind), dimension(:,:,:),   intent(in)    :: w
+            complex(rkind), dimension(:,:,:),   intent(inout) :: urhs, vrhs, wrhs
+            complex(rkind), dimension(:,:,:,:), intent(in)    :: duidxjC, duidxjE
         end subroutine
     end interface
 

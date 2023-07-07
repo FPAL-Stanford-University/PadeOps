@@ -6,6 +6,7 @@ module forcingLayerMod
     use kind_parameters, only: rkind, clen, mpirkind
     use decomp_2d, only: decomp_info, transpose_x_to_y, transpose_y_to_z, &
         transpose_z_to_y, transpose_y_to_x, nrank, nproc
+    use decomp_2d_io, only: decomp_2d_read_one
     use spectralMod, only: spectral
     use reductions, only: p_minval, p_maxval
     use PadeDerOps, only: Pade6Stagg
@@ -22,12 +23,14 @@ module forcingLayerMod
     real(rkind), dimension(4) :: xsample = [0.d0, 1.d0/3.d0, 2.d0/3.d0, 1.d0]
     real(rkind), dimension(4) :: vsample = [0.d0, 2.d0/3.d0, 2.d0/3.d0, 0.d0]
     integer, parameter :: zbc_bot = -1, zbc_top = -1
-    public :: forcingLayer
+    public :: forcingLayer, onThisRank, getStEndIndices
 
     type :: forcingLayer
         integer :: nblocks ! The number of forcing blocks in each x,y direction
         real(rkind) :: lf  ! Physical size of forcing layer
         real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
+        complex(rkind), dimension(:,:,:), allocatable :: fxhat, fyhat, fzhat
+        complex(rkind), dimension(:,:,:), allocatable :: fxhat_old, fyhat_old, fzhat_old
         real(rkind), dimension(:,:,:), allocatable :: phixC, phiyC, phizC
         real(rkind), dimension(:,:,:), allocatable :: phixE, phiyE, phizE
         real(rkind), dimension(:,:,:), allocatable :: dphixC, dphiyC, dphizC
@@ -39,7 +42,7 @@ module forcingLayerMod
         real(rkind) :: zgap, forceAmp
         type(Pade6Stagg), pointer :: Pade6opZ
         logical :: dumpForce, dumpSplines, checkDivergence
-        logical :: randomizeBlockPositions
+        logical :: randomizeBlockPosition_xy, randomizeBlockPosition_z
         real(rkind) :: seedFact
         integer :: seed, fixedForceType
         real(rkind) :: xshift = 0.d0, yshift = 0.d0
@@ -50,6 +53,8 @@ module forcingLayerMod
         real(rkind), dimension(:,:,:), allocatable :: k1C, k1E
         real(rkind), dimension(:,:,:), allocatable :: sp_buffyC, sp_buffyE
         integer :: version
+        real(rkind) :: alpha_t
+        logical :: firstCall
         contains
           procedure :: init
           procedure :: destroy
@@ -62,7 +67,7 @@ module forcingLayerMod
     contains
 
       subroutine init(this,inputfile,Lx,Ly,mesh,xE,yE,zE,gpC,gpE,spectC,spectE,Pade6opZ,PadePoiss,&
-          restartSim,runID,tsim,inputdir)
+          restartSim,runID,tsim,inputdir,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE,cbuffxC)
           class(forcingLayer), intent(inout) :: this
           character(len=*), intent(in) :: inputfile, inputdir
           real(rkind), intent(in) :: Lx, Ly
@@ -74,18 +79,22 @@ module forcingLayerMod
           class(padePoisson), intent(in), target :: PadePoiss
           logical, intent(in) :: restartSim
           integer, intent(in) :: runID, tsim
-          integer :: nblocks = 1, i, j
+          real(rkind), dimension(:,:,:), intent(inout) :: rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE
+          complex(rkind), dimension(:,:,:), intent(inout) :: cbuffxC
+          integer :: nblocks = 1
           integer :: ioUnit, ierr, fixedForceType = 0
           real(rkind) :: zgap = 0, forceAmp = 1
           logical :: dumpForce = .false., dumpSplines = .false., checkDivergence = .false.
-          logical :: randomizeBlockPositions = .true.
+          logical :: randomizeBlockPosition_xy = .true.
+          logical :: randomizeBlockPosition_z = .true.
           character(len=clen) :: tempname, fname
           real(rkind), dimension(:,:,:), allocatable :: tmp
           integer :: version = 1
+          real(rkind) :: alpha_t = 1.d0
 
           namelist /localizedForceLayer/ nblocks, zgap, forceAmp, dumpForce, &
-            dumpSplines, checkDivergence, fixedForceType, randomizeBlockPositions, &
-            version
+            dumpSplines, checkDivergence, fixedForceType, randomizeBlockPosition_xy, &
+            randomizeBlockPosition_z, version, alpha_t
           
           ioUnit = 123
           open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -130,16 +139,26 @@ module forcingLayerMod
           this%dumpForce = dumpForce
           this%dumpSplines = dumpSplines
           this%checkDivergence = checkDivergence
-          this%randomizeBlockPositions = randomizeBlockPositions
+          this%randomizeBlockPosition_xy = randomizeBlockPosition_xy
+          this%randomizeBlockPosition_z = randomizeBlockPosition_z
 
           this%fixedForceType = fixedForceType
           this%version = version
+          this%alpha_t = alpha_t
         
           allocate(this%forceType(this%nblocks,this%nblocks))
 
           allocate(this%fx(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
           allocate(this%fy(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
           allocate(this%fz(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
+
+          allocate(this%fxhat(this%spectC%spectDecomp%ysz(1), this%spectC%spectDecomp%ysz(2), this%spectC%spectDecomp%ysz(3)))
+          allocate(this%fyhat(this%spectC%spectDecomp%ysz(1), this%spectC%spectDecomp%ysz(2), this%spectC%spectDecomp%ysz(3)))
+          allocate(this%fzhat(this%spectE%spectDecomp%ysz(1), this%spectE%spectDecomp%ysz(2), this%spectE%spectDecomp%ysz(3)))
+          
+          allocate(this%fxhat_old(this%spectC%spectDecomp%ysz(1), this%spectC%spectDecomp%ysz(2), this%spectC%spectDecomp%ysz(3)))
+          allocate(this%fyhat_old(this%spectC%spectDecomp%ysz(1), this%spectC%spectDecomp%ysz(2), this%spectC%spectDecomp%ysz(3)))
+          allocate(this%fzhat_old(this%spectE%spectDecomp%ysz(1), this%spectE%spectDecomp%ysz(2), this%spectE%spectDecomp%ysz(3)))
           
           allocate(this%phixC(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
           allocate(this%phiyC(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
@@ -189,9 +208,31 @@ module forcingLayerMod
               call MPI_Barrier(MPI_COMM_WORLD,ierr)
               call MPI_Bcast(this%seedFact,1,mpirkind,0,MPI_COMM_WORLD,ierr)
               call MPI_Barrier(MPI_COMM_WORLD,ierr)
+
+              write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",runID,"_frcx_t",tsim,".out"
+              fname = inputDir(:len_trim(inputDir))//"/"//trim(tempname)
+              call decomp_2d_read_one(1,this%fx, fname, this%gpC)
+              
+              write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",runID,"_frcy_t",tsim,".out"
+              fname = inputDir(:len_trim(inputDir))//"/"//trim(tempname)
+              call decomp_2d_read_one(1,this%fy, fname, this%gpC)
+              
+              write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",runID,"_frcz_t",tsim,".out"
+              fname = inputDir(:len_trim(inputDir))//"/"//trim(tempname)
+              call decomp_2d_read_one(1,rbuffxC, fname, this%gpC)
+              call this%interpE2C(this%fz,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE)
+
+              call this%spectC%fft(this%fx,this%fxhat_old)
+              call this%spectC%fft(this%fy,this%fyhat_old)
+              call this%spectE%fft(this%fz,this%fzhat_old)
+
+              call fixOddBall(this%fxhat_old,this%fyhat_old,this%spectC,cbuffxC)
+              this%firstCall = .false.
           else
               this%seedFact = initializeLogMap(1)
+              this%firstCall = .true.
           end if
+
 
           call message(0,'Forcing layer initialized')
           call message(1,'Forcing layer bounds (about forcing mid-plane)',[-0.5d0*(this%zgap + this%lf), &
@@ -214,20 +255,19 @@ module forcingLayerMod
           nullify(this%zE)
       end subroutine
 
-      subroutine updateRHS(this,urhs,vrhs,wrhs,cbuffxC,cbuffxE,cbuffyC,cbuffyE,cbuffzC,cbuffzE,&
-          rbuffxC,rbuffxE,rbuffyC,rbuffzC,rbuffyE,rbuffzE,newTimeStep)
+      subroutine updateRHS(this,urhs,vrhs,wrhs,cbuffxC,cbuffyC,cbuffyE,cbuffzC,cbuffzE,&
+          rbuffxC,rbuffxE,newTimeStep)
           use random, only: uniform_random
           use constants, only: third, half
           class(forcingLayer), intent(inout) :: this
           complex(rkind), dimension(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
           complex(rkind), dimension(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: wrhs
-          complex(rkind), dimension(:,:,:), intent(inout) :: cbuffxC, cbuffxE
+          complex(rkind), dimension(:,:,:), intent(inout) :: cbuffxC
           complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffyC, cbuffyE
-          real(rkind), dimension(:,:,:), intent(inout) :: rbuffyC, rbuffzC, rbuffyE, rbuffzE
           real(rkind), dimension(:,:,:,:), intent(inout) :: rbuffxC, rbuffxE
           logical, intent(in) :: newTimeStep
           real(rkind) :: xst, yst, zst
-          integer :: i, j, n, ierr
+          integer :: i, j, n
           real(rkind) :: tmp, ampFact = 1.d0
           complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffzC, cbuffzE
           real(rkind), dimension(size(this%xs)) :: xmid, ymid
@@ -239,13 +279,20 @@ module forcingLayerMod
 
           ! Step 1: get new locations for forcing blocks
           if (newTimeStep) then
-              if (this%randomizeBlockPositions) then
+              this%fxhat_old = this%fxhat
+              this%fyhat_old = this%fyhat
+              this%fzhat_old = this%fzhat
+
+              this%xshift = 0.d0
+              this%yshift = 0.d0
+              this%zshift = 0.d0
+              if (this%randomizeBlockPosition_xy) then
                   call this%updateSeed()
                   call uniform_random(this%xshift,-0.5d0*this%lf,0.5d0*this%lf,this%seed)
-                  !call uniform_random(this%xshift,-0.5d0*this%Lx,0.5d0*this%Lx,this%seed)
                   call this%updateSeed()
                   call uniform_random(this%yshift,-0.5d0*this%lf,0.5d0*this%lf,this%seed)
-                  !call uniform_random(this%yshift,-0.5d0*this%Ly,0.5d0*this%Ly,this%seed)
+              end if
+              if (this%randomizeBlockPosition_z) then
                   ! Randomly shift each block in z-direction
                   do j = 1,this%nblocks
                       do i = 1,this%nblocks
@@ -253,10 +300,6 @@ module forcingLayerMod
                           call uniform_random(this%zshift(i,j),-0.5d0*this%zgap,0.5d0*this%zgap,this%seed)
                       end do
                   end do
-              else
-                  this%xshift = 0.d0
-                  this%yshift = 0.d0
-                  this%zshift = 0.d0
               end if
 
               ! Elementary force types
@@ -276,6 +319,7 @@ module forcingLayerMod
                   end do
               end if
           end if
+          
           ! Location of the bottom of the forcing layer
           zst = -0.5d0*this%lf
 
@@ -296,7 +340,7 @@ module forcingLayerMod
                     this%phixC = 0.d0; this%phiyC = 0.d0; this%phizC = 0.d0
                     this%phixE = 0.d0; this%phiyE = 0.d0; this%phizE = 0.d0
                     
-                    ! Loop over all 8 periodic shifts
+                    ! Add periodic contributions
                     do n = 1,size(periodicXshift)
                         xmid = this%xs + xst + this%xshift + periodicXshift(n)
                         ymid = this%ys + yst + this%yshift + periodicYshift(n)
@@ -312,8 +356,8 @@ module forcingLayerMod
                     this%phizE = spline2(this%zs + zst + this%zshift(i,j),this%vs,this%zE,3,this%gpE)
                    
                     ! Get derivatives
-                    call ddx(this%phixC,this%dphixC,cbuffyC,cbuffxC,this%spectC,this%sp_buffyC,this%k1C)
-                    call ddx(this%phixE,this%dphixE,cbuffyE,cbuffxE,this%spectE,this%sp_buffyE,this%k1E)
+                    call ddx(this%phixC,this%dphixC,cbuffyC,this%spectC,this%sp_buffyC,this%k1C)
+                    call ddx(this%phixE,this%dphixE,cbuffyE,this%spectE,this%sp_buffyE,this%k1E)
                     
                     call ddy(this%phiyC,this%dphiyC,cbuffyC,this%spectC)
                     call ddy(this%phiyE,this%dphiyE,cbuffyE,this%spectE)
@@ -341,23 +385,33 @@ module forcingLayerMod
 
                   end do
               end do
+              ! Step 3: Take FFT (in x & y) of the force
+              call this%spectC%fft(this%fx,this%fxhat)!cbuffyC(:,:,:,1))
+              call this%spectC%fft(this%fy,this%fyhat)!cbuffyC(:,:,:,2))
+              call this%spectE%fft(this%fz,this%fzhat)!cbuffyE(:,:,:,1))
+
+              !call fixOddBall(cbuffyC(:,:,:,1),cbuffyC(:,:,:,2),this%spectC,cbuffxC)
+              call fixOddBall(this%fxhat,this%fyhat,this%spectC,cbuffxC)
           end if
 
-          ! Step 3: Take FFT (in x & y) of the force
-          call this%spectC%fft(this%fx,cbuffyC(:,:,:,1))
-          call this%spectC%fft(this%fy,cbuffyC(:,:,:,2))
-          call this%spectE%fft(this%fz,cbuffyE(:,:,:,1))
-
-          call fixOddBall(cbuffyC(:,:,:,1),cbuffyC(:,:,:,2),this%spectC,cbuffxC)
+          if (newTimeStep .and. this%firstCall) then
+              this%fxhat_old = this%fxhat
+              this%fyhat_old = this%fyhat
+              this%fzhat_old = this%fzhat
+          end if
+        
+          ! STEP 3b: Time filter
+          this%fxhat = this%alpha_t*this%fxhat + (1.d0 - this%alpha_t)*this%fxhat_old
+          this%fyhat = this%alpha_t*this%fyhat + (1.d0 - this%alpha_t)*this%fyhat_old
+          this%fzhat = this%alpha_t*this%fzhat + (1.d0 - this%alpha_t)*this%fzhat_old
 
           ! Step 4: Update RHS velocities
-          urhs = urhs + cbuffyC(:,:,:,1)
-          vrhs = vrhs + cbuffyC(:,:,:,2)
-          wrhs = wrhs + cbuffyE(:,:,:,1)
+          urhs = urhs + this%fxhat !cbuffyC(:,:,:,1)
+          vrhs = vrhs + this%fyhat !cbuffyC(:,:,:,2)
+          wrhs = wrhs + this%fzhat !cbuffyE(:,:,:,1)
 
           if (newTimeStep .and. this%checkDivergence) then
-              call this%poiss%divergenceCheck(cbuffyC(:,:,:,1),cbuffyC(:,:,:,2), &
-                cbuffyE(:,:,:,1), rbuffxC(:,:,:,1))
+              call this%poiss%divergenceCheck(this%fxhat, this%fyhat, this%fzhat, rbuffxC(:,:,:,1))
               call message("Max divergence of forcing layer",p_maxval(maxval(abs(rbuffxC(:,:,:,1)))))
           end if
 
@@ -395,10 +449,9 @@ module forcingLayerMod
           call spectE%ifft(cbuffyE,dfdz)
       end subroutine
 
-      subroutine ddx(f,dfdx,cbuffy,cbuffx,spect,rbuffy,myk1)
+      subroutine ddx(f,dfdx,cbuffy,spect,rbuffy,myk1)
           real(rkind), dimension(:,:,:), intent(in) :: f
           real(rkind), dimension(:,:,:), intent(out) :: dfdx
-          complex(rkind), dimension(:,:,:), intent(inout) :: cbuffx
           complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffy
           class(spectral), intent(inout) :: spect
           real(rkind), dimension(:,:,:), intent(inout) :: rbuffy
@@ -522,7 +575,7 @@ module forcingLayerMod
           real(rkind), dimension(gp%xsz(1),gp%xsz(2),gp%xsz(3)) :: vq
           real(rkind), dimension(size(xq,coord)) :: x1D
           real(rkind), dimension(size(xs)) :: weight
-          integer :: nknots, st, en, ierr, n, m
+          integer :: nknots, st, en, n
           real(rkind) :: delta
 
           select case (coord)

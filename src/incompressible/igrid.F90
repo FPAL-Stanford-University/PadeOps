@@ -1011,10 +1011,10 @@ contains
                     this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(this%zTop - zstSponge)))/two
                     this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(this%zTop - zstSponge)))/two
 
-                   where (zEinY < zstSponge) 
+                   where (zEinY < (zstSponge - this%zBot)) 
                        this%RdampE = zero
                    end where
-                   where (zinY < zstSponge) 
+                   where (zinY < (zstSponge - this%zBot)) 
                        this%RdampC = zero
                    end where
                 end if 
@@ -1271,7 +1271,9 @@ contains
            allocate(this%forceLayer)
            call this%forceLayer%init(inputfile,Lx,Ly,this%mesh,this%xE,this%yE,&
              this%zE,this%gpC,this%gpE,this%spectC,this%spectE,this%Pade6opZ,&
-             this%PadePoiss,useRestartFile,this%RunID, this%step,this%inputDir)
+             this%PadePoiss,useRestartFile,this%RunID, this%step,this%inputDir,&
+             this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),&
+             this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), this%cbuffxC)
        end if
        
        ! STEP 19: Set up storage for Pressure

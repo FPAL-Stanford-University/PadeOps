@@ -45,7 +45,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:,:), allocatable :: tau_ij
         real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
         real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
-        real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E
+        real(rkind), dimension(:,:,:,:), allocatable, public :: S_ij_C, S_ij_E
         real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffyE, rbuffzE
         real(rkind), dimension(:,:,:), allocatable :: rbuffxE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE

@@ -640,30 +640,32 @@
                 call this%dumpFullField(this%WindTurbineArr%fy, "TrbY")
                 call this%dumpFullField(this%WindTurbineArr%fz, "TrbZ")
            end if 
-           if (this%useLocalizedForceLayer .and. this%forceLayer%dumpForce) then
-               call this%dumpFullField(this%forceLayer%fx, "frcx")
-               call this%dumpFullField(this%forceLayer%fy, "frcy")
-               call this%forceLayer%interpE2C(this%forceLayer%fz,&
-                 this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), &
-                 this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
-                 this%rbuffzE(:,:,:,1))
-               call this%dumpFullField(this%rbuffxC(:,:,:,1), "frcz")
-               if (this%forceLayer%dumpSplines) then
-                   call this%dumpFullField(this%forceLayer%phixC, "phxC", this%gpC)
-                   call this%dumpFullField(this%forceLayer%phiyC, "phyC", this%gpC)
-                   call this%dumpFullField(this%forceLayer%phizC, "phzC", this%gpC)
-                   
-                   call this%dumpFullField(this%forceLayer%dphixC, "dpxC", this%gpC)
-                   call this%dumpFullField(this%forceLayer%dphiyC, "dpyC", this%gpC)
-                   call this%dumpFullField(this%forceLayer%dphizC, "dpzC", this%gpC)
-                   
-                   call this%dumpFullField(this%forceLayer%phixE, "phxE", this%gpE)
-                   call this%dumpFullField(this%forceLayer%phiyE, "phyE", this%gpE)
-                   call this%dumpFullField(this%forceLayer%phizE, "phzE", this%gpE)
-                   
-                   call this%dumpFullField(this%forceLayer%dphixE, "dpxE", this%gpE)
-                   call this%dumpFullField(this%forceLayer%dphiyE, "dpyE", this%gpE)
-                   call this%dumpFullField(this%forceLayer%dphizE, "dpzE", this%gpE)
+           if (this%useLocalizedForceLayer) then
+               if (this%forceLayer%dumpForce) then
+                   call this%dumpFullField(this%forceLayer%fx, "frcx")
+                   call this%dumpFullField(this%forceLayer%fy, "frcy")
+                   call this%forceLayer%interpE2C(this%forceLayer%fz,&
+                     this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), &
+                     this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+                     this%rbuffzE(:,:,:,1))
+                   call this%dumpFullField(this%rbuffxC(:,:,:,1), "frcz")
+                   if (this%forceLayer%dumpSplines) then
+                       call this%dumpFullField(this%forceLayer%phixC, "phxC", this%gpC)
+                       call this%dumpFullField(this%forceLayer%phiyC, "phyC", this%gpC)
+                       call this%dumpFullField(this%forceLayer%phizC, "phzC", this%gpC)
+                       
+                       call this%dumpFullField(this%forceLayer%dphixC, "dpxC", this%gpC)
+                       call this%dumpFullField(this%forceLayer%dphiyC, "dpyC", this%gpC)
+                       call this%dumpFullField(this%forceLayer%dphizC, "dpzC", this%gpC)
+                       
+                       call this%dumpFullField(this%forceLayer%phixE, "phxE", this%gpE)
+                       call this%dumpFullField(this%forceLayer%phiyE, "phyE", this%gpE)
+                       call this%dumpFullField(this%forceLayer%phizE, "phzE", this%gpE)
+                       
+                       call this%dumpFullField(this%forceLayer%dphixE, "dpxE", this%gpE)
+                       call this%dumpFullField(this%forceLayer%dphiyE, "dpyE", this%gpE)
+                       call this%dumpFullField(this%forceLayer%dphizE, "dpzE", this%gpE)
+                   end if
                end if
            end if
        case default

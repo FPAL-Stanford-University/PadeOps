@@ -18,7 +18,7 @@ program shearlessMixing
     character(len=clen) :: inputfile
     integer :: ierr
     
-    call MPI_Init(ierr)                                                
+    call MPI_Init(ierr)
 
     call GETARG(1,inputfile)                                            
 
