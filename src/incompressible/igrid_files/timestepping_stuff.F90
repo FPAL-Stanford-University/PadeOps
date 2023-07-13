@@ -797,9 +797,9 @@
          this%vhat => this%vstar
          this%what => this%wstar
          
-         call this%project_and_prep(.false.)
          call this%populate_rhs()
          call this%reset_pointers()
+         call this%project_and_prep(.false.)
 
          this%du = this%du + b(idx)*this%dt*this%u_rhs
          this%dv = this%dv + b(idx)*this%dt*this%v_rhs

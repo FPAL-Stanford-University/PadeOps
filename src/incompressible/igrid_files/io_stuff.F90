@@ -642,6 +642,10 @@
            end if 
            if (this%useLocalizedForceLayer) then
                if (this%forceLayer%dumpForce) then
+                   call this%spectC%ifft(this%forceLayer%fxhat,this%forceLayer%fx)
+                   call this%spectC%ifft(this%forceLayer%fyhat,this%forceLayer%fy)
+                   call this%spectE%ifft(this%forceLayer%fzhat,this%forceLayer%fz)
+                   
                    call this%dumpFullField(this%forceLayer%fx, "frcx")
                    call this%dumpFullField(this%forceLayer%fy, "frcy")
                    call this%forceLayer%interpE2C(this%forceLayer%fz,&

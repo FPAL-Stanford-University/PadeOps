@@ -311,6 +311,7 @@ module IncompressibleGrid
 
         contains
             procedure          :: init
+            procedure          :: reinit
             procedure          :: destroy
             procedure          :: printDivergence 
             procedure          :: getMaxKE
@@ -325,7 +326,13 @@ module IncompressibleGrid
             procedure          :: start_io
             procedure          :: finalize_io
             procedure          :: get_dt
-            procedure          :: interpolate_cellField_to_edgeField 
+            procedure          :: interpolate_cellField_to_edgeField
+            procedure          :: getConvectiveTerms
+            procedure          :: getViscousTerms
+            procedure          :: getSGSterms
+            procedure          :: getPressureGradient
+            procedure          :: getSpongeTerms
+            procedure, private :: ifft_CCE
             !procedure, private :: init_stats
             procedure, private :: init_stats3D
             procedure, private :: AdamsBashforth
@@ -1911,4 +1918,59 @@ contains
 
    end subroutine
 
+    subroutine reinit(this,tid_reinit)
+        ! Re-initialize igrid with new data from a fresh restart file (Different
+        ! from the one read during init). Assumes the same problem size so no
+        ! arrays need to be deallocated/reallocated and assumes all parameters
+        ! from inputfile during init are valid so will not re-read the
+        ! inputfile.:w
+
+        class(igrid), intent(inout), target :: this       
+        integer, intent(in) :: tid_reinit 
+
+       ! STEP 7: INITIALIZE THE FIELDS
+       call this%readRestartFile(tid_reinit, this%runID)
+       this%step = tid_reinit
+       this%newTimeStep = .true.
+   
+       call this%spectC%fft(this%u,this%uhat)   
+       call this%spectC%fft(this%v,this%vhat)   
+       call this%spectE%fft(this%w,this%what)   
+       if (this%isStratified .or. this%initspinup) call this%spectC%fft(this%T,this%That)   
+
+       ! Dealias and filter before projection
+       call this%dealiasFields()
+
+       ! Pressure projection
+       call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
+       call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+
+       ! Take it back to physical fields
+       call this%spectC%ifft(this%uhat,this%u)
+       call this%spectC%ifft(this%vhat,this%v)
+       call this%spectE%ifft(this%what,this%w)
+       if (this%isStratified) call this%spectC%ifft(this%That,this%T)
+
+       call this%interp_PrimitiveVars()
+       call message(1,"Max KE:",P_MAXVAL(this%getMaxKE()))
+    
+       ! STEP 9: Compute duidxj
+       call this%compute_duidxj()
+       if (this%isStratified) call this%compute_dTdxi()
+
+       ! Force Layer
+       if (this%useLocalizedForceLayer) then
+           call this%forceLayer%reinit(this%runID,tid_reinit,&
+             this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),&
+             this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), this%cbuffxC)
+       end if 
+      
+       ! STEP 28: Compute the timestep
+       call this%compute_deltaT()
+       this%dtOld = this%dt
+
+       call message("IGRID re-initialized with new data!")
+       call message("===========================================================")
+
+   end subroutine
 end module 

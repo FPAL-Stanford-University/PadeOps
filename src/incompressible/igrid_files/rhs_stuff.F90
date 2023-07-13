@@ -77,10 +77,24 @@
            call this%spectC%ifft(ybuffC2,this%fbody_y)
            call this%spectE%ifft(ybuffE ,this%fbody_z)
        end if
-   end subroutine  
+   end subroutine 
 
-   subroutine addSponge(this)
+   subroutine getSpongeTerms(this,usp_hat,vsp_hat,wsp_hat,usp,vsp,wsp)
+       class(igrid), intent(inout) :: this
+       complex(rkind), dimension(:,:,:), intent(out) :: usp_hat, vsp_hat, wsp_hat
+       real(rkind), dimension(:,:,:), intent(out) :: usp, vsp, wsp
+       
+       usp_hat = im0
+       vsp_hat = im0
+       wsp_hat = im0
+       
+       call this%addSponge(usp_hat,vsp_hat,wsp_hat)
+       call this%ifft_CCE(usp_hat,vsp_hat,wsp_hat,usp,vsp,wsp)
+   end subroutine 
+
+   subroutine addSponge(this,urhs,vrhs,wrhs)
        class(igrid), intent(inout), target :: this
+       complex(rkind), dimension(:,:,:), intent(inout), optional :: urhs, vrhs, wrhs
        complex(rkind), dimension(:,:,:), pointer :: deviationC
 
        deviationC => this%cbuffyC(:,:,:,1)
@@ -88,16 +102,28 @@
        deviationC = this%uhat
        if (this%spectC%carryingZeroK) then
            deviationC(1,1,:) = cmplx(zero,zero,rkind)
-       end if 
-       this%u_rhs = this%u_rhs - (this%RdampC/this%dt)*deviationC
+       end if
+       if (present(urhs)) then
+           urhs = urhs - (this%RdampC/this%dt)*deviationC
+       else 
+           this%u_rhs = this%u_rhs - (this%RdampC/this%dt)*deviationC
+       end if
 
        deviationC = this%vhat
        if (this%spectC%carryingZeroK) then
            deviationC(1,1,:) = cmplx(zero,zero,rkind)
        end if 
-       this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*deviationC
-       
-       this%w_rhs = this%w_rhs - (this%RdampE/this%dt)*this%what ! Mean of w is always zero 
+       if (present(vrhs)) then
+           vrhs = vrhs - (this%RdampC/this%dt)*deviationC
+       else 
+           this%v_rhs = this%v_rhs - (this%RdampC/this%dt)*deviationC
+       end if
+      
+       if (present(wrhs)) then 
+           wrhs = wrhs - (this%RdampE/this%dt)*this%what ! Mean of w is always zero 
+       else
+           this%w_rhs = this%w_rhs - (this%RdampE/this%dt)*this%what ! Mean of w is always zero 
+       end if
 
        deviationC = this%That 
        if (this%spectC%carryingZeroK) then
@@ -190,7 +216,74 @@
        end if
 
    end subroutine
+  
+   subroutine getPressureGradient(this,px,py,pz)
+       class(igrid), intent(inout) :: this
+       real(rkind), dimension(:,:,:), intent(inout) :: px, py, pz
+        
+       call this%spectC%fft(this%pressure,this%cbuffyC(:,:,:,1))
+       call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), px)
 
+       call this%spectC%mtimes_ik2_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
+       call this%spectC%ifft(this%cbuffyC(:,:,:,2), py)
+
+       call transpose_y_to_z(this%cbuffyC(:,:,:,1),this%cbuffzC(:,:,:,1),this%sp_gpC)
+       call this%Pade6opZ%ddz_C2E(this%cbuffzC(:,:,:,1),this%cbuffzE(:,:,:,1),0,0)
+       call transpose_y_to_z(this%cbuffzE(:,:,:,1),this%cbuffyE(:,:,:,1),this%sp_gpE)
+       call this%spectE%ifft(this%cbuffyE(:,:,:,1), pz)
+
+   end subroutine
+
+   subroutine getSGSTerms(this,usgs_hat,vsgs_hat,wsgs_hat,usgs,vsgs,wsgs)
+       class(igrid), intent(inout) :: this
+       complex(rkind), dimension(:,:,:), intent(inout) :: usgs_hat, vsgs_hat, wsgs_hat
+       real(rkind), dimension(:,:,:), intent(inout) :: usgs, vsgs, wsgs
+
+       call this%sgsmodel%getRHS_SGS(usgs_hat,vsgs_hat,wsgs_hat,this%duidxjC, this%duidxjE, &
+         this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
+         this%v,     this%wC,    this%T,          this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
+         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
+
+       call this%ifft_CCE(usgs_hat,vsgs_hat,wsgs_hat,usgs, vsgs, wsgs)
+   end subroutine
+   
+   subroutine getViscousTerms(this,uvisc_hat,vvisc_hat,wvisc_hat,uvisc,vvisc,wvisc)
+       class(igrid), intent(inout) :: this
+       real(rkind), dimension(:,:,:), intent(inout) :: uvisc, vvisc, wvisc
+       complex(rkind), dimension(:,:,:), intent(inout) :: uvisc_hat, vvisc_hat, wvisc_hat
+
+       call this%addViscousTerm(uvisc_hat,vvisc_hat,wvisc_hat)
+
+       call this%ifft_CCE(uvisc_hat,vvisc_hat,wvisc_hat,uvisc, vvisc, wvisc)
+   end subroutine
+  
+   subroutine ifft_CCE(this,uhat,vhat,what,u,v,w)
+       class(igrid), intent(inout) :: this
+       complex(rkind), dimension(:,:,:), intent(in) :: uhat, vhat, what
+       real(rkind), dimension(:,:,:), intent(out) :: u, v, w
+
+       call this%spectC%ifft(uhat,u)
+       call this%spectC%ifft(vhat,v)
+       call this%spectE%ifft(what,w)
+
+   end subroutine
+
+   subroutine getConvectiveTerms(this,uconv_hat,vconv_hat,wconv_hat,uconv,vconv,wconv)
+       class(igrid), intent(inout) :: this
+       real(rkind), dimension(:,:,:), intent(inout) :: uconv, vconv, wconv
+       complex(rkind), dimension(:,:,:), intent(inout) :: uconv_hat, vconv_hat, wconv_hat
+       
+       if (useSkewSymm) then
+           call this%addNonLinearTerm_skewSymm(uconv_hat, vconv_hat, wconv_hat)
+       else
+           call this%addNonLinearTerm_Rot(uconv_hat, vconv_hat, wconv_hat)
+       end if
+
+       call this%ifft_CCE(uconv_hat, vconv_hat, wconv_hat, &
+         uconv, vconv, wconv)
+   end subroutine
+   
    subroutine addNonLinearTerm_skewSymm(this, urhs, vrhs, wrhs)
        class(igrid), intent(inout), target :: this
        real(rkind),    dimension(:,:,:), pointer :: dudy, dudz, dudx

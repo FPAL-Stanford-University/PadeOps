@@ -226,7 +226,7 @@
        if (this%useLocalizedForceLayer) then
            call this%forceLayer%updateRHS(this%u_rhs, this%v_rhs, this%w_rhs, &
                this%cbuffxC, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, &
-               this%rbuffxC, this%rbuffxE, this%newTimeStep)
+               this%rbuffxC, this%rbuffxE, this%newTimeStep, this%dt)
        end if
 
        !if (this%useHITRealSpaceLinearForcing) then

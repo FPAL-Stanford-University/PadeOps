@@ -16,13 +16,14 @@ module forcingLayerMod
     use basic_io, only: read_0d_ascii
     use mpi
     use fortran_assert, only: assert
+    use constants, only: third, half, rmaxInt
     
     implicit none
     private
 
     real(rkind), dimension(4) :: xsample = [0.d0, 1.d0/3.d0, 2.d0/3.d0, 1.d0]
     real(rkind), dimension(4) :: vsample = [0.d0, 2.d0/3.d0, 2.d0/3.d0, 0.d0]
-    integer, parameter :: zbc_bot = -1, zbc_top = -1
+    integer, parameter :: zbc_bot = 0, zbc_top = 0
     public :: forcingLayer, onThisRank, getStEndIndices
 
     type :: forcingLayer
@@ -39,7 +40,8 @@ module forcingLayerMod
         type(spectral), pointer :: spectC, spectE
         real(rkind), dimension(4) :: xs, ys, zs, vs ! Sample points for spline interpolation
         real(rkind), dimension(:,:,:), pointer :: x, y, z, xE, yE, zE
-        real(rkind) :: zgap, forceAmp
+        real(rkind) :: zgap, forceAmp, zst
+        real(rkind), dimension(3) :: periodicXshift, periodicYshift
         type(Pade6Stagg), pointer :: Pade6opZ
         logical :: dumpForce, dumpSplines, checkDivergence
         logical :: randomizeBlockPosition_xy, randomizeBlockPosition_z
@@ -53,12 +55,14 @@ module forcingLayerMod
         real(rkind), dimension(:,:,:), allocatable :: k1C, k1E
         real(rkind), dimension(:,:,:), allocatable :: sp_buffyC, sp_buffyE
         integer :: version
-        real(rkind) :: alpha_t
         logical :: firstCall
+        character(len=clen) :: inputdir
         contains
           procedure :: init
+          procedure :: reinit
           procedure :: destroy
           procedure :: updateRHS
+          procedure :: updateForce
           procedure :: interpC2E
           procedure :: interpE2C
           procedure :: updateSeed
@@ -90,11 +94,10 @@ module forcingLayerMod
           character(len=clen) :: tempname, fname
           real(rkind), dimension(:,:,:), allocatable :: tmp
           integer :: version = 1
-          real(rkind) :: alpha_t = 1.d0
 
           namelist /localizedForceLayer/ nblocks, zgap, forceAmp, dumpForce, &
             dumpSplines, checkDivergence, fixedForceType, randomizeBlockPosition_xy, &
-            randomizeBlockPosition_z, version, alpha_t
+            randomizeBlockPosition_z, version
           
           ioUnit = 123
           open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -144,7 +147,8 @@ module forcingLayerMod
 
           this%fixedForceType = fixedForceType
           this%version = version
-          this%alpha_t = alpha_t
+
+          this%inputdir = inputdir
         
           allocate(this%forceType(this%nblocks,this%nblocks))
 
@@ -197,6 +201,12 @@ module forcingLayerMod
           tmp(spectE%nx_g/2+1,:,:) = 0
           call transpose_x_to_y(tmp,this%k1E,this%sp_gpE)
           deallocate(tmp)
+          
+          ! Location of the bottom of the forcing layer
+          this%zst = -0.5d0*this%lf
+
+          this%periodicXshift = [0.d0, this%Lx, -this%Lx]
+          this%periodicYshift = [0.d0, this%Ly, -this%Ly]
 
           ! Initialize randomized seeds
           if (restartSim) then
@@ -220,7 +230,7 @@ module forcingLayerMod
               write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",runID,"_frcz_t",tsim,".out"
               fname = inputDir(:len_trim(inputDir))//"/"//trim(tempname)
               call decomp_2d_read_one(1,rbuffxC, fname, this%gpC)
-              call this%interpE2C(this%fz,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE)
+              call this%interpC2E(rbuffxC,this%fz,rbuffyC,rbuffzC,rbuffyE,rbuffzE)
 
               call this%spectC%fft(this%fx,this%fxhat_old)
               call this%spectC%fft(this%fy,this%fyhat_old)
@@ -235,6 +245,49 @@ module forcingLayerMod
 
 
           call message(0,'Forcing layer initialized')
+          call message(1,'Forcing layer bounds (about forcing mid-plane)',[-0.5d0*(this%zgap + this%lf), &
+            0.5d0*(this%zgap + this%lf)])
+      end subroutine
+      
+      subroutine reinit(this,runID,tsim,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE,cbuffxC)
+          class(forcingLayer), intent(inout) :: this
+          integer, intent(in) :: runID, tsim
+          real(rkind), dimension(:,:,:), intent(inout) :: rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE
+          complex(rkind), dimension(:,:,:), intent(inout) :: cbuffxC
+          character(len=clen) :: tempname, fname
+          integer :: ierr
+
+          ! Read force info
+          if (nrank == 0) then
+              write(tempname,"(A7,A4,I2.2,A5,I6.6)") "RESTART", "_Run",runID, "_frc.",tsim
+              fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
+              call read_0d_ascii(this%seedFact,fname)
+          end if
+          call MPI_Barrier(MPI_COMM_WORLD,ierr)
+          call MPI_Bcast(this%seedFact,1,mpirkind,0,MPI_COMM_WORLD,ierr)
+          call MPI_Barrier(MPI_COMM_WORLD,ierr)
+
+          write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",runID,"_frcx_t",tsim,".out"
+          fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
+          call decomp_2d_read_one(1,this%fx, fname, this%gpC)
+          
+          write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",runID,"_frcy_t",tsim,".out"
+          fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
+          call decomp_2d_read_one(1,this%fy, fname, this%gpC)
+          
+          write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",runID,"_frcz_t",tsim,".out"
+          fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
+          call decomp_2d_read_one(1,rbuffxC, fname, this%gpC)
+          call this%interpC2E(rbuffxC,this%fz,rbuffyC,rbuffzC,rbuffyE,rbuffzE)
+
+          call this%spectC%fft(this%fx,this%fxhat_old)
+          call this%spectC%fft(this%fy,this%fyhat_old)
+          call this%spectE%fft(this%fz,this%fzhat_old)
+
+          call fixOddBall(this%fxhat_old,this%fyhat_old,this%spectC,cbuffxC)
+          this%firstCall = .false.
+
+          call message(0,'Forcing layer re-initialized')
           call message(1,'Forcing layer bounds (about forcing mid-plane)',[-0.5d0*(this%zgap + this%lf), &
             0.5d0*(this%zgap + this%lf)])
       end subroutine
@@ -256,9 +309,10 @@ module forcingLayerMod
       end subroutine
 
       subroutine updateRHS(this,urhs,vrhs,wrhs,cbuffxC,cbuffyC,cbuffyE,cbuffzC,cbuffzE,&
-          rbuffxC,rbuffxE,newTimeStep)
-          use random, only: uniform_random
-          use constants, only: third, half
+          rbuffxC,rbuffxE,newTimeStep,dt)
+          ! The force added to the RHS is computed from f = ddt(Bodart force).
+          ! Below Bodart force is first computed and stored in fhat, then fhat
+          ! is updated via Forward Euler.
           class(forcingLayer), intent(inout) :: this
           complex(rkind), dimension(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
           complex(rkind), dimension(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: wrhs
@@ -266,154 +320,181 @@ module forcingLayerMod
           complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffyC, cbuffyE
           real(rkind), dimension(:,:,:,:), intent(inout) :: rbuffxC, rbuffxE
           logical, intent(in) :: newTimeStep
-          real(rkind) :: xst, yst, zst
-          integer :: i, j, n
-          real(rkind) :: tmp, ampFact = 1.d0
+          real(rkind), intent(in) :: dt
           complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffzC, cbuffzE
-          real(rkind), dimension(size(this%xs)) :: xmid, ymid
-          real(rkind), dimension(3) :: periodicXshift, periodicYshift
-          real(rkind), dimension(this%nblocks,this%nblocks) :: sgn
-          real(rkind), dimension(0:1) :: sgns
 
-          sgns = [-1.d0,1.d0]
 
-          ! Step 1: get new locations for forcing blocks
-          if (newTimeStep) then
-              this%fxhat_old = this%fxhat
-              this%fyhat_old = this%fyhat
-              this%fzhat_old = this%fzhat
+              !this%fxhat_old = this%fxhat
+              !this%fyhat_old = this%fyhat
+              !this%fzhat_old = this%fzhat
 
-              this%xshift = 0.d0
-              this%yshift = 0.d0
-              this%zshift = 0.d0
-              if (this%randomizeBlockPosition_xy) then
-                  call this%updateSeed()
-                  call uniform_random(this%xshift,-0.5d0*this%lf,0.5d0*this%lf,this%seed)
-                  call this%updateSeed()
-                  call uniform_random(this%yshift,-0.5d0*this%lf,0.5d0*this%lf,this%seed)
-              end if
-              if (this%randomizeBlockPosition_z) then
-                  ! Randomly shift each block in z-direction
-                  do j = 1,this%nblocks
-                      do i = 1,this%nblocks
-                          call this%updateSeed()
-                          call uniform_random(this%zshift(i,j),-0.5d0*this%zgap,0.5d0*this%zgap,this%seed)
-                      end do
-                  end do
-              end if
-
-              ! Elementary force types
-              if (this%fixedForceType > 0) then
-                  this%forceType = this%fixedForceType
-              else
-                  do j = 1,this%nblocks
-                      do i = 1,this%nblocks
-                          call this%updateSeed()
-                          call uniform_random(tmp,0.d0,1.d0,this%seed)
-                          this%forceType(i,j) = ceiling(tmp/third)
-
-                          call this%updateSeed()
-                          call uniform_random(tmp,0.d0,1.d0,this%seed)
-                          sgn(i,j) = sgns(nint(tmp))
-                      end do
-                  end do
-              end if
-          end if
           
-          ! Location of the bottom of the forcing layer
-          zst = -0.5d0*this%lf
-
-          periodicXshift = [0.d0, this%Lx, -this%Lx]
-          periodicYshift = [0.d0, this%Ly, -this%Ly]
-
           if (newTimeStep) then
-              this%fx = 0.d0
-              this%fy = 0.d0
-              this%fz = 0.d0
-              
-              ! Step 2: get the elementary force for each block
-              do j = 1,this%nblocks
-                  yst = (j - 1)*this%lf
-                  do i = 1,this%nblocks
-                    xst = (i - 1)*this%lf
-                    
-                    this%phixC = 0.d0; this%phiyC = 0.d0; this%phizC = 0.d0
-                    this%phixE = 0.d0; this%phiyE = 0.d0; this%phizE = 0.d0
-                    
-                    ! Add periodic contributions
-                    do n = 1,size(periodicXshift)
-                        xmid = this%xs + xst + this%xshift + periodicXshift(n)
-                        ymid = this%ys + yst + this%yshift + periodicYshift(n)
-                    
-                        this%phixC = this%phixC + spline2(xmid,this%vs,this%x ,1,this%gpC)
-                        this%phiyC = this%phiyC + spline2(ymid,this%vs,this%y ,2,this%gpC)
-                        
-                        this%phixE = this%phixE + spline2(xmid,this%vs,this%xE,1,this%gpE)
-                        this%phiyE = this%phiyE + spline2(ymid,this%vs,this%yE,2,this%gpE)
-                    end do
-                    
-                    this%phizC = spline2(this%zs + zst + this%zshift(i,j),this%vs,this%z ,3,this%gpC)
-                    this%phizE = spline2(this%zs + zst + this%zshift(i,j),this%vs,this%zE,3,this%gpE)
-                   
-                    ! Get derivatives
-                    call ddx(this%phixC,this%dphixC,cbuffyC,this%spectC,this%sp_buffyC,this%k1C)
-                    call ddx(this%phixE,this%dphixE,cbuffyE,this%spectE,this%sp_buffyE,this%k1E)
-                    
-                    call ddy(this%phiyC,this%dphiyC,cbuffyC,this%spectC)
-                    call ddy(this%phiyE,this%dphiyE,cbuffyE,this%spectE)
-                    
-                    call ddz_E2C(this%phizE,this%dphizC,cbuffyE(:,:,:,1),cbuffyC(:,:,:,1),&
-                      cbuffzE(:,:,:,1),cbuffzC(:,:,:,1), this%spectC,this%spectE,this%sp_gpE,&
-                      this%sp_gpC,this%pade6opZ)
-                    call ddz_C2E(this%phizC,this%dphizE,cbuffyE(:,:,:,1),cbuffyC(:,:,:,1),&
-                      cbuffzE(:,:,:,1),cbuffzC(:,:,:,1), this%spectC,this%spectE,this%sp_gpE,&
-                      this%sp_gpC,this%pade6opZ)
+              call this%updateForce(rbuffxC, rbuffxE, cbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE)
 
-                    ! Randomly choose the force type
-                    call getForceBlock(this%phixC,this%phiyC,this%phizC, &
-                      this%dphixC, this%dphiyC, this%dphizC, this%forceType(i,j), &
-                      rbuffxC(:,:,:,1), rbuffxC(:,:,:,2),rbuffxC(:,:,:,3),this%version)
-                    call getForceBlock(this%phixE,this%phiyE,this%phizE, &
-                      this%dphixE, this%dphiyE, this%dphizE, this%forceType(i,j), &
-                      rbuffxE(:,:,:,1), rbuffxE(:,:,:,2), rbuffxE(:,:,:,3),this%version)
+              if (this%firstCall) then
+                  this%fxhat_old = this%fxhat
+                  this%fyhat_old = this%fyhat
+                  this%fzhat_old = this%fzhat
+                  
+                  call this%updateForce(rbuffxC, rbuffxE, cbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE)
+                  this%firstCall = .false.
+              end if
+          
+              ! Step 3b: Time integrate (since f = ddt(Bodart forcing)) using Forwared Euler
+              this%fxhat = this%fxhat_old + dt*this%fxhat
+              this%fyhat = this%fyhat_old + dt*this%fyhat
+              this%fzhat = this%fzhat_old + dt*this%fzhat
 
-                    !call this%updateSeed()
-                    !call uniform_random(ampFact,0.d0,2.d0,this%seed)
-                    this%fx = this%fx + ampFact*this%forceAmp*sgn(i,j)*rbuffxC(:,:,:,1)
-                    this%fy = this%fy + ampFact*this%forceAmp*sgn(i,j)*rbuffxC(:,:,:,2)
-                    this%fz = this%fz + ampFact*this%forceAmp*sgn(i,j)*rbuffxE(:,:,:,3)
-
-                  end do
-              end do
-              ! Step 3: Take FFT (in x & y) of the force
-              call this%spectC%fft(this%fx,this%fxhat)!cbuffyC(:,:,:,1))
-              call this%spectC%fft(this%fy,this%fyhat)!cbuffyC(:,:,:,2))
-              call this%spectE%fft(this%fz,this%fzhat)!cbuffyE(:,:,:,1))
-
-              !call fixOddBall(cbuffyC(:,:,:,1),cbuffyC(:,:,:,2),this%spectC,cbuffxC)
-              call fixOddBall(this%fxhat,this%fyhat,this%spectC,cbuffxC)
-          end if
-
-          if (newTimeStep .and. this%firstCall) then
+              ! Update and store fhat_old
               this%fxhat_old = this%fxhat
               this%fyhat_old = this%fyhat
               this%fzhat_old = this%fzhat
+
           end if
+
+          !if (newTimeStep .and. this%firstCall) then
+          !    this%fxhat_old = this%fxhat
+          !    this%fyhat_old = this%fyhat
+          !    this%fzhat_old = this%fzhat
+          !end if
         
           ! STEP 3b: Time filter
-          this%fxhat = this%alpha_t*this%fxhat + (1.d0 - this%alpha_t)*this%fxhat_old
-          this%fyhat = this%alpha_t*this%fyhat + (1.d0 - this%alpha_t)*this%fyhat_old
-          this%fzhat = this%alpha_t*this%fzhat + (1.d0 - this%alpha_t)*this%fzhat_old
+          !this%fxhat = this%alpha_t*this%fxhat + (1.d0 - this%alpha_t)*this%fxhat_old
+          !this%fyhat = this%alpha_t*this%fyhat + (1.d0 - this%alpha_t)*this%fyhat_old
+          !this%fzhat = this%alpha_t*this%fzhat + (1.d0 - this%alpha_t)*this%fzhat_old
+
 
           ! Step 4: Update RHS velocities
-          urhs = urhs + this%fxhat !cbuffyC(:,:,:,1)
-          vrhs = vrhs + this%fyhat !cbuffyC(:,:,:,2)
-          wrhs = wrhs + this%fzhat !cbuffyE(:,:,:,1)
+          urhs = urhs + this%fxhat
+          vrhs = vrhs + this%fyhat
+          wrhs = wrhs + this%fzhat
 
           if (newTimeStep .and. this%checkDivergence) then
               call this%poiss%divergenceCheck(this%fxhat, this%fyhat, this%fzhat, rbuffxC(:,:,:,1))
               call message("Max divergence of forcing layer",p_maxval(maxval(abs(rbuffxC(:,:,:,1)))))
           end if
+
+      end subroutine
+            
+      subroutine updateForce(this, rbuffxC, rbuffxE, cbuffxC, cbuffyC, cbuffyE, cbuffzC, cbuffzE)
+          use random, only: uniform_random
+          class(forcingLayer), intent(inout) :: this
+          real(rkind), dimension(:,:,:,:), intent(inout) :: rbuffxC, rbuffxE
+          complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffyC, cbuffyE, cbuffzC, cbuffzE
+          complex(rkind), dimension(:,:,:), intent(inout) :: cbuffxC
+          integer :: i, j, n
+          real(rkind) :: ampFact = 1.d0
+          real(rkind), dimension(size(this%xs)) :: xmid, ymid
+          real(rkind) :: xst, yst
+          real(rkind) :: tmp
+          real(rkind), dimension(this%nblocks,this%nblocks) :: sgn
+          real(rkind), dimension(0:1) :: sgns
+             
+          this%fx = 0.d0
+          this%fy = 0.d0
+          this%fz = 0.d0
+          
+          this%xshift = 0.d0
+          this%yshift = 0.d0
+          this%zshift = 0.d0
+          
+          sgns = [-1.d0,1.d0]
+          
+          ! Step 1: get new locations for forcing blocks
+          if (this%randomizeBlockPosition_xy) then
+              call this%updateSeed()
+              call uniform_random(this%xshift,-0.5d0*this%lf,0.5d0*this%lf,this%seed)
+              call this%updateSeed()
+              call uniform_random(this%yshift,-0.5d0*this%lf,0.5d0*this%lf,this%seed)
+          end if
+          if (this%randomizeBlockPosition_z) then
+              ! Randomly shift each block in z-direction
+              do j = 1,this%nblocks
+                  do i = 1,this%nblocks
+                      call this%updateSeed()
+                      call uniform_random(this%zshift(i,j),-0.5d0*this%zgap,0.5d0*this%zgap,this%seed)
+                  end do
+              end do
+          end if
+
+          ! Elementary force types
+          if (this%fixedForceType > 0) then
+              this%forceType = this%fixedForceType
+          else
+              do j = 1,this%nblocks
+                  do i = 1,this%nblocks
+                      call this%updateSeed()
+                      call uniform_random(tmp,0.d0,1.d0,this%seed)
+                      this%forceType(i,j) = ceiling(tmp/third)
+
+                      call this%updateSeed()
+                      call uniform_random(tmp,0.d0,1.d0,this%seed)
+                      sgn(i,j) = sgns(nint(tmp))
+                  end do
+              end do
+          end if
+          
+          ! Step 2: get the elementary force for each block
+          do j = 1,this%nblocks
+              yst = (j - 1)*this%lf
+              do i = 1,this%nblocks
+                xst = (i - 1)*this%lf
+                
+                this%phixC = 0.d0; this%phiyC = 0.d0; this%phizC = 0.d0
+                this%phixE = 0.d0; this%phiyE = 0.d0; this%phizE = 0.d0
+                
+                ! Add periodic contributions
+                do n = 1,size(this%periodicXshift)
+                    xmid = this%xs + xst + this%xshift + this%periodicXshift(n)
+                    ymid = this%ys + yst + this%yshift + this%periodicYshift(n)
+                
+                    this%phixC = this%phixC + spline2(xmid,this%vs,this%x ,1,this%gpC)
+                    this%phiyC = this%phiyC + spline2(ymid,this%vs,this%y ,2,this%gpC)
+                    
+                    this%phixE = this%phixE + spline2(xmid,this%vs,this%xE,1,this%gpE)
+                    this%phiyE = this%phiyE + spline2(ymid,this%vs,this%yE,2,this%gpE)
+                end do
+                
+                this%phizC = spline2(this%zs + this%zst + this%zshift(i,j),this%vs,this%z ,3,this%gpC)
+                this%phizE = spline2(this%zs + this%zst + this%zshift(i,j),this%vs,this%zE,3,this%gpE)
+               
+                ! Get derivatives
+                call ddx(this%phixC,this%dphixC,cbuffyC,this%spectC,this%sp_buffyC,this%k1C)
+                call ddx(this%phixE,this%dphixE,cbuffyE,this%spectE,this%sp_buffyE,this%k1E)
+                
+                call ddy(this%phiyC,this%dphiyC,cbuffyC,this%spectC)
+                call ddy(this%phiyE,this%dphiyE,cbuffyE,this%spectE)
+                
+                call ddz_E2C(this%phizE,this%dphizC,cbuffyE(:,:,:,1),cbuffyC(:,:,:,1),&
+                  cbuffzE(:,:,:,1),cbuffzC(:,:,:,1), this%spectC,this%spectE,this%sp_gpE,&
+                  this%sp_gpC,this%pade6opZ)
+                call ddz_C2E(this%phizC,this%dphizE,cbuffyE(:,:,:,1),cbuffyC(:,:,:,1),&
+                  cbuffzE(:,:,:,1),cbuffzC(:,:,:,1), this%spectC,this%spectE,this%sp_gpE,&
+                  this%sp_gpC,this%pade6opZ)
+
+                ! Randomly choose the force type
+                call getForceBlock(this%phixC,this%phiyC,this%phizC, &
+                  this%dphixC, this%dphiyC, this%dphizC, this%forceType(i,j), &
+                  rbuffxC(:,:,:,1), rbuffxC(:,:,:,2),rbuffxC(:,:,:,3),this%version)
+                call getForceBlock(this%phixE,this%phiyE,this%phizE, &
+                  this%dphixE, this%dphiyE, this%dphizE, this%forceType(i,j), &
+                  rbuffxE(:,:,:,1), rbuffxE(:,:,:,2), rbuffxE(:,:,:,3),this%version)
+
+                !call this%updateSeed()
+                !call uniform_random(ampFact,0.d0,2.d0,this%seed)
+                this%fx = this%fx + ampFact*this%forceAmp*sgn(i,j)*rbuffxC(:,:,:,1)
+                this%fy = this%fy + ampFact*this%forceAmp*sgn(i,j)*rbuffxC(:,:,:,2)
+                this%fz = this%fz + ampFact*this%forceAmp*sgn(i,j)*rbuffxE(:,:,:,3)
+
+              end do
+          end do
+          ! Step 3: Take FFT (in x & y) of the force
+          call this%spectC%fft(this%fx,this%fxhat)
+          call this%spectC%fft(this%fy,this%fyhat)
+          call this%spectE%fft(this%fz,this%fzhat)
+
+          call fixOddBall(this%fxhat,this%fyhat,this%spectC,cbuffxC)
 
       end subroutine
 
@@ -509,7 +590,6 @@ module forcingLayerMod
           real(rkind), dimension(:,:,:), intent(inout) :: rbuffzC, rbuffzE
           
           call transpose_x_to_y(fE,rbuffyE,this%gpE)
-          call transpose_y_to_z(rbuffyE, rbuffzE, this%gpE)
           call this%pade6opZ%interpz_E2C(rbuffzE, rbuffzC, zbc_bot, zbc_top)
           call transpose_z_to_y(rbuffzC, rbuffyC, this%gpC)
           call transpose_y_to_x(rbuffyC, fC, this%gpC)
@@ -517,7 +597,6 @@ module forcingLayerMod
       
       subroutine updateSeed(this)
           use seedGen, only: incrementLogisticMap
-          use constants, only: rmaxInt
           class(forcingLayer), intent(inout) :: this
           call incrementLogisticMap(this%seedFact,this%seedFact)
           this%seed = nint(rmaxInt*this%seedFact)
