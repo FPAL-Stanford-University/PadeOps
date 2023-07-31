@@ -821,7 +821,7 @@ contains
        ! Pressure projection
        call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
        call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
-       !call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
+       !call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,fixDiv=.true.)
 
        ! Take it back to physical fields
        call this%spectC%ifft(this%uhat,this%u)
@@ -924,6 +924,17 @@ contains
                                     this%ThetaRef, this%wTh_surf, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, &
                                     this%botBC_Temp, this%initSpinUp)
             call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
+
+            ! Compute nSGS (or tau_ij for non eddy viscosity models) for initialization data dump
+            ! if restarting the simulation. Otherwise, the nSGS file at the
+            ! restart TID will be overwritten with zeros
+            if (useRestartFile) then
+                call this%sgsModel%getTauSGS(this%duidxjC, this%duidxjE, this%uhat, &
+                    this%vhat, this%whatC, this%That, this%u, this%v, this%wC, this%T, &
+                    this%newTimeStep, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdxE, &
+                    this%dTdyE, this%dTdzE)
+            end if
+
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
@@ -1279,8 +1290,8 @@ contains
            call this%forceLayer%init(inputfile,Lx,Ly,this%mesh,this%xE,this%yE,&
              this%zE,this%gpC,this%gpE,this%spectC,this%spectE,this%Pade6opZ,&
              this%PadePoiss,useRestartFile,this%RunID, this%step,this%inputDir,&
-             this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),&
-             this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), this%cbuffxC)
+             this%rbuffxC,this%rbuffxE,this%cbuffxC,this%cbuffxE,this%cbuffyC,this%cbuffyE,&
+             this%cbuffzC,this%cbuffzE)
        end if
        
        ! STEP 19: Set up storage for Pressure
@@ -1960,9 +1971,7 @@ contains
 
        ! Force Layer
        if (this%useLocalizedForceLayer) then
-           call this%forceLayer%reinit(this%runID,tid_reinit,&
-             this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1),&
-             this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), this%cbuffxC)
+           call this%forceLayer%reinit(this%runID,tid_reinit,this%cbuffxC,this%cbuffxE)
        end if 
       
        ! STEP 28: Compute the timestep

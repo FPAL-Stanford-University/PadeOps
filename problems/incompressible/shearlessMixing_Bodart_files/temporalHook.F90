@@ -29,10 +29,19 @@ contains
             call message(0,"Time",gp%tsim)
             call message(1,"TIDX:",gp%step)
             call message(1,"MaxDiv:",DomMaxDiv)
-            call message_min_max(1,"Bounds for u:", p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
-            call message_min_max(1,"Bounds for v:", p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
-            call message_min_max(1,"Bounds for w:", p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
-            call message_min_max(1,"Bounds for T:", p_minval(minval(gp%T)), p_maxval(maxval(gp%T)))
+            call message_min_max(1,"Bounds for u:" , p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
+            call message_min_max(1,"Bounds for v:" , p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
+            call message_min_max(1,"Bounds for w:" , p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
+            call message_min_max(1,"Bounds for T:" , p_minval(minval(gp%T)), p_maxval(maxval(gp%T)))
+            call message_min_max(1,"Bounds for fx:", &
+              gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fx)), &
+              gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fx)))
+            call message_min_max(1,"Bounds for fy:", &
+              gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fy)), &
+              gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fy)))
+            call message_min_max(1,"Bounds for fz:", &
+              gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fz)), &
+              gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fz)))
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 

@@ -1259,7 +1259,7 @@ contains
 
     end subroutine 
 
-    subroutine DivergenceCheck(this,uhat,vhat,what,divergence, fixDiv)
+    subroutine DivergenceCheck(this,uhat,vhat,what,divergence, fixDiv, printMessage)
         class(Padepoisson), intent(inout) :: this
         complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat,vhat
         complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: what
@@ -1269,14 +1269,19 @@ contains
 
         real(rkind) :: maxDiv, myMaxDiv
         integer :: ii, jj, kk, ierr
-        logical, optional, intent(in) :: fixDiv
-        logical :: fixDivergence
+        logical, optional, intent(in) :: fixDiv, printMessage
+        logical :: fixDivergence, printMssg
         
         fixDivergence = .false. 
 
         if (present(fixDiv)) then
             fixDivergence = fixDiv
         end if 
+        
+        printMssg = .true.
+        if (present(printMessage)) then
+            printMssg = printMessage
+        end if
 
         ! Step 1: Compute dwdz
         call transpose_y_to_z(what, this%w2, this%sp_gpE)
@@ -1297,7 +1302,7 @@ contains
         ! Step 3: Take inverse Fourier Transform
         call this%sp%ifft(this%f2dy,divergence)
         !divergence = abs(divergence)
-        call message(0,"Maximum Divergence:", maxval(divergence))
+        if (printMssg) call message(0,"Maximum Divergence:", maxval(divergence))
 
        ! if (fixDivergence) then
        !     myMaxDiv = maxval(divergence)

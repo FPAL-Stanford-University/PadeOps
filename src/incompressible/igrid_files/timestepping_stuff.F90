@@ -332,7 +332,7 @@
        if (.not. AlreadyProjected) then
            call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
            if (mod(this%step,this%t_DivergenceCheck) == 0) then
-               call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,.true.)
+               call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence,fixDiv=.true.)
            end if 
        end if 
 
@@ -709,7 +709,7 @@
            rb2 = abs(rb2)
            rb1 = rb1 + rb2
            TSmax = p_maxval(rb1)
-           dtmin(1)= this%CFL/TSmax
+           dtmin(1)= this%CFL/(TSmax + 1.d-14)
               
            if (.not. this%isInviscid) then
               dtmin(2) = this%CviscDT*0.5d0*this%Re*(min(this%dx,this%dy,this%dz)**2)

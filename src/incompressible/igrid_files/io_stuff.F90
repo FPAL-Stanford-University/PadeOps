@@ -2,10 +2,11 @@
        use decomp_2d_io
        use mpi
        use exits, only: message
-       use basic_io, only: write_0d_ascii
+       use basic_io, only: write_1d_ascii
        class(igrid), intent(in) :: this
        character(len=clen) :: tempname, fname
-       integer :: ierr, idx 
+       integer :: ierr, idx
+       real(rkind), dimension(2) :: tmp 
 
        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -31,10 +32,28 @@
            end do
        end if
 
-       if (this%useLocalizedForceLayer .and. nrank == 0) then
-           write(tempname,"(A7,A4,I2.2,A5,I6.6)") "RESTART", "_Run",this%runID, "_frc.",this%step
+       if (this%useLocalizedForceLayer) then
+           if (nrank == 0) then
+               tmp(1) = this%forceLayer%seedFact
+               tmp(2) = this%forceLayer%ampFact
+               write(tempname,"(A7,A4,I2.2,A7,I6.6)") "RESTART", "_Run",this%runID, "_finfo.",this%step
+               fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+               call write_1d_ascii(tmp,fname)
+           end if
+           call MPI_Barrier(MPI_COMM_WORLD,ierr)
+       
+           write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",this%runID, "_fx.",this%step
            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-           call write_0d_ascii(this%forceLayer%seedFact,fname)
+           call decomp_2d_write_one(1,this%forceLayer%fx,trim(fname), this%gpC)
+
+           write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",this%runID, "_fy.",this%step
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(1,this%forceLayer%fy,fname, this%gpC)
+
+           write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",this%runID, "_fz.",this%step
+           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           call decomp_2d_write_one(1,this%forceLayer%fz,fname, this%gpE)
+
        end if
 
        if (nrank == 0) then
@@ -607,6 +626,7 @@
    end subroutine 
 
    subroutine dump_visualization_files(this)
+       use exits, only: message_min_max, message
        class(igrid), intent(inout) :: this
 
        select case (this%ioType) 
@@ -642,17 +662,16 @@
            end if 
            if (this%useLocalizedForceLayer) then
                if (this%forceLayer%dumpForce) then
-                   call this%spectC%ifft(this%forceLayer%fxhat,this%forceLayer%fx)
-                   call this%spectC%ifft(this%forceLayer%fyhat,this%forceLayer%fy)
-                   call this%spectE%ifft(this%forceLayer%fzhat,this%forceLayer%fz)
-                   
-                   call this%dumpFullField(this%forceLayer%fx, "frcx")
-                   call this%dumpFullField(this%forceLayer%fy, "frcy")
-                   call this%forceLayer%interpE2C(this%forceLayer%fz,&
-                     this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), &
+                   this%rbuffxC(:,:,:,1) = this%forceLayer%ampfact*this%forceLayer%fx
+                   this%rbuffxC(:,:,:,2) = this%forceLayer%ampfact*this%forceLayer%fy
+                   this%rbuffxE(:,:,:,1) = this%forceLayer%ampfact*this%forceLayer%fz
+                   call this%dumpFullField(this%rbuffxC(:,:,:,1), "frcx")
+                   call this%dumpFullField(this%rbuffxC(:,:,:,2), "frcy")
+                   call this%forceLayer%interpE2C(this%rbuffxE(:,:,:,1),&
+                     this%rbuffxC(:,:,:,3), this%rbuffyC(:,:,:,1), &
                      this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
                      this%rbuffzE(:,:,:,1))
-                   call this%dumpFullField(this%rbuffxC(:,:,:,1), "frcz")
+                   call this%dumpFullField(this%rbuffxC(:,:,:,3), "frcz")
                    if (this%forceLayer%dumpSplines) then
                        call this%dumpFullField(this%forceLayer%phixC, "phxC", this%gpC)
                        call this%dumpFullField(this%forceLayer%phiyC, "phyC", this%gpC)
@@ -807,20 +826,6 @@
        if (present(dumpInitField)) then
            if (dumpInitField) then
                call message(0,"Performing initialization data dump.")
-               !call this%dumpFullField(this%u,'uVel')
-               !call this%dumpFullField(this%v,'vVel')
-               !call this%dumpFullField(this%wC,'wVel')
-               !call this%dump_scalar_fields()
-               !call this%dumpVisualizationInfo()
-               !if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
-               !if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-               !if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
-               !if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrn')
-               !if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
-               !if (this%useWindTurbines) then
-               !    this%WindTurbineArr%dumpTurbField = .true.
-               !    this%WindTurbineArr%step = this%step-1
-               !endif
                call this%dump_visualization_files()
                call message(0,"Done with the initialization data dump.")
            end if
