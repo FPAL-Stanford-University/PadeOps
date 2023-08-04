@@ -68,18 +68,18 @@ module cgrid_hooks
     end interface
 
     interface hook_timestep
-        subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
+        subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
             import :: rkind
             import :: decomp_info
             import :: mixture
             import :: sgs_cgrid
             type(decomp_info),               intent(in) :: decomp
             type(mixture),                   intent(in) :: mix
-            type(sgs_cgrid),                 intent(in) :: sgsmodel
             integer,                         intent(in) :: step
             real(rkind),                     intent(in) :: tsim
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(in) :: fields
+            type(sgs_cgrid), optional,       intent(in) :: sgsmodel
 
         end subroutine
     end interface

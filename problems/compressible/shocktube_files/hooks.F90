@@ -39,8 +39,10 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = one/real(nx-1,rkind)
-        dy = dx
+        dy = half/real(ny-1,rkind)
         dz = dx
+        
+        print*, nx, ny,nz,ix1,ixn,iy1,iyn,iz1,izn
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
@@ -164,12 +166,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     end associate
 end subroutine
 
-subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
+!subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
     use kind_parameters,  only: rkind
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index
     use decomp_2d,        only: decomp_info
     use MixtureEOSMod,    only: mixture
     use exits,            only: message
+    use sgsmod_cgrid,     only: sgs_cgrid
     use reductions,       only: P_MAXVAL,P_MINVAL
 
     use shocktube_data
@@ -178,8 +182,10 @@ subroutine hook_timestep(decomp,mesh,fields,mix,tsim)
     type(decomp_info),               intent(in) :: decomp
     type(mixture),                   intent(in) :: mix
     real(rkind),                     intent(in) :: tsim
+    integer,                         intent(in) :: step
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    type(sgs_cgrid), optional,       intent(in) :: sgsmodel
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &

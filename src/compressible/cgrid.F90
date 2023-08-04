@@ -846,7 +846,11 @@ contains
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
-            call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%sgsmodel, this%step, this%tsim)
+            if(this%useSGS) then
+              call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim, this%sgsmodel)
+            else
+              call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
+            endif
           
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
@@ -907,6 +911,7 @@ contains
     subroutine advance_RK45(this, rhs, vizcond)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
         use exits,      only: message,nancheck,GracefulExit
+        use reductions, only: P_MAXVAL, P_MINVAL
         class(cgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv), intent(inout) :: rhs  ! RHS for conserved variables
         logical,              intent(in)    :: vizcond
@@ -1037,9 +1042,12 @@ contains
                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
             end if
 
+            print *, '--wcns--', p_maxval(this%Wcnsrv(:,:,:,3)), p_minval(this%Wcnsrv(:,:,:,3))
             call this%get_primitive()
+            print *, '--v--', p_maxval(this%v), p_minval(this%v)
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
+            print *, '--v-postbc-', p_maxval(this%v), p_minval(this%v)
 
             ! Compute TKE budgets
             if ((vizcond) .and. ((this%compute_tke_budget) .or. (this%compute_scale_decomposition))) then

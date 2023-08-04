@@ -475,7 +475,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         ! Gradually apply the exit boundary conditions
         dy = Ly/real(decomp%ysz(2)-1,rkind)
         filpt = 3.0_rkind/dy 
-        thickT = real(5.D0, rkind)
+        thickT = real(5.0D0, rkind)
         
         ! Gussian Filter for 
         do i=1,decomp%ysz(2)
@@ -572,7 +572,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
         call message(2,"Maximum diffusivity",P_MAXVAL(diff))
 
-        !if(useSGS)
+        !!if(useSGS)
           !if(sgsmodel%DynamicProcedureType==1) then
              call message_min_max(2,"Bounds for LD-Coeff-tke  : ",     &
                     sgsmodel%get_Max_LocalDynamicProcedure_Coeff_tke(),   &
@@ -600,7 +600,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
               endif
            endif
 
-       ! endif
+       !! endif
 
     end associate
 

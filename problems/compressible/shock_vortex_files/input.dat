@@ -1,0 +1,98 @@
+&INPUT
+
+inputdir  =  "/home/nghaisas/runs/PadeOps_startup/compressible/shock_vortex"      ! Directory for input files
+outputdir  = "/home/nghaisas/runs/PadeOps_startup/compressible/shock_vortex"      ! Directory for output files
+
+nx = 32                   ! Number of points in X
+ny = 32                   ! Number of points in Y
+nz = 32                   ! Number of points in Z
+
+dt = 1.0D-4               ! Fixed time step value (Set to negative to disable)
+tstop = 0.2D0             ! Physical time to stop the simulation
+CFL = 0.7D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 1.0D-2             ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "shock_vortex"! Prefix for the visualization files
+reduce_precision  = .false.
+
+periodicx = .FALSE.        ! Periodic in X?
+periodicy = .FALSE.        ! Periodic in Y?
+periodicz = .FALSE.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+
+SkewSymm   = .false.
+/
+
+&CINPUT
+gam   = 1.4D0                   ! Ratio of specific heats
+Rgas  = 1.D0                    ! Gas constant
+Cmu   = 0.002D0                 ! LAD coeff  
+Cbeta = 1.75D0                  ! LAD coeff 
+Ckap  = 0.01D0                  ! LAD coeff 
+Cdiff = 0.003D0                 ! LAD coeff 
+Cy    = 1D2                     ! LAD coeff 
+inviscid = .false.              ! Inviscid simulation?
+ns       = 1                    ! Number of species + passive tracers
+nrestart = 5000                 ! Number of steps between restart dumps
+compute_tke_budget = .false.    ! Compute TKE budgets?
+useSGS   = .false.
+x_bc1    = 1                    ! Left  X BC (0 => general, 1 => symmetric). Not used if periodic
+x_bcn    = 1                    ! Right X BC (0 => general, 1 => symmetric). Not used if periodic
+y_bc1    = 1                    ! Left  Y BC (0 => general, 1 => symmetric). Not used if periodic
+y_bcn    = 1                    ! Right Y BC (0 => general, 1 => symmetric). Not used if periodic
+z_bc1    = 1                    ! Left  Z BC (0 => general, 1 => symmetric). Not used if periodic
+z_bcn    = 1                    ! Right Z BC (0 => general, 1 => symmetric). Not used if periodic
+
+/
+&SGS_MODEL
+DynamicProcedureType     =  1        !0=Static  1=Local_mgm  2=Global_mgm
+SGSmodelID               =  2        !0=Smagorinsky  1=sigma 2=AMD 3=MGM
+useWallDamping           =  .false. 
+ncWall                   =  1.0D0
+Csgs                     =  1.3D0
+Ctke                     =  0.1D0
+DynProcFreq              =  1
+useSGSDynamicRestartFile =  .false.
+DomainAveraged_DynProc   =  .false.
+SGSDynamicRestartFile    =  "null"
+filter_in_x              =  .true. 
+filter_in_y              =  .true.
+filter_in_z              =  .true.
+testfilter_x             =  "box2"
+testfilter_y             =  "box2"   
+testfilter_z             =  "box2"
+DeltaRatio               =   2.0D0
+isEddyViscosityModel     =  .true.
+isEddyDiffmodel          =  .true.
+isTurbPrandtlconst       =  .false.
+useDynamicProcedureScalar=  .false.
+PrSGS                    =   0.7D0
+
+/
+
+&PROBINPUT
+Lx      = 25.D0         ! JFM 2017   
+Ly      = 15.D0         ! JFM 2017
+Lz      = 15.D0         ! JFM 2017
+domega0 = 0.1D0         ! JFM 2017
+Re      = 5D3           ! Reynolds number rho_Ref*dU*L/mu_ref
+T_ref   = 1.D0          ! Reference temp
+p_ref   = 1.D0          ! Reference pressure
+pr_pref = 3.6D0         ! reservoir to chamber pressure
+npr     = 1.D0          ! Nozzle pressure ratio
+rho_ref = 1.D0          ! Reference density
+nu_ref  = 0.04D0        ! Reference Kinematic viscosity
+Pr      = 0.7D0         ! Prandtl number nu/kappa 0.7
+Sc      = 1.D0          ! Schmidt number nu/massDiffusivity
+/
