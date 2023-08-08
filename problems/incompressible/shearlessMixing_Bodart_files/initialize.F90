@@ -132,11 +132,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:), allocatable :: TinZ
 
     ! INPUT namelist variables (only inputdir is needed)
-    integer :: nx, ny, nz, nsteps
+    integer :: nx, ny, nz, nsteps, nstepConstDt, nxS, nyS, nzS
     real(rkind) :: tstop, dt, CFL, CviscDT
     character(len=clen) :: inputdir, outputdir
     integer :: prow, pcol, restartFile_TID, restartFile_RID
-    logical :: useRestartFile
+    logical :: useRestartFile, restartFromDifferentGrid
 
     ! PHYSICS namelist variables (only isStratified is needed)
     logical :: isInviscid, useCoriolis, useExtraForcing, useMoisture, useSGS, &
@@ -147,12 +147,13 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       G_geostrophic,G_alpha,dpFdx,dpFdy,dpFdz,latitude,frameAngle, &
       HITForceTimeScale, immersed_taufact
     integer :: BuoyancyTermType,buoyancyDirection,numberOfImmersedBodies
-    logical :: isStratified = .false.
+    logical :: isStratified = .false., removeMean = .false.
 
     ! Read input file
     namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
     namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
-                    useRestartFile, restartFile_TID, restartFile_RID, CviscDT
+                    useRestartFile, restartFile_TID, restartFile_RID, CviscDT, &
+                    nstepConstDt, restartFromDifferentGrid, nxS, nyS, nzS
     namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,&
       useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, &
       BuoyancyTermType,useforcedStratification, useGeostrophicForcing, &
@@ -160,7 +161,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       useHITForcing, useScalars, frameAngle, buoyancyDirection, &
       useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm, &
       useImmersedBodies, numberOfImmersedBodies, immersed_taufact, &
-      useLocalizedForceLayer
+      useLocalizedForceLayer, removeMean
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

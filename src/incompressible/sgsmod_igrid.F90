@@ -93,7 +93,8 @@ module sgsmod_igrid
 
         integer :: BC_tau13_top = 0, BC_tau13_bot = 0, BC_tau23_top = 0, BC_tau23_bot = 0, BC_tau33_top = 0, BC_tau33_bot = 0
         ! Buoyancy factor (needed for AMD model, set using the procedure:  setBuoyancyFact)
-        real(rkind) :: BuoyancyFact = 0.d0 
+        real(rkind) :: BuoyancyFact = 0.d0
+
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init

@@ -582,10 +582,15 @@
            this%initspinup = .false.
            call message(0,"Initialization spin up turned off. No active scalar in the problem.")
        end if 
-      end if 
+      end if
+
+      if ((this%step > this%nstepConstDt) .and. (this%nstepConstDt > 0)) then
+          this%useCFL = .true.
+      end if
       ! Exit if the exitpdo file was detected earlier at the beginning of this
       ! subroutine
       if(exitstat) call GracefulExit("Found exitpdo file in control directory",1234)
+
 
    end subroutine
    

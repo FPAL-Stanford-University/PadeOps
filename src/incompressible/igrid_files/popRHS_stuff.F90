@@ -202,6 +202,7 @@
        class(igrid), intent(inout) :: this
        logical, intent(in) :: copyFringeRHS, storeForBudget
        integer :: idx 
+       real(rkind) :: Re
        
        ! Step 7a: Extra Forcing 
        if (this%useExtraForcing) then
@@ -224,8 +225,10 @@
        end if
 
        if (this%useLocalizedForceLayer) then
+           Re = this%Re
+           if (this%isInviscid) Re = huge(1.0_rkind)
            call this%forceLayer%updateRHS(this%u_rhs, this%v_rhs, this%w_rhs, &
-               this%u, this%v, this%wC, &
+               this%u, this%v, this%wC, this%duidxjC, Re, this%nu_SGS,&
                this%cbuffxC, this%cbuffxE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, &
                this%rbuffxC, this%rbuffxE, this%rbuffyC, this%rbuffyE, this%rbuffzC, &
                this%rbuffzE, this%newTimeStep, this%dt)

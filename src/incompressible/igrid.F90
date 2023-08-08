@@ -1,12 +1,12 @@
 module IncompressibleGrid
-    use kind_parameters, only: rkind, clen
+    use kind_parameters, only: rkind, clen, mpirkind
     use constants, only: imi, zero,one,two,three,half,fourth, pi, kappa, im0
     use GridMod, only: grid
     use gridtools, only: alloc_buffs, destroy_buffs
     use igrid_hooks!, only: setDirichletBC_Temp, set_Reference_Temperature, meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
     use decomp_2d
     use StaggOpsMod, only: staggOps  
-    use exits, only: GracefulExit, message, check_exit
+    use exits, only: GracefulExit, message, check_exit, message_min_max
     use spectralMod, only: spectral  
     !use PoissonMod, only: poisson
     use mpi 
@@ -28,6 +28,8 @@ module IncompressibleGrid
     use PoissonPeriodicMod, only: PoissonPeriodic
     use immersedbodyMod, only: immersedBody
     use forcingLayerMod, only: forcingLayer
+    use interpolatorMod, only: interpolator
+    use fortran_assert, only: assert
 
     implicit none
 
@@ -75,9 +77,10 @@ module IncompressibleGrid
         ! Variables common to grid
         integer :: nx, ny, nz, t_datadump, t_restartdump
         real(rkind) :: dt, tstop, CFL, CviscDT, dx, dy, dz, tsim
+        integer :: nstepConstDt ! Number of steps using constant dt before switching to CFL condition
         character(len=clen) ::  outputdir
         real(rkind), dimension(:,:,:,:), allocatable :: mesh
-        real(rkind) :: zBot, zTop, zMid
+        real(rkind) :: zTop, zBot, zMid
         character(len=clen) :: filter_x          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
         character(len=clen) :: filter_y          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
         character(len=clen) :: filter_z          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
@@ -283,6 +286,7 @@ module IncompressibleGrid
         logical :: useHITForcing = .false., useforcedStratification = .false.
         logical :: useHITRealSpaceLinearForcing = .false.
         logical :: useLocalizedForceLayer = .false.
+        logical :: needEdgeFields = .false.
         type(HIT_shell_forcing), allocatable :: hitforce
         real(rkind) :: HITForceTimeScale 
         type(forcingLayer), allocatable :: forceLayer 
@@ -333,6 +337,9 @@ module IncompressibleGrid
             procedure          :: getPressureGradient
             procedure          :: getSpongeTerms
             procedure, private :: ifft_CCE
+            procedure, private :: generateEdgeMesh
+            procedure, private :: readAndInterpolateRestartData
+            procedure, private :: allocateMemoryAndGenerateMesh
             !procedure, private :: init_stats
             procedure, private :: init_stats3D
             procedure, private :: AdamsBashforth
@@ -428,15 +435,14 @@ contains
         integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,t_stop_planeDump = 1,t_dumpKSprep = 10 
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1, t_start_planeDump = 1
         real(rkind) :: dt=-one,tstop=one,CFL =-one,tSimStartStats=100.d0,dpfdy=zero,dPfdz=zero,CviscDT=1.d0,deltaT_dump=1.d0
+        integer :: nstepConstDt = 0 
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0, moistureFactor = 0.61_rkind
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
-        logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false.  
+        logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false. 
         logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical :: addExtraSourceTerm = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
-        real(rkind), dimension(:,:,:), pointer :: xinZ, xinY, xEinY, xEinZ
-        real(rkind), dimension(:,:,:), pointer :: yinZ, yinY, yEinY, yEinZ
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
         integer :: timeSteppingScheme = 0, num_turbines = 0, P_dumpFreq = 10, P_compFreq = 10, BuoyancyTermType = 1
@@ -470,8 +476,14 @@ contains
         real(rkind), dimension(:,:,:), allocatable, target :: tmpzE, tmpzC, tmpyE, tmpyC
         real(rkind) :: Lx, Ly
 
+        ! Used for restarting from data generated on different resolution mesh.
+        ! "S" stands for "S"ource
+        logical :: restartFromDifferentGrid = .false.
+        integer :: nxS = 100, nyS = 100, nzS = 100
+
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
-                        useRestartFile, restartFile_TID, restartFile_RID, CviscDT
+                        useRestartFile, restartFile_TID, restartFile_RID, CviscDT, nstepConstDt, &
+                        restartFromDifferentGrid, nxS, nyS, nzS
         namelist /IO/ vizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
                     & t_stop_pointProbe, t_pointProbe
@@ -523,6 +535,7 @@ contains
         close(ioUnit)
         this%nx = nx; this%ny = ny; this%nz = nz; this%meanfact = one/(real(nx,rkind)*real(ny,rkind)); 
         this%dt = dt; this%dtby2 = dt/two ; this%Re = Re; this%useSponge = useSpongeLayer
+        this%nstepConstDt = nstepConstDt 
         this%outputdir = outputdir; this%inputdir = inputdir; this%isStratified = isStratified
         this%WallMtype = WallMType; this%runID = runID; this%tstop = tstop; this%t_dataDump = t_dataDump
         this%CFL = CFL; this%dumpPlanes = dumpPlanes; this%useGeostrophicForcing = useGeostrophicForcing
@@ -542,7 +555,7 @@ contains
         this%moistureFactor = moistureFactor; this%useHITRealSpaceLinearForcing = useHITRealSpaceLinearForcing
         this%NumericalSchemeVert = NumericalSchemeVert
 
-        if (this%CFL > zero) this%useCFL = .true. 
+        if (this%CFL > zero .and. this%nstepConstDt < 1) this%useCFL = .true. 
         if ((this%CFL < zero) .and. (this%dt < zero)) then
             call GracefulExit("Both CFL and dt cannot be negative. Have you &
             & specified either one of these in the input file?", 124)
@@ -586,6 +599,21 @@ contains
         end if
 
        call decomp_info_init(nx,ny,nz+1,this%gpE)
+        
+       ! STEP 2.a: If restarting from different mesh, then generate RESTART
+       ! files before anything else
+       if (restartFromDifferentGrid) then
+           call assert(useRestartFile,'Must set useRestartFile = .true. if'//&
+             ' restartFromDifferentGrid = .true.')
+           call this%readAndInterpolateRestartData(restartfile_TID, &
+             restartfile_RID,nxS,nyS,nzS,nz,inputFile)
+           restartfile_TID = 0
+           restartfile_RID = this%runID
+           this%inputdir = this%outputdir ! Change inputdir to outputdir since 
+                                          ! we dumped restart files in outputdir 
+                                          ! during readAndInterpolateRestartData
+       end if
+
        
        if (this%useSystemInteractions) then
            if ((trim(controlDir) .eq. "null") .or.(trim(ControlDir) .eq. "NULL")) then
@@ -635,7 +663,6 @@ contains
        ! STEP 3: GENERATE MESH (CELL CENTERED) 
        if ( allocated(this%mesh) ) deallocate(this%mesh) 
        allocate(this%mesh(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),3))
-       allocate(this%zE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
        call meshgen_WallM(this%gpC, this%dx, this%dy, &
            this%dz, this%mesh,inputfile) ! <-- this procedure is part of user defined HOOKS
        Lx = p_maxval(this%mesh(:,:,:,1)) - p_minval(this%mesh(:,:,:,1)) + this%dx
@@ -651,6 +678,7 @@ contains
        call message(1,"Lx:", Lx)
        call message(1,"Ly:", Ly)
        call message(1,"Lz:", Lz)
+
 
 
        ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
@@ -721,6 +749,7 @@ contains
        this%T_Orhs => this%OrhsC(:,:,:,3); this%TEhat => this%SfieldsE(:,:,:,2)
        !end if
 
+       ! Allocate buffers
        allocate(this%cbuffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),3))
        allocate(this%cbuffyE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3),2))
        
@@ -754,6 +783,26 @@ contains
        allocate(this%fbody_z(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
        this%storeFbody = .true. ! Cant think of a case where this will be false 
 
+       ! Generate mesh (edge-based) -- zE is needed for all cases, but xE
+       ! and yE depending on the problems
+       allocate(this%zE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+       call this%generateEdgeMesh(this%zE,3,this%mesh,this%gpC,this%gpE, &
+         this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+         this%rbuffzE(:,:,:,1), this%dz, this%nz)
+
+       if (this%useLocalizedForceLayer) this%needEdgeFields = .true.
+       
+       if (this%needEdgeFields .or. restartFromDifferentGrid) then
+           allocate(this%xE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+           allocate(this%yE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+           call this%generateEdgeMesh(this%xE,1,this%mesh,this%gpC,this%gpE, &
+             this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+             this%rbuffzE(:,:,:,1), this%dz, this%nz)
+           call this%generateEdgeMesh(this%yE,2,this%mesh,this%gpC,this%gpE, &
+             this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+             this%rbuffzE(:,:,:,1), this%dz, this%nz)
+       end if
+
 
        ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
        allocate(this%padepoiss)
@@ -762,7 +811,8 @@ contains
           
        ! STEP 7: INITIALIZE THE FIELDS
        if (useRestartFile) then
-           call this%readRestartFile(restartfile_TID, restartfile_RID)
+           call this%readRestartFile(restartfile_TID, restartfile_RID, &
+             this%u, this%v, this%w, this%T, this%gpC, this%gpE)
            this%step = restartfile_TID
        else 
            call initfields_wallM(this%gpC, this%gpE, inputfile, this%mesh, this%PfieldsC, this%PfieldsE)! <-- this procedure is part of user defined HOOKS
@@ -895,19 +945,6 @@ contains
            this%rbuffxC(:,:,:,1) = dpFdx
            call this%spectC%fft(this%rbuffxC(:,:,:,1),this%dpF_dxhat)
        end if  
-
-        ! First get z at edges
-        zinY => this%rbuffyC(:,:,:,1); zinZ => this%rbuffzC(:,:,:,1)
-        zEinZ => this%rbuffzE(:,:,:,1); zEinY => this%rbuffyE(:,:,:,1)
-        call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
-        call transpose_y_to_z(zinY,zinZ,this%gpC)
-        call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
-        zEinZ(:,:,1        ) = zEinZ(:,:,2      ) - this%dz
-        zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
-        call transpose_z_to_y(zEinZ,zEinY,this%gpE)
-        call transpose_y_to_x(zEinY,this%zE, this%gpE)
-        nullify(zinY, zinZ, zEinZ, zEinY)
-
 
         ! STEP 11: Initialize SGS model
         allocate(this%SGSmodel)
@@ -1263,35 +1300,13 @@ contains
        end if
 
        if (this%useLocalizedForceLayer) then ! See Bodart, Cazalbou, & Joly (2010)
-           ! Need xE and yE first
-           allocate(this%xE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
-           allocate(this%yE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
-           xinY  => this%rbuffyC(:,:,:,1); xinZ  => this%rbuffzC(:,:,:,1)
-           xEinY => this%rbuffyE(:,:,:,1); xEinZ => this%rbuffzE(:,:,:,1)
-           call transpose_x_to_y(this%mesh(:,:,:,1),xinY,this%gpC)
-           call transpose_y_to_z(xinY,xinZ,this%gpC)
-           xEinZ(:,:,1:this%nz) = xinZ
-           xEinZ(:,:,this%nz+1) = xinZ(:,:,1)
-           call transpose_z_to_y(xEinZ,xEinY,this%gpE)
-           call transpose_y_to_x(xEinY,this%xE,this%gpE)
-           nullify(xinY, xinZ, xEinY, xEinZ)
-           
-           yinY  => this%rbuffyC(:,:,:,1); yinZ  => this%rbuffzC(:,:,:,1)
-           yEinY => this%rbuffyE(:,:,:,1); yEinZ => this%rbuffzE(:,:,:,1)
-           call transpose_x_to_y(this%mesh(:,:,:,2),yinY,this%gpC)
-           call transpose_y_to_z(yinY,yinZ,this%gpC)
-           yEinZ(:,:,1:this%nz) = yinZ
-           yEinZ(:,:,this%nz+1) = yinZ(:,:,1)
-           call transpose_z_to_y(yEinZ,yEinY,this%gpE)
-           call transpose_y_to_x(yEinY,this%yE,this%gpE)
-           nullify(yinY, yinZ, yEinY, yEinZ)
-           
+           if (allocated(this%forceLayer)) deallocate(this%forceLayer)
            allocate(this%forceLayer)
            call this%forceLayer%init(inputfile,Lx,Ly,this%mesh,this%xE,this%yE,&
              this%zE,this%gpC,this%gpE,this%spectC,this%spectE,this%Pade6opZ,&
-             this%PadePoiss,useRestartFile,this%RunID, this%step,this%inputDir,&
+             this%PadePoiss,this%RunID, this%step,this%inputDir,&
              this%rbuffxC,this%rbuffxE,this%cbuffxC,this%cbuffxE,this%cbuffyC,this%cbuffyE,&
-             this%cbuffzC,this%cbuffzE)
+             this%cbuffzC,this%cbuffzE,useRestartFile)
        end if
        
        ! STEP 19: Set up storage for Pressure
@@ -1858,7 +1873,6 @@ contains
                                  vXoddMaxR, vYoddMaxR, &
                                  wXoddMaxI, wYoddMaxI, &
                                  wXoddMaxR, wYoddMaxR, dataLoc)
-       use fortran_assert, only: assert
 
        class(igrid), intent(inout) :: this
        real(rkind), intent(out) :: uXoddMaxI, uYoddMaxI, &
@@ -1940,7 +1954,8 @@ contains
         integer, intent(in) :: tid_reinit 
 
        ! STEP 7: INITIALIZE THE FIELDS
-       call this%readRestartFile(tid_reinit, this%runID)
+       call this%readRestartFile(tid_reinit, this%runID, this%u, this%v, &
+         this%w, this%T, this%gpC, this%gpE)
        this%step = tid_reinit
        this%newTimeStep = .true.
    
@@ -1980,6 +1995,203 @@ contains
 
        call message("IGRID re-initialized with new data!")
        call message("===========================================================")
+
+   end subroutine
+   
+   subroutine generateEdgeMesh(this,zE,coord,meshC,gpC,gpE,rbuffyC,rbuffzC,&
+       rbuffyE,rbuffzE,dz,nz)
+       class(igrid), intent(inout), target :: this
+       real(rkind), dimension(:,:,:), intent(inout) :: zE
+       integer, intent(in) :: coord, nz
+       real(rkind), dimension(:,:,:,:), intent(in) :: meshC
+       class(decomp_info), intent(in) :: gpC, gpE
+       real(rkind), dimension(:,:,:), intent(inout), target :: rbuffyC, rbuffzC, &
+         rbuffzE, rbuffyE
+       real(rkind), intent(in) :: dz
+       real(rkind), dimension(:,:,:), pointer :: zinY, zinZ, zEinY, zEinZ
+       
+       zinY => rbuffyC
+       zinZ => rbuffzC
+       zEinY => rbuffyE
+       zEinZ => rbuffzE
+
+       if ((coord == 1) .or. (coord == 2)) then
+           call transpose_x_to_y(meshC(:,:,:,coord),zinY,gpC)
+           call transpose_y_to_z(zinY,zinZ,gpC)
+           zEinZ(:,:,1:nz) = zinZ
+           zEinZ(:,:,nz+1) = zinZ(:,:,1)
+           call transpose_z_to_y(zEinZ,zEinY,gpE)
+           call transpose_y_to_x(zEinY,zE,gpE)
+       else if (coord == 3) then
+           call transpose_x_to_y(meshC(:,:,:,coord),zinY,gpC)
+           call transpose_y_to_z(zinY,zinZ,gpC)
+           zEinZ(:,:,1:nz) = zinZ - 0.5d0*dz
+           !call OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
+           !zEinZ(:,:,1        ) = zEinZ(:,:,2      ) - dz
+           zEinZ(:,:,nz+1) = zEinZ(:,:,nz) + dz
+           call transpose_z_to_y(zEinZ,zEinY,gpE)
+           call transpose_y_to_x(zEinY,zE, gpE)
+       end if
+       nullify(zinY, zinZ, zEinZ, zEinY)
+   end subroutine
+   
+   subroutine readAndInterpolateRestartData(this,TID,RunID,nxS,nyS,nzS,nzD,inputFile)
+       class(igrid), intent(inout), target :: this
+       integer, intent(in) :: TID, RunID, nxS, nyS, nzS, nzD
+       character(len=*), intent(in) :: inputFile
+       type(decomp_info) :: gpC_S, gpE_S
+       type(decomp_info), pointer :: gpC_D, gpE_D
+       real(rkind), dimension(:,:,:), allocatable :: SbuffyC, SbuffzC, SbuffyE, SbuffzE
+       real(rkind), dimension(:,:,:), allocatable :: DbuffyC, DbuffzC, DbuffyE, DbuffzE
+       real(rkind), dimension(:,:,:,:), allocatable :: Smesh_C, Smesh_E, Dmesh_C, Dmesh_E
+       type(interpolator) :: interpC, interpE
+       real(rkind), dimension(:,:,:), allocatable :: uS, vS, wS, TS
+       real(rkind), dimension(:,:,:), allocatable, target :: uD, vD, wD, TD
+       integer :: ierr, fid
+       character(len=clen) :: tempname, fname
+       type(forcingLayer) :: forcelayerS
+       type(forcingLayer), pointer :: forcelayerD
+   
+       ! Grid partitions for both meshes
+       gpC_D => this%gpC
+       gpE_D => this%gpE
+       call decomp_info_init(nxS, nyS, nzS, gpC_S)
+       call decomp_info_init(nxS, nyS, nzS+1, gpE_S)
+       
+       if (gpC_S%xsz(2) < 2 .or. gpC_S%xsz(3) < 2 .or. &
+           gpC_S%ysz(1) < 1 .or. gpC_S%ysz(3) < 2) then
+           call gracefulExit('Using too many MPI ranks for source grid size.'//&
+             ' Reduce the number of ranks to generate restart files',ierr)
+       end if
+
+       call this%allocateMemoryAndGenerateMesh(uS,vS,wS,TS,Smesh_C,&
+         Smesh_E,SbuffyC,SbuffzC,SbuffyE,SbuffzE,gpC_S,gpE_S,nzS,&
+         TID,RunID,inputfile)
+       call this%allocateMemoryAndGenerateMesh(uD,vD,wD,TD,Dmesh_C,&
+         Dmesh_E,DbuffyC,DbuffzC,DbuffyE,DbuffzE,gpC_D,gpE_D,nzD,&
+         TID,RunID,inputfile)
+       
+       ! Read in source fields
+       call this%readRestartFile(TID, RunID, uS, vS, wS, TS, gpC_S, gpE_S)
+
+       ! Link pointers for dumprestart below
+       this%u => uD
+       this%v => vD
+       this%w => wD
+       this%T => TD
+   
+       ! Initialize the interpolators
+       call interpC%init(gpC_S, gpC_D, Smesh_C(:,:,:,1), &
+         Smesh_C(:,:,:,2), Smesh_C(:,:,:,3), Dmesh_C(:,:,:,1), &
+         Dmesh_C(:,:,:,2), Dmesh_C(:,:,:,3),SbuffyC,SbuffzC,&
+         DbuffyC,DbuffzC)
+       call interpE%init(gpE_S, gpE_D, Smesh_E(:,:,:,1), &
+         Smesh_E(:,:,:,2), Smesh_E(:,:,:,3), Dmesh_E(:,:,:,1), &
+         Dmesh_E(:,:,:,2), Dmesh_E(:,:,:,3),SbuffyE,SbuffzE,&
+         DbuffyE,DbuffzE)
+
+       ! Interpolate the fields 
+       call interpC%linInterp3D(uS, this%u)
+       call interpC%linInterp3D(vS, this%v)
+       call interpE%linInterp3D(wS, this%w)
+       if (this%isStratified) call interpC%linInterp3D(TS, this%T)
+
+       ! Repeat for forcing layer
+       if (this%uselocalizedForceLayer) then
+           allocate(this%forcelayer)
+           forcelayerD => this%forcelayer
+           call forcelayerS%init(gpC_S,gpE_S,TID,RunID,.true.,this%inputdir)
+           call forcelayerD%init(gpC_D,gpE_D,0,RunID,.false.,this%inputdir)
+           
+           call interpC%linInterp3D(forcelayerS%fx,forcelayerD%fx)
+           call interpC%linInterp3D(forcelayerS%fy,forcelayerD%fy)
+           call interpE%linInterp3D(forcelayerS%fz,forcelayerD%fz)
+
+           forcelayerD%ampFact = forcelayerS%ampFact
+           forcelayerD%seedFact = forcelayerS%seedFact
+
+           call message_min_max(1,"bounds for fx input",&
+             p_minval(minval(forcelayerS%fx)),p_maxval(maxval(forcelayerS%fx)))
+           call message_min_max(1,"bounds for fy input",&
+             p_minval(minval(forcelayerS%fy)),p_maxval(maxval(forcelayerS%fy)))
+           call message_min_max(1,"bounds for fz input",&
+             p_minval(minval(forcelayerS%fz)),p_maxval(maxval(forcelayerS%fz)))
+           call message(1,"--------------------------------------")
+           call message(1,"Now check bounds of interpolated force")
+           call message(1,"--------------------------------------")
+           call message_min_max(1,"bounds for fx output",&
+             p_minval(minval(forcelayerD%fx)),p_maxval(maxval(forcelayerD%fx)))
+           call message_min_max(1,"bounds for fy output",&
+             p_minval(minval(forcelayerD%fy)),p_maxval(maxval(forcelayerD%fy)))
+           call message_min_max(1,"bounds for fz output",&
+             p_minval(minval(forcelayerD%fz)),p_maxval(maxval(forcelayerD%fz)))
+
+           call forcelayerS%destroy()
+       end if
+
+       ! Read tsim (needed for dumpRestartFile)
+       if (nrank == 0) then
+           write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",RunID, "_info.",TID
+           fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+           fid = 10
+           open(unit=fid,file=trim(fname),status="old",action="read")
+           read (fid, "(100g15.5)")  this%tsim
+           close(fid)
+       end if
+
+       call mpi_barrier(mpi_comm_world, ierr)
+       call mpi_bcast(this%tsim,1,mpirkind,0,mpi_comm_world,ierr)
+       call mpi_barrier(mpi_comm_world, ierr)
+
+       ! Dump new resolution restart files
+       call this%dumpRestartFile()
+
+       ! Release all memory associated with source grid & fields
+       call interpC%destroy()
+       call interpE%destroy()
+       deallocate(SbuffyC, SbuffzC, SbuffyE, SbuffzE, DbuffyC, DbuffzC, &
+         DbuffyE, DbuffzE, Smesh_C, Smesh_E, Dmesh_C, Dmesh_E, uS, vS, &
+         wS, TS, uD, vD, wD, TD)
+       nullify(gpC_D, gpE_D, this%u, this%v, this%w, this%T)
+       if (associated(forcelayerD)) then
+         call forcelayerD%destroy()
+         nullify(forcelayerD)
+       end if
+
+   end subroutine
+
+   subroutine allocateMemoryAndGenerateMesh(this,u,v,w,T,mesh_C,&
+       mesh_E,buffyC,buffzC,buffyE,buffzE,gpC,gpE,nz,TID,&
+       RunID,inputfile)
+       class(igrid), intent(inout) :: this
+       real(rkind), dimension(:,:,:), allocatable, intent(out) :: u, v, w, T, &
+         buffyC, buffzC, buffyE, buffzE
+       real(rkind), dimension(:,:,:,:), allocatable, intent(out) :: mesh_C, mesh_E
+       type(decomp_info), intent(inout) :: gpC, gpE
+       integer, intent(in) :: nz, TID, RunID
+       character(len=*), intent(in) :: inputfile
+       real(rkind) :: dx, dy, dz
+   
+       ! Allocate memory for the fields
+       allocate(u(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+       allocate(v(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+       allocate(w(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+       allocate(T(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+       allocate(mesh_C(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),3))
+       allocate(mesh_E(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3),3))
+       allocate(buffyC(gpC%ysz(1),gpC%ysz(2),gpC%ysz(3)))
+       allocate(buffzC(gpC%zsz(1),gpC%zsz(2),gpC%zsz(3)))
+       allocate(buffyE(gpE%ysz(1),gpE%ysz(2),gpE%ysz(3)))
+       allocate(buffzE(gpE%zsz(1),gpE%zsz(2),gpE%zsz(3)))
+       
+       ! Generate the source mesh
+       call meshgen_WallM(gpC, dx, dy, dz, mesh_C,inputfile) ! <-- this procedure is part of user defined HOOK
+       call this%generateEdgeMesh(mesh_E(:,:,:,1),1,mesh_C,gpC,gpE, &
+         buffyC, buffzC, buffyE, buffzE, dz, nz)
+       call this%generateEdgeMesh(mesh_E(:,:,:,2),2,mesh_C,gpC,gpE, &
+         buffyC, buffzC, buffyE, buffzE, dz, nz)
+       call this%generateEdgeMesh(mesh_E(:,:,:,3),3,mesh_C,gpC,gpE, &
+         buffyC, buffzC, buffyE, buffzE, dz, nz)
 
    end subroutine
 end module 

@@ -220,7 +220,9 @@
    subroutine getPressureGradient(this,px,py,pz)
        class(igrid), intent(inout) :: this
        real(rkind), dimension(:,:,:), intent(inout) :: px, py, pz
-        
+       
+       px = 0.d0; py = 0.d0; pz = 0.d0
+
        call this%spectC%fft(this%pressure,this%cbuffyC(:,:,:,1))
        call this%spectC%mtimes_ik1_oop(this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2))
        call this%spectC%ifft(this%cbuffyC(:,:,:,2), px)
@@ -240,6 +242,10 @@
        complex(rkind), dimension(:,:,:), intent(inout) :: usgs_hat, vsgs_hat, wsgs_hat
        real(rkind), dimension(:,:,:), intent(inout) :: usgs, vsgs, wsgs
 
+       usgs_hat = im0
+       vsgs_hat = im0
+       wsgs_hat = im0
+       
        call this%sgsmodel%getRHS_SGS(usgs_hat,vsgs_hat,wsgs_hat,this%duidxjC, this%duidxjE, &
          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
          this%v,     this%wC,    this%T,          this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
@@ -252,6 +258,10 @@
        class(igrid), intent(inout) :: this
        real(rkind), dimension(:,:,:), intent(inout) :: uvisc, vvisc, wvisc
        complex(rkind), dimension(:,:,:), intent(inout) :: uvisc_hat, vvisc_hat, wvisc_hat
+
+       uvisc_hat = im0
+       vvisc_hat = im0
+       wvisc_hat = im0
 
        call this%addViscousTerm(uvisc_hat,vvisc_hat,wvisc_hat)
 
@@ -273,6 +283,10 @@
        class(igrid), intent(inout) :: this
        real(rkind), dimension(:,:,:), intent(inout) :: uconv, vconv, wconv
        complex(rkind), dimension(:,:,:), intent(inout) :: uconv_hat, vconv_hat, wconv_hat
+      
+       uconv_hat = im0 
+       vconv_hat = im0 
+       wconv_hat = im0 
        
        if (useSkewSymm) then
            call this%addNonLinearTerm_skewSymm(uconv_hat, vconv_hat, wconv_hat)

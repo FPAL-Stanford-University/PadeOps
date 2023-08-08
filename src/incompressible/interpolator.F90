@@ -15,14 +15,48 @@ module interpolatorMod
         integer, dimension(:), allocatable  :: xInd, yInd, zInd  
         real(rkind), dimension(:), allocatable :: wx, wy, wz
         contains
-            procedure :: init 
+            procedure, private :: init_common
+            procedure, private :: init_1D, init_3D
+            generic            :: init => init_1D, init_3D 
             procedure :: destroy 
             procedure :: LinInterp3D 
     end type 
 
 contains 
 
-subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest)
+subroutine init_3D(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest, &
+    buffyS, buffzS, buffyD, buffzD)
+    ! The mesh arrays are 3D local (to the MPI rank) arrays. This is in contrast
+    ! to init_1D where the arrays are 1D, but global meshes.
+    class(interpolator), intent(inout) :: this
+    type(decomp_info), intent(in), target :: gpSource, gpDest 
+    real(rkind), dimension(:,:,:), intent(in) :: xSource, ySource, zSource, xDest, yDest, zDest
+    real(rkind), dimension(:,:,:), intent(inout) :: buffyS, buffzS, buffyD, buffzD
+    real(rkind), dimension(:), allocatable :: xS1d, yS1d, zS1d, xD1d, yD1d, zD1d
+
+    allocate(xS1d(gpSource%xsz(1)))
+    allocate(yS1d(gpSource%ysz(2)))
+    allocate(zS1d(gpSource%zsz(3)))
+    allocate(xD1d(gpDest%xsz(1)))
+    allocate(yD1d(gpDest%ysz(2)))
+    allocate(zD1d(gpDest%zsz(3)))
+
+    call extract1DglobalMeshFrom3DlocalMesh(xS1d,yS1d,zS1d,xSource,ySource,zSource,gpSource,buffyS,buffzS)
+    call extract1DglobalMeshFrom3DlocalMesh(xD1d,yD1d,zD1d,xDest,yDest,zDest,gpDest,buffyD,buffzD)
+
+    call this%init_common(gpSource, gpDest, xS1d, yS1d, zS1d, xD1d, yD1d, zD1d)
+    
+end subroutine
+
+subroutine init_1D(this,gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest)
+    class(interpolator), intent(inout) :: this
+    type(decomp_info), intent(in), target :: gpSource, gpDest 
+    real(rkind), dimension(:), intent(in) :: xSource, ySource, zSource, xDest, yDest, zDest
+
+    call this%init_common(gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest)
+end subroutine
+
+subroutine init_common(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest)
     class(interpolator), intent(inout) :: this
     type(decomp_info), intent(in), target :: gpSource, gpDest 
     real(rkind), dimension(:), intent(in) :: xSource, ySource, zSource, xDest, yDest, zDest
@@ -33,24 +67,26 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
     this%gpDest => gpDest
 
     ! Safeguards
-    if (xSource(1) > xDest(1)) then
-        call GracefulExit("Low bound of x-axis in out of bounds (interpolator)",34)
-    end if
-    if (xSource(size(xSource)) < xDest(size(xDest))) then
-        call GracefulExit("High bound of x-axis in out of bounds (interpolator)",34)
-    end if  
-    if (ySource(1) > yDest(1)) then
-        call GracefulExit("Low bound of y-axis in out of bounds (interpolator)",34)
-    end if
-    if (ySource(size(ySource)) < yDest(size(yDest))) then
-        call GracefulExit("High bound of y-axis in out of bounds (interpolator)",34)
-    end if  
-    if (zSource(1) > zDest(1)) then
-        call GracefulExit("Low bound of z-axis in out of bounds (interpolator)",34)
-    end if
-    if (zSource(size(zSource)) < zDest(size(zDest))) then
-        call GracefulExit("High bound of z-axis in out of bounds (interpolator)",34)
-    end if  
+    !if (xSource(1) > xDest(1)) then
+    !    call GracefulExit("Low bound of x-axis in out of bounds (interpolator)",34)
+    !end if
+    !if (xSource(size(xSource)) < xDest(size(xDest))) then
+    !    print*, xSource(size(xSource)), xDest(size(xDest))
+    !    call GracefulExit("High bound of x-axis in out of bounds (interpolator)",34)
+    !end if  
+    !if (ySource(1) > yDest(1)) then
+    !    call GracefulExit("Low bound of y-axis in out of bounds (interpolator)",34)
+    !end if
+    !if (ySource(size(ySource)) < yDest(size(yDest))) then
+    !    print*, ySource(size(ySource)),yDest(size(yDest)) 
+    !    call GracefulExit("High bound of y-axis in out of bounds (interpolator)",34)
+    !end if  
+    !if (zSource(1) > zDest(1)) then
+    !    call GracefulExit("Low bound of z-axis in out of bounds (interpolator)",34)
+    !end if
+    !if (zSource(size(zSource)) < zDest(size(zDest))) then
+    !    call GracefulExit("High bound of z-axis in out of bounds (interpolator)",34)
+    !end if  
 
     allocate(this%xInd(size(xDest)))
     allocate(this%wx(size(xDest)))
@@ -75,21 +111,45 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
     start = xSource(1)
     do idx = 1,size(this%wx)
         this%xInd(idx) = ceiling((xDest(idx) - start)/delta)
-        this%wx(idx) = (xSource(this%xInd(idx) + 1) - xDest(idx))/delta 
+        if (this%xInd(idx) < 1) then 
+            this%wx(idx) = 1.d0
+            this%xInd(idx) = 1
+        elseif (this%xInd(idx) > size(xSource) - 1) then
+            this%wx(idx) = 0.d0
+            this%xInd(idx) = size(xSource) - 1 
+        else
+            this%wx(idx) = (xSource(this%xInd(idx) + 1) - xDest(idx))/delta 
+        endif  
     end do 
 
     delta = ySource(2) - ySource(1)
     start = ySource(1)
     do idx = 1,size(this%wy)
         this%yInd(idx) = ceiling((yDest(idx) - start)/delta)
-        this%wy(idx) = (ySource(this%yInd(idx) + 1) - yDest(idx))/delta 
+        if (this%yInd(idx) < 1) then 
+            this%wy(idx) = 1.d0
+            this%yInd(idx) = 1
+        elseif (this%yInd(idx) > size(ySource) - 1) then
+            this%wy(idx) = 0.d0
+            this%yInd(idx) = size(ySource) - 1 
+        else
+            this%wy(idx) = (ySource(this%yInd(idx) + 1) - yDest(idx))/delta 
+        end if 
     end do 
 
     delta = zSource(2) - zSource(1)
     start = zSource(1)
     do idx = 1,size(this%wz)
         this%zInd(idx) = ceiling((zDest(idx) - start)/delta)
-        this%wz(idx) = (zSource(this%zInd(idx) + 1) - zDest(idx))/delta 
+        if (this%zInd(idx) < 1) then 
+            this%wz(idx) = 1.d0
+            this%zInd(idx) = 1
+        elseif (this%zInd(idx) > size(zSource) - 1) then
+            this%wz(idx) = 0.d0
+            this%zInd(idx) = size(zSource) - 1 
+        else
+            this%wz(idx) = (zSource(this%zInd(idx) + 1) - zDest(idx))/delta 
+        end if 
     end do 
 
     ! Create 2 intermediate transposers and buffer arrays    
@@ -110,11 +170,13 @@ subroutine destroy(this)
     deallocate(this%fx_X, this%fx_Y, this%fxy_Y, this%fxy_Z)
 end subroutine
 
-subroutine LinInterp3D(this, fS, fD)
+subroutine LinInterp3D(this, fS, fD, buffer)
     use constants, only: one 
     class(interpolator), intent(inout) :: this 
     real(rkind), dimension(this%gpSource%xsz(1),this%gpSource%xsz(2), this%gpSource%xsz(3)), intent(in) :: fS
-    real(rkind), dimension(this%gpDest%xsz(1),this%gpDest%xsz(2), this%gpDest%xsz(3)), intent(out) :: fD
+    real(rkind), dimension(this%gpDest%xsz(1),this%gpDest%xsz(2), this%gpDest%xsz(3)), intent(inout) :: fD
+    real(rkind), dimension(this%gpDest%xsz(1),this%gpDest%xsz(2), this%gpDest%xsz(3)), intent(out), optional :: buffer
+
     integer :: i, j, k 
     
     ! interpolate in x
@@ -148,7 +210,29 @@ subroutine LinInterp3D(this, fS, fD)
 
     ! Finally, transpose back to x decomposition 
     call transpose_z_to_y(this%fxyz_Z,this%fxyz_Y,this%gpDest)
-    call transpose_y_to_x(this%fxyz_Y,fD, this%gpDest) ! DONE!
+    !call transpose_y_to_x(this%fxyz_Y,fD, this%gpDest) ! DONE!
+
+    if (present(buffer)) then 
+        call transpose_y_to_x(this%fxyz_Y, buffer, this%gpDest) 
+        fD = fD + buffer ! DONE!
+    else
+        call transpose_y_to_x(this%fxyz_Y,fD, this%gpDest) ! DONE!
+    end if 
+
 end subroutine 
+
+subroutine extract1DglobalMeshFrom3DlocalMesh(x1d,y1d,z1d,x3d,y3d,z3d,gp,buffy,buffz)
+    real(rkind), dimension(:), intent(inout) :: x1d, y1d, z1d
+    real(rkind), dimension(:,:,:), intent(in) :: x3d, y3d, z3d
+    class(decomp_info), intent(in) :: gp
+    real(rkind), dimension(:,:,:), intent(inout) :: buffy, buffz
+
+    x1d = x3d(:,1,1)
+    call transpose_x_to_y(y3d,buffy,gp)
+    y1d = buffy(1,:,1)
+    call transpose_x_to_y(z3d,buffy,gp)
+    call transpose_y_to_z(buffy,buffz,gp)
+    z1d = buffz(1,1,:)
+end subroutine
 
 end module 

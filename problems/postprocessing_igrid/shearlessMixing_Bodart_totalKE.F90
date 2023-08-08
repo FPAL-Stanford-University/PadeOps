@@ -37,8 +37,7 @@ program totalKE
     complex(rkind), dimension(:,:,:), allocatable :: ucon_hat, vcon_hat, wcon_hat,&
       uvisc_hat, vvisc_hat, wvisc_hat, usgs_hat, vsgs_hat, wsgs_hat, spx_hat, &
       spy_hat, spz_hat
-    real(rkind), dimension(:,:,:), allocatable, target :: ucon
-    real(rkind), dimension(:,:,:), pointer :: KE
+    real(rkind), dimension(:,:,:), allocatable :: ucon, KE
    
     ! Initialize MPI 
     call MPI_Init(ierr)                                               
@@ -86,6 +85,8 @@ program totalKE
     allocate(Eprss(SM%gpC%xsz(1),SM%gpC%xsz(2),SM%gpC%xsz(3)))
     allocate(Esp(SM%gpC%xsz(1),SM%gpC%xsz(2),SM%gpC%xsz(3)))
 
+    allocate(KE(SM%gpC%xsz(1),SM%gpC%xsz(2),SM%gpC%xsz(3)))
+    
     call SM%spectC%alloc_r2c_out(ucon_hat)
     call SM%spectC%alloc_r2c_out(vcon_hat)
     call SM%spectE%alloc_r2c_out(wcon_hat)
@@ -102,19 +103,10 @@ program totalKE
     call SM%spectC%alloc_r2c_out(spy_hat)
     call SM%spectE%alloc_r2c_out(spz_hat)
 
-    KE => ucon
-
-! Test the time stepping
-!call SM%timeAdvance()
-!call SM%reinit(tidst)
-!call SM%timeAdvance()
-!call SM%reinit(tidst + tstep)
-!call SM%timeAdvance()
-!call MPI_Barrier(MPI_COMM_WORLD,ierr)
-!stop
     do tid = tidst,tiden,tstep
         call message("TID", tid)
         call SM%reinit(tid)
+        call message("Current time",SM%tsim)
         
         ! Get momentum RHS terms
         call SM%getConvectiveTerms(ucon_hat,vcon_hat,wcon_hat,ucon,vcon,wcon)
@@ -126,6 +118,8 @@ program totalKE
         usgs = usgs - uvisc
         vsgs = vsgs - vvisc
         wsgs = wsgs - wvisc
+
+        call MPI_Barrier(MPI_COMM_WORLD,ierr)
        
         ! Viscous
         SM%rbuffxE(:,:,:,1) = SM%w*wvisc
@@ -146,9 +140,10 @@ program totalKE
         call message("Eprss ",p_sum(sum(Eprss)))
 
         ! Force layer work
-        SM%rbuffxE(:,:,:,1) = SM%w*SM%forceLayer%fz
+        SM%rbuffxE(:,:,:,1) = SM%w*SM%forceLayer%ampFact*SM%forceLayer%fz
         call interp_E2C(SM,SM%rbuffxE(:,:,:,1),Ef)
-        Ef = Ef + SM%u*SM%forceLayer%fx + SM%v*SM%forceLayer%fy
+        Ef = Ef + SM%u*SM%forceLayer%ampFact*SM%forceLayer%fx + &
+          SM%v*SM%forceLayer%ampFact*SM%forceLayer%fy
         call message("Ef ",p_sum(sum(Ef)))
 
         ! Convection
@@ -190,8 +185,7 @@ program totalKE
     deallocate(ucon, vcon, wcon, uvisc, vvisc, wvisc, usgs, vsgs, wsgs, &
       px, py, pz, Ef, Econ, Evisc, Esgs, Eprss, ucon_hat, vcon_hat, wcon_hat,&
       uvisc_hat, vvisc_hat, wvisc_hat, usgs_hat, vsgs_hat, wsgs_hat, Esp, &
-      spx, spy, spz, spx_hat, spy_hat, spz_hat)
-    nullify(KE)
+      spx, spy, spz, spx_hat, spy_hat, spz_hat, KE)
 
     call SM%finalize_io()
     call SM%destroy()

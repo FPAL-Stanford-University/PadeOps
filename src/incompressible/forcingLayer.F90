@@ -16,7 +16,8 @@ module forcingLayerMod
     use basic_io, only: read_1d_ascii
     use mpi
     use fortran_assert, only: assert
-    use constants, only: third, half, rmaxInt
+    use constants, only: third, half, rmaxInt, im0
+    use interpolatorMod, only: interpolator
     
     implicit none
     private
@@ -56,9 +57,18 @@ module forcingLayerMod
         real(rkind), dimension(:,:,:), allocatable :: sp_buffyC, sp_buffyE
         integer :: version
         character(len=clen) :: inputdir
-        real(rkind) :: ampFact, tgtDissipation
+        logical :: initFull = .false.
+        real(rkind) :: maxDiv
+
+        ! Required for forcing control strategies:
+        integer :: controlMethod
+        real(rkind) :: ampFact, tgtDissipation, tgtKE, integralTime, gain
+        integer :: kst, ken
+
         contains
-          procedure :: init
+          procedure, private :: init_full
+          procedure, private :: init_lightweight
+          generic            :: init => init_full, init_lightweight
           procedure :: reinit
           procedure :: destroy
           procedure :: updateRHS
@@ -72,8 +82,31 @@ module forcingLayerMod
 
     contains
 
-      subroutine init(this,inputfile,Lx,Ly,mesh,xE,yE,zE,gpC,gpE,spectC,spectE,Pade6opZ,PadePoiss,&
-          restartSim,runID,tsim,inputdir,rbuffxC,rbuffxE,cbuffxC,cbuffxE,cbuffyC,cbuffyE,cbuffzC,cbuffzE)
+      subroutine init_lightweight(this,gpC,gpE,TID,runID,restartSim,inputdir)
+          class(forcingLayer), intent(inout) :: this
+          type(decomp_info), intent(inout), target :: gpC, gpE
+          integer, intent(in) :: TID, runID
+          logical, intent(in) :: restartSim
+          character(len=*), intent(in) :: inputdir
+
+          this%gpC => gpC
+          this%gpE => gpE
+          this%inputdir = inputdir
+          
+          allocate(this%fx( this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+          allocate(this%fy( this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
+          allocate(this%fz( this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
+          
+          if (restartSim) then
+              call this%readRestartFiles(runID,TID,this%fx,this%fy,this%fz,&
+                this%gpC,this%gpE)
+          end if
+
+          this%initFull = .false.
+      end subroutine
+
+      subroutine init_full(this,inputfile,Lx,Ly,mesh,xE,yE,zE,gpC,gpE,spectC,spectE,Pade6opZ,PadePoiss,&
+          runID,TID,inputdir,rbuffxC,rbuffxE,cbuffxC,cbuffxE,cbuffyC,cbuffyE,cbuffzC,cbuffzE,restartSim)
           class(forcingLayer), intent(inout) :: this
           character(len=*), intent(in) :: inputfile, inputdir
           real(rkind), intent(in) :: Lx, Ly
@@ -84,7 +117,7 @@ module forcingLayerMod
           class(Pade6Stagg), intent(in), target :: Pade6opZ
           class(padePoisson), intent(in), target :: PadePoiss
           logical, intent(in) :: restartSim
-          integer, intent(in) :: runID, tsim
+          integer, intent(in) :: runID, TID
           real(rkind), dimension(:,:,:,:), intent(inout) :: rbuffxC, rbuffxE
           complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffyC, cbuffyE, cbuffzC, cbuffzE
           complex(rkind), dimension(:,:,:), intent(inout) :: cbuffxC, cbuffxE
@@ -95,12 +128,15 @@ module forcingLayerMod
           logical :: randomizeBlockPosition_xy = .true.
           logical :: randomizeBlockPosition_z = .true.
           real(rkind), dimension(:,:,:), allocatable :: tmp
-          integer :: version = 1
-          real(rkind) :: tgtDissipation = 0.1d0
+          integer :: version = 1, controlMethod = 1
+          real(rkind) :: tgtDissipation = -1.d0, tgtKE = -1.d0, integralTime = -1.d0, gain = 50.d0
+          real(rkind), dimension(:), allocatable :: z1D
+          real(rkind) :: Lf
 
           namelist /localizedForceLayer/ nblocks, zgap, dumpForce, &
             dumpSplines, checkDivergence, fixedForceType, randomizeBlockPosition_xy, &
-            randomizeBlockPosition_z, version, tgtDissipation
+            randomizeBlockPosition_z, version, tgtDissipation, tgtKE, gain, &
+            controlMethod
           
           ioUnit = 123
           open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -113,7 +149,7 @@ module forcingLayerMod
           !               about periodicity
           !     zgap --> Allows random shifts in z
 
-          call message(0,'=========== Initializeing forcing layer ============')
+          call message(0,'=========== Initializing forcing layer ============')
           this%nblocks  = nblocks 
           this%zgap     = zgap
           this%lf       = Lx/real(nblocks,rkind)
@@ -148,11 +184,24 @@ module forcingLayerMod
           this%randomizeBlockPosition_z = randomizeBlockPosition_z
 
           this%fixedForceType = fixedForceType
-          this%version = version
+          this%version = version ! 1: Same fundamental force types as Bodart et al.
+                                 ! 2: Force types have zero mean locally
 
           this%inputdir = inputdir
 
+          ! The following is used to scale the forcing term such that a target
+          ! stationary state is achieved
+          call assert(controlMethod < 3,'Must select appropriate control method -- forcingLayer.F90')
+          call assert(controlMethod > 0,'Must select appropriate control method -- forcingLayer.F90')
+          call assert(tgtDissipation > 0.d0,'Must set tgtDissipation to a postivive value -- forcingLayer.F90')
+          if (controlMethod == 2)  then
+              call assert(tgtKE > 0.d0,'Must set tgtKE to a postivive value -- forcingLayer.F90')
+          end if
+          this%controlMethod  = controlMethod
           this%tgtDissipation = tgtDissipation
+          this%tgtKE          = tgtKE
+          this%integralTime   = tgtKE/tgtDissipation
+          this%gain           = gain
         
           allocate(this%forceType(this%nblocks,this%nblocks))
 
@@ -192,6 +241,9 @@ module forcingLayerMod
           allocate(this%sp_buffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
           allocate(this%sp_buffyE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
 
+          allocate(z1D(this%gpC%xsz(3)))
+          z1D = this%z(1,1,:)
+
           this%k1C = spectC%k1
           this%k1E = spectE%k1
 
@@ -214,8 +266,9 @@ module forcingLayerMod
 
           ! Initialize randomized seeds
           if (restartSim) then
-              call this%readRestartFiles(runID,tsim)
-              
+              call this%readRestartFiles(runID,TID,this%fx,this%fy,this%fz,&
+                this%gpC,this%gpE)
+             
               ! Transform to spectral space
               call this%spectC%fft(this%fx,this%fxhat_old)
               call this%spectC%fft(this%fy,this%fyhat_old)
@@ -245,6 +298,18 @@ module forcingLayerMod
 
           end if
 
+          ! Set bounds for computing integrated work, dissipation, etc. for the
+          ! forcing control strategies
+          Lf = this%lf + this%zgap
+          if (onThisRank(z1D,-0.5d0*Lf,0.5d0*Lf)) then
+              call getStEndIndices(z1D,-0.5d0*Lf,0.5d0*Lf,this%kst,this%ken)
+          else
+              this%kst = 2
+              this%ken = 1
+          end if
+
+          deallocate(z1D)
+          
           call message(1,'Forcing layer initialized')
           call message_min_max(1,"Bounds for fx:", this%ampFact*p_minval(minval(this%fx)), &
             this%ampFact*p_maxval(maxval(this%fx)))
@@ -252,19 +317,51 @@ module forcingLayerMod
             this%ampFact*p_maxval(maxval(this%fy)))
           call message_min_max(1,"Bounds for fz:", this%ampFact*p_minval(minval(this%fz)), &
             this%ampFact*p_maxval(maxval(this%fz)))
-          call this%divergenceCheck(rbuffxC(:,:,:,1))
+          call this%divergenceCheck(rbuffxC(:,:,:,1),fixDivergence = .false.)
+
+          if (this%maxDiv > 1.d-12) then
+              ! The only reason this should happen is if we are restarting from
+              ! a courser simulation. In that case fx, fy, and fz are
+              ! interpolated from the course grid useing linear interpolation
+              ! and so the force will not be divergence free.
+              call message(1,"Projecting out divergence")
+
+              call this%divergenceCheck(rbuffxC(:,:,:,1),fixDivergence = .true.)
+             
+              ! Get physical space force 
+              call this%spectC%ifft(this%fxhat,this%fx)
+              call this%spectC%ifft(this%fyhat,this%fy)
+              call this%spectE%ifft(this%fzhat,this%fz)
+
+              ! Store the old fhats for next time step
+              this%fxhat_old = this%fxhat
+              this%fyhat_old = this%fyhat
+              this%fzhat_old = this%fzhat
+            
+              ! Print force bounds
+              call message_min_max(1,"Bounds for fx:", this%ampFact*p_minval(minval(this%fx)), &
+                this%ampFact*p_maxval(maxval(this%fx)))
+              call message_min_max(1,"Bounds for fy:", this%ampFact*p_minval(minval(this%fy)), &
+                this%ampFact*p_maxval(maxval(this%fy)))
+              call message_min_max(1,"Bounds for fz:", this%ampFact*p_minval(minval(this%fz)), &
+                this%ampFact*p_maxval(maxval(this%fz)))
+          end if
+          
           call message(1,'Forcing layer bounds (about forcing mid-plane)',[-0.5d0*(this%zgap + this%lf), &
             0.5d0*(this%zgap + this%lf)])
+          
+          this%initFull = .true.
       end subroutine
       
-      subroutine reinit(this,runID,tsim,cbuffxC,cbuffxE)
+      subroutine reinit(this,runID,TID,cbuffxC,cbuffxE)
           class(forcingLayer), intent(inout) :: this
-          integer, intent(in) :: runID, tsim
+          integer, intent(in) :: runID, TID
           complex(rkind), dimension(:,:,:), intent(inout) :: cbuffxC, cbuffxE
           integer :: ierr
 
           ! Read force info
-          call this%readRestartFiles(runID,tsim)
+          call this%readRestartFiles(runID,TID,this%fx,this%fy,this%fz,&
+            this%gpC,this%gpE)
 
           call this%spectC%fft(this%fx,this%fxhat_old)
           call this%spectC%fft(this%fy,this%fyhat_old)
@@ -279,15 +376,17 @@ module forcingLayerMod
             0.5d0*(this%zgap + this%lf)])
       end subroutine
           
-      subroutine readRestartFiles(this,runID,tsim)
+      subroutine readRestartFiles(this,runID,TID,fx,fy,fz,gpC,gpE)
           class(forcingLayer), intent(inout) :: this
-          integer, intent(in) :: runID, tsim
+          integer, intent(in) :: runID, TID
+          real(rkind), dimension(:,:,:), intent(out) :: fx, fy, fz
+          type(decomp_info), intent(in) :: gpC, gpE
           character(len=clen) :: tempname, fname
           real(rkind), dimension(:), allocatable :: tmp
           integer :: ierr
 
           if (nrank == 0) then
-              write(tempname,"(A7,A4,I2.2,A7,I6.6)") "RESTART", "_Run",runID, "_finfo.",tsim
+              write(tempname,"(A7,A4,I2.2,A7,I6.6)") "RESTART", "_Run",runID, "_finfo.",TID
               fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
               call read_1d_ascii(tmp,fname)
               this%seedFact = tmp(1)
@@ -299,45 +398,56 @@ module forcingLayerMod
           call MPI_Bcast(this%ampFact,1,mpirkind,0,MPI_COMM_WORLD,ierr)
           call MPI_Barrier(MPI_COMM_WORLD,ierr)
 
-          write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",runID, "_fx.",tsim
+          write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",runID, "_fx.",TID
           fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
-          call decomp_2d_read_one(1,this%fx, fname, this%gpC)
+          call decomp_2d_read_one(1,fx, fname, gpC)
           
-          write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",runID, "_fy.",tsim
+          write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",runID, "_fy.",TID
           fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
-          call decomp_2d_read_one(1,this%fy, fname, this%gpC)
+          call decomp_2d_read_one(1,fy, fname, gpC)
           
-          write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",runID, "_fz.",tsim
+          write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",runID, "_fz.",TID
           fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
-          call decomp_2d_read_one(1,this%fz, fname, this%gpC)
+          call decomp_2d_read_one(1,fz, fname, gpE)
 
       end subroutine
 
       subroutine destroy(this)
           class(forcingLayer), intent(inout) :: this
-
-          deallocate(this%fx,this%fy,this%fz)
-          deallocate(this%phixC,this%phiyC,this%phizC)
-          deallocate(this%phixE,this%phiyE,this%phizE)
-          deallocate(this%dphixC,this%dphiyC,this%dphizC)
-          deallocate(this%dphixE,this%dphiyE,this%dphizE)
-          deallocate(this%zshift)
-          deallocate(this%forceType)
-
-          nullify(this%gpC, this%gpE, this%spectC, this%spectE, this%sp_gpC)
-          nullify(this%sp_gpE, this%Pade6opz, this%x, this%y, this%z, this%poiss)
-          nullify(this%zE)
+         
+          if (this%initFull) then
+              deallocate(this%fxhat, this%fyhat, this%fzhat)
+              deallocate(this%fxhat_old, this%fyhat_old, this%fzhat_old)
+              deallocate(this%phixC, this%phiyC, this%phizC)
+              deallocate(this%phixE, this%phiyE, this%phizE)
+              deallocate(this%dphixC, this%dphiyC, this%dphizC)
+              deallocate(this%dphixE, this%dphiyE, this%dphizE)
+              deallocate(this%zshift, this%forceType, this%k1C, this%k1E)
+              deallocate(this%sp_buffyC, this%sp_buffyE)
+          
+              nullify(this%sp_gpC, this%sp_gpE)
+              nullify(this%spectC, this%spectE)
+              nullify(this%x, this%y, this%z, this%xE, this%yE, this%zE)
+              nullify(this%Pade6opZ, this%poiss)
+          end if 
+          
+          deallocate(this%fx, this%fy, this%fz)
+          nullify(this%gpC, this%gpE)
       end subroutine
 
-      subroutine updateRHS(this,urhs,vrhs,wrhs,u,v,wC,cbuffxC,cbuffxE,cbuffyC,cbuffyE,cbuffzC,cbuffzE,&
+      subroutine updateRHS(this,urhs,vrhs,wrhs,u,v,wC,duidxjC,Re,nSGS,&
+          cbuffxC,cbuffxE,cbuffyC,cbuffyE,cbuffzC,cbuffzE,&
           rbuffxC,rbuffxE,rbuffyC,rbuffyE,rbuffzC,rbuffzE,newTimeStep,dt)
           ! The force added to the RHS is computed from f = ddt(Bodart force).
           ! Below Bodart force is first computed and stored in fhat, then fhat
           ! is updated via Forward Euler.
-          class(forcingLayer), intent(inout) :: this
+          class(forcingLayer), intent(inout), target :: this
           complex(rkind), dimension(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
           complex(rkind), dimension(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: wrhs
-          real(rkind), dimension(:,:,:), intent(in) :: u, v, wC
+          real(rkind), dimension(:,:,:), intent(in), target :: u, v, wC
+          real(rkind), dimension(:,:,:), intent(in) :: nSGS
+          real(rkind), dimension(:,:,:,:), intent(in) :: duidxjC
+          real(rkind), intent(in) :: Re
           complex(rkind), dimension(:,:,:), intent(inout) :: cbuffxC, cbuffxE
           complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffyC, cbuffyE
           real(rkind), dimension(:,:,:,:), intent(inout) :: rbuffxC, rbuffxE, &
@@ -345,35 +455,70 @@ module forcingLayerMod
           logical, intent(in) :: newTimeStep
           real(rkind), intent(in) :: dt
           complex(rkind), dimension(:,:,:,:), intent(inout) :: cbuffzC, cbuffzE
-          real(rkind) :: forceWork
+          real(rkind) :: forceWork, KE, eps
+          real(rkind), dimension(:,:,:), pointer :: uF, vF, wF, fxF, fyF, fzF, &
+            dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, nSGS_F
 
+          call assert(this%initFull,'Cannot call updateRHS without doing'//&
+            ' full initialization -- forcingLayer.F0-')
           if (newTimeStep) then
-              call this%updateForce(rbuffxC, rbuffxE, cbuffxC, cbuffxE, cbuffyC, cbuffyE, cbuffzC, cbuffzE)
-
-              ! Step 3b: Time integrate (since dfdt = <Bodart forcing>) using Forwared Euler
-              this%fxhat = this%fxhat_old + dt*this%fxhat
-              this%fyhat = this%fyhat_old + dt*this%fyhat
-              this%fzhat = this%fzhat_old + dt*this%fzhat
-
-              ! Update and store fhat_old
-              this%fxhat_old = this%fxhat
-              this%fyhat_old = this%fyhat
-              this%fzhat_old = this%fzhat
-
-              ! Compare the current work done by the force to the target value
-              ! and scale the force appropriately
-              call this%spectC%ifft(this%fxhat,this%fx)
-              call this%spectC%ifft(this%fyhat,this%fy)
-              call this%spectE%ifft(this%fzhat,this%fz)
-
-              call this%interpE2C(this%fz,rbuffxC(:,:,:,1),rbuffyC(:,:,:,1),&
-                rbuffzC(:,:,:,1),rbuffyE(:,:,:,1),rbuffzE(:,:,:,1))
-              forceWork    = p_sum(sum(u*this%fx + v*this%fy + wC*rbuffxC(:,:,:,1)))
-              !forceWork    = forceWork + p_sum(sum(w*this%fz))
-              this%ampFact = this%tgtDissipation/(forceWork + 1.d-14)
+              ! Link pointers
+              associate( uF => u(:,:,this%kst:this%ken), vF => v(:,:,this%kst:this%ken), &
+                  wF => wC(:,:,this%kst:this%ken), fxF => this%fx(:,:,this%kst:this%ken), &
+                  fyF => this%fy(:,:,this%kst:this%ken), fzF => rbuffxC(:,:,this%kst:this%ken,1), &
+                  dudx => duidxjC(:,:,this%kst:this%ken,1), dudy => duidxjC(:,:,this%kst:this%ken,2), &
+                  dudz => duidxjC(:,:,this%kst:this%ken,3), dvdx => duidxjC(:,:,this%kst:this%ken,4), &
+                  dvdy => duidxjC(:,:,this%kst:this%ken,5), dvdz => duidxjC(:,:,this%kst:this%ken,6), &
+                  dwdx => duidxjC(:,:,this%kst:this%ken,7), dwdy => duidxjC(:,:,this%kst:this%ken,8), &
+                  dwdz => duidxjC(:,:,this%kst:this%ken,9), nSGS_F => nSGS(:,:,this%kst:this%ken))
               
-              ! Clip large values due to forceWork~0
-              if (abs(this%ampFact) > 1.d4) this%ampFact = 1.d0
+                  call this%updateForce(rbuffxC, rbuffxE, cbuffxC, cbuffxE, cbuffyC, cbuffyE, cbuffzC, cbuffzE)
+
+                  ! Step 3b: Time integrate (since dfdt = <Bodart forcing>) using Forwared Euler
+                  this%fxhat = this%fxhat_old + dt*this%fxhat
+                  this%fyhat = this%fyhat_old + dt*this%fyhat
+                  this%fzhat = this%fzhat_old + dt*this%fzhat
+
+                  ! Update and store fhat_old
+                  this%fxhat_old = this%fxhat
+                  this%fyhat_old = this%fyhat
+                  this%fzhat_old = this%fzhat
+
+                  ! Compare the current work done by the force to the target value
+                  ! and scale the force appropriately
+                  call this%spectC%ifft(this%fxhat,this%fx)
+                  call this%spectC%ifft(this%fyhat,this%fy)
+                  call this%spectE%ifft(this%fzhat,this%fz)
+
+                  call this%interpE2C(this%fz,rbuffxC(:,:,:,1),rbuffyC(:,:,:,1),&
+                    rbuffzC(:,:,:,1),rbuffyE(:,:,:,1),rbuffzE(:,:,:,1))
+                  !forceWork    = p_sum(sum(u(:,:,this%kst:this%ken)*this%fx(:,:,this%kst:this%ken) + &
+                  !  v(:,:,this%kst:this%ken)*this%fy(:,:,this%kst:this%ken) + &
+                  !  wC(:,:,this%kst:this%ken)*rbuffxC(:,:,this%kst:this%ken,1)))
+
+                  ! Now remove the mean if useing version 1 since version 2 is
+                  ! guaranteed to have zero mean
+                  if (this%spectC%carryingZeroK .and. (this%version == 1)) then
+                      this%fxhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
+                      this%fyhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
+                  end if
+
+                  forceWork    = p_sum(sum(uF*fxF + vF*fyF + wF*fzF))
+                  select case (this%controlMethod)
+                  case (1)
+                    this%ampFact = this%tgtDissipation/(forceWork + 1.d-14)
+                  case (2)
+                    KE = 0.5d0*p_sum(sum(uF*uF + vF*vF + wF*wF))
+                    eps = p_sum(sum((1.d0/Re + nSGS_F)*(dudx*dudx + dudy*dudy + &
+                      dudz*dudz + dvdx*dvdx + dvdy*dvdy + dvdz*dvdz + &
+                      dwdx*dwdx + dwdy*dwdy + dwdz*dwdz)))
+
+                    this%ampFact = (eps - this%gain*(KE - this%tgtKE)/this%integralTime)/(forceWork + 1.d-14)
+                  end select
+
+                  ! Clip large values due to forceWork~0
+                  if (abs(this%ampFact) > 1.d4) this%ampFact = 1.d0
+              end associate
           end if
 
           ! Step 4: Update RHS velocities
@@ -387,14 +532,23 @@ module forcingLayerMod
 
       end subroutine
 
-      subroutine divergenceCheck(this,rbuffxC)
+      subroutine divergenceCheck(this,rbuffxC,fixDivergence)
           class(forcingLayer), intent(inout) :: this
           real(rkind), dimension(:,:,:), intent(inout) :: rbuffxC
+          logical, intent(in), optional :: fixDivergence
+          logical :: fixDivrg
+
+          if (present(fixDivergence)) then
+              fixDivrg = fixDivergence
+          else
+              fixDivrg = .false.
+          end if
 
           rbuffxC = 0.d0
           call this%poiss%divergenceCheck(this%fxhat, this%fyhat, this%fzhat, &
-            rbuffxC, printMessage = .false.)
-          call message(1, "Max divergence of forcing layer",p_maxval(maxval(abs(rbuffxC))))
+            rbuffxC, fixDiv = fixDivrg, printMessage = .false.)
+          this%maxDiv = p_maxval(maxval(abs(rbuffxC)))
+          call message(1, "Max divergence of forcing layer",this%maxDiv)
       end subroutine
             
       subroutine updateForce(this, rbuffxC, rbuffxE, cbuffxC, cbuffxE, cbuffyC, cbuffyE, cbuffzC, cbuffzE)

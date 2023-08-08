@@ -21,7 +21,7 @@ module temporalHook
 contains
 
     subroutine doTemporalStuff(gp)
-        class(igrid), intent(inout) :: gp 
+        class(igrid), intent(inout) :: gp
 
         if (mod(gp%step,nt_print2screen) == 0) then
             maxDiv = maxval(gp%divergence)

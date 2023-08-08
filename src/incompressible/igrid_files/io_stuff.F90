@@ -517,32 +517,34 @@
        end if 
    end subroutine
 
-   subroutine readRestartFile(this, tid, rid)
+   subroutine readRestartFile(this, tid, rid, u, v, w, T, gpC, gpE)
        use decomp_2d_io
        use mpi
        use exits, only: message
        use kind_parameters, only: mpirkind
        class(igrid), intent(inout) :: this
        integer, intent(in) :: tid, rid
+       real(rkind), dimension(:,:,:), intent(inout) :: u, v, w, T
+       class(decomp_info), intent(in) :: gpC, gpE
        character(len=clen) :: tempname, fname
        integer :: ierr, fid 
 
        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-       call decomp_2d_read_one(1,this%u,fname, this%gpC)
+       call decomp_2d_read_one(1,u,fname, gpC)
 
        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-       call decomp_2d_read_one(1,this%v,fname, this%gpC)
+       call decomp_2d_read_one(1,v,fname, gpC)
 
        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-       call decomp_2d_read_one(1,this%w,fname, this%gpE)
+       call decomp_2d_read_one(1,w,fname, gpE)
 
        if (this%isStratified) then
            write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
-           call decomp_2d_read_one(1,this%T,fname, this%gpC)
+           call decomp_2d_read_one(1,T,fname, gpC)
        end if
 
        if (nrank == 0) then
@@ -555,7 +557,7 @@
               read(fid,"(100g15.5)") this%restartPhi
            end if
            close(fid)
-       end if 
+       end if
 
        call mpi_barrier(mpi_comm_world, ierr)
        call mpi_bcast(this%tsim,1,mpirkind,0,mpi_comm_world,ierr)
@@ -659,7 +661,8 @@
                 call this%dumpFullField(this%WindTurbineArr%fx, "TrbX")
                 call this%dumpFullField(this%WindTurbineArr%fy, "TrbY")
                 call this%dumpFullField(this%WindTurbineArr%fz, "TrbZ")
-           end if 
+           end if
+
            if (this%useLocalizedForceLayer) then
                if (this%forceLayer%dumpForce) then
                    this%rbuffxC(:,:,:,1) = this%forceLayer%ampfact*this%forceLayer%fx

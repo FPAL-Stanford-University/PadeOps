@@ -72,6 +72,7 @@ module PadePoissonMod
             procedure, private :: Periodic_getPressureAndUpdateRHS
             procedure :: destroy
             procedure :: DivergenceCheck
+            procedure, private :: computeDivergence
             procedure :: getPressure
             procedure :: getPressureAndUpdateRHS 
     end type
@@ -1261,14 +1262,13 @@ contains
 
     subroutine DivergenceCheck(this,uhat,vhat,what,divergence, fixDiv, printMessage)
         class(Padepoisson), intent(inout) :: this
-        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat,vhat
-        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: what
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(inout) :: uhat,vhat
+        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: what
 
         real(rkind), dimension(this%sp_gp%xsz(1),this%sp_gp%xsz(2),this%sp_gp%xsz(3)), intent(out) :: divergence
         !real(rkind), dimension(:,:,:), intent(out) :: divergence
 
         real(rkind) :: maxDiv, myMaxDiv
-        integer :: ii, jj, kk, ierr
         logical, optional, intent(in) :: fixDiv, printMessage
         logical :: fixDivergence, printMssg
         
@@ -1283,6 +1283,34 @@ contains
             printMssg = printMessage
         end if
 
+        call this%computeDivergence(uhat,vhat,what,divergence)
+    
+        if (printMssg) call message(0,"Maximum Divergence:", maxval(divergence))
+
+        if (fixDivergence) then
+            myMaxDiv = maxval(divergence)
+            maxDiv = p_maxval(myMaxDiv)
+
+            if (maxDiv > 1d-13) then
+                if (printMssg) call message(0,"Projecting divergence-free")
+                call this%PressureProjection(uhat,vhat,what)
+                call this%computeDivergence(uhat,vhat,what,divergence)
+                
+                myMaxDiv = maxval(divergence)
+                maxDiv = p_maxval(myMaxDiv)
+                if (printMssg) call message(0,"New max divergence",maxDiv)
+            end if 
+        end if 
+
+    end subroutine
+        
+    subroutine computeDivergence(this,uhat,vhat,what,divergence)
+        class(Padepoisson), intent(inout) :: this
+        complex(rkind), dimension(this%sp_gp%ysz(1),this%sp_gp%ysz(2),this%sp_gp%ysz(3)), intent(in) :: uhat,vhat
+        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(in) :: what
+        real(rkind), dimension(this%sp_gp%xsz(1),this%sp_gp%xsz(2),this%sp_gp%xsz(3)), intent(out) :: divergence
+        integer :: ii, jj, kk, ierr
+        
         ! Step 1: Compute dwdz
         call transpose_y_to_z(what, this%w2, this%sp_gpE)
         !call this%derZ%ddz_E2C(this%w2,this%f2d, size(this%w2,1),size(this%w2,2))
@@ -1301,47 +1329,6 @@ contains
 
         ! Step 3: Take inverse Fourier Transform
         call this%sp%ifft(this%f2dy,divergence)
-        !divergence = abs(divergence)
-        if (printMssg) call message(0,"Maximum Divergence:", maxval(divergence))
-
-       ! if (fixDivergence) then
-       !     myMaxDiv = maxval(divergence)
-       !     maxDiv = p_maxval(myMaxDiv)
-
-       !     if (maxDiv > 1d-13) then
-       !         call this%PressureProjection(uhat,vhat,what)
-       !         ! Step 1: Compute dwdz
-       !         call transpose_y_to_z(what, this%w2, this%sp_gpE)
-       !         !call this%derZ%ddz_E2C(this%w2,this%f2d, size(this%w2,1),size(this%w2,2))
-       !         call this%derivZ%ddz_E2C(this%w2,this%f2d,-1,-1)
-       !         call transpose_z_to_y(this%f2d,this%f2dy, this%sp_gp)
-       !         ! Step 2: compute and add dudx + dvdy
-       !         do kk = 1,size(uhat,3)
-       !             do jj = 1,size(uhat,2)
-       !                 do ii = 1,size(uhat,1)
-       !                     !this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + imi*this%k1_2d(ii,jj,kk)*uhat(ii,jj,kk)
-       !                     !this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + imi*this%k2_2d(ii,jj,kk)*vhat(ii,jj,kk)
-       !                     this%f2dy(ii,jj,kk) = this%f2dy(ii,jj,kk) + imi*this%k1_2d(ii,jj,kk)*uhat(ii,jj,kk) &
-       !                                 + imi*this%k2_2d(ii,jj,kk)*vhat(ii,jj,kk)
-       !                 end do
-       !             end do 
-       !         end do  
-       !         ! Step 3: Take inverse Fourier Transform
-       !         call this%sp%ifft(this%f2dy,divergence)
-       !         !divergence = abs(divergence)
-       !         myMaxDiv = maxval(divergence)
-       !         maxDiv = p_maxval(myMaxDiv)
-       !         
-       !         if (maxDiv > 1d-10) then
-       !             call this%PressureProjection(uhat,vhat,what)
-       !             call message(0,"Maximum Divergence is found to be:", maxDiv)
-       !             call mpi_barrier(mpi_comm_world, ierr)
-       !             !call GracefulExit("Divergence is not zero.",342)
-       !         end if 
-
-       !     end if 
-       ! end if 
-
     end subroutine
 
     !pure subroutine getmodCD06stagg(k,dx,kp)
