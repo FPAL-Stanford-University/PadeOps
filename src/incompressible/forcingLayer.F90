@@ -191,7 +191,9 @@ module forcingLayerMod
 
           ! The following is used to scale the forcing term such that a target
           ! stationary state is achieved
-          call assert(controlMethod < 3,'Must select appropriate control method -- forcingLayer.F90')
+!print*, "conrolMethod =", controlMethod
+!call MPI_Barrier(MPI_COMM_WORLD,ierr)
+          call assert(controlMethod < 4,'Must select appropriate control method -- forcingLayer.F90')
           call assert(controlMethod > 0,'Must select appropriate control method -- forcingLayer.F90')
           call assert(tgtDissipation > 0.d0,'Must set tgtDissipation to a postivive value -- forcingLayer.F90')
           if (controlMethod == 2)  then
@@ -514,6 +516,8 @@ module forcingLayerMod
                       dwdx*dwdx + dwdy*dwdy + dwdz*dwdz)))
 
                     this%ampFact = (eps - this%gain*(KE - this%tgtKE)/this%integralTime)/(forceWork + 1.d-14)
+                  case (3) ! A(t) = const
+                    this%ampFact = 1.d-2
                   end select
 
                   ! Clip large values due to forceWork~0
