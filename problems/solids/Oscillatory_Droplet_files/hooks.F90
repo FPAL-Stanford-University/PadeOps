@@ -19,7 +19,7 @@ module Oscillatory_Droplet_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 6, Lx = 6, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 1
+    real(rkind) :: Ly = 6, Lx = 6, interface_init = 3,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 1
     real(rkind) :: tau0_2=1d0, Nvel=1d0, minYs,etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
 
 
@@ -352,7 +352,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
 
         !set mixture pressure (uniform)
-	mix%material(1)%p =  p_ten*mix%material(1)%Ys + p_amb
+	mix%material(1)%p =  p_ten*mix%material(1)%VF + p_amb
 	mix%material(2)%p = mix%material(1)%p
 
        !mix%surfaceTension_f(:,:,1,1) = Fx
@@ -784,10 +784,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !dx = x(2,1,1) - x(1,1,1)
         !dum = half*(one - tanh( (x-xspng)/(tspng) ))
 
-        xspngL = 0.45
+        xspngL = 0.1
         xspngR = Lx -xspngL
         dx = x(2,1,1) - x(1,1,1)
-        tspng = 5*dx
+        tspng = 2*dx
         dumL = half*(one - tanh( (x-xspngL)/(tspng) ))+ half*(one - tanh((y-xspngL)/(tspng) ))
         dumR = half*(one + tanh( (x-xspngR)/(tspng) )) + half*(one + tanh((y-xspngR)/(tspng) ))       
         dum  = dumL+dumR

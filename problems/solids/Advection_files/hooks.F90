@@ -15,11 +15,11 @@ module Advection_data
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
     real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e
     real(rkind) :: kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2
-    real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, Nvel = 0, p_disturb = 0.1
+    real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, Nvel = 0, p_disturb = 0.1, width = 0.25d0;
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1d0, Lx = 0.25d0, interface_init = 0.5d0, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 1d0, Lx = 1d0, interface_init = 0.5, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -217,7 +217,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
                           diff_c_ge,diff_c_ge_2,diff_c_gp,diff_c_gp_2,diff_c_gt,diff_c_gt_2, &
-                          v0, v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nvel, p_disturb
+                          v0, v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nvel, p_disturb,width
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -271,14 +271,17 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         ! Set up smearing function for VF based on interface location and thickness
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 
-        eta =(y-interface_init)
+        eta =(x-interface_init)
         !eta = x-interface_init
         !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
 !	tmp = (half - minVF) * ( one - erf( eta/(delta_rho) ) )
 	!set mixture Volume fraction
 
-        tmp = (half)*(erf( (eta+0.25_rkind)/(thick*dy) ) - erf( (eta-0.25_rkind)/(thick*dy)))
+!        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (y-0.5)*(y-0.5))/(thick*dx) ) )
+
+        tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
+        !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp
         mix%material(2)%VF = 1 - mix%material(1)%VF
@@ -288,8 +291,8 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
-        u = 0
-        v = v0
+        u = v0
+        v = 0
         w = 0
 
         !tmp2 = half*(erf( (y-0.8+0.1_rkind)/(thick*dy) ) - erf((y-0.8-0.1_rkind)/(thick*dy)))

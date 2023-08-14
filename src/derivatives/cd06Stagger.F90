@@ -4,7 +4,8 @@
 module cd06Staggerstuff
 
     use kind_parameters, only: rkind
-    use constants,       only : zero,one,two
+    use constants,       only : zero,one,two,third,fifth
+    use exits,    only: gracefulExit, message
     implicit none
 
     private
@@ -14,6 +15,11 @@ module cd06Staggerstuff
     real(rkind), parameter :: alpha06d1=  9.0_rkind / 62.0_rkind
     real(rkind), parameter :: a06d1    = (63.0_rkind / 62.0_rkind) 
     real(rkind), parameter :: b06d1    = ( 17.0_rkind / 62.0_rkind) / 3.0_rkind
+
+    ! 6th order first derivative explicit centeral difference coefficients
+    real(rkind), parameter :: aD06d1     = 3.0_rkind / 4.0_rkind
+    real(rkind), parameter :: bD06d1     = -3.0_rkind / 20.0_rkind
+    real(rkind), parameter :: cD06d1     = 1.0_rkind / 60.0_rkind
     
     ! 6th order second derivative coefficients (See Lele (1992) for explanation)
     real(rkind), parameter :: alpha06d2=  2.0_rkind / 11.0_rkind
@@ -80,7 +86,7 @@ module cd06Staggerstuff
         integer     :: bc1 = 0                             ! Boundary condition type. 0=Dirichlet, 1=Neumann
         integer     :: bcn = 0                             ! Boundary condition type. 0=Dirichlet, 1=Neumann
 
-        real(rkind), allocatable, dimension(:,:) :: LU1
+        real(rkind), allocatable, dimension(:,:) :: LU1, LU1_BC
         real(rkind), allocatable, dimension(:,:) :: LU2
         real(rkind), allocatable, dimension(:,:) :: Tri1
         real(rkind), allocatable, dimension(:,:) :: Tri2
@@ -99,7 +105,10 @@ module cd06Staggerstuff
         procedure, private :: SolveXLU1
         procedure, private :: SolveYLU1
         procedure, private :: SolveZLU1
-        
+        procedure, private :: SolveXLU1_BC
+        procedure, private :: SolveYLU1_BC
+        procedure, private :: SolveZLU1_BC
+    
         procedure, private :: SolveLU2
        
         procedure, private :: ComputeTri1
@@ -177,7 +186,9 @@ contains
             if(allocated( this%tri1 )) deallocate( this%tri1 ); allocate( this%tri1(n_,3) )
   
             if (n_ .GE. 8) then             
-                call this%ComputeTri1(bc1_,bcn_)
+
+                 call ComputeLU(this%LU1_BC,this%n-4,alpha06d1,one,alpha06d1)
+            !    call this%ComputeTri1(bc1_,bcn_)
             else if (n_ .EQ. 1) then
                 this%Tri1 = one
             else
@@ -212,6 +223,8 @@ contains
     
         ! Dellocate 2nd derivative LU matrix.
         if(allocated( this%LU2 )) deallocate( this%LU2 )
+
+        if(allocated( this%LU1_BC )) deallocate( this%LU1_BC )
 
         ! Dellocate 1st derivative tri matrix.
         if(allocated( this%tri1 )) deallocate( this%tri1 )
@@ -375,7 +388,35 @@ contains
     
     end subroutine
 
-    
+    subroutine SolveXLU1_BC(this,y,n2,n3)
+        class (cd06Stagger), intent(in) :: this
+        integer, intent(in) :: n2,n3
+        real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHSand put solution into it
+        integer :: i, j, k
+        real(rkind) :: sum1
+
+        do k = 1,n3
+            do j = 1,n2
+                ! Step 2
+                sum1 = this%LU1_BC(1,2)*y(3,j,k)
+                do i = 4,this%n-3
+                    y(i,j,k) = y(i,j,k) - this%LU1_BC(i-2,1)*y(i-1,j,k)
+                    sum1 = sum1 + this%LU1_BC(i-2,2)*y(i,j,k)
+                end do
+                y(this%n-2,j,k) = y(this%n-2,j,k) - sum1
+
+                ! Step 3
+                y(this%n-2,j,k)   = y(this%n-2,j,k) * this%LU1_BC(this%n-4,3)
+
+                y(this%n-3,j,k) =  y(this%n-3,j,k) * this%LU1_BC(this%n-5,3) -y(this%n-2,j,k) * this%LU1_BC(this%n-5,5)
+                do i = this%n-4,3,-1
+                    y(i,j,k) =  y(i,j,k) * this%LU1_BC(i-2,3)- y(i+1,j,k) *this%LU1_BC(i-2,4)- y(this%n-2,j,k) * this%LU1_BC(i-2,5)
+                end do
+            end do
+        end do
+
+    end subroutine
+ 
     subroutine SolveYLU1(this,y,n1,n3)
         
         class (cd06Stagger), intent(in) :: this
@@ -404,7 +445,34 @@ contains
     
     end subroutine
 
-    
+    subroutine SolveYLU1_BC(this,y,n1,n3)
+
+        class (cd06Stagger), intent(in) :: this
+        integer, intent(in) :: n1,n3
+        real(rkind), dimension(n1,this%n,n3), intent(inout) :: y  ! Take in RHSand put solution into it
+        integer ::  j, k
+        real(rkind), dimension(n1) :: sum1
+
+        do k = 1,n3
+                ! Step 2
+                sum1 = this%LU1_BC(1,2)*y(:,3,k)
+                do j = 4,this%n-3
+                    y(:,j,k) = y(:,j,k) - this%LU1_BC(j-2,1)*y(:,j-1,k)
+                    sum1 = sum1 + this%LU1_BC(j-2,2)*y(:,j,k)
+                end do
+                y(:,this%n-2,k) = y(:,this%n-2,k) - sum1
+
+                ! Step 3
+                y(:,this%n-2,k)   = y(:,this%n-2,k) * this%LU1_BC(this%n-4,3)
+
+                y(:,this%n-3,k) =  y(:,this%n-3,k) * this%LU1_BC(this%n-5,3) -y(:,this%n-2,k) * this%LU1_BC(this%n-5,5)
+                do j = this%n-4,3,-1
+                    y(:,j,k) =  y(:,j,k) * this%LU1_BC(j-2,3)- y(:,j+1,k) *this%LU1_BC(j-2,4)- y(:,this%n-2,k) * this%LU1_BC(j-2,5)
+                end do
+        end do
+
+    end subroutine
+
     subroutine SolveZLU1(this,y,n1,n2)
         
         class (cd06Stagger), intent(in) :: this
@@ -431,7 +499,32 @@ contains
     
     end subroutine
 
-    
+    subroutine SolveZLU1_BC(this,y,n1,n2)
+
+        class (cd06Stagger), intent(in) :: this
+        integer, intent(in) :: n1,n2
+        real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  ! Take in RHSand put solution into it
+        integer ::  k
+        real(rkind), dimension(n1,n2) :: sum1
+
+        ! Step 2
+        sum1 = this%LU1_BC(1,2)*y(:,:,3)
+        do k = 4,this%n-3
+            y(:,:,k) = y(:,:,k) - this%LU1_BC(k-2,1)*y(:,:,k-1)
+            sum1 = sum1 + this%LU1_BC(k-2,2)*y(:,:,k)
+        end do
+        y(:,:,this%n-2) = y(:,:,this%n-2) - sum1
+
+        ! Step 3
+        y(:,:,this%n-2)   = y(:,:,this%n-2) * this%LU1_BC(this%n-4,3)
+
+        y(:,:,this%n-3) =  y(:,:,this%n-3) * this%LU1_BC(this%n-5,3) -y(:,:,this%n-2) * this%LU1_BC(this%n-5,5)
+        do k = this%n-4,3,-1
+            y(:,:,k) =  y(:,:,k) * this%LU1_BC(k-2,3)- y(:,:,k+1) * this%LU1_BC(k-2,4)-y(:,:,this%n-2) * this%LU1_BC(k-2,5)
+        end do
+
+    end subroutine
+
     subroutine SolveXTri1(this,y,n2,n3)
     
         class (cd06Stagger), intent(in) :: this
@@ -515,15 +608,15 @@ contains
         y = zero 
     end subroutine
     
-    subroutine ComputeXD1RHS(this,f, RHS, dir,n2, n3) 
+    subroutine ComputeXD1RHS(this,f, RHS, dir,n2, n3,bc1,bcn) 
          
         class( cd06Stagger ), intent(in) :: this
-        integer, intent(in) :: n2, n3
+        integer, intent(in) :: n2, n3,bc1,bcn
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
         character(len=*)  , intent(in)             :: dir
         integer ::  j, k
-        real(rkind) :: a06, b06
+        real(rkind) :: a06, b06,a10,a102,a104,b10,b104,b102,c10,c102,c104,a101
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2
@@ -560,59 +653,103 @@ contains
         end select
 
         case (.FALSE.)
-            a06 = a06d1 * this%onebydx
-            b06 = b06d1 * this%onebydx
-        
-            a_np_3 = w3*q_pp * this%onebydx  
-            b_np_3 = w3*r_pp * this%onebydx 
-
-            a_np_2 = w2*q_p * this%onebydx
-            
-            a_np_1 = w1*( -p * this%onebydx)
-            b_np_1 = w1*(  q * this%onebydx)
-            c_np_1 = w1*(  r * this%onebydx)
-            d_np_1 = w1*(  s * this%onebydx)
        
-            do k = 1,n3
-                do j =1,n2
-                    RHS(1         ,j,k) =   a_np_1* f(1         ,j,k) +  b_np_1*f(2         ,j,k)   &
-                                        +   c_np_1* f(3         ,j,k) +  d_np_1*f(4         ,j,k) 
-                   
-                    RHS(2         ,j,k) =   a_np_2*(f(3         ,j,k) -         f(1         ,j,k))
-                    
-                    RHS(3         ,j,k) =   a_np_3*(f(4         ,j,k) -         f(2         ,j,k)) &
-                                        +   b_np_3*(f(5         ,j,k) -         f(1         ,j,k)) 
 
-                    RHS(4:this%n-3,j,k) =   b06   *(f(6:this%n-1,j,k) -         f(2:this%n-5,j,k)) &
-                                        +   a06   *(f(5:this%n-2,j,k) -         f(3:this%n-4,j,k)) 
-                                          
+            a10 = aD06d1 * this%onebydx
+            b10 = bD06d1 * this%onebydx * third
+            c10 = cD06d1 * this%onebydx * fifth
+            RHS = 0.0d0
 
-                    RHS(this%n-2  ,j,k) =   a_np_3*(f(this%n-1  ,j,k) -         f(this%n-3  ,j,k)) &
-                                        +   b_np_3*(f(this%n    ,j,k) -         f(this%n-4  ,j,k)) 
-                    
-                    RHS(this%n-1  ,j,k) =   a_np_2*(f(this%n    ,j,k) -         f(this%n-2  ,j,k))
+            a102 = one * this%onebydx
+            a101 = a102
 
-                    RHS(this%n    ,j,k) =  -a_np_1* f(this%n    ,j,k) -  b_np_1*f(this%n-1  ,j,k)   &
-                                        -   c_np_1* f(this%n-2  ,j,k) -  d_np_1*f(this%n-3  ,j,k)
+            a104 =  9.0d0/8.0d0  * this%onebydx
+            b104 = -1.0d0/24.0d0 * this%onebydx
 
-                end do 
-            end do  
-        
+            select case (dir)
+
+               case("F2N")
+
+               RHS(3:this%n-2,j,k) = a06 * ( f(3:this%n-2,j,k) -f(2:this%n-3,j,k) ) &
+                                        + b06 * ( f(4:this%n-1,j,k) -f(1:this%n-4,j,k) )
+
+
+               select case(bc1)
+                        ! left boundary (1:3)
+                        case(1)
+                            RHS(3,:,:) = RHS(3,:,:) + a10 * (f(3,:,:) -f(2,:,:)) &
+                                                    + b10 * (f(4,:,:) -f(1,:,:)) &
+                                                    + c10 * (f(5,:,:) -f(1,:,:))
+                            RHS(2,:,:) = RHS(2,:,:) + a10 * (f(2,:,:) -f(1,:,:)) &
+                                                    + b10 * (f(3,:,:) -f(1,:,:)) &
+                                                    + c10 * (f(4,:,:) -f(2,:,:))
+                            RHS(1,:,:) = RHS(1,:,:) + a10 * (f(1,:,:) -f(1,:,:)) &
+                                                    + b10 * (f(2,:,:) -f(2,:,:)) &
+                                                    + c10 * (f(3,:,:) -f(3,:,:))
+                        case(-1)
+                            RHS(3,:,:) = RHS(3,:,:) + a10 * (f(3,:,:) -f(2,:,:)) &
+                                                    + b10 * (f(4,:,:) -f(1,:,:)) &
+                                                    + c10 * (f(5,:,:) +f(1,:,:))
+                            RHS(2,:,:) = RHS(2,:,:) + a10 * (f(2,:,:) -f(1,:,:)) &
+                                                    + b10 * (f(3,:,:) +f(1,:,:)) &
+                                                    + c10 * (f(4,:,:) +f(2,:,:))
+                            RHS(1,:,:) = RHS(1,:,:) + a10 * (f(1,:,:) +f(1,:,:)) &
+                                                    + b10 * (f(2,:,:) +f(2,:,:)) &
+                                                    + c10 * (f(3,:,:) +f(3,:,:))
+                        case(0)
+                            RHS(1,:,:) = RHS(1,:,:) + a101 * (f(2,:,:) -f(1,:,:))
+                            RHS(2,:,:) = RHS(2,:,:) + a102 * (f(2,:,:) -f(1,:,:))
+                            RHS(3,:,:) = RHS(3,:,:) + a104 * (f(3,:,:) -f(2,:,:)) &
+                                                    + b104 * (f(4,:,:) -f(1,:,:))
+                    end select
+
+                    select case(bcn)
+                        !right boundary (n-2:n)
+                        case(1)
+                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a10 *(f(this%n-2,:,:) - f(this%n-3,:,:)) &
+                                                                  + b10 *(f(this%n-1,:,:) - f(this%n-4,:,:)) &
+                                                                  + c10 *(f(this%n-1,:,:) - f(this%n-5,:,:))
+                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a10 *(f(this%n-1,:,:) - f(this%n-2,:,:)) &
+                                                                  + b10 *(f(this%n-1,:,:) - f(this%n-3,:,:)) &
+                                                                  + c10 *(f(this%n-2,:,:) - f(this%n-4,:,:))
+                            RHS(this%n,:,:) = RHS(this%n,:,:)     + a10 *(f(this%n-1,:,:) - f(this%n-1,:,:)) &
+                                                                  + b10 *(f(this%n-2,:,:) - f(this%n-2,:,:)) &
+                                                                  + c10 *(f(this%n-3,:,:) - f(this%n-3,:,:))
+                        case(-1)
+                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a10 * (f(this%n-2,:,:) - f(this%n-3,:,:)) &
+                                                                  + b10 * (f(this%n-1,:,:) - f(this%n-4,:,:)) &
+                                                                  + c10 *(-f(this%n-1,:,:) - f(this%n-5,:,:))
+                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a10 * (f(this%n-1,:,:) - f(this%n-2,:,:)) &
+                                                                  + b10 *(-f(this%n-1,:,:) - f(this%n-3,:,:)) &
+                                                                  + c10 *(-f(this%n-2,:,:) - f(this%n-4,:,:))
+                            RHS(this%n,:,:) = RHS(this%n,:,:)     + a10 *(-f(this%n-1,:,:) - f(this%n-1,:,:)) &
+                                                                  + b10 *(-f(this%n-2,:,:) - f(this%n-2,:,:)) &
+                                                                  + c10 *(-f(this%n-3,:,:) - f(this%n-3,:,:))
+                        case(0)
+                            RHS(this%n,:,:)   = RHS(this%n  ,:,:) + a101 *(f(this%n-1,:,:) - f(this%n-2,:,:))
+                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a102 *(f(this%n-1,:,:) - f(this%n-2,:,:))
+                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a104 *(f(this%n-2,:,:) - f(this%n-3,:,:)) &
+                                                                  + b104 *(f(this%n-1,:,:) - f(this%n-4,:,:))
+                    end select
+
+                case("N2F")
+
+            end select           
         end select
     
     end subroutine
    
 
 
-    subroutine ComputeYD1RHS(this,f, RHS,dir, n1, n3) 
+    subroutine ComputeYD1RHS(this,f, RHS,dir, n1, n3,bc1,bcn) 
          
         class( cd06Stagger ), intent(in) :: this
-        integer, intent(in) :: n1, n3
+        integer, intent(in) :: n1, n3,bc1,bcn
         real(rkind), dimension(n1,this%n,n3), intent(in) :: f
         real(rkind), dimension(n1,this%n,n3), intent(out) :: RHS
         character(len=*)  , intent(in)             :: dir
         integer ::  k
-        real(rkind) :: a06, b06
+        real(rkind) :: a06, b06, a10,a102,a104,b10,b104,b102,c10,c102,c104,a101
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2
@@ -648,56 +785,99 @@ contains
 
           end select
         case (.FALSE.)
-            a06 = a06d1 * this%onebydx
-            b06 = b06d1 * this%onebydx
-        
-            a_np_3 = w3*q_pp * this%onebydx  
-            b_np_3 = w3*r_pp * this%onebydx 
+            a10 = aD06d1 * this%onebydx
+            b10 = bD06d1 * this%onebydx * third
+            c10 = cD06d1 * this%onebydx * fifth
+            RHS = 0.0d0
 
-            a_np_2 = w2*q_p * this%onebydx
-            
-            a_np_1 = w1*( -p * this%onebydx)
-            b_np_1 = w1*(  q * this%onebydx)
-            c_np_1 = w1*(  r * this%onebydx)
-            d_np_1 = w1*(  s * this%onebydx)
-       
-            do k = 1,n3
-                    RHS(:,1         ,k) =   a_np_1* f(:,1         ,k) +  b_np_1*f(:,2         ,k)   &
-                                        +   c_np_1* f(:,3         ,k) +  d_np_1*f(:,4         ,k) 
-                   
-                    RHS(:,2         ,k) =   a_np_2*(f(:,3         ,k) -         f(:,1         ,k))
-                    
-                    RHS(:,3         ,k) =   a_np_3*(f(:,4         ,k) -         f(:,2         ,k)) &
-                                        +   b_np_3*(f(:,5         ,k) -         f(:,1         ,k)) 
+            a102 = one * this%onebydx
+            a101 = a102
 
-                    RHS(:,4:this%n-3,k) =   b06   *(f(:,6:this%n-1,k) -         f(:,2:this%n-5,k)) &
-                                        +   a06   *(f(:,5:this%n-2,k) -         f(:,3:this%n-4,k)) 
-                                          
+            a104 =  9.0d0/8.0d0  * this%onebydx
+            b104 = -1.0d0/24.0d0 * this%onebydx       
+          select case(dir)
 
-                    RHS(:,this%n-2  ,k) =   a_np_3*(f(:,this%n-1  ,k) -         f(:,this%n-3  ,k)) &
-                                        +   b_np_3*(f(:,this%n    ,k) -         f(:,this%n-4  ,k)) 
-                    
-                    RHS(:,this%n-1  ,k) =   a_np_2*(f(:,this%n    ,k) -         f(:,this%n-2  ,k))
+            case("N2F")
 
-                    RHS(:,this%n    ,k) =  -a_np_1* f(:,this%n    ,k) -  b_np_1*f(:,this%n-1  ,k)   &
-                                        -   c_np_1* f(:,this%n-2  ,k) -  d_np_1*f(:,this%n-3  ,k)
+            case("F2N")
 
-                !end do 
-            end do  
-        
+              RHS(:,3:this%n-2,k) = a06 * ( f(:,3:this%n-2,k) -f(:,2:this%n-3,k) ) &
+                                        + b06 * ( f(:,4:this%n-1  ,k) -f(:,1:this%n-4,k) )
+
+              select case(bc1)
+                        ! left boundary (1:3)
+                        case(1)
+                            RHS(:,3,:) = RHS(:,3,:) + a10 * (f(:,3,:) -f(:,2,:)) &
+                                                    + b10 * (f(:,4,:) -f(:,1,:)) &
+                                                    + c10 * (f(:,5,:) -f(:,1,:))
+                            RHS(:,2,:) = RHS(:,2,:) + a10 * (f(:,2,:) -f(:,1,:)) &
+                                                    + b10 * (f(:,3,:) -f(:,1,:)) &
+                                                    + c10 * (f(:,4,:) -f(:,2,:))
+                            RHS(:,1,:) = RHS(:,1,:) + a10 * (f(:,1,:) -f(:,1,:)) &
+                                                    + b10 * (f(:,2,:) -f(:,2,:)) &
+                                                    + c10 * (f(:,3,:) -f(:,3,:))
+                        case(-1)
+                            RHS(:,3,:) = RHS(:,3,:) + a10 * (f(:,3,:) -f(:,2,:)) &
+                                                    + b10 * (f(:,4,:) -f(:,1,:)) &
+                                                    + c10 * (f(:,5,:) +f(:,1,:))
+                            RHS(:,2,:) = RHS(:,2,:) + a10 * (f(:,2,:) -f(:,1,:)) &
+                                                    + b10 * (f(:,3,:) +f(:,1,:)) &
+                                                    + c10 * (f(:,4,:) +f(:,2,:))
+                            RHS(:,1,:) = RHS(:,1,:) + a10 * (f(:,1,:) +f(:,1,:)) &
+                                                    + b10 * (f(:,2,:) +f(:,2,:)) &
+                                                    + c10 * (f(:,3,:) +f(:,3,:))
+                        case(0)
+                            RHS(:,1,:) = RHS(:,1,:) + a101 * (f(:,2,:) -f(:,1,:))
+                            RHS(:,2,:) = RHS(:,2,:) + a102 * (f(:,2,:) -f(:,1,:))
+                            RHS(:,3,:) = RHS(:,3,:) + a104 * (f(:,3,:) -f(:,2,:)) &
+                                                    + b104 * (f(:,4,:) -f(:,1,:))
+                    end select
+
+                    select case(bcn)
+                        !right boundary (n-2:n)
+                        case(1)
+                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a10 *(f(:,this%n-2,:) - f(:,this%n-3,:)) &
+                                                                  + b10 *(f(:,this%n-1,:) - f(:,this%n-4,:)) &
+                                                                  + c10 *(f(:,this%n-1,:) - f(:,this%n-5,:))
+                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a10 *(f(:,this%n-1,:) - f(:,this%n-2,:)) &
+                                                                  + b10 *(f(:,this%n-1,:) - f(:,this%n-3,:)) &
+                                                                  + c10 *(f(:,this%n-2,:) - f(:,this%n-4,:))
+                            RHS(:,this%n,:) = RHS(:,this%n,:)     + a10 *(f(:,this%n-1,:) - f(:,this%n-1,:)) &
+                                                                  + b10 *(f(:,this%n-2,:) - f(:,this%n-2,:)) &
+                                                                  + c10 *(f(:,this%n-3,:) - f(:,this%n-3,:))
+                        case(-1)
+                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a10 * (f(:,this%n-2,:) - f(:,this%n-3,:)) &
+                                                                  + b10 * (f(:,this%n-1,:) - f(:,this%n-4,:)) &
+                                                                  + c10 *(-f(:,this%n-1,:) - f(:,this%n-5,:))
+                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a10 * (f(:,this%n-1,:) - f(:,this%n-2,:)) &
+                                                                  + b10 *(-f(:,this%n-1,:) - f(:,this%n-3,:)) &
+                                                                  + c10 *(-f(:,this%n-2,:) - f(:,this%n-4,:))
+                            RHS(:,this%n,:) = RHS(:,this%n,:)     + a10 *(-f(:,this%n-1,:) - f(:,this%n-1,:)) &
+                                                                  + b10 *(-f(:,this%n-2,:) - f(:,this%n-2,:)) &
+                                                                  + c10 *(-f(:,this%n-3,:) - f(:,this%n-3,:))
+                        case(0)
+                            RHS(:,this%n,:)   = RHS(:,this%n  ,:) + a101 *(f(:,this%n-1,:) - f(:,this%n-2,:))
+                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a102 *(f(:,this%n-1,:) - f(:,this%n-2,:))
+                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a104 *(f(:,this%n-2,:) - f(:,this%n-3,:)) &
+                                                                  + b104 *(f(:,this%n-1,:) - f(:,this%n-4,:))
+                    end select
+
+
+          end select
+              
         end select
     
     end subroutine
 
 
-    subroutine ComputeZD1RHS(this,f, RHS, dir,n1, n2) 
+    subroutine ComputeZD1RHS(this,f, RHS, dir,n1, n2,bc1,bcn) 
          
         class( cd06Stagger ), intent(in) :: this
-        integer, intent(in) :: n1, n2
+        integer, intent(in) :: n1, n2,bc1,bcn
         real(rkind), dimension(n1,n2,this%n), intent(in) :: f
         real(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
         character(len=*)  , intent(in)             :: dir
-        real(rkind) :: a06, b06
+        real(rkind) :: a06, b06, a10,a102,a104,b10,b104,b102,c10,c102,c104,a101
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2
@@ -730,40 +910,87 @@ contains
  
          end select
         case (.FALSE.)
-            a06 = a06d1 * this%onebydx
-            b06 = b06d1 * this%onebydx
-        
-            a_np_3 = w3*q_pp * this%onebydx  
-            b_np_3 = w3*r_pp * this%onebydx 
 
-            a_np_2 = w2*q_p * this%onebydx
-            
-            a_np_1 = w1*( -p * this%onebydx)
-            b_np_1 = w1*(  q * this%onebydx)
-            c_np_1 = w1*(  r * this%onebydx)
-            d_np_1 = w1*(  s * this%onebydx)
-       
-            RHS(:,:,1         ) =   a_np_1* f(:,:,1         ) +  b_np_1*f(:,:,2         )   &
-                                +   c_np_1* f(:,:,3         ) +  d_np_1*f(:,:,4         ) 
-            
-            RHS(:,:,2         ) =   a_np_2*(f(:,:,3         ) -         f(:,:,1         ))
-            
-            RHS(:,:,3         ) =   a_np_3*(f(:,:,4         ) -         f(:,:,2         )) &
-                                +   b_np_3*(f(:,:,5         ) -         f(:,:,1         )) 
+            a10 = aD06d1 * this%onebydx
+            b10 = bD06d1 * this%onebydx * third
+            c10 = cD06d1 * this%onebydx * fifth
+            RHS = 0.0d0
 
-            RHS(:,:,4:this%n-3) =   b06   *(f(:,:,6:this%n-1) -         f(:,:,2:this%n-5)) &
-                                +   a06   *(f(:,:,5:this%n-2) -         f(:,:,3:this%n-4)) 
-                                  
+            a102 = one * this%onebydx
+            a101 = a102
 
-            RHS(:,:,this%n-2  ) =   a_np_3*(f(:,:,this%n-1  ) -         f(:,:,this%n-3  )) &
-                                +   b_np_3*(f(:,:,this%n    ) -         f(:,:,this%n-4  )) 
-            
-            RHS(:,:,this%n-1  ) =   a_np_2*(f(:,:,this%n    ) -         f(:,:,this%n-2  ))
+            a104 =  9.0d0/8.0d0  * this%onebydx
+            b104 = -1.0d0/24.0d0 * this%onebydx
 
-            RHS(:,:,this%n    ) =  -a_np_1* f(:,:,this%n    ) -  b_np_1*f(:,:,this%n-1  )   &
-                                -   c_np_1* f(:,:,this%n-2  ) -  d_np_1*f(:,:,this%n-3  )
+            select case (dir)
 
-        
+               case ("N2F")
+
+               case ("F2N")!TODO: implement better non-periodic BC: currently12466...66421
+                    !interior    
+                    RHS(:,:,3:this%n-2) = a06 * ( f(:,:,3:this%n-2) -f(:,:,2:this%n-3) ) &
+                               + b06 * ( f(:,:,4:this%n-1) - f(:,:,1:this%n-4) )
+
+                    select case(bc1)
+                        ! left boundary (1:3)
+                        case(1)
+                            RHS(:,:,3) = RHS(:,:,3) + a10 * (f(:,:,3) -f(:,:,2)) &
+                                                    + b10 * (f(:,:,4) -f(:,:,1)) &
+                                                    + c10 * (f(:,:,5) -f(:,:,1))
+                            RHS(:,:,2) = RHS(:,:,2) + a10 * (f(:,:,2) -f(:,:,1)) &
+                                                    + b10 * (f(:,:,3) -f(:,:,1)) &
+                                                    + c10 * (f(:,:,4) -f(:,:,2))
+                            RHS(:,:,1) = RHS(:,:,1) + a10 * (f(:,:,1) -f(:,:,1)) &
+                                                    + b10 * (f(:,:,2) -f(:,:,2)) &
+                                                    + c10 * (f(:,:,3) -f(:,:,3))
+                        case(-1)
+                            RHS(:,:,3) = RHS(:,:,3) + a10 * (f(:,:,3) -f(:,:,2)) &
+                                                    + b10 * (f(:,:,4) -f(:,:,1)) &
+                                                    + c10 * (f(:,:,5) +f(:,:,1))
+                            RHS(:,:,2) = RHS(:,:,2) + a10 * (f(:,:,2) -f(:,:,1)) &
+                                                    + b10 * (f(:,:,3) +f(:,:,1)) &
+                                                    + c10 * (f(:,:,4) +f(:,:,2))
+                            RHS(:,:,1) = RHS(:,:,1) + a10 * (f(:,:,1) +f(:,:,1)) &
+                                                    + b10 * (f(:,:,2) +f(:,:,2)) &
+                                                    + c10 * (f(:,:,3) +f(:,:,3))
+                        case(0)
+                            RHS(:,:,1) = RHS(:,:,1) + a101 * (f(:,:,2) -f(:,:,1))
+                            RHS(:,:,2) = RHS(:,:,2) + a102 * (f(:,:,2) -f(:,:,1))
+                            RHS(:,:,3) = RHS(:,:,3) + a104 * (f(:,:,3) -f(:,:,2)) &
+                                                    + b104 * (f(:,:,4) -f(:,:,1))
+                    end select
+
+                    select case(bcn)
+                        !right boundary (n-2:n)
+                        case(1)
+                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a10 *(f(:,:,this%n-2) - f(:,:,this%n-3)) &
+                                                                  + b10 *(f(:,:,this%n-1) - f(:,:,this%n-4)) &
+                                                                  + c10 *(f(:,:,this%n-1) - f(:,:,this%n-5))
+                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a10 *(f(:,:,this%n-1) - f(:,:,this%n-2)) &
+                                                                  + b10 *(f(:,:,this%n-1) - f(:,:,this%n-3)) &
+                                                                  + c10 *(f(:,:,this%n-2) - f(:,:,this%n-4))
+                            RHS(:,:,this%n) = RHS(:,:,this%n)     + a10 *(f(:,:,this%n-1) - f(:,:,this%n-1)) &
+                                                                  + b10 *(f(:,:,this%n-2) - f(:,:,this%n-2)) &
+                                                                  + c10 *(f(:,:,this%n-3) - f(:,:,this%n-3))
+                        case(-1)
+                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a10 * (f(:,:,this%n-2) - f(:,:,this%n-3)) &
+                                                                  + b10 * (f(:,:,this%n-1) - f(:,:,this%n-4)) &
+                                                                  + c10 *(-f(:,:,this%n-1) - f(:,:,this%n-5))
+                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a10 * (f(:,:,this%n-1) - f(:,:,this%n-2)) &
+                                                                  + b10 *(-f(:,:,this%n-1) - f(:,:,this%n-3)) &
+                                                                  + c10 *(-f(:,:,this%n-2) - f(:,:,this%n-4))
+                            RHS(:,:,this%n) = RHS(:,:,this%n)     + a10 *(-f(:,:,this%n-1) - f(:,:,this%n-1)) &
+                                                                  + b10 *(-f(:,:,this%n-2) - f(:,:,this%n-2)) &
+                                                                  + c10 *(-f(:,:,this%n-3) - f(:,:,this%n-3))
+                        case(0)
+                            RHS(:,:,this%n)   = RHS(:,:,this%n  ) + a101 *(f(:,:,this%n-1) - f(:,:,this%n-2))
+                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a102 *(f(:,:,this%n-1) - f(:,:,this%n-2))
+                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a104 *(f(:,:,this%n-2) - f(:,:,this%n-3)) &
+                                                                  + b104 *(f(:,:,this%n-1) - f(:,:,this%n-4))
+                    end select
+
+
+            end select        
         end select
     
     end subroutine
@@ -799,133 +1026,282 @@ contains
     
     end function
 
-    subroutine dd1F2N(this, f, df, na, nb)
+    subroutine dd1F2N(this, f, df, na, nb,bc1_,bcn_)
         class( cd06Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
+        integer  :: bc1,bcn
         real(rkind), dimension(this%n,na,nb), intent(in)  :: f
         real(rkind), dimension(this%n,na,nb), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1(should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
 
         if (this%n == 1) then
             df = zero
             return
         end if
 
-        call this%ComputeXD1RHS(f, df,"F2N", na, nb)
+        call this%ComputeXD1RHS(f, df,"F2N", na, nb,bc1,bcn)
         select case (this%periodic) 
         case (.TRUE.)
            call this%SolveXLU1(df,na,nb)
         case (.FALSE.) 
-           call this%SolveXTri1(df,na,nb)
+           call this%SolveXLU1_BC(df,na,nb)
         end select
 
 
     end subroutine
 
-     subroutine dd1N2F(this, f, df, na, nb)
+     subroutine dd1N2F(this, f, df, na, nb,bc1_,bcn_)
         class( cd06Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
+        integer  :: bc1,bcn
         real(rkind), dimension(this%n,na,nb), intent(in)  :: f
         real(rkind), dimension(this%n,na,nb), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+
+        if(this%n == 1) then
+            df = zero
+            return
+        end if
+
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1(should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn(should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
 
         if (this%n == 1) then
             df = zero
             return
         end if
 
-        call this%ComputeXD1RHS(f, df,"N2F", na, nb)
+        call this%ComputeXD1RHS(f, df,"N2F", na, nb,bc1,bcn)
         select case (this%periodic)
         case (.TRUE.)
            call this%SolveXLU1(df,na,nb)
         case (.FALSE.)
-           call this%SolveXTri1(df,na,nb)
+           call this%SolveXLU1_BC(df,na,nb)
         end select
 
 
     end subroutine
 
-    subroutine dd2F2N(this, f, df, na, nb)
+    subroutine dd2F2N(this, f, df, na, nb,bc1_,bcn_)
         class( cd06Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
+        integer  :: bc1,bcn
         real(rkind), dimension(na,this%n,nb), intent(in)  :: f
         real(rkind), dimension(na,this%n,nb), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+
+        if(this%n == 1) then
+            df = zero
+            return
+        end if
+
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
 
         if (this%n == 1) then
             df = zero
             return
         end if
 
-        call this%ComputeYD1RHS(f, df, "F2N", na, nb)
+        call this%ComputeYD1RHS(f, df, "F2N", na, nb,bc1,bcn)
         select case (this%periodic) 
         case (.TRUE.)
            call this%SolveYLU1(df,na,nb)
         case (.FALSE.) 
-           call this%SolveYTri1(df,na,nb)
+           call this%SolveYLU1_BC(df,na,nb)
         end select
 
 
     end subroutine
     
-    subroutine dd2N2F(this, f, df, na, nb)
+    subroutine dd2N2F(this, f, df, na, nb, bc1_, bcn_)
         class( cd06Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
+        integer  :: bc1,bcn
         real(rkind), dimension(na,this%n,nb), intent(in)  :: f
         real(rkind), dimension(na,this%n,nb), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+
+        if(this%n == 1) then
+            df = zero
+            return
+        end if
+
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
 
         if (this%n == 1) then
             df = zero
             return
         end if
 
-        call this%ComputeYD1RHS(f, df, "N2F", na, nb)
+        call this%ComputeYD1RHS(f, df, "N2F", na, nb,bc1,bcn)
         select case (this%periodic)
         case (.TRUE.)
            call this%SolveYLU1(df,na,nb)
         case (.FALSE.)
-           call this%SolveYTri1(df,na,nb)
+           call this%SolveYLU1_BC(df,na,nb)
         end select
 
 
     end subroutine
 
-    subroutine dd3F2N(this, f, df, na, nb)
+    subroutine dd3F2N(this, f, df, na, nb,bc1_,bcn_)
         class( cd06Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
+        integer  :: bc1,bcn
         real(rkind), dimension(na,nb,this%n), intent(in)  :: f
         real(rkind), dimension(na,nb,this%n), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+
+        if(this%n == 1) then
+            df = zero
+            return
+        end if
+
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
 
         if (this%n == 1) then
             df = zero
             return
         end if
 
-        call this%ComputeZD1RHS(f, df,"F2N", na, nb)
+        call this%ComputeZD1RHS(f, df,"F2N", na, nb,bc1,bcn)
         select case (this%periodic) 
         case (.TRUE.)
            call this%SolveZLU1(df,na,nb)
         case (.FALSE.) 
-           call this%SolveZTri1(df,na,nb)
+           call this%SolveZLU1_BC(df,na,nb)
         end select
 
 
     end subroutine
 
-    subroutine dd3N2F(this, f, df, na, nb)
+    subroutine dd3N2F(this, f, df, na, nb,bc1_,bcn_)
         class( cd06Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
+        integer  :: bc1,bcn
         real(rkind), dimension(na,nb,this%n), intent(in)  :: f
         real(rkind), dimension(na,nb,this%n), intent(out) :: df
+        integer, optional, intent(in) :: bc1_, bcn_
+
+        if(this%n == 1) then
+            df = zero
+            return
+        end if
+
+        if (present(bc1_)) then
+            bc1 = bc1_
+            if ( (bc1 /= 0) .AND. (bc1 /= 1) .AND. (bc1 /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bc1 (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bc1 = 0
+        end if
+
+        if (present(bcn_)) then
+            bcn = bcn_
+            if ( (bcn /= 0) .AND. (bcn /= 1) .AND. (bcn /= -1) ) then
+                call GracefulExit("Incorrect boundary specification for bcn (should be 0, 1 or -1)", 324)
+            end if
+        else
+            bcn = 0
+        end if
+
 
         if (this%n == 1) then
             df = zero
             return
         end if
 
-        call this%ComputeZD1RHS(f, df,"N2F", na, nb)
+        call this%ComputeZD1RHS(f, df,"N2F", na, nb,bc1,bcn)
         select case (this%periodic)
         case (.TRUE.)
            call this%SolveZLU1(df,na,nb)
         case (.FALSE.)
-           call this%SolveZTri1(df,na,nb)
+           call this%SolveZLU1_BC(df,na,nb)
         end select
 
 

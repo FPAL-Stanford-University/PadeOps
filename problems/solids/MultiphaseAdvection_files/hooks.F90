@@ -19,7 +19,7 @@ module MultiphaseFluid_shock_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = one, Lx = one, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = 1.0, Lx = 1.0, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
 
     type(filters) :: mygfil
 
@@ -173,7 +173,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index,rho_index
@@ -182,12 +182,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
-    
+    use DerivativesMod,   only: derivatives
+
     use MultiphaseFluid_shock_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
     type(decomp_info),               intent(in)    :: decomp
+    type(derivatives),               intent(in)    :: der
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     type(solid_mixture),             intent(inout) :: mix
@@ -195,7 +197,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, noise
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac
     integer, dimension(2) :: iparams
@@ -204,6 +206,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
     integer :: nx,ny,nz
     nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
+    CALL RANDOM_NUMBER(noise)
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
@@ -234,23 +237,23 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
 
-        if(rhoRatio > 0) then
+!        if(rhoRatio > 0) then
           ! if rhoRatio is positive, only rho_0 is different. Rgas is set such
           ! that Temperature equilibrium condition is satisfied
-          gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
-          rho_0_2 = rho_0*rhoRatio; mu_2 = mu
-        else
+!          gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
+!          rho_0_2 = rho_0*rhoRatio; mu_2 = mu
+!        else
           ! if rhoRatio is negative, all quantities except Rgas need to be
           ! specified in input file. Rgas is then set such
           ! that Temperature equilibrium condition is satisfied
-          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+!          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
 
           ! determine p_amb that guarantees T equilibrium
          ! if(adjustPamb) then
          !   fac = Rgas_2*rho_0_2/Rgas/rho_0
          !   p_amb = (fac*p_infty - p_infty_2)/(one - fac)
          ! endif
-        endif
+!        endif
 
         ! write material properties
         if (nrank == 0) then
@@ -297,7 +300,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         ! ! speed of sound
          a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-         a2 = sqrt((gamma*(p2+p_infty_2) + 4.0d0/3.0d0*mu)/rho2)
+         a2 = sqrt((gamma_2*(p2+p_infty_2) + 4.0d0/3.0d0*mu)/rho2)
 
         ! if (nrank == 0) then
         !     print*, '----Shock Initialization-----'
@@ -368,15 +371,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         ! shock_init = interface_init - 0.3_rkind  ! (10*thick) grid points away from the interface
         ! dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
 
-        u   = 0 !(u2-u1)*dum
-        v   = v0
+        u   = v0 !(u2-u1)*dum
+        v   = 0
         w   = zero
 
         
 
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
         !tmp = half * ( one - erf((0.25 - (x-interface_init)*(x-interface_init) - (y-3.0_rkind)*(y-3.0_rkind))/(thick*dx) ) )
-        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
+        !tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) - (y-0.5)*(y-0.5))/(thick*dx) ) )
+         tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) -(y-0.5)*(y-0.5))/(thick*dx) ) ) 
 
        ! tmp = half * ( one - erf((0.35**2 - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
 
@@ -397,7 +401,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         !mix%material(2)%g11 = mix%material(1)%g11
 
-        mix%material(1)%p  = p_amb!p2*dum + p1*(one-dum)
+        mix%material(1)%p  = p_amb !+ (noise-0.5)*1d-8 !p2*dum + p1*(one-dum)
         mix%material(2)%p  = mix%material(1)%p
 
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp

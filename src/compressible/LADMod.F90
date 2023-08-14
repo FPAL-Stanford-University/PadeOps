@@ -23,7 +23,9 @@ module LADMod
         real(rkind) :: Cdiff_gp
         real(rkind) :: Cdiff_pe
         real(rkind) :: Cdiff_pe_2
-
+        real(rkind) :: Crho
+        real(rkind) :: Cvf1
+        real(rkind) :: Cvf2
         type(decomp_info), pointer :: decomp
         type(derivatives), pointer :: der
         type(filters),     pointer :: fil
@@ -39,6 +41,7 @@ module LADMod
         procedure          :: get_viscosities
         procedure          :: get_conductivity
         procedure          :: get_diffusivity
+        procedure          :: get_diffusivity_5eqn
         procedure          :: get_diff_g
         procedure          :: get_diff_pe
         procedure, private :: filter
@@ -48,13 +51,13 @@ module LADMod
 
 contains
 
-    subroutine init(this,decomp,der,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
+    subroutine init(this,decomp,der,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1, Cvf2)
         class(ladobject),        intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
         type(filters),     target, intent(in) :: fil
         integer,           intent(in) :: nfils
-        real(rkind),       intent(in) :: Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,dx,dy,dz    
+        real(rkind),       intent(in) :: Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1,Cvf2,dx,dy,dz    
 
         ! Set all coefficients
         this%Cbeta = Cbeta
@@ -69,6 +72,9 @@ contains
         this%Cdiff_gp = Cdiff_gp
         this%Cdiff_pe = Cdiff_pe
         this%Cdiff_pe_2 = Cdiff_pe_2
+        this%Crho       = Crho
+        this%Cvf1       = Cvf1
+        this%Cvf2       = Cvf2
 
         ! Point type pointers to external types
         this%decomp => decomp
@@ -385,6 +391,7 @@ contains
         kap = kap + kapstar
     end subroutine
 
+    
     subroutine get_diffusivity(this,Ys,dYsdx,dYsdy,dYsdz,sos,diff,x_bc,y_bc,z_bc)
         class(ladobject),  intent(in) :: this
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)  :: Ys,dYsdx,dYsdy,dYsdz,sos
@@ -440,6 +447,108 @@ contains
         diff = diff + diffstar
     end subroutine
 
+     subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,sos,adiff,rhodiff,x_bc,y_bc,z_bc)
+        class(ladobject),  intent(in) :: this
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: rhoYs,sos,VF,rho 
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3
+        real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
+        real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2, ztmp3,ztmp4,Ys
+
+        ! -------- Artificial Diffusivity ---------
+
+
+        Ys = rhoYs/rho
+
+        ! Step 1: Construct Heaviside Functions
+
+        where( abs(VF*(1 - VF)) .GT. 0)
+           H1 = 1
+        elsewhere
+           H1 = 0
+        endwhere
+
+
+        where( (VF - 1) .GT. 0)
+           H2 = 1
+        elsewhere
+           H2 = 0
+        endwhere
+
+
+        where( VF .GT. 0)
+          H3 = 1
+        elsewhere
+          H3 = 0
+        endwhere
+
+        ! Step 2: Get 4th derivative in X
+        call transpose_y_to_x(Ys,xtmp1,this%decomp)
+        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+        call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
+        xtmp2 = xtmp1*this%dx**5
+        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+        diffstar = ytmp4 ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+        ! Step 3: Get 4th derivative in Z
+        call transpose_y_to_z(Ys,ztmp1,this%decomp)
+        call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
+        call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
+        ztmp2 = ztmp1*this%dz**5
+        call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+        diffstar = diffstar + ytmp4 !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+        ! Step 4: Get 4th derivative in Y
+        call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
+        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
+        ytmp4 = ytmp5*this%dy**5
+        diffstar = diffstar + ytmp4 !* ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        ytmp5 = this%CY*sos*( half*(abs(Ys)-one + abs(Ys-one)) )*(this%dy*this%dx*this%dz)**(1/3)
+        diffstar = sos*abs(diffstar) ! CD part of diff
+        call this%filter(diffstar, x_bc, y_bc, z_bc)
+        call this%filter(ytmp5, x_bc, y_bc, z_bc)
+        rhodiff = this%Crho*diffstar + ytmp5
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !                              VF                                   !
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       
+        ! Step 2: Get 4th derivative in X
+        call transpose_y_to_x(VF,xtmp3,this%decomp)
+        call this%der%d2dx2(xtmp3,xtmp4,x_bc(1),x_bc(2))
+        call this%der%d2dx2(xtmp4,xtmp3,x_bc(1),x_bc(2))
+        xtmp4 = xtmp3*this%dx**5
+        call transpose_x_to_y(xtmp4,ytmp6,this%decomp)
+        adiffstar = ytmp6 ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 +real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+        ! Step 3: Get 4th derivative in Z
+        call transpose_y_to_z(VF,ztmp3,this%decomp)
+        call this%der%d2dz2(ztmp3,ztmp4,z_bc(1),z_bc(2))
+        call this%der%d2dz2(ztmp4,ztmp3,z_bc(1),z_bc(2))
+        ztmp4 = ztmp3*this%dz**5
+        call transpose_z_to_y(ztmp4,ytmp6,this%decomp)
+        adiffstar = adiffstar + ytmp6 !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 +ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+        ! Step 4: Get 4th derivative in Y
+        call this%der%d2dy2(VF,ytmp6,y_bc(1),y_bc(2))
+        call this%der%d2dy2(ytmp6,ytmp7,y_bc(1),y_bc(2))
+        ytmp6 = ytmp7*this%dy**5
+        adiffstar = adiffstar + ytmp6
+
+        adiffstar = this%Cvf1*sos*abs(adiffstar)
+        ytmp5 = this%Cvf2*sos*( (VF-1)*H2 - VF*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one + abs(Ys-one)) )*ytmp4 ! CY partof diff
+
+        call this%filter(adiffstar, x_bc, y_bc, z_bc)
+        call this%filter(ytmp5, x_bc, y_bc, z_bc)
+
+        adiff = adiffstar + ytmp5
+        ! Filter each part
+
+
+    end subroutine
 
     subroutine get_diff_pe(this,pe,sos,diff_pe,x_bc,y_bc,z_bc)
         class(ladobject),  intent(in) :: this

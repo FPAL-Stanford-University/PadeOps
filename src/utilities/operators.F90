@@ -90,7 +90,7 @@ contains
         type(decomp_info), intent(in) :: decomp
         type(interpolators), intent(in) :: interpMid
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)), intent(in) :: nodes
-        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(out) :: faces
+        real(rkind), dimension(size(nodes,1), size(nodes,2), size(nodes,3)), intent(out) :: faces
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
@@ -111,12 +111,13 @@ contains
         type(decomp_info), intent(in) :: decomp
         type(interpolators), intent(in) :: interpMid
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)), intent(in) :: nodes
-        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(out) :: faces
+        real(rkind), dimension(size(nodes,1), size(nodes,2), size(nodes,3)), intent(out) :: faces
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
         integer :: i,j,k
+
 
         ! j+1/2 faces
         call interpMid % iN2Fy(nodes,faces,y_bc(1),y_bc(2)) !TODO:addBCs (only correct if interface is away from boundary)
@@ -130,7 +131,7 @@ contains
         type(decomp_info), intent(in) :: decomp
         type(interpolators), intent(in) :: interpMid
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)),intent(in) :: nodes
-        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)),intent(out) :: faces
+        real(rkind), dimension(size(nodes,1), size(nodes,2), size(nodes,3)),intent(out) :: faces
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
@@ -150,16 +151,16 @@ contains
         type(decomp_info), intent(in) :: decomp
         type(derivativesStagg), intent(in) :: derStagg
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)), intent(in) :: faces1, faces2, faces3
-        real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)), intent(out)  :: nodes
+        real(rkind), dimension(size(faces1,1), size(faces1,2), size(faces1,3)), intent(out)  :: nodes
         real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: tmp
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf
-        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xdiv
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xdiv, xtmp
         real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ybuf
-        real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ydiv
+        real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ydiv,ytmp
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf
-        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) ::zdiv, ztmp
         integer :: i,j,k, one = 1
       
 
@@ -170,8 +171,8 @@ contains
         if(decomp%xsz(1).gt. one) then
            call transpose_y_to_x(faces1,xbuf,decomp)
            call derStagg % ddxF2N(xbuf,xdiv,x_bc(1),x_bc(2)) !TODO: add BCs(only correct if interface is away from boundary)
-           call transpose_x_to_y(xdiv,tmp,decomp)
-           nodes = nodes + tmp
+           call transpose_x_to_y(xdiv,ytmp,decomp)
+           nodes = nodes + ytmp
         endif
 
 
@@ -185,8 +186,8 @@ contains
         if(decomp%zsz(3).gt.one) then
            call transpose_y_to_z(faces3,zbuf,decomp)
            call derStagg % ddzF2N(zbuf,zdiv,z_bc(1),z_bc(2)) !TODO: add BCs(only correct if interface is away from boundary)
-           call transpose_z_to_y(zdiv,tmp,decomp)
-           nodes = nodes + tmp
+           call transpose_z_to_y(zdiv,ytmp,decomp)
+           nodes = nodes + ytmp
         endif
 
     end subroutine divergenceFV
@@ -195,7 +196,7 @@ contains
         type(decomp_info), intent(in) :: decomp
         type(derivativesStagg), intent(in) :: derStagg
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)),intent(in) :: faces
-        real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)),intent(out)  :: nodes
+        real(rkind), dimension(size(faces,1), size(faces,2), size(faces,3)),intent(out)  :: nodes
         real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: tmp
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
@@ -208,14 +209,11 @@ contains
         integer :: i,j,k, one = 1
 
 
-        nodes = 0.0
-
         ! i nodes
         if(decomp%xsz(1).gt. one) then
            call transpose_y_to_x(faces,xbuf,decomp)
            call derStagg % ddxF2N(xbuf,xdiv,x_bc(1),x_bc(2)) !TODO: add BCs(onlycorrect if interface is away from boundary)
-           call transpose_x_to_y(xdiv,tmp,decomp)
-           nodes = nodes + tmp
+           call transpose_x_to_y(xdiv,nodes,decomp)
         endif
 
 
@@ -225,7 +223,7 @@ contains
         type(decomp_info), intent(in) :: decomp
         type(derivativesStagg), intent(in) :: derStagg
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)),intent(in) :: faces
-        real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)),intent(out)  :: nodes
+        real(rkind), dimension(size(faces,1), size(faces,2),size(faces,3)),intent(out)  :: nodes
         real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: tmp
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
@@ -238,12 +236,10 @@ contains
         integer :: i,j,k, one = 1
 
 
-        nodes = 0.0
 
         ! j nodes
         if(decomp%ysz(2).gt.one) then
-           call derStagg % ddyF2N(faces,ydiv,y_bc(1),y_bc(2)) !TODO: add BCs(only correct if interface is away from boundary)
-           nodes = nodes + ydiv
+           call derStagg % ddyF2N(faces,nodes,y_bc(1),y_bc(2)) !TODO: add BCs(only correct if interface is away from boundary)
         endif
 
 
@@ -253,7 +249,7 @@ contains
         type(decomp_info), intent(in) :: decomp
         type(derivativesStagg), intent(in) :: derStagg
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)),intent(in) :: faces
-        real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)),intent(out)  :: nodes
+        real(rkind), dimension(size(faces,1), size(faces,2),size(faces,3)),intent(out)  :: nodes
         real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: tmp
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
@@ -266,11 +262,10 @@ contains
         integer :: i,j,k, one = 1
 
 
-        nodes = 0.0
         if(decomp%zsz(3).gt.one) then
            call transpose_y_to_z(faces,zbuf,decomp)
            call derStagg % ddzF2N(zbuf,zdiv,z_bc(1),z_bc(2)) !TODO: add BCs(onlycorrect if interface is away from boundary)
-           call transpose_z_to_y(zdiv,tmp,decomp)
+           call transpose_z_to_y(zdiv,nodes,decomp)
            nodes = nodes + tmp
         endif
 
@@ -285,7 +280,7 @@ contains
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) ::xtmp,xdum
         real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) ::ztmp,zdum
-        real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) ::ytmp,ydum
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) ::ytmp,ydum
 
         
         x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
@@ -396,8 +391,7 @@ contains
         x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
         y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
         z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
-
-        ! Get Y derivatives
+        
         call der%ddy(v,div,y_bc(1),y_bc(2))
 
         ! Get X derivatives
@@ -415,6 +409,28 @@ contains
         div = div + ytmp
 
     end subroutine
+
+    subroutine grady(decomp, der, f, df, x_bc_, y_bc_, z_bc_)
+        type(decomp_info), intent(in) :: decomp
+        type(derivatives), intent(in) :: der
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)),intent(in)  :: f
+        real(rkind), dimension(size(f,1), size(f,2), size(f,3)),intent(out) :: df
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
+
+        real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xdum
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: ytmp
+        real(rkind), dimension(decomp%zsz(1), decomp%zsz(2), decomp%zsz(3)) :: ztmp,zdum
+
+
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
+
+        call der%ddy(f,df,y_bc(1),y_bc(2))
+
+    end subroutine
+
 
     subroutine crossprod_components(rx,ry,rz,ux,uy,uz,vx,vy,vz)
         real(kind=rkind), dimension(:,:,:), intent(in) :: ux,uy,uz,vx,vy,vz

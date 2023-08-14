@@ -156,15 +156,10 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = Lx/real(nx-1,rkind)
-        dy = Ly/real(ny-1,rkind)
+        dx = Lx/real(nx,rkind)
+        dy = Ly/real(ny,rkind)
         dz = dx
 
-        print *, 'dx = ', dx
-        print *, 'dy = ', dy
-
-        print *, 'size x ', size(mesh,1)
-        print *, 'size y', size(mesh,2)
         if(abs(dx-dy)>1.0d-13) then
           call warning("dx not equal to dy")
         endif
@@ -172,7 +167,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx   ! x \in (-2,4]
+                    x(i,j,k) = real( ix1  + i - 1, rkind ) * dx   ! x \in (-2,4]
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 
@@ -187,7 +182,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index, rho_index
@@ -196,20 +191,21 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
-    
+    use DerivativesMod,   only: derivatives
+
     use Laplace_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
     type(decomp_info),               intent(in)    :: decomp
+    type(derivatives),               intent(in)    :: der
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp2, tmp, dum, eta
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp2, tmp, dum, eta,eta2
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac
     integer, dimension(2) :: iparams
@@ -235,7 +231,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
-
     ! Initialize mygfil
     call mygfil%init(                        decomp, &
                      .FALSE.,     .TRUE.,    .TRUE., &
@@ -276,8 +271,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
             write(*,*) 'p_amb = ', p_amb
         end if
        
-        print *, 'nx= ', nx
-        print *, 'ny= ', ny
 
         ! Set materials
         ! call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,1.0D-10)) !mca: see Sep1SolidEOS.F90 "init"
@@ -301,8 +294,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = sqrt((x - 1.0)**2 + (y - 1.0)**2)
-
+	eta = sqrt((x - 1)**2 + (y - 1)**2)
+        eta2 = sqrt((x-1.1)**2 + (y - 1.1)**2)
         !mp = half * ( one - erf((R**2 -(x-1_rkind)*(x-1_rkind) - (y-1_rkind)*(y-1_rkind))/(thick*dx)) )	
         tmp = 1/ (1+exp( (eta - R)/(thick*dx)) )
 
@@ -364,14 +357,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
        ! end do
 
         !set mixture pressure (uniform)
-	mix%material(1)%p = p_ten*mix%material(1)%Ys + p_amb
+        
+	mix%material(1)%p = p_ten*mix%material(1)%VF + p_amb !  +  1d-4*exp(-(eta-4*dx)**2/(2*dx**2))
+!        where( eta2 .LE. 3*dx)
+
+!            mix%material(2)%p = mix%material(2)%p + 1d-6
+!        endwhere
 	mix%material(2)%p = mix%material(1)%p
 
-        mix%surfaceTension_f(:,:,:,1) = 0.3/(thick*dx)*(-(x-1)* exp( (eta-R)/(thick*dx))/ ( eta**2 * (1 + exp( (eta - R)/(thick*dx)))**2))
-        mix%surfaceTension_f(:,:,:,2) = 0.3/(thick*dx)*(-(y-1)* exp((eta-R)/(thick*dx))/ ( eta**2 * (1 + exp( (eta - R)/(thick*dx)))**2))
+        mix%surfaceTension_f(:,:,:,1) = 0.3/(thick*dx)*(-(x-1.0)* exp( (eta-R)/(thick*dx))/ ( eta**2 * (1 + exp( (eta - R)/(thick*dx)))**2))
+        mix%surfaceTension_f(:,:,:,2) = 0.3/(thick*dx)*(-(y-1.0)* exp((eta-R)/(thick*dx))/ ( eta**2 * (1 + exp( (eta - R)/(thick*dx)))**2))
         mix%surfaceTension_f(:,:,:,3) = 0 
         mix%surfaceTension_e = 0;
-        mix%kappa  = -1 / sqrt( (x-1)**2 + (y-1)**2) 
+        mix%kappa  = -1 / sqrt( (x-1.0)**2 + (y-1.0)**2) 
      ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -705,8 +703,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx,ny, i, j
-    real(rkind) :: dx,dy, xspng, tspng, xspng1, xspng2
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind) :: dx,dy, xspng, tspng, xspng1, xspng2, RR
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta
     
     nx = decomp%ysz(1)
     ny = decomp%ysz(2)
@@ -825,13 +823,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
         
 
-
-        xspng1 = 0.22
+        eta = sqrt( (x-1)**2 + (y-1)**2)
+        RR = (Lx-0.22)/2
+        xspng1 = 0.15
         xspng2 = Lx -xspng1
         dx = x(2,1,1) - x(1,1,1)
-        tspng = 0.04
+        tspng = 0.02
         dum = half*(one - tanh( (x-xspng1)/(tspng) )) + half*(one + tanh((x-xspng2)/tspng) ) + half*(one - tanh( (y-xspng1)/(tspng) )) + half*(one + tanh((y-xspng2)/tspng) )
-
+        !dum = half*(one-tanh((eta-RR)/tspng))
 
         do i=1,4
             tmp = u

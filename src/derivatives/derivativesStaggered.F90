@@ -582,7 +582,11 @@ contains
                 call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
             end if
         case (2)
-            call this%xcd06 % dd1N2F(f,dfdx,this%xsz(2),this%xsz(3))
+            if (present(bc1) .AND. present(bcn)) then
+               call this%xcd06 % dd1N2F(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
+               call this%xcd06 % dd1N2F(f,dfdx,this%xsz(2),this%xsz(3))
+            end if
         case (3)
             call this%xfour % dd1(f,dfdx)
         case (4)
@@ -623,7 +627,11 @@ contains
                 call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
             end if
         case (2)
-            call this%ycd06 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3))
+             if (present(bc1) .AND. present(bcn)) then
+                call this%ycd06 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+             else
+                call this%ycd06 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3))
+             end if
         case (3)
             call this%yfour % dd2(f,dfdx)
         case (4)
@@ -664,7 +672,11 @@ contains
                 call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         case (2)
-            call this%zcd06 % dd3N2F(f,dfdx,this%zsz(1),this%zsz(2))
+            if (present(bc1) .AND. present(bcn)) then
+                call this%zcd06 % dd3N2F(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            else
+                call this%zcd06 % dd3N2F(f,dfdx,this%zsz(1),this%zsz(2))
+            end if 
         case (3)
             call this%zfour % dd3(f,dfdx)
         case (4)
@@ -704,7 +716,11 @@ contains
                 call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
             end if
         case (2)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%xcd06 % dd1F2N(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
             call this%xcd06 % dd1F2N(f,dfdx,this%xsz(2),this%xsz(3))
+            endif
         case (3)
             call this%xfour % dd1(f,dfdx)
         case (4)
@@ -745,7 +761,11 @@ contains
                 call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
             end if
         case (2)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%ycd06 % dd2F2N(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
             call this%ycd06 % dd2F2N(f,dfdx,this%ysz(1),this%ysz(3))
+            end if 
         case (3)
             call this%yfour % dd2(f,dfdx)
         case (4)
@@ -786,7 +806,11 @@ contains
                 call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         case (2)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%zcd06 % dd3F2N(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            else
             call this%zcd06 % dd3F2N(f,dfdx,this%zsz(1),this%zsz(2))
+            end if
         case (3)
             call this%zfour % dd3(f,dfdx)
         case (4)

@@ -255,6 +255,7 @@ contains
         this%ysz = gp%ysz
         this%zsz = gp%zsz
 
+
         call this%init_procedures (dx, dy, dz, periodic_x, periodic_y, periodic_z,&
                                             method_x,method_y,method_z)
 
@@ -540,7 +541,11 @@ contains
                 call this%xcd10 % dd1(fN,fF,this%xsz(2),this%xsz(3))
             end if
         case (2)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%xci06 % iN2F1(fN,fF,this%xsz(2),this%xsz(3),bc1,bcn)
+             else
             call this%xci06 % iN2F1(fN,fF,this%xsz(2),this%xsz(3))
+            end if
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -583,7 +588,11 @@ contains
                 call this%ycd10 % dd2(fN,fF,this%ysz(1),this%ysz(3))
             end if
         case (2)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%yci06 % iN2F2(fN,fF,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
             call this%yci06 % iN2F2(fN,fF,this%ysz(1),this%ysz(3))
+            end if
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
