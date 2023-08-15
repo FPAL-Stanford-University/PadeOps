@@ -564,6 +564,9 @@
        call mpi_barrier(mpi_comm_world, ierr)
        call message("================= RESTART FILE USED ======================")
        call message(0, "Simulation Time at restart:", this%tsim)
+       call message_min_max(0,"u bounds:",p_minval(minval(u)),p_maxval(maxval(u)))
+       call message_min_max(0,"v bounds:",p_minval(minval(v)),p_maxval(maxval(v)))
+       call message_min_max(0,"w bounds:",p_minval(minval(w)),p_maxval(maxval(w)))
        call message("=================================== ======================")
 
    end subroutine

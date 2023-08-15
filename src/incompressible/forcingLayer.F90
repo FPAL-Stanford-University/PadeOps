@@ -62,7 +62,7 @@ module forcingLayerMod
 
         ! Required for forcing control strategies:
         integer :: controlMethod
-        real(rkind) :: ampFact, tgtDissipation, tgtKE, integralTime, gain
+        real(rkind) :: ampFact, tgtDissipation, tgtKE, integralTime, gain, dV
         integer :: kst, ken
 
         contains
@@ -177,6 +177,10 @@ module forcingLayerMod
           this%yE => yE
           this%zE => zE
 
+          this%dV = (this%x(2,1,1)-this%x(1,1,1)) * &
+                    (this%y(1,2,1)-this%y(1,1,1)) * &
+                    (this%z(1,1,2)-this%z(1,1,1))
+
           this%dumpForce = dumpForce
           this%dumpSplines = dumpSplines
           this%checkDivergence = checkDivergence
@@ -270,7 +274,7 @@ module forcingLayerMod
           if (restartSim) then
               call this%readRestartFiles(runID,TID,this%fx,this%fy,this%fz,&
                 this%gpC,this%gpE)
-             
+
               ! Transform to spectral space
               call this%spectC%fft(this%fx,this%fxhat_old)
               call this%spectC%fft(this%fy,this%fyhat_old)
@@ -403,7 +407,7 @@ module forcingLayerMod
           write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",runID, "_fx.",TID
           fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
           call decomp_2d_read_one(1,fx, fname, gpC)
-          
+
           write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",runID, "_fy.",TID
           fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
           call decomp_2d_read_one(1,fy, fname, gpC)
@@ -411,6 +415,8 @@ module forcingLayerMod
           write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",runID, "_fz.",TID
           fname = this%inputDir(:len_trim(this%inputDir))//"/"//trim(tempname)
           call decomp_2d_read_one(1,fz, fname, gpE)
+
+          call message(1,"Finished reading forcing layer restart files")
 
       end subroutine
 
@@ -494,9 +500,6 @@ module forcingLayerMod
 
                   call this%interpE2C(this%fz,rbuffxC(:,:,:,1),rbuffyC(:,:,:,1),&
                     rbuffzC(:,:,:,1),rbuffyE(:,:,:,1),rbuffzE(:,:,:,1))
-                  !forceWork    = p_sum(sum(u(:,:,this%kst:this%ken)*this%fx(:,:,this%kst:this%ken) + &
-                  !  v(:,:,this%kst:this%ken)*this%fy(:,:,this%kst:this%ken) + &
-                  !  wC(:,:,this%kst:this%ken)*rbuffxC(:,:,this%kst:this%ken,1)))
 
                   ! Now remove the mean if useing version 1 since version 2 is
                   ! guaranteed to have zero mean
@@ -505,13 +508,13 @@ module forcingLayerMod
                       this%fyhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
                   end if
 
-                  forceWork    = p_sum(sum(uF*fxF + vF*fyF + wF*fzF))
+                  forceWork    = this%dV*p_sum(sum(uF*fxF + vF*fyF + wF*fzF))
                   select case (this%controlMethod)
                   case (1)
                     this%ampFact = this%tgtDissipation/(forceWork + 1.d-14)
                   case (2)
-                    KE = 0.5d0*p_sum(sum(uF*uF + vF*vF + wF*wF))
-                    eps = p_sum(sum((1.d0/Re + nSGS_F)*(dudx*dudx + dudy*dudy + &
+                    KE = this%dV*0.5d0*p_sum(sum(uF*uF + vF*vF + wF*wF))
+                    eps = this%dV*p_sum(sum((1.d0/Re + nSGS_F)*(dudx*dudx + dudy*dudy + &
                       dudz*dudz + dvdx*dvdx + dvdy*dvdy + dvdz*dvdz + &
                       dwdx*dwdx + dwdy*dwdy + dwdz*dwdz)))
 

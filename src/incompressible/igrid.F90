@@ -603,6 +603,8 @@ contains
        ! STEP 2.a: If restarting from different mesh, then generate RESTART
        ! files before anything else
        if (restartFromDifferentGrid) then
+           print*, "Restarting from a different grid hasn't been fully tested and debugged"
+           stop
            call assert(useRestartFile,'Must set useRestartFile = .true. if'//&
              ' restartFromDifferentGrid = .true.')
            call this%readAndInterpolateRestartData(restartfile_TID, &

@@ -1,3 +1,54 @@
+module convertViz2RestartMod
+  use kind_parameters, only: clen, rkind
+  use decomp_2d
+  use decomp_2d_io
+  use PadeDerOps, only: Pade6stagg
+  implicit none
+  character(len=clen) :: outputdir, inputdir
+  integer :: inputFile_RID, inputFile_TID, restartfile_TID, restartfile_RID
+  type(Pade6stagg) :: DerOps
+
+  contains
+    subroutine convertCellField(vizName,restartName,rbuffx,gp)
+        character(len=4), intent(in) :: vizName
+        character(len=*), intent(in) :: restartName
+        real(rkind), dimension(:,:,:), intent(inout) :: rbuffx
+        type(decomp_info), intent(inout) :: gp
+        character(len=clen) :: tempname, fname
+
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",inputFile_RID, "_",vizNAme,"_t",inputFile_TID,".out"
+        fname = inputdir(:len_trim(inputdir))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,rbuffx,fname, gp)
+        write(tempname,"(A7,A4,I2.2,A1,A,A1,I6.6)") "RESTART", "_Run",restartfile_RID, "_",restartName,".",restartfile_TID
+        fname = outputdir(:len_trim(outputdir))//"/"//trim(tempname)
+        call decomp_2d_write_one(1,rbuffx,fname,gp)
+    end subroutine
+
+    subroutine convertEdgeField(vizName,restartName,rbuffxC,rbuffyC,rbuffzC,&
+        rbuffzE,gpC,gpE)
+        character(len=4), intent(in) :: vizName
+        character(len=*), intent(in) :: restartName
+        real(rkind), dimension(:,:,:), intent(inout) :: rbuffxC, rbuffyC, &
+          rbuffzC, rbuffzE
+        type(decomp_info), intent(inout) :: gpC, gpE
+        character(len=clen) :: tempname, fname
+      
+        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",inputFile_RID, "_",&
+          vizName,"_t",inputFile_TID,".out"
+        fname = inputdir(:len_trim(inputdir))//"/"//trim(tempname)
+        call decomp_2d_read_one(1,rbuffxC,fname, gpC)
+        write(tempname,"(A7,A4,I2.2,A1,A,A1,I6.6)") "RESTART", "_Run",restartfile_RID, "_",&
+          restartName,".",restartfile_TID
+        fname = outputdir(:len_trim(outputdir))//"/"//trim(tempname)
+   
+        call transpose_x_to_y(rbuffxC, rbuffyC, gpC)
+        call transpose_y_to_z(rbuffyC, rbuffzC, gpC)
+        call DerOps%interpz_C2E(rbuffzC, rbuffzE, -1, -1)
+        call decomp_2d_write_one(3,rbuffzE,fname,gpE)
+    end subroutine
+
+end module convertViz2RestartMod
+
 program convertViz2Restart 
     use kind_parameters, only: rkind, clen
     use gridtools, only: alloc_buffs, destroy_buffs
@@ -7,13 +58,14 @@ program convertViz2Restart
     use timer, only: tic, toc
     use decomp_2d_io
     use constants, only: pi 
-    use PadeDerOps, only: Pade6stagg
     use spectralMod, only: spectral  
+    use convertViz2RestartMod, only: inputdir, outputdir, convertCellField, &
+      inputFile_TID, inputFile_RID, restartfile_TID, restartfile_RID, &
+      convertEdgeField, DerOps
     implicit none
 
     character(len=clen) :: inputfile 
-    character(len=clen) :: outputdir, inputdir
-    integer :: ioUnit, nx, ny, nz, ierr, inputFile_TID, inputFile_RID, restartfile_TID, restartfile_RID
+    integer :: ioUnit, nx, ny, nz, ierr 
     logical :: isStratified = .false. 
     type(decomp_info) :: gpC, gpE
     type(decomp_info), pointer :: sp_gpC, sp_gpE
@@ -23,11 +75,11 @@ program convertViz2Restart
     real(rkind) :: tsim 
     logical :: periodicInZ = .false. 
     real(rkind) :: Lz = 2.d0*pi, dz
-    type(Pade6stagg) :: DerOps
     integer :: NumericalSchemeVert = 2
+    logical :: usingLocalizedForceLayer = .false.
 
     namelist /INPUT/ nx, ny, nz, inputdir, outputdir, inputFile_TID, inputFile_RID, NumericalSchemeVert, &
-      & restartfile_TID, restartfile_RID, isStratified, PeriodicInZ, Lz
+      & restartfile_TID, restartfile_RID, isStratified, PeriodicInZ, Lz, usingLocalizedForceLayer
 
     call MPI_Init(ierr)               !<-- Begin MPI
     call GETARG(1,inputfile)          !<-- Get the location of the input file
@@ -60,7 +112,7 @@ program convertViz2Restart
     if (nrank == 0) then
       !write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",inputFile_RID, "_info.",inputFile_TID
       write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",inputFile_RID, "_","info","_t",inputFile_TID,".out"
-      fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
+      fname = inputdir(:len_trim(inputdir))//"/"//trim(tempname)
       open(unit=10,file=fname,access='sequential',form='formatted')
       read (10, *)  tsim
       close(10)
@@ -68,54 +120,31 @@ program convertViz2Restart
     end if 
 
     call mpi_barrier(mpi_comm_world, ierr)
-    !!!!! CELL FIELDS !!!!!!!!!!!!
-
-    ! Read and Write u - field
-    write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",inputFile_RID, "_","uVel","_t",inputFile_TID,".out"
-    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
-    call decomp_2d_read_one(1,rbuffxC,fname, gpC)
-    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",restartfile_RID, "_u.",restartfile_TID
-    fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-    call decomp_2d_write_one(1,rbuffxC,fname,gpC)
-
-    write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",inputFile_RID, "_","vVel","_t",inputFile_TID,".out"
-    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
-    call decomp_2d_read_one(1,rbuffxC,fname, gpC)
-    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",restartfile_RID, "_v.",restartfile_TID
-    fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-    call decomp_2d_write_one(1,rbuffxC,fname,gpC)
     
-    if (isStratified) then
-      write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",inputFile_RID, "_","potT","_t",inputFile_TID,".out"
-      fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
-      call decomp_2d_read_one(1,rbuffxC,fname, gpC)
-      write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",restartfile_RID, "_T.",restartfile_TID
-      fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-      call decomp_2d_write_one(1,rbuffxC,fname,gpC)
+    !!!!! CELL FIELDS !!!!!!!!!!!
+    call convertCellField('uVel','u',rbuffxC,gpC)
+    call convertCellField('vVel','v',rbuffxC,gpC)
+    if (isStratified) call convertCellField('potT','T',rbuffxC,gpC)
+
+    if (usingLocalizedForceLayer) then
+      call convertCellField('frcx','fx',rbuffxC,gpC)
+      call convertCellField('frcy','fy',rbuffyC,gpC)
     end if
    
     call message(0,"Now converting w to an edge field.")
     call mpi_barrier(mpi_comm_world, ierr)
 
     !!!!!!!!!!!!! EDGE FIELDS !!!!!!!!!!!!!!!
-    ! Read and Write w - field
-    write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",inputFile_RID, "_","wVel","_t",inputFile_TID,".out"
-    fname = InputDir(:len_trim(InputDir))//"/"//trim(tempname)
-    call decomp_2d_read_one(1,rbuffxC,fname, gpC)
-    write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",restartfile_RID, "_w.",restartfile_TID
-    fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
-   
-    call transpose_x_to_y(rbuffxC, rbuffyC, gpC)
-    call transpose_y_to_z(rbuffyC, rbuffzC, gpC)
-    call DerOps%interpz_C2E(rbuffzC, rbuffzE, -1, -1)
-    call decomp_2d_write_one(3,rbuffzE,fname,gpE)
+    call convertEdgeField('wVel','w',rbuffxC,rbuffyC,rbuffzC,rbuffzE,gpC,gpE)
+    if (usingLocalizedForceLayer) call convertEdgeField('frcz','fz',rbuffxC,&
+      rbuffyC,rbuffzC,rbuffzE,gpC,gpE)
     
     call mpi_barrier(mpi_comm_world, ierr)
 
     !!!!!! WRITE HEADER !!!!!!!!!!!
     if (nrank == 0) then
         write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",restartfile_RID, "_info.",restartfile_TID
-        fname = OutputDir(:len_trim(OutputDir))//"/"//trim(tempname)
+        fname = outputdir(:len_trim(outputdir))//"/"//trim(tempname)
         OPEN(UNIT=10, FILE=trim(fname))
         write(10,"(100g15.5)") tsim
         close(10)

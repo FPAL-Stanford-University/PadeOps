@@ -33,6 +33,7 @@ contains
             call message_min_max(1,"Bounds for v:" , p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
             call message_min_max(1,"Bounds for w:" , p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
             call message_min_max(1,"Bounds for T:" , p_minval(minval(gp%T)), p_maxval(maxval(gp%T)))
+            call message(1,"Forcing ampFact:",gp%forcelayer%ampFact)
             call message_min_max(1,"Bounds for fx:", &
               gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fx)), &
               gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fx)))
