@@ -514,8 +514,9 @@ module forcingLayerMod
                     this%ampFact = this%tgtDissipation/(forceWork + 1.d-14)
                   case (2)
                     KE = this%dV*0.5d0*p_sum(sum(uF*uF + vF*vF + wF*wF))
-                    eps = this%dV*p_sum(sum((1.d0/Re + nSGS_F)*(dudx*dudx + dudy*dudy + &
-                      dudz*dudz + dvdx*dvdx + dvdy*dvdy + dvdz*dvdz + &
+                    eps = this%dV*p_sum(sum((1.d0/Re + nSGS_F)*(&
+                      dudx*dudx + dudy*dudy + dudz*dudz + &
+                      dvdx*dvdx + dvdy*dvdy + dvdz*dvdz + &
                       dwdx*dwdx + dwdy*dwdy + dwdz*dwdz)))
 
                     this%ampFact = (eps - this%gain*(KE - this%tgtKE)/this%integralTime)/(forceWork + 1.d-14)
