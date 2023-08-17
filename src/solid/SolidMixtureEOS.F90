@@ -57,8 +57,8 @@ module SolidMixtureMod
         real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV
         
         integer, dimension(2) :: x_bc, y_bc, z_bc
-        real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa,VF_intx, VF_inty,VF_intz, DerX, DerY,DerZ, ddx_exact, ddy_exact 
-        real(rkind), allocatable, dimension(:,:,:)   ::  intX_error, intY_error,derX_error, derY_error, intx_exact, inty_exact, lapTest, DivTest, lap_error, div_error
+        real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa,VF_intx, VF_inty,VF_intz, DerX, DerY,DerZ, ddx_exact, ddy_exact, DerX_Stagg, DerY_Stagg, DerZ_Stagg, ddy_exactStagg 
+        real(rkind), allocatable, dimension(:,:,:)   ::  intX_error, intY_error,derX_error, derY_error, intx_exact, inty_exact, lapTest, DivTest, lap_error, div_error, ddx_exactStagg
         real(rkind), allocatable, dimension(:,:,:,:) :: norm, normFV,gradp,gradVF,gradxi
         real(rkind), allocatable, dimension(:,:,:,:,:) :: gradVF_FV
 	real(rkind), allocatable, dimension(:,:,:)   :: phi
@@ -442,6 +442,21 @@ contains
         if(allocated(this%DerX)) deallocate(this%DerX)
         allocate(this%DerX(this%nxp, this%nyp, this%nzp))
 
+        if(allocated(this%DerY_Stagg)) deallocate(this%DerY_Stagg)
+        allocate(this%DerY_Stagg(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%DerX_Stagg)) deallocate(this%DerX_Stagg)
+        allocate(this%DerX_Stagg(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%DerZ_Stagg)) deallocate(this%DerZ_Stagg)
+        allocate(this%DerZ_Stagg(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%ddx_exactStagg)) deallocate(this%ddx_exactStagg)
+        allocate(this%ddx_exactStagg(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%ddy_exact)) deallocate(this%ddy_exact)
+        allocate(this%ddy_exact(this%nxp, this%nyp, this%nzp))
+
         if(allocated(this%buffer_send_1)) deallocate(this%buffer_send_1)
         allocate(this%buffer_send_1(1,this%nyp, this%nzp))
 
@@ -558,6 +573,11 @@ contains
         if(allocated(this%ddy_exact)) deallocate(this%ddy_exact)
         if(allocated(this%DerY)) deallocate(this%DerY)
         if(allocated(this%DerX)) deallocate(this%DerX)
+        if(allocated(this%ddx_exactStagg)) deallocate(this%ddx_exactStagg)
+        if(allocated(this%ddy_exactStagg)) deallocate(this%ddy_exactStagg)
+        if(allocated(this%DerY_Stagg)) deallocate(this%DerY_Stagg)
+        if(allocated(this%DerX_Stagg)) deallocate(this%DerX_Stagg)
+        if(allocated(this%DerX_Stagg)) deallocate(this%DerX_Stagg)
         if(allocated(this%derY_error)) deallocate(this%derY_error)
         if(allocated(this%derX_error)) deallocate(this%derX_error)
         if(allocated(this%intX_error)) deallocate(this%intY_error)
@@ -5081,7 +5101,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
     subroutine Test_Der(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z,transpose_z_to_y
-        use operators, only: gradFV_x, gradFV_y,gradFV_z, interpolateFV_x,interpolateFV_y, interpolateFV_z, divergenceFV, laplacian
+        use operators, only: gradFV_x, gradFV_y,gradFV_z, interpolateFV_x,interpolateFV_y, interpolateFV_z, divergenceFV, laplacian, gradFV_N2Fz, gradFV_N2Fy, gradFV_N2Fx, gradFV_N2F
         use constants,       only: zero,epssmall,eps,one,two,third,half, pi
         use exits,           only: GracefulExit
         use reductions, only : P_MAXVAL
@@ -5105,15 +5125,22 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
          
         this%ddx_exact  = ( 2.0) * cos(2.0*x) *cos(4.0*y) - 3*sin(x)
         this%ddy_exact =  (-4.0) * sin(2.0*x) *sin(4.0*y) + 5*cos(y)
+        this%ddx_exactStagg = ( 2.0) * cos(2.0*x_half) *cos(4.0*y) - 3*sin(x_half)
+        this%ddy_exactStagg =  (-4.0) * sin(2.0*x) *sin(4.0*y_half) + 5*cos(y_half)
+
         this%intx_exact = sin(2.0*x_half)*cos(4.0*y) + 5*sin(y) + 3*cos(x_half)
         this%inty_exact = sin(2.0*x)*cos(4.0*y_half) +5*sin(y_half) + 3*cos(x)
         this%intX_error = abs( sin(2.0*x_half)*cos(4.0*y) +  5*sin(y) + 3*cos(x_half) - this%VF_intx)
         this%intY_error = abs( sin(2.0*x)*cos(4.0*y_half) +5*sin(y_half) + 3*cos(x) - this%VF_intY) 
         call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        print *, "gradVF x"
         call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        print *, "gradVF_y"
         call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        
+        !call gradFV_N2Fx(this%decomp,this%derStagg,this%material(1)%VF,this%DerX_Stagg,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !call gradFV_N2Fy(this%decomp,this%derStagg,this%material(1)%VF,this%DerY_Stagg,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !call gradFV_N2Fz(this%decomp,this%derStagg,this%material(1)%VF,this%DerZ_Stagg,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         
+        call gradFV_N2F(this%decomp,this%derStagg,this%material(1)%VF,this%DerX_Stagg,this%DerY_Stagg, this%DerZ_Stagg,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         call divergenceFV(this%decomp,this%derStagg,this%VF_intx, this%VF_inty, this%VF_intz,this%DivTest,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         call laplacian(this%decomp,this%der, this%material(1)%VF, this%lapTest, x_bc,y_bc, z_bc)
         

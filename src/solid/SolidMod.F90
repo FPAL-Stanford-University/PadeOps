@@ -5173,8 +5173,8 @@ contains
         call filter3D(this%decomp, fil_, this%consrv(:,:,:,1), iflag, x_bc, y_bc, z_bc)
 
         if(this%pEqb) then
-            ! filter VF
-          !  call filter3D(this%decomp, fil_, this%VF, iflag, x_bc, y_bc,z_bc)
+            !!!!!!! USE FOR 5 EQN !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! filter VF
+            call filter3D(this%decomp, fil_, this%VF, iflag, x_bc, y_bc,z_bc)
         endif
 
         if(this%pRelax) then
@@ -5304,7 +5304,6 @@ contains
            call this%hydro%get_enthalpy(this%T,enthalpy)
         elseif (this%pEqb) then
            call this%hydro%get_enthalpy_5eqn(this%p,this%rhom,enthalpy)
-           print *, "5eqn"
         endif
     end subroutine
 

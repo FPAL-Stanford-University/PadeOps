@@ -649,6 +649,23 @@ contains
             end do 
           case("N2F")
           !!!!!!!!!!!!!!!!!!!!! To do     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+              do k = 1,n3
+                do j = 1,n2
+                    RHS(1         ,j,k) = a06 * ( f(2,j,k)          - f(1,j,k) ) &
+                                        + b06 * ( f(3,j,k)          - f(this%n,j,k) )
+
+
+                    RHS(2:this%n-2,j,k) = a06 * ( f(3:this%n-1,j,k) - f(2:this%n-2,j,k) ) &
+                                        + b06 * ( f(4:this%n,j,k) - f(1:this%n-3,j,k) )
+
+                    RHS(this%n-1  ,j,k) = a06 * ( f(this%n,j,k)         - f(this%n-1,j,k) ) &
+                                        + b06 * ( f(1,j,k)           - f(this%n-2,j,k) )
+
+                    RHS(this%n    ,j,k) = a06 * ( f(1,j,k)           - f(this%n,j,k) ) &
+                                        + b06 * ( f(2,j,k)                - f(this%n-1,j,k) )
+                end do
+            end do
+
 
         end select
 
@@ -782,6 +799,20 @@ contains
             end do 
            case("N2F")
          !!!!!!!!!!!!!!!!!!!!!!!!!!   TO DO        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            do k = 1,n3
+                    RHS(:,1         ,k) = a06 * ( f(:,2,k)          - f(:,1,k) ) &
+                                        + b06 * ( f(:,3,k)          - f(:,this%n,k) )
+
+                    RHS(:,2:this%n-2,k) = a06 * ( f(:,3:this%n-1,k) - f(:,2:this%n-2,k) ) &
+                                        + b06 * ( f(:,4:this%n  ,k) - f(:,1:this%n-3,k) )
+
+                    RHS(:,this%n-1  ,k) = a06 * ( f(:,this%n,k)         - f(:,this%n-1,k) ) &
+                                        + b06 * ( f(:,1,k)          -  f(:,this%n-2,k) )
+
+                    RHS(:,this%n    ,k) = a06 * ( f(:,1,k)          -  f(:,this%n,k) ) &
+                                        + b06 * ( f(:,2,k)          -       f(:,this%n-1,k) )
+                !end do 
+            end do
 
           end select
         case (.FALSE.)
@@ -907,7 +938,17 @@ contains
             case("N2F")
 
             !!!!! To Do      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- 
+            RHS(:,:,1         ) = a06 * ( f(:,:,2)          - f(:,:,1) ) &
+                                + b06 * ( f(:,:,3)          - f(:,:,this%n) ) 
+
+            RHS(:,:,2:this%n-2) = a06 * ( f(:,:,3:this%n-1) - f(:,:,2:this%n-2)) &
+                               + b06 * ( f(:,:,4:this%n) - f(:,:,1:this%n-3) )
+
+            RHS(:,:, this%n-1  ) = a06 * ( f(:,:, this%n)         - f(:,:, this%n-1) ) &
+                               + b06 * ( f(:,:,1)            - f(:,:, this%n-2) )
+
+            RHS(:,:,this%n    ) = a06 * ( f(:,:,1)          - f(:,:, this%n) ) &
+                                + b06 * ( f(:,:,2)          - f(:,:, this%n-1 ) )
          end select
         case (.FALSE.)
 
