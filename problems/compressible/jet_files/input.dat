@@ -1,0 +1,65 @@
+&INPUT
+
+inputdir  =  "/home/nghaisas/runs/cgrid/jet1"      ! Directory for input files
+outputdir  = "/home/nghaisas/runs/cgrid/jet1"      ! Directory for output files
+
+nx = 128                  ! Number of points in X
+ny = 64                   ! Number of points in Y
+nz = 1                    ! Number of points in Z
+
+dt = 1.0D-4               ! Fixed time step value (Set to negative to disable)
+tstop = 200.D0             ! Physical time to stop the simulation
+CFL = 0.7D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 4.0D0             ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "jet"   ! Prefix for the visualization files
+reduce_precision  = .false.
+
+periodicx = .FALSE.       ! Periodic in X?
+periodicy = .TRUE.        ! Periodic in Y?
+periodicz = .TRUE.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+
+SkewSymm   = .false.
+/
+
+&CINPUT
+ns   = 1
+gam  = 1.4D0              ! Ratio of specific heats
+Rgas = 1.D0               ! Ratio of specific heats
+x_bc1 = 0                 ! Left  X boundary ( 0 => general, 1 => symmetric ) 
+x_bcn = 0                 ! Right X boundary ( 0 => general, 1 => symmetric ) 
+y_bc1 = 0                 ! Left  X boundary ( 0 => general, 1 => symmetric ) 
+y_bcn = 0                 ! Right X boundary ( 0 => general, 1 => symmetric ) 
+z_bc1 = 0                 ! Left  X boundary ( 0 => general, 1 => symmetric ) 
+z_bcn = 0                 ! Right X boundary ( 0 => general, 1 => symmetric ) 
+compute_tke_budget = .false.
+compute_scale_decomposition = .false.
+forcing = .false
+/
+
+&PROBINPUT
+Lx = 30.0d0      ! domain size in x
+Ly = 10.0d0      ! domain size in x
+Lz = 1.0d0       ! domain size in x
+U0 = 1.0d0      ! main inflow velocity
+Uco = 0.05d0      ! coflow velocity
+Re = 10.0d0      ! Reynolds number
+Pr = 0.7d0      ! Prandtl number
+Sc = 0.7d0      ! Schmidt number
+T_ref = 1.0d0      ! Ref Temperature
+D = 1.0d0      ! diameter of jet inlet
+ycen = 5.0d0      ! center of jet inlet in y
+zcen = 0.0d0      !  center of jet inlet in z; set equal to 0 for 2D simulation
+/

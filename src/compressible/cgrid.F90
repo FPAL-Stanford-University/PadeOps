@@ -1042,12 +1042,9 @@ contains
                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
             end if
 
-            print *, '--wcns--', p_maxval(this%Wcnsrv(:,:,:,3)), p_minval(this%Wcnsrv(:,:,:,3))
             call this%get_primitive()
-            print *, '--v--', p_maxval(this%v), p_minval(this%v)
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
-            print *, '--v-postbc-', p_maxval(this%v), p_minval(this%v)
 
             ! Compute TKE budgets
             if ((vizcond) .and. ((this%compute_tke_budget) .or. (this%compute_scale_decomposition))) then
