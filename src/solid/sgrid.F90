@@ -961,32 +961,53 @@ contains
     end subroutine
 
     subroutine getRHS_P(this,rhsP,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z
+        use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z, gradFV_x, gradFV_y, gradFV_z
         class(sgrid),                                         intent(inout)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out)    :: rhsP
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,tmp1,tmp2,tmp3,u_int,v_int, w_int,flux,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,tmp1,tmp2,tmp3,u_int,v_int, w_int,flux,divu, Gam,esum,ksum
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rho_int,Ys_int,rhoYs_int, p_int
-
+        integer :: i
        ! vcon = 100
        if(.NOT. this%use_Stagg) then
 
        else
+
+         Gam = 0
+         esum = 0
+         do i = 1,2
+
+            Gam = Gam + this%mix%material(i)%VF/(this%mix%material(i)%hydro%gam- 1 )
+            esum = esum + this%mix%material(i)%eh*this%mix%material(i)%rhom*this%mix%material(i)%intSharp_aFV
+            
+         enddo
 
          call interpolateFV_x(this%decomp,this%interpMid,this%u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV_y(this%decomp,this%interpMid,this%v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV_z(this%decomp,this%interpMid,this%w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV(this%decomp,this%interpMid,this%p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-         call divergenceFV(this%decomp,this%derStagg,-u_int*p_int(:,:,:,1),-v_int*p_int(:,:,:,2),-w_int*p_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call gradFV_x(this%decomp,this%derStagg,-p_int(:,:,:,1),tmp1,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call gradFV_y(this%decomp,this%derStagg,-p_int(:,:,:,2),tmp2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call gradFV_z(this%decomp,this%derStagg,-p_int(:,:,:,3),tmp3,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         !call divergenceFV(this%decomp,this%derStagg,-u_int*p_int(:,:,:,1),-v_int*p_int(:,:,:,2),-w_int*p_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call divergenceFV(this%decomp,this%derStagg,-u_int,-v_int,-w_int,divu,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-         rhsP = tmp + (this%rho*this%sos**2 - this%p)*divu 
+         if( .NOT. this%intSharp) then
+   
+            rhsP = tmp1*this%u + tmp2*this%v + tmp3*this%w + (1/Gam)*(this%rho*this%e +this%p)*divu 
+ 
+         else
 
+            rhsP = tmp1*this%u + tmp2*this%v + tmp3*this%w + (1/Gam)*((this%rho*this%e +this%p)*divu + this%mix%intSharp_hFV - esum)
+
+         endif
 
        endif
     end subroutine
+
+
     subroutine simulate(this)
         use reductions, only: P_MEAN
         use timer,      only: tic, toc
@@ -1944,7 +1965,7 @@ contains
            rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + this%mix%intSharp_fFV(:,:,:,1)
            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + this%mix%intSharp_fFV(:,:,:,2)
            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + this%mix%intSharp_fFV(:,:,:,3)
-           rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%mix%intSharp_hFV
+           rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%mix%intSharp_hFV + this%mix%intSharp_kFV
 
         else
 

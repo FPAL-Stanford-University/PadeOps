@@ -54,7 +54,7 @@ module SolidMixtureMod
         real(rkind), allocatable, dimension(:,:,:)   :: surfaceTension_fxx, surfaceTension_fyy, surfaceTension_fzz, surfaceTension_fxy,surfaceTension_fxz, surfaceTension_fyz, surfaceTension_pe
         real(rkind), allocatable, dimension(:,:,:)   :: surfaceTension_pe_x,surfaceTension_pe_y, surfaceTension_pe_z
         real(rkind), allocatable, dimension(:,:,:) :: surfaceTension_e,surfaceTension_fxy_x,surfaceTension_fxy_y, surfaceTension_fxz_x,surfaceTension_fxz_z, surfaceTension_fyz_y, surfaceTension_fyz_z
-        real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV
+        real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV, intSharp_kFV
         
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa,VF_intx, VF_inty,VF_intz, DerX, DerY,DerZ, ddx_exact, ddy_exact 
@@ -296,6 +296,9 @@ contains
         if(allocated(this%intSharp_hFV)) deallocate(this%intSharp_hFV)
         allocate(this%intSharp_hFV(this%nxp, this%nyp, this%nzp))
 
+        if(allocated(this%intSharp_kFV)) deallocate(this%intSharp_kFV)
+        allocate(this%intSharp_kFV(this%nxp, this%nyp, this%nzp))
+
         if(allocated(this%VFboundDiff)) deallocate(this%VFboundDiff)
         allocate(this%VFboundDiff(this%nxp, this%nyp, this%nzp, this%ns))
 
@@ -513,6 +516,7 @@ contains
         if(allocated(this%intSharp_hDiff)) deallocate(this%intSharp_hDiff)
         if(allocated(this%intSharp_fFV)) deallocate(this%intSharp_fFV)
         if(allocated(this%intSharp_hFV)) deallocate(this%intSharp_hFV)
+        if(allocated(this%intSharp_kFV)) deallocate(this%intSharp_kFV)
         if(allocated(this%VFboundDiff)) deallocate(this%VFboundDiff)
         if(allocated(this%antiDiffTerm)) deallocate(this%antiDiffTerm)
         if(allocated(this%DiffTerm)) deallocate(this%DiffTerm)
@@ -2590,7 +2594,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), intent(in) :: dx,dy,dz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradRhoYs,gradVF,gradVFdiff,fv_f,fv_h,tmp4, gradphi
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradRhoYs,gradVF,gradVFdiff,fv_f,fv_h,tmp4, gradphi, fv_k
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: rhoi,VFbound,hi,spf_a,spf_r
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint, gradxi,VFint,uFVint,vFVint,wFVint,gFVint,gtFVint,gpFVint,rhoFVint, kernel
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint, rhoiFVint_local,pFVint
@@ -3747,19 +3751,22 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  !finish FV enthalpy term
                  if(this%intSharp_ufv) then
                     fv_h = zero
+                    fv_k = zero
 
      
                     do i=1,this%ns
       
                        if(this%PTeqb) then
-                           fv_h = fv_h + antiDiffFVint(:,:,:,:,i)*(rhoiFVint_local(:,:,:,:,i)*hiFVint(:,:,:,:,i)+rhoiFVint(:,:,:,:,i)*half*(uFVint**two+vFVint**two+wFVint**two))
+                           fv_h = fv_h + antiDiffFVint(:,:,:,:,i)*(rhoiFVint_local(:,:,:,:,i)*hiFVint(:,:,:,:,i))
+                           fv_k = fv_k + antiDiffFVint(:,:,:,:,i)*rhoiFVint(:,:,:,:,i)*half*(uFVint**two+vFVint**two+wFVint**two)
                        else
-                           fv_h = fv_h + antiDiffFVint(:,:,:,:,i)*(hiFVint(:,:,:,:,i)+rhoiFVint(:,:,:,:,i)*half*(uFVint**two+vFVint**two+wFVint**two)) 
-
+                           fv_h = fv_h + antiDiffFVint(:,:,:,:,i)*(hiFVint(:,:,:,:,i)) 
+                           fv_k = fv_k + antiDiffFVint(:,:,:,:,i)*rhoiFVint(:,:,:,:,i)*half*(uFVint**two+vFVint**two+wFVint**two)
                        endif
                     enddo
 
                     call divergenceFV(this,fv_h,this%intSharp_hFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+                    call divergenceFV(this,fv_k,this%intSharp_kFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
                  endif
 
               endif
