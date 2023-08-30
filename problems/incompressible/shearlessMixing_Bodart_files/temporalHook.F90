@@ -33,16 +33,31 @@ contains
             call message_min_max(1,"Bounds for v:" , p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
             call message_min_max(1,"Bounds for w:" , p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
             call message_min_max(1,"Bounds for T:" , p_minval(minval(gp%T)), p_maxval(maxval(gp%T)))
-            call message(1,"Forcing ampFact:",gp%forcelayer%ampFact)
-            call message_min_max(1,"Bounds for fx:", &
-              gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fx)), &
-              gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fx)))
-            call message_min_max(1,"Bounds for fy:", &
-              gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fy)), &
-              gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fy)))
-            call message_min_max(1,"Bounds for fz:", &
-              gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fz)), &
-              gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fz)))
+            if (gp%localizedForceLayer == 1) then
+                call message(1,"Forcing ampFact:",gp%forcelayer%ampFact)
+                call message_min_max(1,"Bounds for fx:", &
+                  gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fx)), &
+                  gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fx)))
+                call message_min_max(1,"Bounds for fy:", &
+                  gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fy)), &
+                  gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fy)))
+                call message_min_max(1,"Bounds for fz:", &
+                  gp%forcelayer%ampFact*p_minval(minval(gp%forcelayer%fz)), &
+                  gp%forcelayer%ampFact*p_maxval(maxval(gp%forcelayer%fz)))
+            elseif (gp%localizedForceLayer == 2) then
+                call message(1,"Forcing layer divergence",gp%spectForceLayer%maxDiv)
+                call message(1,"Forcing layer max all-time divergence",gp%spectForceLayer%maxDivAllTime)
+                call message_min_max(1,"Bounds for fx:", &
+                  gp%spectForceLayer%ampFact*p_minval(minval(gp%spectForceLayer%fx)), &
+                  gp%spectForceLayer%ampFact*p_maxval(maxval(gp%spectForceLayer%fx)))
+                call message_min_max(1,"Bounds for fy:", &
+                  gp%spectForceLayer%ampFact*p_minval(minval(gp%spectForceLayer%fy)), &
+                  gp%spectForceLayer%ampFact*p_maxval(maxval(gp%spectForceLayer%fy)))
+                call message_min_max(1,"Bounds for fz:", &
+                  gp%spectForceLayer%ampFact*p_minval(minval(gp%spectForceLayer%fz)), &
+                  gp%spectForceLayer%ampFact*p_maxval(maxval(gp%spectForceLayer%fz)))
+
+            end if
             if (gp%useCFL) then
                 call message(1,"Current dt:",gp%dt)
             end if 

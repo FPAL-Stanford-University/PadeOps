@@ -325,6 +325,7 @@
        logical, intent(in) :: AlreadyProjected
        integer :: idx 
 
+
        ! Step 1: Dealias
        call this%dealiasFields()
 

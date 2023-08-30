@@ -18,6 +18,7 @@ module forcingLayerMod
     use fortran_assert, only: assert
     use constants, only: third, half, rmaxInt, im0
     use interpolatorMod, only: interpolator
+    use gridtools, only: onThisRank, getStEndIndices
     
     implicit none
     private
@@ -25,41 +26,47 @@ module forcingLayerMod
     real(rkind), dimension(4) :: xsample = [0.d0, 1.d0/3.d0, 2.d0/3.d0, 1.d0]
     real(rkind), dimension(4) :: vsample = [0.d0, 2.d0/3.d0, 2.d0/3.d0, 0.d0]
     integer, parameter :: zbc_bot = 0, zbc_top = 0
-    public :: forcingLayer, onThisRank, getStEndIndices
+    public :: forcingLayer!, onThisRank, getStEndIndices
 
     type :: forcingLayer
-        integer :: nblocks ! The number of forcing blocks in each x,y direction
-        real(rkind) :: lf  ! Physical size of forcing layer
-        real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz
-        complex(rkind), dimension(:,:,:), allocatable :: fxhat, fyhat, fzhat
-        complex(rkind), dimension(:,:,:), allocatable :: fxhat_old, fyhat_old, fzhat_old
-        real(rkind), dimension(:,:,:), allocatable :: phixC, phiyC, phizC
-        real(rkind), dimension(:,:,:), allocatable :: phixE, phiyE, phizE
-        real(rkind), dimension(:,:,:), allocatable :: dphixC, dphiyC, dphizC
-        real(rkind), dimension(:,:,:), allocatable :: dphixE, dphiyE, dphizE
-        type(decomp_info), pointer :: gpC, gpE, sp_gpC, sp_gpE
-        type(spectral), pointer :: spectC, spectE
+        real(rkind),    dimension(:,:,:),   allocatable :: fx, fy, fz
+        complex(rkind), dimension(:,:,:),   allocatable :: fxhat, fyhat, fzhat,&
+                                                           fxhat_old, fyhat_old, fzhat_old
+        real(rkind),    dimension(:,:,:),   allocatable :: phixC, phiyC, phizC
+        real(rkind),    dimension(:,:,:),   allocatable :: phixE, phiyE, phizE
+        real(rkind),    dimension(:,:,:),   allocatable :: dphixC, dphiyC, dphizC
+        real(rkind),    dimension(:,:,:),   allocatable :: dphixE, dphiyE, dphizE
+        real(rkind),    dimension(:,:,:),   allocatable :: k1C, k1E
+        real(rkind),    dimension(:,:,:),   allocatable :: sp_buffyC, sp_buffyE
+        real(rkind),    dimension(:,:),     allocatable :: zshift
+        real(rkind),    dimension(:),       allocatable :: y1D
+        
+        integer, dimension(:,:), allocatable :: forceType
+        
         real(rkind), dimension(4) :: xs, ys, zs, vs ! Sample points for spline interpolation
         real(rkind), dimension(:,:,:), pointer :: x, y, z, xE, yE, zE
         real(rkind) :: zgap, zst
         real(rkind), dimension(3) :: periodicXshift, periodicYshift
+        real(rkind) :: seedFact
+        real(rkind) :: xshift = 0.d0, yshift = 0.d0
+        real(rkind) :: Lx, Ly
+        real(rkind) :: maxDiv
+        real(rkind) :: lf  ! Physical size of forcing layer
+        
+        integer :: nblocks ! The number of forcing blocks in each x,y direction
+        integer :: seed, fixedForceType, version
+        
+        type(decomp_info), pointer :: gpC, gpE, sp_gpC, sp_gpE
+        type(spectral), pointer :: spectC, spectE
         type(Pade6Stagg), pointer :: Pade6opZ
+        type(padePoisson), pointer :: poiss
+        
         logical :: dumpForce, dumpSplines, checkDivergence
         logical :: randomizeBlockPosition_xy, randomizeBlockPosition_z
-        real(rkind) :: seedFact
-        integer :: seed, fixedForceType
-        real(rkind) :: xshift = 0.d0, yshift = 0.d0
-        real(rkind), dimension(:,:), allocatable :: zshift
-        type(padePoisson), pointer :: poiss
-        integer, dimension(:,:), allocatable :: forceType
-        real(rkind) :: Lx, Ly
-        real(rkind), dimension(:,:,:), allocatable :: k1C, k1E
-        real(rkind), dimension(:,:,:), allocatable :: sp_buffyC, sp_buffyE
-        integer :: version
-        character(len=clen) :: inputdir
         logical :: initFull = .false.
-        real(rkind) :: maxDiv
 
+        character(len=clen) :: inputdir
+        
         ! Required for forcing control strategies:
         integer :: controlMethod
         real(rkind) :: ampFact, tgtDissipation, tgtKE, integralTime, gain, dV
@@ -83,7 +90,7 @@ module forcingLayerMod
     contains
 
       subroutine init_lightweight(this,gpC,gpE,TID,runID,restartSim,inputdir)
-          class(forcingLayer), intent(inout) :: this
+          class(forcingLayer), intent(inout), target :: this
           type(decomp_info), intent(inout), target :: gpC, gpE
           integer, intent(in) :: TID, runID
           logical, intent(in) :: restartSim
@@ -92,7 +99,7 @@ module forcingLayerMod
           this%gpC => gpC
           this%gpE => gpE
           this%inputdir = inputdir
-          
+         
           allocate(this%fx( this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
           allocate(this%fy( this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
           allocate(this%fz( this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
@@ -107,7 +114,7 @@ module forcingLayerMod
 
       subroutine init_full(this,inputfile,Lx,Ly,mesh,xE,yE,zE,gpC,gpE,spectC,spectE,Pade6opZ,PadePoiss,&
           runID,TID,inputdir,rbuffxC,rbuffxE,cbuffxC,cbuffxE,cbuffyC,cbuffyE,cbuffzC,cbuffzE,restartSim)
-          class(forcingLayer), intent(inout) :: this
+          class(forcingLayer), intent(inout), target :: this
           character(len=*), intent(in) :: inputfile, inputdir
           real(rkind), intent(in) :: Lx, Ly
           real(rkind), dimension(:,:,:,:), intent(in), target :: mesh ! Cell-centered mesh (x,y,z)
@@ -247,8 +254,10 @@ module forcingLayerMod
           allocate(this%sp_buffyC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
           allocate(this%sp_buffyE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
 
-          allocate(z1D(this%gpC%xsz(3)))
-          z1D = this%z(1,1,:)
+          allocate(this%y1D(this%gpC%xsz(2)))
+          allocate(     z1D(this%gpC%xsz(3)))
+          this%y1D = this%y(1,:,1)
+          z1D      = this%z(1,1,:)
 
           this%k1C = spectC%k1
           this%k1E = spectE%k1
@@ -423,24 +432,47 @@ module forcingLayerMod
       subroutine destroy(this)
           class(forcingLayer), intent(inout) :: this
          
-          if (this%initFull) then
-              deallocate(this%fxhat, this%fyhat, this%fzhat)
-              deallocate(this%fxhat_old, this%fyhat_old, this%fzhat_old)
-              deallocate(this%phixC, this%phiyC, this%phizC)
-              deallocate(this%phixE, this%phiyE, this%phizE)
-              deallocate(this%dphixC, this%dphiyC, this%dphizC)
-              deallocate(this%dphixE, this%dphiyE, this%dphizE)
-              deallocate(this%zshift, this%forceType, this%k1C, this%k1E)
-              deallocate(this%sp_buffyC, this%sp_buffyE)
-          
-              nullify(this%sp_gpC, this%sp_gpE)
-              nullify(this%spectC, this%spectE)
-              nullify(this%x, this%y, this%z, this%xE, this%yE, this%zE)
-              nullify(this%Pade6opZ, this%poiss)
-          end if 
-          
-          deallocate(this%fx, this%fy, this%fz)
           nullify(this%gpC, this%gpE)
+          if (associated(this%sp_gpC   )) nullify(this%sp_gpC)
+          if (associated(this%sp_gpE   )) nullify(this%sp_gpE)
+          if (associated(this%spectC   )) nullify(this%spectC)
+          if (associated(this%spectE   )) nullify(this%spectE)
+          if (associated(this%x        )) nullify(this%x)
+          if (associated(this%y        )) nullify(this%y)
+          if (associated(this%z        )) nullify(this%z)
+          if (associated(this%xE       )) nullify(this%xE)
+          if (associated(this%yE       )) nullify(this%yE)
+          if (associated(this%zE       )) nullify(this%zE)
+          if (associated(this%Pade6opZ )) nullify(this%Pade6opZ)
+          if (associated(this%poiss    )) nullify(this%poiss)
+          
+          if (allocated(this%phixC)) deallocate(this%phixC)
+          if (allocated(this%phiyC)) deallocate(this%phiyC)
+          if (allocated(this%phizC)) deallocate(this%phizC)
+          if (allocated(this%dphixC)) deallocate(this%dphixC)
+          if (allocated(this%dphiyC)) deallocate(this%dphiyC)
+          if (allocated(this%dphizC)) deallocate(this%dphizC)
+          if (allocated(this%phixE)) deallocate(this%phixE)
+          if (allocated(this%phiyE)) deallocate(this%phiyE)
+          if (allocated(this%phizE))  deallocate(this%phizE)
+          if (allocated(this%dphixE)) deallocate(this%dphixE)
+          if (allocated(this%dphiyE)) deallocate(this%dphiyE)
+          if (allocated(this%dphizE)) deallocate(this%dphizE)
+          if (allocated(this%fxhat    )) deallocate(this%fxhat)
+          if (allocated(this%fyhat    )) deallocate(this%fyhat)
+          if (allocated(this%fzhat    )) deallocate(this%fzhat)
+          if (allocated(this%fxhat_old)) deallocate(this%fxhat_old)
+          if (allocated(this%fyhat_old)) deallocate(this%fyhat_old)
+          if (allocated(this%fzhat_old)) deallocate(this%fzhat_old)
+          if (allocated(this%zshift)) deallocate(this%zshift)
+          if (allocated(this%forceType)) deallocate(this%forceType)
+          if (allocated(this%k1C)) deallocate(this%k1C)
+          if (allocated(this%k1E)) deallocate(this%k1E)
+          if (allocated(this%sp_buffyC)) deallocate(this%sp_buffyC)
+          if (allocated(this%sp_buffyE)) deallocate(this%sp_buffyE)
+          if (allocated(this%y1D)) deallocate(this%y1D)
+          deallocate(this%fx, this%fy, this%fz)
+          
       end subroutine
 
       subroutine updateRHS(this,urhs,vrhs,wrhs,u,v,wC,duidxjC,Re,nSGS,&
@@ -619,54 +651,67 @@ module forcingLayerMod
           ! Step 2: get the elementary force for each block
           do j = 1,this%nblocks
               yst = (j - 1)*this%lf
-              do i = 1,this%nblocks
-                xst = (i - 1)*this%lf
-                
-                this%phixC = 0.d0; this%phiyC = 0.d0; this%phizC = 0.d0
-                this%phixE = 0.d0; this%phiyE = 0.d0; this%phizE = 0.d0
-                
-                ! Add periodic contributions
-                do n = 1,size(this%periodicXshift)
-                    xmid = this%xs + xst + this%xshift + this%periodicXshift(n)
-                    ymid = this%ys + yst + this%yshift + this%periodicYshift(n)
-                
-                    this%phixC = this%phixC + spline2(xmid,this%vs,this%x ,1,this%gpC)
-                    this%phiyC = this%phiyC + spline2(ymid,this%vs,this%y ,2,this%gpC)
+              !if (onThisRank(this%y1D,this%ys(1)             + yst + this%yshift + this%periodicYshift(1),&
+              !                        this%ys(size(this%ys)) + yst + this%yshift + this%periodicYshift(1)) .or. &
+              !    onThisRank(this%y1D,this%ys(1)             + yst + this%yshift + this%periodicYshift(2),&
+              !                        this%ys(size(this%ys)) + yst + this%yshift + this%periodicYshift(2)) .or. &
+              !    onThisRank(this%y1D,this%ys(1)             + yst + this%yshift + this%periodicYshift(3),&
+              !                        this%ys(size(this%ys)) + yst + this%yshift + this%periodicYshift(3))) then
+                  do i = 1,this%nblocks
+                    xst = (i - 1)*this%lf
                     
-                    this%phixE = this%phixE + spline2(xmid,this%vs,this%xE,1,this%gpE)
-                    this%phiyE = this%phiyE + spline2(ymid,this%vs,this%yE,2,this%gpE)
-                end do
-                
-                this%phizC = spline2(this%zs + this%zst + this%zshift(i,j),this%vs,this%z ,3,this%gpC)
-                this%phizE = spline2(this%zs + this%zst + this%zshift(i,j),this%vs,this%zE,3,this%gpE)
-               
-                ! Get derivatives
-                call ddx(this%phixC,this%dphixC,cbuffyC,this%spectC,this%sp_buffyC,this%k1C)
-                call ddx(this%phixE,this%dphixE,cbuffyE,this%spectE,this%sp_buffyE,this%k1E)
-                
-                call ddy(this%phiyC,this%dphiyC,cbuffyC,this%spectC)
-                call ddy(this%phiyE,this%dphiyE,cbuffyE,this%spectE)
-                
-                call ddz_E2C(this%phizE,this%dphizC,cbuffyE(:,:,:,1),cbuffyC(:,:,:,1),&
-                  cbuffzE(:,:,:,1),cbuffzC(:,:,:,1), this%spectC,this%spectE,this%sp_gpE,&
-                  this%sp_gpC,this%pade6opZ)
-                call ddz_C2E(this%phizC,this%dphizE,cbuffyE(:,:,:,1),cbuffyC(:,:,:,1),&
-                  cbuffzE(:,:,:,1),cbuffzC(:,:,:,1), this%spectC,this%spectE,this%sp_gpE,&
-                  this%sp_gpC,this%pade6opZ)
+                    this%phixC = 0.d0; this%phiyC = 0.d0; this%phizC = 0.d0
+                    this%phixE = 0.d0; this%phiyE = 0.d0; this%phizE = 0.d0
+                    
+                    ! Add periodic contributions
+                    do n = 1,size(this%periodicXshift)
+                        xmid = this%xs + xst + this%xshift + this%periodicXshift(n)
+                        ymid = this%ys + yst + this%yshift + this%periodicYshift(n)
+                    
+                        this%phixC = this%phixC + spline2(xmid,this%vs,this%x ,1,this%gpC)
+                        this%phiyC = this%phiyC + spline2(ymid,this%vs,this%y ,2,this%gpC)
+                        
+                        this%phixE = this%phixE + spline2(xmid,this%vs,this%xE,1,this%gpE)
+                        this%phiyE = this%phiyE + spline2(ymid,this%vs,this%yE,2,this%gpE)
+                    end do
+                    
+                    this%phizC = spline2(this%zs + this%zst + this%zshift(i,j),this%vs,this%z ,3,this%gpC)
+                    this%phizE = spline2(this%zs + this%zst + this%zshift(i,j),this%vs,this%zE,3,this%gpE)
+                   
+                    ! Get derivatives
+                    call ddx(this%phixC,this%dphixC,cbuffyC,this%spectC,this%sp_buffyC,this%k1C)
+                    call ddx(this%phixE,this%dphixE,cbuffyE,this%spectE,this%sp_buffyE,this%k1E)
+                    
+                    call ddy(this%phiyC,this%dphiyC,cbuffyC,this%spectC)
+                    call ddy(this%phiyE,this%dphiyE,cbuffyE,this%spectE)
+                    
+                    call ddz_E2C(this%phizE,this%dphizC,cbuffyE(:,:,:,1),cbuffyC(:,:,:,1),&
+                      cbuffzE(:,:,:,1),cbuffzC(:,:,:,1), this%spectC,this%spectE,this%sp_gpE,&
+                      this%sp_gpC,this%pade6opZ)
+                    call ddz_C2E(this%phizC,this%dphizE,cbuffyE(:,:,:,1),cbuffyC(:,:,:,1),&
+                      cbuffzE(:,:,:,1),cbuffzC(:,:,:,1), this%spectC,this%spectE,this%sp_gpE,&
+                      this%sp_gpC,this%pade6opZ)
 
-                ! Randomly choose the force type
-                call getForceBlock(this%phixC,this%phiyC,this%phizC, &
-                  this%dphixC, this%dphiyC, this%dphizC, this%forceType(i,j), &
-                  rbuffxC(:,:,:,1), rbuffxC(:,:,:,2),rbuffxC(:,:,:,3),this%version)
-                call getForceBlock(this%phixE,this%phiyE,this%phizE, &
-                  this%dphixE, this%dphiyE, this%dphizE, this%forceType(i,j), &
-                  rbuffxE(:,:,:,1), rbuffxE(:,:,:,2), rbuffxE(:,:,:,3),this%version)
+                    ! Randomly choose the force type
+                    !call getForceBlock(this%phixC,this%phiyC,this%phizC, &
+                    !  this%dphixC, this%dphiyC, this%dphizC, this%forceType(i,j), &
+                    !  rbuffxC(:,:,:,1), rbuffxC(:,:,:,2),rbuffxC(:,:,:,3),this%version)
+                    !call getForceBlock(this%phixE,this%phiyE,this%phizE, &
+                    !  this%dphixE, this%dphiyE, this%dphizE, this%forceType(i,j), &
+                    !  rbuffxE(:,:,:,1), rbuffxE(:,:,:,2), rbuffxE(:,:,:,3),this%version)
+                    call getForceBlockC(this%phixC,this%phiyC,this%phizC, &
+                      this%dphixC, this%dphiyC, this%dphizC, this%forceType(i,j), &
+                      rbuffxC(:,:,:,1), rbuffxC(:,:,:,2),this%version)
+                    call getForceBlockE(this%phixE,this%phiyE,this%phizE, &
+                      this%dphixE, this%dphiyE, this%dphizE, this%forceType(i,j), &
+                      rbuffxE(:,:,:,3),this%version)
 
-                this%fx = this%fx + sgn(i,j)*rbuffxC(:,:,:,1)
-                this%fy = this%fy + sgn(i,j)*rbuffxC(:,:,:,2)
-                this%fz = this%fz + sgn(i,j)*rbuffxE(:,:,:,3)
+                    this%fx = this%fx + sgn(i,j)*rbuffxC(:,:,:,1)
+                    this%fy = this%fy + sgn(i,j)*rbuffxC(:,:,:,2)
+                    this%fz = this%fz + sgn(i,j)*rbuffxE(:,:,:,3)
 
-              end do
+                  end do
+              !end if
           end do
           ! Step 3: Take FFT (in x & y) of the force
           call this%spectC%fft(this%fx,this%fxhat)
@@ -784,14 +829,57 @@ module forcingLayerMod
           this%seed = nint(rmaxInt*this%seedFact)
       end subroutine
 
-      subroutine getForceBlock(phix,phiy,phiz,dphix,dphiy,dphiz,forceType,fx,fy,fz,version)
+!      subroutine getForceBlock(phix,phiy,phiz,dphix,dphiy,dphiz,forceType,fx,fy,fz,version)
+!          real(rkind), dimension(:,:,:), intent(in) :: phix, phiy, phiz, dphix, &
+!            dphiy, dphiz
+!          integer, intent(in) :: forcetype
+!          real(rkind), dimension(:,:,:), intent(out) :: fx, fy, fz
+!          integer, intent(in) :: version
+!          
+!          fx = 0.d0; fy = 0.d0; fz = 0.d0
+!
+!          select case (version)
+!          case (1)
+!              select case (forceType)
+!              case (1)
+!                  fx = phix*dphiy*phiz
+!                  fy = -dphix*phiy*phiz
+!                  fz = 0.d0
+!              case (2)
+!                  fx = -dphiz*phix*phiy
+!                  fy = 0.d0
+!                  fz = phiz*dphix*phiy
+!              case (3)
+!                  fx = 0.d0
+!                  fy = phiy*dphiz*phix
+!                  fz = -dphiy*phiz*phix
+!              end select
+!          case (2)
+!              select case (forceType)
+!              case (1)
+!                  fx = phix*dphiy*phiz*dphiz
+!                  fy = -dphix*phiy*phiz*dphiz
+!                  fz = 0.d0
+!              case (2)
+!                  fx = -dphiz*phix*phiy*dphiy
+!                  fy = 0.d0
+!                  fz = phiz*dphix*phiy*dphiy
+!              case (3)
+!                  fx = 0.d0
+!                  fy = phiy*dphiz*phix*dphix
+!                  fz = -dphiy*phiz*phix*dphix
+!              end select
+!          end select
+!      end subroutine
+      
+      subroutine getForceBlockC(phix,phiy,phiz,dphix,dphiy,dphiz,forceType,fx,fy,version)
           real(rkind), dimension(:,:,:), intent(in) :: phix, phiy, phiz, dphix, &
             dphiy, dphiz
           integer, intent(in) :: forcetype
-          real(rkind), dimension(:,:,:), intent(out) :: fx, fy, fz
+          real(rkind), dimension(:,:,:), intent(out) :: fx, fy
           integer, intent(in) :: version
           
-          fx = 0.d0; fy = 0.d0; fz = 0.d0
+          fx = 0.d0; fy = 0.d0
 
           select case (version)
           case (1)
@@ -799,29 +887,54 @@ module forcingLayerMod
               case (1)
                   fx = phix*dphiy*phiz
                   fy = -dphix*phiy*phiz
-                  fz = 0.d0
               case (2)
                   fx = -dphiz*phix*phiy
                   fy = 0.d0
-                  fz = phiz*dphix*phiy
               case (3)
                   fx = 0.d0
                   fy = phiy*dphiz*phix
-                  fz = -dphiy*phiz*phix
               end select
           case (2)
               select case (forceType)
               case (1)
                   fx = phix*dphiy*phiz*dphiz
                   fy = -dphix*phiy*phiz*dphiz
-                  fz = 0.d0
               case (2)
                   fx = -dphiz*phix*phiy*dphiy
                   fy = 0.d0
-                  fz = phiz*dphix*phiy*dphiy
               case (3)
                   fx = 0.d0
                   fy = phiy*dphiz*phix*dphix
+              end select
+          end select
+      end subroutine
+
+      subroutine getForceBlockE(phix,phiy,phiz,dphix,dphiy,dphiz,forceType,fz,version)
+          real(rkind), dimension(:,:,:), intent(in) :: phix, phiy, phiz, dphix, &
+            dphiy, dphiz
+          integer, intent(in) :: forcetype
+          real(rkind), dimension(:,:,:), intent(out) :: fz
+          integer, intent(in) :: version
+          
+          fz = 0.d0
+
+          select case (version)
+          case (1)
+              select case (forceType)
+              case (1)
+                  fz = 0.d0
+              case (2)
+                  fz = phiz*dphix*phiy
+              case (3)
+                  fz = -dphiy*phiz*phix
+              end select
+          case (2)
+              select case (forceType)
+              case (1)
+                  fz = 0.d0
+              case (2)
+                  fz = phiz*dphix*phiy*dphiy
+              case (3)
                   fz = -dphiy*phiz*phix*dphix
               end select
           end select
@@ -861,12 +974,12 @@ module forcingLayerMod
           
           ! Now assemble the spline function
           select case (coord)
-          case (1)
+          case (1) ! All ranks span the full x-domain
             do n = 1,nknots-1
-              if (onThisRank(x1D,xs(n),xs(n+1))) then
+              !if (onThisRank(x1D,xs(n),xs(n+1))) then
                   call getStEndIndices(x1D,xs(n),xs(n+1),st,en)
                   vq(st:en,:,:) = spl2fcn(xq(st:en,:,:),vs(n),weight(n),weight(n+1),delta,xs(n),xs(n+1))
-              end if
+              !end if
             end do
           case (2)
             do n = 1,nknots-1
@@ -909,24 +1022,24 @@ module forcingLayerMod
           end do
       end function
 
-      function onThisRank(myx,xst,xen) result (TF)
-          real(rkind), dimension(:), intent(in) :: myx
-          real(rkind), intent(in) :: xst, xen
-          logical :: TF
-
-          TF = .true.
-          if ((xen < minval(myx)) .or. (xst > maxval(myx))) TF = .false.
-      end function
-      
-      subroutine getStEndIndices(xvec,x1,x2,st,en)
-          real(rkind), dimension(:), intent(in) :: xvec
-          real(rkind), intent(in) :: x1, x2
-          integer, intent(out) :: st, en
-
-          st = minloc(abs(xvec - x1), dim=1)
-          en = minloc(abs(xvec - x2), dim=1)
-          if (xvec(st) < x1) st = st + 1
-          if (xvec(en) > x2) en = en - 1
-      end subroutine
+!      function onThisRank(myx,xst,xen) result (TF)
+!          real(rkind), dimension(:), intent(in) :: myx
+!          real(rkind), intent(in) :: xst, xen
+!          logical :: TF
+!
+!          TF = .true.
+!          if ((xen < minval(myx)) .or. (xst > maxval(myx))) TF = .false.
+!      end function
+!      
+!      subroutine getStEndIndices(xvec,x1,x2,st,en)
+!          real(rkind), dimension(:), intent(in) :: xvec
+!          real(rkind), intent(in) :: x1, x2
+!          integer, intent(out) :: st, en
+!
+!          st = minloc(abs(xvec - x1), dim=1)
+!          en = minloc(abs(xvec - x2), dim=1)
+!          if (xvec(st) < x1) st = st + 1
+!          if (xvec(en) > x2) en = en - 1
+!      end subroutine
    
 end module

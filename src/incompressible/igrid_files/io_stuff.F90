@@ -32,7 +32,7 @@
            end do
        end if
 
-       if (this%useLocalizedForceLayer) then
+       if (this%localizedForceLayer == 1) then
            if (nrank == 0) then
                tmp(1) = this%forceLayer%seedFact
                tmp(2) = this%forceLayer%ampFact
@@ -666,7 +666,7 @@
                 call this%dumpFullField(this%WindTurbineArr%fz, "TrbZ")
            end if
 
-           if (this%useLocalizedForceLayer) then
+           if (this%localizedForceLayer == 1) then
                if (this%forceLayer%dumpForce) then
                    this%rbuffxC(:,:,:,1) = this%forceLayer%ampfact*this%forceLayer%fx
                    this%rbuffxC(:,:,:,2) = this%forceLayer%ampfact*this%forceLayer%fy
@@ -695,6 +695,17 @@
                        call this%dumpFullField(this%forceLayer%dphiyE, "dpyE", this%gpE)
                        call this%dumpFullField(this%forceLayer%dphizE, "dpzE", this%gpE)
                    end if
+               end if
+           elseif (this%localizedForceLayer == 2) then
+               if (this%spectForceLayer%dumpForce) then
+                   call this%dumpFullField(this%spectForceLayer%ampFact*this%spectForceLayer%fx, "frcx")
+                   call this%dumpFullField(this%spectForceLayer%ampFact*this%spectForceLayer%fy, "frcy")
+                   call this%spectForceLayer%interpE2C(this%spectForceLayer%fz,&
+                     this%rbuffxC(:,:,:,3), this%rbuffyC(:,:,:,1), &
+                     this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+                     this%rbuffzE(:,:,:,1))
+                   call this%dumpFullField(this%spectForceLayer%ampFact*this%rbuffxC(:,:,:,3), "frcz")
+
                end if
            end if
        case default

@@ -244,7 +244,7 @@ contains
                 allocate(this%Budget_3(this%nz,8))
                 allocate(this%Budget_3s(this%nz,8))
             else
-                if (this%igrid_sim%useLocalizedForceLayer) then
+                if (this%igrid_sim%localizedForceLayer == 1) then
                     allocate(this%Budget_0s(this%nz,30))
                     allocate(this%Budget_0(this%nz,30))
                     allocate(this%Budget_2(this%nz,10))
@@ -590,7 +590,7 @@ contains
             this%budget_3s(:,7) = this%budget_3s(:,7) - this%U_mean*this%budget_1s(:,4) - this%V_mean*this%budget_1s(:,10)
 
             ! Force production
-            if (this%igrid_sim%useLocalizedForceLayer) then
+            if (this%igrid_sim%localizedForceLayer == 1) then
                 call assert(this%version > 1, 'this%version > 1 -- dumpBudgets()')
                 this%budget_3s(:,11) = this%budget_3s(:,11) - this%budget_2(:,10)
             end if
@@ -1683,7 +1683,7 @@ contains
             this%budget_0(:,27) = this%budget_0(:,27) + this%tmp_meanC
         end if
         
-        if (this%igrid_sim%useLocalizedForceLayer) then
+        if (this%igrid_sim%localizedForceLayer == 1) then
             call assert(this%version > 1,'this%version > 1')
             call this%get_xy_meanC_from_fC(this%igrid_sim%forceLayer%fx,this%tmp_meanC)
             this%budget_0(:,28) = this%budget_0(:,28) + this%tmp_meanC
@@ -1815,7 +1815,7 @@ contains
             this%budget_2(:,7) = this%U_mean*(this%budget_1(:,4)/real(this%counter,rkind)) &
                                + this%V_mean*(this%budget_1(:,10)/real(this%counter,rkind))
 
-            if (this%igrid_sim%useLocalizedForceLayer) then
+            if (this%igrid_sim%localizedForceLayer == 1) then
                 call assert(this%version > 1,'this%version > 1 -- budget 2')
                 this%budget_2(:,10) = this%U_mean*(this%budget_0(:,28)/real(this%counter,rkind)) &
                   + this%V_mean*(this%budget_0(:,29)/real(this%counter,rkind))
@@ -2011,7 +2011,7 @@ contains
         this%budget_3(:,8) = this%budget_3(:,8) + this%tmp_meanC
 
        ! Force production
-       if (this%igrid_sim%useLocalizedForceLayer) then
+       if (this%igrid_sim%localizedForceLayer == 1) then
            call assert(this%version > 1,'this%version > 1 -- budget 3')
            
            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%igrid_sim%forceLayer%fx

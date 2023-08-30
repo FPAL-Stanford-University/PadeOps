@@ -37,9 +37,12 @@ program shearlessMixing
        call doTemporalStuff(SM) 
     end do
 
+    call message("==========================================================")
+    call message(0,"Finalizing simulation")
     call SM%finalize_io()
     call budg%destroy()
     call SM%destroy()
+    call message(0,"Simulation finalized")
    
     !deallocate(SM)
     

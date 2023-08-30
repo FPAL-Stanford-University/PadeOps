@@ -5,7 +5,7 @@ module fringeMethod
    use exits, only: message
    implicit none
    private
-   public :: fringe
+   public :: fringe, S_fringe
 
    type :: fringe 
       private

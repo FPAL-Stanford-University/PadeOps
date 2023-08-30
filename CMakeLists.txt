@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.10)
 project(PadeOps)
 
 enable_language(Fortran)
@@ -53,6 +53,8 @@ if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -traceback -g -mkl -heap-arrays 1024 -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Profile" )
         set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -mkl -heap-arrays 1024 -warn all ${OPTFLAG} -dynamic -qopt-report=2 -qopt-report-phase=vec -qopenmp -pg -g")
+    elseif ( CMAKE_BUILD_TYPE MATCHES "O2" )
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O2 -traceback -mkl -heap-arrays 1024 -warn all ${OPTFLAG} -dynamic -qopt-report=2 -qopt-report-phase=vec -qopenmp")
     endif()
 
 # GNU compiler on OSX

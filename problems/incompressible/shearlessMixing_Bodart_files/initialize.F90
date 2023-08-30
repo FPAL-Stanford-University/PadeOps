@@ -142,11 +142,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     logical :: isInviscid, useCoriolis, useExtraForcing, useMoisture, useSGS, &
       useforcedStratification, useGeostrophicForcing, assume_fplane, &
       useHITForcing,useScalars,useHITRealSpaceLinearForcing,addExtraSourceTerm, &
-      useImmersedBodies, useLocalizedForceLayer
+      useImmersedBodies
     real(rkind) :: Re, Ro, Pr, Fr, Ra, PrandtlFluid, BulkRichardson, &
       G_geostrophic,G_alpha,dpFdx,dpFdy,dpFdz,latitude,frameAngle, &
       HITForceTimeScale, immersed_taufact
-    integer :: BuoyancyTermType,buoyancyDirection,numberOfImmersedBodies
+    integer :: BuoyancyTermType,buoyancyDirection,numberOfImmersedBodies, localizedForceLayer
     logical :: isStratified = .false., removeMean = .false.
 
     ! Read input file
@@ -161,7 +161,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       useHITForcing, useScalars, frameAngle, buoyancyDirection, &
       useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm, &
       useImmersedBodies, numberOfImmersedBodies, immersed_taufact, &
-      useLocalizedForceLayer, removeMean
+      localizedForceLayer, removeMean
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

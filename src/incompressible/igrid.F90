@@ -28,6 +28,7 @@ module IncompressibleGrid
     use PoissonPeriodicMod, only: PoissonPeriodic
     use immersedbodyMod, only: immersedBody
     use forcingLayerMod, only: forcingLayer
+    use spectralForcingLayerMod, only: spectForcingLayer
     use interpolatorMod, only: interpolator
     use fortran_assert, only: assert
 
@@ -285,11 +286,13 @@ module IncompressibleGrid
         ! HIT Forcing
         logical :: useHITForcing = .false., useforcedStratification = .false.
         logical :: useHITRealSpaceLinearForcing = .false.
-        logical :: useLocalizedForceLayer = .false.
+        !logical :: useLocalizedForceLayer = .false.
+        integer :: localizedForceLayer = 0
         logical :: needEdgeFields = .false.
         type(HIT_shell_forcing), allocatable :: hitforce
         real(rkind) :: HITForceTimeScale 
         type(forcingLayer), allocatable :: forceLayer 
+        type(spectForcingLayer), allocatable :: spectForceLayer 
 
         ! Scalars
         logical :: useScalars = .false. 
@@ -450,7 +453,8 @@ contains
         real(rkind) :: tmpmn, Lz = 1.d0, latitude = 90._rkind, KSFilFact = 4.d0, dealiasFact = 2.d0/3.d0, frameAngle = 0.d0, BulkRichardson = 0.d0, HITForceTimeScale = 10.d0
         logical :: ADM = .false., storePressure = .false., useSystemInteractions = .true., &
           useFringe = .false., useHITForcing = .false., useControl = .false., &
-          useHITRealSpaceLinearForcing = .false., useLocalizedForceLayer = .false.
+          useHITRealSpaceLinearForcing = .false.!, useLocalizedForceLayer = .false.
+        integer :: localizedForceLayer = 0
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
         logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
@@ -495,7 +499,7 @@ contains
           useHITForcing, useScalars, frameAngle, buoyancyDirection, &
           useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm, &
           useImmersedBodies, numberOfImmersedBodies, immersed_taufact, &
-          useLocalizedForceLayer
+          localizedForceLayer !useLocalizedForceLayer
         namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
@@ -547,7 +551,8 @@ contains
         this%KSinitType = KSinitType; this%KSFilFact = KSFilFact;this%useFringe = useFringe; this%useControl = useControl
         this%nsteps = nsteps; this%PeriodicinZ = periodicInZ; this%usedoublefringex = usedoublefringex 
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT 
-        this%useLocalizedForceLayer = useLocalizedForceLayer
+        !this%useLocalizedForceLayer = useLocalizedForceLayer
+        this%localizedForceLayer = localizedForceLayer
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity 
         this%deleteInstructions = deleteInstructions; this%TopBC_Temp = TopBC_temp
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
@@ -762,7 +767,7 @@ contains
        allocate(this%rbuffyC(this%gpC%ysz(1),this%gpC%ysz(2),this%gpC%ysz(3),2))
        allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),4))
 
-       if (this%useLocalizedForceLayer) then
+       if (this%localizedForceLayer == 1) then
          allocate(this%cbuffxC(this%sp_gpC%xsz(1),this%sp_gpC%xsz(2),this%sp_gpC%xsz(3)))
          allocate(this%cbuffxE(this%sp_gpE%xsz(1),this%sp_gpE%xsz(2),this%sp_gpE%xsz(3)))
          allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),3))
@@ -792,7 +797,7 @@ contains
          this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
          this%rbuffzE(:,:,:,1), this%dz, this%nz)
 
-       if (this%useLocalizedForceLayer) this%needEdgeFields = .true.
+       if (this%localizedForceLayer == 1) this%needEdgeFields = .true.
        
        if (this%needEdgeFields .or. restartFromDifferentGrid) then
            allocate(this%xE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
@@ -1301,7 +1306,7 @@ contains
              this%cbuffzE(:,:,:,1), this%cbuffzC, this%rbuffxC(:,:,:,1), this%step)
        end if
 
-       if (this%useLocalizedForceLayer) then ! See Bodart, Cazalbou, & Joly (2010)
+       if (this%localizedForceLayer == 1) then ! See Bodart, Cazalbou, & Joly (2010)
            if (allocated(this%forceLayer)) deallocate(this%forceLayer)
            allocate(this%forceLayer)
            call this%forceLayer%init(inputfile,Lx,Ly,this%mesh,this%xE,this%yE,&
@@ -1309,6 +1314,11 @@ contains
              this%PadePoiss,this%RunID, this%step,this%inputDir,&
              this%rbuffxC,this%rbuffxE,this%cbuffxC,this%cbuffxE,this%cbuffyC,this%cbuffyE,&
              this%cbuffzC,this%cbuffzE,useRestartFile)
+       elseif (this%localizedForceLayer == 2) then ! See Briggs et al. (1996)
+           if (allocated(this%spectForceLayer)) deallocate(this%spectForceLayer)
+           allocate(this%spectForceLayer)
+           call this%spectForceLayer%init(inputfile,this%spectC,this%spectE,&
+             this%mesh,this%zE,this%gpC,this%gpE, this%Pade6opZ,this%outputdir)
        end if
        
        ! STEP 19: Set up storage for Pressure
@@ -1572,9 +1582,12 @@ contains
          call this%hitforce%destroy()
          deallocate(this%hitforce)
        endif 
-       if (this%useLocalizedForceLayer) then
+       if (this%localizedForceLayer == 1) then
          call this%forceLayer%destroy()
          deallocate(this%forceLayer)
+       elseif (this%localizedForceLayer == 2) then
+         call this%spectForceLayer%destroy()
+         deallocate(this%spectForceLayer)
        end if
        if (this%timeAvgFullFields) then
            call this%finalize_stats3d()
@@ -1953,7 +1966,8 @@ contains
         ! inputfile.:w
 
         class(igrid), intent(inout), target :: this       
-        integer, intent(in) :: tid_reinit 
+        integer, intent(in) :: tid_reinit
+        integer :: ierr 
 
        ! STEP 7: INITIALIZE THE FIELDS
        call this%readRestartFile(tid_reinit, this%runID, this%u, this%v, &
@@ -1987,8 +2001,10 @@ contains
        if (this%isStratified) call this%compute_dTdxi()
 
        ! Force Layer
-       if (this%useLocalizedForceLayer) then
+       if (this%localizedForceLayer == 1) then
            call this%forceLayer%reinit(this%runID,tid_reinit,this%cbuffxC,this%cbuffxE)
+       elseif (this%localizedForceLayer == 2) then
+           call gracefulExit('Reinitializing spectral force layer has not been implemented -- igrid.F90',ierr) 
        end if 
       
        ! STEP 28: Compute the timestep
@@ -2099,7 +2115,7 @@ contains
        if (this%isStratified) call interpC%linInterp3D(TS, this%T)
 
        ! Repeat for forcing layer
-       if (this%uselocalizedForceLayer) then
+       if (this%localizedForceLayer == 1) then
            allocate(this%forcelayer)
            forcelayerD => this%forcelayer
            call forcelayerS%init(gpC_S,gpE_S,TID,RunID,.true.,this%inputdir)
@@ -2129,6 +2145,9 @@ contains
              p_minval(minval(forcelayerD%fz)),p_maxval(maxval(forcelayerD%fz)))
 
            call forcelayerS%destroy()
+       elseif (this%localizedForceLayer == 2) then
+           call gracefulExit('Initializing from a different grid has not been'&
+             //' implemented in spectral force layer -- igrid.F90',ierr)
        end if
 
        ! Read tsim (needed for dumpRestartFile)

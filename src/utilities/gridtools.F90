@@ -187,4 +187,24 @@ contains
         end do 
         vecout(2*nx) = 0.5d0*(vecout(2*nx-1) + vecout(1))
     end subroutine
+    
+    function onThisRank(myx,xst,xen) result (TF)
+        real(rkind), dimension(:), intent(in) :: myx
+        real(rkind), intent(in) :: xst, xen
+        logical :: TF
+
+        TF = .true.
+        if ((xen < minval(myx)) .or. (xst > maxval(myx))) TF = .false.
+    end function
+    
+    subroutine getStEndIndices(xvec,x1,x2,st,en)
+        real(rkind), dimension(:), intent(in) :: xvec
+        real(rkind), intent(in) :: x1, x2
+        integer, intent(out) :: st, en
+
+        st = minloc(abs(xvec - x1), dim=1)
+        en = minloc(abs(xvec - x2), dim=1)
+        if (xvec(st) < x1) st = st + 1
+        if (xvec(en) > x2) en = en - 1
+    end subroutine
 end module 
