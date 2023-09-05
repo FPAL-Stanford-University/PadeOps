@@ -56,9 +56,9 @@ module spectralForcingLayerMod
           type(Pade6Stagg), intent(inout), target :: Pade6opZ
           characteR(len=*), intent(in) :: outputdir
           integer :: ioUnit, ierr
-          real(rkind), dimension(:,:,:), pointer :: zC, zE
+          real(rkind), dimension(:,:,:), pointer :: zC => null(), zE => null()
           real(rkind), dimension(:,:,:), allocatable, target :: zinY
-          type(decomp_info), pointer :: sp_gpC, sp_gpE
+          type(decomp_info), pointer :: sp_gpC => null(), sp_gpE => null()
           real(rkind) :: tgtKE = 0.6d0, tgtDissipation = 0.1d0
           real(rkind) :: zmid = 0.d0, lf = 0.1d0, kmin = 3.d0, kmax = 10.d0
           real(rkind) :: gain = 60.d0
@@ -73,6 +73,13 @@ module spectralForcingLayerMod
           open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
           read(unit=ioUnit, NML=spectForceLayer)
           close(ioUnit)
+  
+          ! Nullify all pointers to be safe
+          this%spectC   => null()
+          this%spectE   => null()
+          this%gpC      => null()
+          this%gpE      => null()
+          this%Pade6opZ => null()
 
           this%tgtKE                 = tgtKE
           this%tgtDissipation        = tgtDissipation
@@ -159,6 +166,10 @@ module spectralForcingLayerMod
           ! Initialize seed selection procedure    
           this%seedFact = initializeLogMap(1)
 
+          if (associated(zC))     nullify(zC)
+          if (associated(zE))     nullify(zE)
+          if (associated(sp_gpC)) nullify(sp_gpC)
+          if (associated(sp_gpE)) nullify(sp_gpE)
       end subroutine
 
       subroutine updateRHS(this,uhat,vhat,what,u,v,wC,duidxjC,nSGS,rbuffxC,poiss,Re,urhs,vrhs,wrhs)

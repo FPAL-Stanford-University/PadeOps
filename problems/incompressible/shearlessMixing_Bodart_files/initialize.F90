@@ -119,7 +119,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
-    real(rkind), dimension(:,:,:), pointer :: u, v, w, wC, x, y, z, T
+    real(rkind), dimension(:,:,:), pointer :: u => null(), v => null(), w => null(), &
+      wC => null(), x => null(), y => null(), z => null(), T => null()
     real(rkind), dimension(:,:,:), allocatable :: ybuffC, ybuffE, zbuffC, zbuffE
     real(rkind)  :: Lx = one, Ly = one, Lz = one
 !    real(rkind)  :: zTop_cell, zBot_cell, zMid
@@ -397,7 +398,7 @@ subroutine setScalar_source(decompC, inputfile, mesh, scalar_id, scalarSource)
     integer, intent(in)                            :: scalar_id
     real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
     real(rkind), dimension(:,:,:), allocatable :: r, lambda, tmp
-    real(rkind), dimension(:,:,:), pointer :: x, y, z
+    real(rkind), dimension(:,:,:), pointer :: x => null(), y => null(), z => null()
     real(rkind) :: xc = pi, yc = pi, zc = pi, rin = 0.75d0, rout = 1.25d0, delta_r = 0.22d0
     real(rkind) :: smear_x = 2.5d0, delta
     real(rkind) :: sumVal 
@@ -432,6 +433,7 @@ subroutine setScalar_source(decompC, inputfile, mesh, scalar_id, scalarSource)
 
     call message(2,"Scalar source initialized with domain integrated value", sumVal)
     deallocate(r, lambda, tmp)
+    nullify(x,y,z)
 
 end subroutine 
 
@@ -442,7 +444,7 @@ subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
   real(rkind), intent(in)                             :: tsim, Re
   real(rkind), dimension(:,:,:,:), intent(in), target :: mesh
   real(rkind), dimension(:,:,:),   intent(inout)      :: urhs, vrhs, wrhs
-  real(rkind), dimension(:,:,:), pointer              :: x, y, z
+  real(rkind), dimension(:,:,:), pointer              :: x => null(), y => null(), z => null()
 
   x => mesh(:,:,:,1)
   y => mesh(:,:,:,2)
@@ -450,6 +452,8 @@ subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
 
   urhs = urhs + 0.d0 
   vrhs = vrhs + 0.d0 
-  wrhs = wrhs + 0.d0 
+  wrhs = wrhs + 0.d0
+
+  nullify(x,y,z) 
 end subroutine
 
