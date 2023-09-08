@@ -207,9 +207,10 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    real(rkind) :: PrandtlNum = 1.d0, TurbPrandtlNum = 1.d0, Cy = 100.d0 
    integer ::  bc_bottom = 1, bc_top = 1 
    character(len=clen) :: tempname, fname
+   real(rkind) :: lowbound = 0.d0, highbound = 1.d0
 
 
-   namelist /SCALAR_INFO/ useSource, PrandtlNum, bc_bottom, bc_top,TurbPrandtlNum, Cy, RejectScalarRestart 
+   namelist /SCALAR_INFO/ useSource, PrandtlNum, bc_bottom, bc_top,TurbPrandtlNum, Cy, RejectScalarRestart, lowbound, highbound
 
    
    this%InputDataDir = InputDataDir
@@ -225,7 +226,11 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%PrandtlNum = PrandtlNum
    this%TurbPrandtlNum = TurbPrandtlNum
    this%Re = Re
+
+   ! Scalar bounding
    this%Cy = Cy 
+   this%lowbound = lowbound
+   this%highbound = highbound
 
    this%der => der
 

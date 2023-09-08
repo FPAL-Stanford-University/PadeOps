@@ -1,5 +1,5 @@
 module temporalHook
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen
     use IncompressibleGrid, only: igrid
     use reductions,         only: P_MAXVAL, p_minval, p_sum
     use exits,              only: message, message_min_max
@@ -22,6 +22,8 @@ contains
 
     subroutine doTemporalStuff(gp)
         class(igrid), intent(inout) :: gp
+        integer :: n
+        character(len=clen) :: mssg
 
         if (mod(gp%step,nt_print2screen) == 0) then
             maxDiv = maxval(gp%divergence)
@@ -63,8 +65,10 @@ contains
             end if 
             call message(0,"------------------------------------------")
             if (allocated(gp%scalars)) then
-               call message_min_max(1,"Bounds for SCALAR 1:", p_minval(minval(gp%scalars(1)%F)), p_maxval(maxval(gp%scalars(1)%F)))
-               call message_min_max(1,"Bounds for SCALAR 2:", p_minval(minval(gp%scalars(2)%F)), p_maxval(maxval(gp%scalars(2)%F)))
+               do n = 1,gp%n_scalars
+                 write(mssg,'(A18,I2.2,A1)')"Bounds for SCALAR ",n,":"
+                 call message_min_max(1,trim(mssg), p_minval(minval(gp%scalars(n)%F)), p_maxval(maxval(gp%scalars(n)%F)))
+               end do
             end if
         end if 
 

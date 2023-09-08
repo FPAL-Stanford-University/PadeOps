@@ -269,12 +269,12 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, zmin
+    real(rkind) :: Lx, Ly, Lz, zmin
     logical :: symmetricDomain
     integer :: iounit
     namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
     
-    Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
+    Tsurf = zero; dTsurf_dt = zero
     
 
     ioUnit = 11
@@ -282,7 +282,6 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     read(unit=ioUnit, NML=SMinput)
     close(ioUnit)    
 
-    ! Do nothing really since this is an unstratified simulation
 end subroutine
 
 
@@ -372,11 +371,11 @@ subroutine hook_probes(inputfile, probe_locs)
     probe_locs(3,9) = 4.25d0;
 end subroutine
 
-subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
+subroutine initScalar(decompC, inputfile, mesh, scalar_id, scalarField)
     use kind_parameters, only: rkind
     use decomp_2d,        only: decomp_info
     type(decomp_info),               intent(in)    :: decompC
-    character(len=*),                intent(in)    :: inpDirectory
+    character(len=*),                intent(in)    :: inputfile
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     integer, intent(in)                            :: scalar_id
     real(rkind), dimension(:,:,:), intent(out)     :: scalarField

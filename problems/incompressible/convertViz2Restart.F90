@@ -65,7 +65,7 @@ program convertViz2Restart
     implicit none
 
     character(len=clen) :: inputfile 
-    integer :: ioUnit, nx, ny, nz, ierr 
+    integer :: ioUnit, nx, ny, nz, ierr, n 
     logical :: isStratified = .false. 
     type(decomp_info) :: gpC, gpE
     type(decomp_info), pointer :: sp_gpC, sp_gpE
@@ -73,13 +73,16 @@ program convertViz2Restart
     character(len=clen) :: tempname, fname
     real(rkind), dimension(:,:,:), allocatable :: rbuffxC, rbuffyC, rbuffzC, rbuffzE
     real(rkind) :: tsim 
+    character(len=4) :: vizname
+    character(len=8) :: rstname
     logical :: periodicInZ = .false. 
     real(rkind) :: Lz = 2.d0*pi, dz
-    integer :: NumericalSchemeVert = 2
+    integer :: NumericalSchemeVert = 2, num_scalars = 0
     logical :: usingLocalizedForceLayer = .false.
 
     namelist /INPUT/ nx, ny, nz, inputdir, outputdir, inputFile_TID, inputFile_RID, NumericalSchemeVert, &
-      & restartfile_TID, restartfile_RID, isStratified, PeriodicInZ, Lz, usingLocalizedForceLayer
+      & restartfile_TID, restartfile_RID, isStratified, PeriodicInZ, Lz, usingLocalizedForceLayer, &
+      num_scalars
 
     call MPI_Init(ierr)               !<-- Begin MPI
     call GETARG(1,inputfile)          !<-- Get the location of the input file
@@ -125,6 +128,13 @@ program convertViz2Restart
     call convertCellField('uVel','u',rbuffxC,gpC)
     call convertCellField('vVel','v',rbuffxC,gpC)
     if (isStratified) call convertCellField('potT','T',rbuffxC,gpC)
+    if (num_scalars > 0) then
+        do n = 1,num_scalars
+            write(vizname,'(A2,I2.2)')'sc',n
+            write(rstname,'(A6,I2.2)')'SCALAR',n
+            call convertCellField(vizname,rstname,rbuffxC,gpC)
+        end do
+    end if
 
     if (usingLocalizedForceLayer) then
       call convertCellField('frcx','fx',rbuffxC,gpC)
