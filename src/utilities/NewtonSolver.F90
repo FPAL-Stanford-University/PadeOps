@@ -3,7 +3,7 @@ module NewtonSolverMod
     use constants,       only: half
     implicit none
 
-    external :: DGESV
+    !external :: DGESV
 
     ! Unary functor y = f(x) used in the Newton Solver
     type, abstract :: newton_functor

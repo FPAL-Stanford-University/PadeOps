@@ -5,8 +5,8 @@ module dctstuff
     
     implicit none
     
-    external :: DFFTW_PLAN_R2R_1D, DFFTW_DESTROY_PLAN, DFFTW_EXECUTE_R2R, &
-        DFFTW_PLAN_MANY_DFT_R2C, DFFTW_PLAN_MANY_DFT_C2R
+    !external :: DFFTW_PLAN_R2R_1D, DFFTW_DESTROY_PLAN, DFFTW_EXECUTE_R2R, &
+    !    DFFTW_PLAN_MANY_DFT_R2C, DFFTW_PLAN_MANY_DFT_C2R
 
     private
     public :: dcts

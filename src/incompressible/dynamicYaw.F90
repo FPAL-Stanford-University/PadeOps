@@ -13,7 +13,7 @@ module dynamicYawMod
 
     implicit none
 
-    external :: DGEQRF
+    !external :: DGEQRF
 
     private
     public :: dynamicYaw
@@ -1380,8 +1380,8 @@ function inv(A) result(Ainv)
   integer :: n, info
 
   ! External procedures defined in LAPACK
-  external DGETRF
-  external DGETRI
+  !external DGETRF
+  !external DGETRI
 
   ! Store A in Ainv to prevent it from being overwritten by LAPACK
   Ainv = A
