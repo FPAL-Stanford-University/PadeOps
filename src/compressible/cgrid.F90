@@ -100,6 +100,10 @@ module CompressibleGrid
         real(rkind), allocatable, dimension(:,:,:,:) :: tausgs, Qjsgs
         type(sgs_cgrid), allocatable :: sgsmodel
 
+        ! stretched and curvilinear meshes
+        logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
+        real(rkind), dimension(:,:,:), allocatable :: xi, eta, zeta
+
         contains
             procedure          :: init
             procedure          :: destroy_grid
@@ -180,12 +184,14 @@ contains
         logical     :: compute_scale_decomposition = .false.
         logical     :: forcing = .false. ! KVM 2021
         logical     :: useSGS = .false.
+        logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
                                       periodicx, periodicy, periodicz, &
                              derivative_x, derivative_y, derivative_z, &
                                          filter_x, filter_y, filter_z, &
+                                          xmetric,  ymetric,  zmetric, &
                                                            prow, pcol, &
                                                              SkewSymm  
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
@@ -257,8 +263,27 @@ contains
             end do 
         end do  
 
-        ! Go to hooks if a different mesh is desired 
-        call meshgen(this%decomp,this%dx, this%dy, this%dz, this%mesh) 
+        ! setup metrics for stretched grids
+        this%xmetric = xmetric;   this%ymetric = ymetric;   this%zmetric = zmetric  
+        if(this%xmetric) then
+            allocate(this%xi(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3)))
+        else
+            allocate(this%xi(0,0,0))
+        endif
+        if(this%ymetric) then 
+            allocate(this%eta(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3)))
+        else
+            allocate(this%eta(0,0,0))
+        endif
+        if(this%zmetric) then 
+            allocate(this%zeta(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3)))
+        else
+            allocate(this%zeta(0,0,0))
+        endif
+
+        ! Go to hooks if a different mesh is desired
+        call meshgen(this%decomp,this%dx, this%dy, this%dz, this%mesh, inputfile, &
+              this%xmetric, this%ymetric, this%zmetric, this%xi, this%eta, this%zeta)
 
         if (ns .LT. 1) call GracefulExit("Cannot have less than 1 species. Must have ns >= 1.",4568)
 
@@ -305,12 +330,6 @@ contains
 
 !!! ----- block moved from here --------
 
-        ! print *, "Cp(1,1,1) = ", this%mix%Cp(1,1,1)
-        ! print *, "Cp(-1,1,1) = ", this%mix%Cp(this%nxp,1,1)
-
-        ! print *, "T(1,1,1) = ", this%T(1,1,1)
-        ! print *, "T(-1,1,1) = ", this%T(this%nxp,1,1)
-
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
         
@@ -338,7 +357,7 @@ contains
         if ((this%filter_x=='none') .AND. (this%filter_y=='none') .AND. (this%filter_z=='none')) then
             call message("Note: Filtering turned off")
         end if
-        
+
         ! Allocate der
         if ( allocated(this%der) ) deallocate(this%der)
         allocate(this%der)
@@ -348,8 +367,10 @@ contains
                            this%dx,       this%dy,        this%dz, &
                          periodicx,     periodicy,      periodicz, &
                       derivative_x,  derivative_y,   derivative_z, &
-                           .false.,       .false.,        .false., &
-                           .false.)      
+                            this%x,        this%y,         this%z, &
+                           xmetric,       ymetric,        zmetric, &
+                           .false.,     inputfile,                 &
+                           this%xi,      this%eta,      this%zeta)
 
         ! Allocate fil and gfil
         if ( allocated(this%fil) ) deallocate(this%fil)
@@ -485,7 +506,8 @@ contains
             !                                         this%x_bc, this%y_bc, this%z_bc, reduce_precision))
             call this%budget%init(this%decomp, this%der, this%mesh, this%dx, this%dy, this%dz, this%mix%ns, &
                                   [this%periodicx, this%periodicy, this%periodicz], this%outputdir, &
-                                  this%x_bc, this%y_bc, this%z_bc, reduce_precision=.false.)
+                                  this%x_bc, this%y_bc, this%z_bc, this%x, this%y, this%z, inputfile, &
+                                  this%xi, this%eta, this%zeta, reduce_precision=.false.)
         end if
 
         ! Instantiate scale decomposition object
@@ -518,6 +540,10 @@ contains
           if(allocated(this%tausgs)) deallocate(this%tausgs)
           if(allocated(this%Qjsgs )) deallocate(this%Qjsgs)
         end if
+
+        if(allocated(this%xi)  ) deallocate(this%xi  )
+        if(allocated(this%eta) ) deallocate(this%eta )
+        if(allocated(this%zeta)) deallocate(this%zeta)
 
         call this%der%destroy()
         if (allocated(this%der)) deallocate(this%der) 

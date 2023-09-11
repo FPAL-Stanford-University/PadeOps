@@ -62,7 +62,8 @@ module TKEBudgetMod
 contains
 
     ! function init(gp, der, mesh, dx, dy, dz, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision) result(this)
-    subroutine init(this, gp, der, mesh, dx, dy, dz, ns, averaging_directions, outputdir, x_bc, y_bc, z_bc, reduce_precision)
+    subroutine init(this, gp, der, mesh, dx, dy, dz, ns, averaging_directions, outputdir, &
+                    x_bc, y_bc, z_bc, x, y, z, inputfile, xi, eta, zeta, reduce_precision)
         ! type(tkeBudget)                             :: this
         class(tkeBudget)                            :: this
         class(decomp_info), target,      intent(in) :: gp
@@ -71,8 +72,9 @@ contains
         real(rkind),                     intent(in) :: dx, dy, dz
         integer,                         intent(in) :: ns
         logical, dimension(3),           intent(in) :: averaging_directions
-        character(len=clen),             intent(in) :: outputdir
+        character(len=clen),             intent(in) :: outputdir, inputfile
         integer, dimension(2),           intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(:,:,:),   intent(in) :: x, y, z, xi, eta, zeta
         logical, optional,               intent(in) :: reduce_precision
 
         logical :: reduce_precision_
@@ -120,10 +122,11 @@ contains
                 call GracefulExit("Averaging in Y is not supported for 1D budgets! :(", 4589)
             end if
 
-            call this%der_avg%init( this%gp, &
-                                    dx, dy, dz, &
-                                    averaging_directions(1), averaging_directions(2), averaging_directions(3), &
-                                    der%getMethodx(), der%getMethody(), der%getMethodz() )
+            call this%der_avg%init( this%gp, dx, dy, dz, &
+                         averaging_directions(1), averaging_directions(2), averaging_directions(3), &
+                         der%getMethodx(), der%getMethody(), der%getMethodz(), x, y, z, & 
+                         der%getmetricx(), der%getmetricy(), der%getmetricz(), der%getcurvilinear(), &
+                         inputfile, xi, eta, zeta)
 
             call this%der_avg%set_ysz( [1, this%gp%ysz(2), 1] )                 ! Set ysz to make arrays 1D
 
@@ -141,10 +144,16 @@ contains
         end if
 
         if (this%avg%avg_dim == 2) then
-            call this%der_avg%init( this%gp, &
-                                    dx, dy, dz, &
-                                    averaging_directions(1), averaging_directions(2), averaging_directions(3), &
-                                    der%getMethodx(), der%getMethody(), der%getMethodz() )
+            !call this%der_avg%init( this%gp, &
+            !                        dx, dy, dz, &
+            !                        averaging_directions(1), averaging_directions(2), averaging_directions(3), &
+            !                        der%getMethodx(), der%getMethody(), der%getMethodz() )
+            call this%der_avg%init( this%gp, dx, dy, dz, &
+                         averaging_directions(1), averaging_directions(2), averaging_directions(3), &
+                         der%getMethodx(), der%getMethody(), der%getMethodz(), x, y, z, & 
+                         der%getmetricx(), der%getmetricy(), der%getmetricz(), der%getcurvilinear(), &
+                         inputfile, xi, eta, zeta)
+
 
             if (averaging_directions(1)) then
                 ! call this%der_avg%set_ysz( [1, this%gp%ysz(2), this%gp%ysz(3)] )                 ! Set ysz to make arrays 2D
@@ -917,7 +926,7 @@ contains
             
             ! Production, integrated
             buf = rbar*buf*R12
-            rate = sum(buf(1,:,1))*dy * -2d0/rho0/du**3
+            rate = sum(buf(1,:,1))*dy * (-2.d0)/rho0/du**3
             deallocate(upp)
             deallocate(vpp)
         endif

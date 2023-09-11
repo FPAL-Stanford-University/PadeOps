@@ -195,7 +195,7 @@ contains
 end module
 
 
-subroutine meshgen(decomp, dx, dy, dz, mesh)
+subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetric, xi, eta, zeta)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one
     use decomp_2d,        only: decomp_info, nrank
@@ -205,8 +205,11 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     type(decomp_info),               intent(in)    :: decomp
     real(rkind),                     intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
+    character(len=*),                intent(in)    :: inputfile
+    logical,                         intent(in   ) :: xmetric, ymetric, zmetric
+    real(rkind), dimension(:,:,:  ), intent(inout) :: xi, eta, zeta
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-    character(clen) :: inputfile='input.dat'
+    !character(clen) :: inputfile='input.dat'
 
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ref, rho_ratio,&
@@ -244,6 +247,12 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
                 end do
             end do
         end do
+
+    if(ymetric) then
+        eta = y
+        !! set y same as in derivatives.F90
+    endif
+
     end associate
 end subroutine
 

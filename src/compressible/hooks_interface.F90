@@ -7,12 +7,15 @@ module cgrid_hooks
     implicit none
 
     interface meshgen
-        subroutine meshgen(decomp, dx, dy, dz, mesh)
+        subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetric, xi, eta, zeta)
             import :: rkind
             import :: decomp_info
             type(decomp_info),               intent(in)    :: decomp
             real(rkind),                     intent(inout) :: dx, dy, dz
             real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
+            character(len=*),                intent(in)    :: inputfile
+            logical    ,                     intent(in)    :: xmetric, ymetric, zmetric
+            real(rkind), dimension(:,:,:),   intent(inout) :: xi, eta, zeta
 
         end subroutine 
     end interface
