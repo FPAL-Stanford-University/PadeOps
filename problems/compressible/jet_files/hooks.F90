@@ -115,7 +115,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
         !!!!--------------------read input values--------------------------!!!!
         ! default values!, zcen
-        xcore = 4.0d0; AA = 4.0d0; D = 1.0d0; U0 = 1.0d0;
+        xcore = 0.5d0; AA = 4.0d0; D = 1.0d0; U0 = 1.0d0;
         ycen = Ly/2.0d0; zcen = Lz/2.0d0; Uco = 0.05d0
         if(decomp%ysz(3)==1) then
             !! there is only 1 point along z
@@ -149,6 +149,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
               u(i,j,k) = uc * radialfac
               if(i==1) then
                 write(*,'(7(e19.12,1x))') y(1,j,1), narg, raddist, sigbyDsq, radialfac, xl, uc
+              endif
+              if (xl > xcore) then
+                 u(i,j,k) = 0.0
               endif
           enddo
          enddo

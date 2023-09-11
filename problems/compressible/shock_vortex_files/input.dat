@@ -82,17 +82,16 @@ PrSGS                    =   0.7D0
 /
 
 &PROBINPUT
-Lx      = 25.D0         ! JFM 2017   
-Ly      = 15.D0         ! JFM 2017
-Lz      = 15.D0         ! JFM 2017
-domega0 = 0.1D0         ! JFM 2017
-Re      = 5D3           ! Reynolds number rho_Ref*dU*L/mu_ref
-T_ref   = 1.D0          ! Reference temp
-p_ref   = 1.D0          ! Reference pressure
-pr_pref = 3.6D0         ! reservoir to chamber pressure
-npr     = 1.D0          ! Nozzle pressure ratio
-rho_ref = 1.D0          ! Reference density
-nu_ref  = 0.04D0        ! Reference Kinematic viscosity
-Pr      = 0.7D0         ! Prandtl number nu/kappa 0.7
-Sc      = 1.D0          ! Schmidt number nu/massDiffusivity
+Lx      = 7.D0         ! PoF 1996  
+Ly      = 7.D0         ! PoF 1996
+Lz      = 7.D0         ! PoF 1996
+u_max   = 0.9301D0     ! Shocktube u_max
+p_max   = 0.3041D0     ! max pressure
+rho_max = 0.2661D0     ! max density
+T_max   = 1.1426D0     ! max temperature
+p_ref   = 0.1D0        ! ref pressure
+rho_ref = 0.125D0      ! ref density
+nu_ref  = 0.02D0       ! Reference Kinematic viscosity
+Pr      = 0.7D0        ! Prandtl number nu/kappa 0.7
+Sc      = 1.D0         ! Schmidt number nu/massDiffusivity
 /
