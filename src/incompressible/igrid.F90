@@ -1319,6 +1319,11 @@ contains
            allocate(this%spectForceLayer)
            call this%spectForceLayer%init(inputfile,this%spectC,this%spectE,&
              this%mesh,this%zE,this%gpC,this%gpE, this%Pade6opZ,this%outputdir)
+           if (useRestartFile) then ! Compute the forcing so we don't dump zeros during initialization data dump
+               call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
+                 this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
+                 this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
+           end if
        end if
        
        ! STEP 19: Set up storage for Pressure

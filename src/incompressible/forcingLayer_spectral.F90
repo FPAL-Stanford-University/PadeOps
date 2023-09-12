@@ -1,6 +1,6 @@
 module spectralForcingLayerMod
   ! This module implements a forcing layer similar to Briggs et al. (1996), but with some modifications
-    use kind_parameters, only: rkind, clen
+    use kind_parameters, only: rkind, clen, mpirkind
     use reductions,      only: p_maxval, p_sum
     use gridtools,       only: onThisRank, getStEndIndices
     use constants,       only: rmaxInt, im0
@@ -13,6 +13,8 @@ module spectralForcingLayerMod
     use PadeDerOps,      only: Pade6Stagg
     use fortran_assert,  only: assert
     use fringeMethod,    only: S_fringe 
+    use mpi
+    use seedGen,         only: initializeLogMap, incrementLogisticMap
     implicit none
 
     integer, parameter :: zbc_bot = 0, zbc_top = 0
@@ -37,7 +39,6 @@ module spectralForcingLayerMod
         procedure :: init
         procedure :: destroy
         procedure :: updateRHS
-        procedure :: updateSeed
         procedure :: interpE2C
         procedure :: dumpField
         procedure :: getFringeMask
@@ -46,7 +47,6 @@ module spectralForcingLayerMod
     contains
       
       subroutine init(this,inputfile,spectC,spectE,mesh,zEin,gpC,gpE,Pade6opZ,outputdir)
-          use seedGen, only: initializeLogMap
           class(spectForcingLayer), intent(inout) :: this
           character(len=*), intent(in) :: inputfile
           type(spectral), intent(inout), target :: spectC, spectE
@@ -163,9 +163,6 @@ module spectralForcingLayerMod
                     (mesh(1,2,1,2) - mesh(1,1,1,2)) * &
                     (mesh(1,1,2,3) - mesh(1,1,1,3))
 
-          ! Initialize seed selection procedure    
-          this%seedFact = initializeLogMap(1)
-
           if (associated(zC))     nullify(zC)
           if (associated(zE))     nullify(zE)
           if (associated(sp_gpC)) nullify(sp_gpC)
@@ -235,13 +232,6 @@ module spectralForcingLayerMod
           vrhs = vrhs + this%ampFact*this%fyhat
           wrhs = wrhs + this%ampFact*this%fzhat
 
-      end subroutine
-      
-      subroutine updateSeed(this)
-          use seedGen, only: incrementLogisticMap
-          class(spectForcingLayer), intent(inout) :: this
-          call incrementLogisticMap(this%seedFact,this%seedFact)
-          this%seed = nint(rmaxInt*this%seedFact)
       end subroutine
       
       subroutine interpE2C(this,fE,fC,rbuffyC,rbuffzC,rbuffyE,rbuffzE)
@@ -336,5 +326,5 @@ module spectralForcingLayerMod
 
           deallocate(z1D, z1, z2, S1, S2, fringeFunc, maskInX, maskInY)
       end subroutine
-
+         
 end module spectralForcingLayerMod

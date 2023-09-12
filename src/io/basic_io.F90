@@ -59,6 +59,10 @@ contains
         character(len=*), intent(in) :: filename
         character(len=1000000) :: columncount
         integer :: nc,nr, ierr, i, j 
+        logical :: fileExists = .true.
+
+        inquire(file=filename,exist=fileExists)
+        call assert(fileExists,"The file does not exist -- basic_io.F90")
 
 
         open(unit=10,file=filename,access='sequential',form='formatted')
@@ -94,6 +98,10 @@ contains
         character(len=*), intent(in) :: filename
         integer, intent(in) :: nrows
         integer :: i
+        logical :: fileExists = .true.
+
+        inquire(file=filename,exist=fileExists)
+        call assert(fileExists,"The file does not exist -- basic_io.F90")
 
         open(12, file=filename)
         do i = 1,nrows
@@ -110,8 +118,11 @@ contains
         real(rkind), intent(out), dimension(:), allocatable :: data2read
         character(len=*), intent(in) :: filename
         integer :: nr, ierr, i
+        logical :: fileExists = .true.
 
-
+        inquire(file=filename,exist=fileExists)
+        call assert(fileExists,"The file does not exist -- basic_io.F90")
+        
         open(unit=10,file=filename,access='sequential',form='formatted')
         nr = 0
         do 
@@ -135,6 +146,10 @@ contains
         implicit none 
         real(rkind), intent(out)  :: data2read
         character(len=*), intent(in) :: filename
+        logical :: fileExists = .true.
+
+        inquire(file=filename,exist=fileExists)
+        call assert(fileExists,"The file does not exist -- basic_io.F90")
 
         open(unit=10,file=filename,access='sequential',form='formatted')
         read (10, *)  data2read
@@ -165,5 +180,13 @@ contains
 
     end subroutine
 
+    subroutine assert(statement,mssg) 
+        logical, intent(in) :: statement
+        character(len=*), intent(in) :: mssg
+        if (.not. statement) then
+           print*, trim(mssg)
+           stop
+        end if 
+    end subroutine
 
 end module 

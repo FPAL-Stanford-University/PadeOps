@@ -6,7 +6,7 @@
        class(igrid), intent(in) :: this
        character(len=clen) :: tempname, fname
        integer :: ierr, idx
-       real(rkind), dimension(2) :: tmp 
+       real(rkind), dimension(:), allocatable :: tmp 
 
        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
@@ -32,28 +32,33 @@
            end do
        end if
 
-       if (this%localizedForceLayer == 1) then
-           if (nrank == 0) then
-               tmp(1) = this%forceLayer%seedFact
-               tmp(2) = this%forceLayer%ampFact
-               write(tempname,"(A7,A4,I2.2,A7,I6.6)") "RESTART", "_Run",this%runID, "_finfo.",this%step
+       if (this%localizedForceLayer > 0) then
+           if (this%localizedForceLayer == 1) then
+               if (nrank == 0) then
+                   allocate(tmp(2))
+                   tmp(1) = this%forceLayer%seedFact
+                   tmp(2) = this%forceLayer%ampFact
+                   write(tempname,"(A7,A4,I2.2,A7,I6.6)") "RESTART", "_Run",this%runID, "_finfo.",this%step
+                   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                   call write_1d_ascii(tmp,fname)
+                   deallocate(tmp)
+               end if
+               call MPI_Barrier(MPI_COMM_WORLD,ierr)
+           
+               write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",this%runID, "_fx.",this%step
                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-               call write_1d_ascii(tmp,fname)
+               call decomp_2d_write_one(1,this%forceLayer%fx,trim(fname), this%gpC)
+
+               write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",this%runID, "_fy.",this%step
+               fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+               call decomp_2d_write_one(1,this%forceLayer%fy,fname, this%gpC)
+
+               write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",this%runID, "_fz.",this%step
+               fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+               call decomp_2d_write_one(1,this%forceLayer%fz,fname, this%gpE)
+
            end if
-           call MPI_Barrier(MPI_COMM_WORLD,ierr)
        
-           write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",this%runID, "_fx.",this%step
-           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-           call decomp_2d_write_one(1,this%forceLayer%fx,trim(fname), this%gpC)
-
-           write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",this%runID, "_fy.",this%step
-           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-           call decomp_2d_write_one(1,this%forceLayer%fy,fname, this%gpC)
-
-           write(tempname,"(A7,A4,I2.2,A4,I6.6)") "RESTART", "_Run",this%runID, "_fz.",this%step
-           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-           call decomp_2d_write_one(1,this%forceLayer%fz,fname, this%gpE)
-
        end if
 
        if (nrank == 0) then

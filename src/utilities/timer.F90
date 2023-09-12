@@ -82,10 +82,10 @@ contains
             finish = MPI_WTIME()
             if (nrank == 0) then   
                 if (mssgID == 1) then 
-                  write(message,'(I,A,I,A,F,A)') Nnow, ' of ', Ntotal, &
+                  write(message,'(I0,A,I0,A,F0.3,A)') Nnow, ' of ', Ntotal, &
                     ' took ', finish - start, ' seconds'
                 else
-                  write(message,'(F,A,F,A)') real(Nnow)/real(Ntotal)*100.d0, '% complete '// &
+                  write(message,'(F0.3,A,F0.3,A)') real(Nnow)/real(Ntotal)*100.d0, '% complete '// &
                     'and took ', finish - start, ' seconds'
                 end if
                 print*, trim(message)
