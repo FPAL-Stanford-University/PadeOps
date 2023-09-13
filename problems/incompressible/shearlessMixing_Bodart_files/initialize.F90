@@ -379,8 +379,28 @@ subroutine initScalar(decompC, inputfile, mesh, scalar_id, scalarField)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     integer, intent(in)                            :: scalar_id
     real(rkind), dimension(:,:,:), intent(out)     :: scalarField
+    integer :: ioUnit = 11, ierr
+    real(rkind) :: zlocScaInterface = 1.5d0
+    real(rkind) :: interfaceThickness = 0.125d0
+    real(rkind), dimension(:,:,:), pointer :: z => null()
+    real(rkind) :: zmid, lf, kmin, kmax, tgtKE, tgtDissipation, gain, fringe_delta
+    integer :: maskType
+    logical :: dumpForce, projectDivergenceFree
+    
+    namelist /spectForceLayer/ zmid, lf, kmin, kmax, tgtKE, tgtDissipation, &
+      gain, dumpForce, maskType, fringe_delta, projectDivergenceFree
 
-    scalarField = 0.d0
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+    read(unit=ioUnit, NML=spectForceLayer)
+    close(ioUnit)
+
+    associate( z => mesh(:,:,:,3))
+        if (scalar_id < 4) then
+            scalarField = 0.5d0*(1.d0 + tanh((z - zlocScaInterface)/interfaceThickness))
+        elseif (scalar_id == 4) then
+            scalarField = exp(-((z - zmid)/(lf/3.d0))**2.d0)
+        end if
+    end associate
 end subroutine 
 
 subroutine setScalar_source(decompC, inputfile, mesh, scalar_id, scalarSource)
@@ -396,44 +416,24 @@ subroutine setScalar_source(decompC, inputfile, mesh, scalar_id, scalarSource)
     real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
     integer, intent(in)                            :: scalar_id
     real(rkind), dimension(:,:,:), intent(out)     :: scalarSource
-    real(rkind), dimension(:,:,:), allocatable :: r, lambda, tmp
-    real(rkind), dimension(:,:,:), pointer :: x => null(), y => null(), z => null()
-    real(rkind) :: xc = pi, yc = pi, zc = pi, rin = 0.75d0, rout = 1.25d0, delta_r = 0.22d0
-    real(rkind) :: smear_x = 2.5d0, delta
-    real(rkind) :: sumVal 
-
-    z => mesh(:,:,:,3)
-    y => mesh(:,:,:,2)
-    x => mesh(:,:,:,1)
-
+    integer :: ioUnit = 11, ierr
+    real(rkind), dimension(:,:,:), pointer :: z => null()
+    real(rkind) :: zmid, lf, kmin, kmax, tgtKE, tgtDissipation, gain, fringe_delta
+    integer :: maskType
+    logical :: dumpForce, projectDivergenceFree
     
-    allocate(r(size(x,1),size(x,2),size(x,3)))
-    allocate(lambda(size(x,1),size(x,2),size(x,3)))
-    allocate(tmp(size(x,1),size(x,2),size(x,3)))
+    namelist /spectForceLayer/ zmid, lf, kmin, kmax, tgtKE, tgtDissipation, &
+      gain, dumpForce, maskType, fringe_delta, projectDivergenceFree
 
-    r = sqrt((y - yc)**2 + (z - zc)**2)
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+    read(unit=ioUnit, NML=spectForceLayer)
+    close(ioUnit)
 
-    select case (scalar_id)
-    case (1)
-      tmp = (r - rout)/delta_r + 1 
-      call Sfunc(tmp, lambda)
-      lambda = -lambda
-    case (2)
-      tmp = (r - rin)/delta_r
-      call Sfunc(tmp, lambda)
-      lambda = 1.d0 - lambda
-    end select 
+    associate( z => mesh(:,:,:,3))
+        scalarSource = exp(-((z - zmid)/(lf/3.d0))**2.d0)
+    end associate
 
-    r = x - xc
-    delta = (x(2,1,1) - x(1,1,1))*smear_x
-    tmp = (1.d0/(delta*sqrt(2.d0*pi)))*exp(-0.5d0*(r**2)/(delta**2))
-    scalarSource = tmp*lambda
-    sumVal = p_sum(sum(scalarSource))*((x(2,1,1) - x(1,1,1))**3)
-
-    call message(2,"Scalar source initialized with domain integrated value", sumVal)
-    deallocate(r, lambda, tmp)
-    nullify(x,y,z)
-
+    call message(2,"Scalar source initialized") 
 end subroutine 
 
 subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
