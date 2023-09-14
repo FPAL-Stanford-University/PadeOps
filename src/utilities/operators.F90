@@ -68,6 +68,12 @@ contains
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
         integer :: i,j,k
 
+        faces = 0.0
+        xbuf = 0.0
+        zbuf = 0.0
+        xint = 0.0
+        zint = 0.0
+
         ! i+1/2 faces
         call transpose_y_to_x(nodes,xbuf,decomp)
         call interpMid % iN2Fx(xbuf,xint,x_bc(1),x_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
@@ -97,6 +103,9 @@ contains
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
         integer :: i,j,k
 
+        faces = 0.0
+        xbuf = 0.0
+        xint = 0.0
         ! i+1/2 faces
         call transpose_y_to_x(nodes,xbuf,decomp)
         call interpMid % iN2Fx(xbuf,xint,x_bc(1),x_bc(2)) !TODO: add BCs (onlycorrect if interface is away from boundary)
@@ -118,7 +127,7 @@ contains
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
         integer :: i,j,k
 
-
+        faces = 0.0
         ! j+1/2 faces
         call interpMid % iN2Fy(nodes,faces,y_bc(1),y_bc(2)) !TODO:addBCs (only correct if interface is away from boundary)
 
@@ -137,6 +146,10 @@ contains
         real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
         integer :: i,j,k
+
+        faces = 0.0
+        zbuf = 0.0
+        zint = 0.0
 
         ! k+1/2 faces
         call transpose_y_to_z(nodes,zbuf,decomp)
@@ -165,7 +178,13 @@ contains
       
 
         nodes = 0.0
-
+        ztmp = 0.0
+        xtmp = 0.0
+        ydiv = 0.0
+        xdiv = 0.0
+        zdiv = 0.0
+        xbuf = 0.0
+        zbuf = 0.0
 
         ! i nodes
         if(decomp%xsz(1).gt. one) then
@@ -207,7 +226,10 @@ contains
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
         integer :: i,j,k, one = 1
-
+    
+        nodes = 0.0
+        xbuf  = 0.0
+        xdiv  = 0.0
 
         ! i nodes
         if(decomp%xsz(1).gt. one) then
@@ -235,7 +257,7 @@ contains
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
         integer :: i,j,k, one = 1
 
-
+        nodes = 0.0
 
         ! j nodes
         if(decomp%ysz(2).gt.one) then
@@ -261,12 +283,13 @@ contains
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
         integer :: i,j,k, one = 1
 
-
+        nodes = 0.0
+        zbuf  = 0.0
+        zdiv = 0.0
         if(decomp%zsz(3).gt.one) then
            call transpose_y_to_z(faces,zbuf,decomp)
            call derStagg % ddzF2N(zbuf,zdiv,z_bc(1),z_bc(2)) !TODO: add BCs(onlycorrect if interface is away from boundary)
            call transpose_z_to_y(zdiv,nodes,decomp)
-           nodes = nodes + tmp
         endif
 
     end subroutine gradFV_z
@@ -286,7 +309,8 @@ contains
         x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
         y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
         z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
-
+            
+        lapf = 0.0
 
         ! Get Y derivatives
         call der%d2dy2(f,lapf,y_bc(1),y_bc(2))

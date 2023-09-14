@@ -29,40 +29,38 @@ module cd06Staggerstuff
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
     !! NOTE : The following variables are used for non-periodic 1st derivative evaluation !!
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
-    
-    ! Set the scheme for the edge nodes (Ref. for notation: Lele - JCP paper)
-    ! 1st derivative 
-    real(rkind), parameter                   :: alpha =  3._rkind
-    real(rkind), parameter                   :: p     = 17._rkind / 6._rkind
-    real(rkind), parameter                   :: q     =  3._rkind / 2._rkind
-    real(rkind), parameter                   :: r     =  3._rkind / 2._rkind
-    real(rkind), parameter                   :: s     = -1._rkind / 6._rkind 
+        ! Set the scheme for the edge nodes (Ref. for notation: Lele - JCP
+        ! paper)
+    ! 1st derivative
+    real(rkind), parameter                   :: alpha =  0._rkind !3._rkind
+    real(rkind), parameter                   :: p     =  -71._rkind / 24._rkind !17._rkind / 6._rkind
+    real(rkind), parameter                   :: q     =  47._rkind / 8._rkind   !3._rkind / 2._rkind
+    real(rkind), parameter                   :: r     =  -31._rkind / 8._rkind  !3._rkind / 2._rkind
+    real(rkind), parameter                   :: s     =  23._rkind  / 24._rkind !-1._rkind / 6._rkind
 
 
-    !!  Calculate the corressponding weights 
+    !!  Calculate the corressponding weights
     ! Step 1: Assign the interior scheme
     real(rkind), parameter                   :: qhat        = a06d1
     real(rkind), parameter                   :: rhat        = b06d1
     real(rkind), parameter                   :: alpha_hat   = alpha06d1
 
     ! Step 2: Assign the scheme at node 2 to be Standard Pade (4th Order)
-    real(rkind), parameter                   :: q_p          = 3._rkind/4._rkind
-    real(rkind), parameter                   :: alpha_p     = 1._rkind/4._rkind
-    
+    real(rkind), parameter                   :: p_p         = 3._rkind/8._rkind*(3._rkind - 2._rkind / 22._rkind)
+    real(rkind), parameter                   :: q_p         = 1._rkind/8._rkind*( -1._rkind + 1._rkind)
+    real(rkind), parameter                   :: alpha_p     = 1._rkind /22._rkind     !1._rkind/4._rkind
+
     ! Step 3: Get the scheme at the node 3
-    real(rkind), parameter                   :: alpha_pp = ((40*alpha_hat - 1)*q  + 7*(4*alpha_hat &
-                                                         -  1)*s)/(16*(alpha_hat + 2)*q + 8*(1      &
-                                                         -  4*alpha_hat)*s)
-    real(rkind), parameter                   :: q_pp     = (1._rkind/3._rkind)*(alpha_pp + 2)
-    real(rkind), parameter                   :: r_pp     = (1._rkind/12._rkind)*(4*alpha_pp - 1)
+    real(rkind), parameter                   :: alpha_pp = 9089._rkind /69564._rkind    !((40*alpha_hat - 1)*q  + 7*(4*alpha_hat &                                                           
+    real(rkind), parameter                   :: q_pp     = 95257._rkind /92752._rkind    !(1._rkind/3._rkind)*(alpha_pp + 2)
+    real(rkind), parameter                   :: r_pp     = 5927._rkind  /25296._rkind / 3._rkind   !(1._rkind/12._rkind)*(4*alpha_pp - 1)
     real(rkind), parameter                   :: s_pp     =  0._rkind
 
     ! Step 4: Get the weights
-    real(rkind), parameter                   :: w1 = (2*alpha_hat + 1)/(2*(q + s))
-    real(rkind), parameter                   :: w2 = ((8*alpha_hat + 7)*q - 6*(2*alpha_hat + 1)*r &
-                                                   + (8*alpha_hat + 7)*s)/(9*(q + s))
-    real(rkind), parameter                   :: w3 = (4*(alpha_hat + 2)*q + 2*(1 - 4*alpha_hat)*s) &
-                                                   / (9*(q + s))
+    real(rkind), parameter                   :: w1 = 181._rkind / 31620._rkind   !(2*alpha_hat + 1)/(2*(q + s))
+    real(rkind), parameter                   :: w2 = 11473._rkind / 10540._rkind !((8*alpha_hat + 7)*q - 6*(2*alpha_hat + 1)*r &
+    real(rkind), parameter                   :: w3 = 1.1
+    
     
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -105,9 +103,6 @@ module cd06Staggerstuff
         procedure, private :: SolveXLU1
         procedure, private :: SolveYLU1
         procedure, private :: SolveZLU1
-        procedure, private :: SolveXLU1_BC
-        procedure, private :: SolveYLU1_BC
-        procedure, private :: SolveZLU1_BC
     
         procedure, private :: SolveLU2
        
@@ -187,8 +182,7 @@ contains
   
             if (n_ .GE. 8) then             
 
-                 call ComputeLU(this%LU1_BC,this%n-4,alpha06d1,one,alpha06d1)
-            !    call this%ComputeTri1(bc1_,bcn_)
+                call this%ComputeTri1(bc1_,bcn_)
             else if (n_ .EQ. 1) then
                 this%Tri1 = one
             else
@@ -388,34 +382,6 @@ contains
     
     end subroutine
 
-    subroutine SolveXLU1_BC(this,y,n2,n3)
-        class (cd06Stagger), intent(in) :: this
-        integer, intent(in) :: n2,n3
-        real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHSand put solution into it
-        integer :: i, j, k
-        real(rkind) :: sum1
-
-        do k = 1,n3
-            do j = 1,n2
-                ! Step 2
-                sum1 = this%LU1_BC(1,2)*y(3,j,k)
-                do i = 4,this%n-3
-                    y(i,j,k) = y(i,j,k) - this%LU1_BC(i-2,1)*y(i-1,j,k)
-                    sum1 = sum1 + this%LU1_BC(i-2,2)*y(i,j,k)
-                end do
-                y(this%n-2,j,k) = y(this%n-2,j,k) - sum1
-
-                ! Step 3
-                y(this%n-2,j,k)   = y(this%n-2,j,k) * this%LU1_BC(this%n-4,3)
-
-                y(this%n-3,j,k) =  y(this%n-3,j,k) * this%LU1_BC(this%n-5,3) -y(this%n-2,j,k) * this%LU1_BC(this%n-5,5)
-                do i = this%n-4,3,-1
-                    y(i,j,k) =  y(i,j,k) * this%LU1_BC(i-2,3)- y(i+1,j,k) *this%LU1_BC(i-2,4)- y(this%n-2,j,k) * this%LU1_BC(i-2,5)
-                end do
-            end do
-        end do
-
-    end subroutine
  
     subroutine SolveYLU1(this,y,n1,n3)
         
@@ -445,34 +411,6 @@ contains
     
     end subroutine
 
-    subroutine SolveYLU1_BC(this,y,n1,n3)
-
-        class (cd06Stagger), intent(in) :: this
-        integer, intent(in) :: n1,n3
-        real(rkind), dimension(n1,this%n,n3), intent(inout) :: y  ! Take in RHSand put solution into it
-        integer ::  j, k
-        real(rkind), dimension(n1) :: sum1
-
-        do k = 1,n3
-                ! Step 2
-                sum1 = this%LU1_BC(1,2)*y(:,3,k)
-                do j = 4,this%n-3
-                    y(:,j,k) = y(:,j,k) - this%LU1_BC(j-2,1)*y(:,j-1,k)
-                    sum1 = sum1 + this%LU1_BC(j-2,2)*y(:,j,k)
-                end do
-                y(:,this%n-2,k) = y(:,this%n-2,k) - sum1
-
-                ! Step 3
-                y(:,this%n-2,k)   = y(:,this%n-2,k) * this%LU1_BC(this%n-4,3)
-
-                y(:,this%n-3,k) =  y(:,this%n-3,k) * this%LU1_BC(this%n-5,3) -y(:,this%n-2,k) * this%LU1_BC(this%n-5,5)
-                do j = this%n-4,3,-1
-                    y(:,j,k) =  y(:,j,k) * this%LU1_BC(j-2,3)- y(:,j+1,k) *this%LU1_BC(j-2,4)- y(:,this%n-2,k) * this%LU1_BC(j-2,5)
-                end do
-        end do
-
-    end subroutine
-
     subroutine SolveZLU1(this,y,n1,n2)
         
         class (cd06Stagger), intent(in) :: this
@@ -497,32 +435,6 @@ contains
             y(:,:,k) =  y(:,:,k) * this%LU1(k,3)- y(:,:,k+1) * this%LU1(k,4)- y(:,:,this%n) * this%LU1(k,5)
         end do
     
-    end subroutine
-
-    subroutine SolveZLU1_BC(this,y,n1,n2)
-
-        class (cd06Stagger), intent(in) :: this
-        integer, intent(in) :: n1,n2
-        real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  ! Take in RHSand put solution into it
-        integer ::  k
-        real(rkind), dimension(n1,n2) :: sum1
-
-        ! Step 2
-        sum1 = this%LU1_BC(1,2)*y(:,:,3)
-        do k = 4,this%n-3
-            y(:,:,k) = y(:,:,k) - this%LU1_BC(k-2,1)*y(:,:,k-1)
-            sum1 = sum1 + this%LU1_BC(k-2,2)*y(:,:,k)
-        end do
-        y(:,:,this%n-2) = y(:,:,this%n-2) - sum1
-
-        ! Step 3
-        y(:,:,this%n-2)   = y(:,:,this%n-2) * this%LU1_BC(this%n-4,3)
-
-        y(:,:,this%n-3) =  y(:,:,this%n-3) * this%LU1_BC(this%n-5,3) -y(:,:,this%n-2) * this%LU1_BC(this%n-5,5)
-        do k = this%n-4,3,-1
-            y(:,:,k) =  y(:,:,k) * this%LU1_BC(k-2,3)- y(:,:,k+1) * this%LU1_BC(k-2,4)-y(:,:,this%n-2) * this%LU1_BC(k-2,5)
-        end do
-
     end subroutine
 
     subroutine SolveXTri1(this,y,n2,n3)
@@ -654,82 +566,79 @@ contains
 
         case (.FALSE.)
        
-
-            a10 = aD06d1 * this%onebydx
-            b10 = bD06d1 * this%onebydx * third
-            c10 = cD06d1 * this%onebydx * fifth
             RHS = 0.0d0
+            a06 = a06d1 * this%onebydx
+            b06 = b06d1 * this%onebydx
 
-            a102 = one * this%onebydx
-            a101 = a102
+            a_np_3 = w3*q_pp * this%onebydx
+            b_np_3 = w3*r_pp * this%onebydx
 
-            a104 =  9.0d0/8.0d0  * this%onebydx
-            b104 = -1.0d0/24.0d0 * this%onebydx
+            a_np_2 = w2*p_p * this%onebydx
+
+            a_np_1 = w1*(  p * this%onebydx)
+            b_np_1 = w1*(  q * this%onebydx)
+            c_np_1 = w1*(  r * this%onebydx)
+            d_np_1 = w1*(  s * this%onebydx)
+
 
             select case (dir)
 
                case("F2N")
-
-               RHS(3:this%n-2,j,k) = a06 * ( f(3:this%n-2,j,k) -f(2:this%n-3,j,k) ) &
-                                        + b06 * ( f(4:this%n-1,j,k) -f(1:this%n-4,j,k) )
-
+               
+                 do k = 1,n3
+                   do j = 1,n2
+              
+                      RHS(4:this%n-3,j,k) = a06 * ( f(4:this%n-3,j,k) -f(3:this%n-4,j,k) ) &
+                                        + b06 * ( f(5:this%n-2,j,k) -f(2:this%n-5,j,k) )
+                    end do
+                 end do
 
                select case(bc1)
                         ! left boundary (1:3)
                         case(1)
-                            RHS(3,:,:) = RHS(3,:,:) + a10 * (f(3,:,:) -f(2,:,:)) &
-                                                    + b10 * (f(4,:,:) -f(1,:,:)) &
-                                                    + c10 * (f(5,:,:) -f(1,:,:))
-                            RHS(2,:,:) = RHS(2,:,:) + a10 * (f(2,:,:) -f(1,:,:)) &
-                                                    + b10 * (f(3,:,:) -f(1,:,:)) &
-                                                    + c10 * (f(4,:,:) -f(2,:,:))
-                            RHS(1,:,:) = RHS(1,:,:) + a10 * (f(1,:,:) -f(1,:,:)) &
-                                                    + b10 * (f(2,:,:) -f(2,:,:)) &
-                                                    + c10 * (f(3,:,:) -f(3,:,:))
+
+                        !!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
-                            RHS(3,:,:) = RHS(3,:,:) + a10 * (f(3,:,:) -f(2,:,:)) &
-                                                    + b10 * (f(4,:,:) -f(1,:,:)) &
-                                                    + c10 * (f(5,:,:) +f(1,:,:))
-                            RHS(2,:,:) = RHS(2,:,:) + a10 * (f(2,:,:) -f(1,:,:)) &
-                                                    + b10 * (f(3,:,:) +f(1,:,:)) &
-                                                    + c10 * (f(4,:,:) +f(2,:,:))
-                            RHS(1,:,:) = RHS(1,:,:) + a10 * (f(1,:,:) +f(1,:,:)) &
-                                                    + b10 * (f(2,:,:) +f(2,:,:)) &
-                                                    + c10 * (f(3,:,:) +f(3,:,:))
+
+                        !!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!
                         case(0)
-                            RHS(1,:,:) = RHS(1,:,:) + a101 * (f(2,:,:) -f(1,:,:))
-                            RHS(2,:,:) = RHS(2,:,:) + a102 * (f(2,:,:) -f(1,:,:))
-                            RHS(3,:,:) = RHS(3,:,:) + a104 * (f(3,:,:) -f(2,:,:)) &
-                                                    + b104 * (f(4,:,:) -f(1,:,:))
+         
+                           do k = 1, n3
+                             do j = 1, n2
+                                RHS(1,j,k) =   a_np_1* f(1,j,k) + b_np_1*f(2,j,k)   &
+                                        +   c_np_1* f(3,j,k) + d_np_1*f(4,j,k)
+
+                                RHS(2,j,k) =   a_np_2*(f(2,j,k) - f(1,j,k))
+
+                                RHS(3,j,k) =   a_np_3*(f(3,j,k) - f(2,j,k)) &
+                                        +   b_np_3*(f(4,j,k) - f(1,j,k))
+                              end do
+                           end do
                     end select
 
                     select case(bcn)
                         !right boundary (n-2:n)
                         case(1)
-                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a10 *(f(this%n-2,:,:) - f(this%n-3,:,:)) &
-                                                                  + b10 *(f(this%n-1,:,:) - f(this%n-4,:,:)) &
-                                                                  + c10 *(f(this%n-1,:,:) - f(this%n-5,:,:))
-                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a10 *(f(this%n-1,:,:) - f(this%n-2,:,:)) &
-                                                                  + b10 *(f(this%n-1,:,:) - f(this%n-3,:,:)) &
-                                                                  + c10 *(f(this%n-2,:,:) - f(this%n-4,:,:))
-                            RHS(this%n,:,:) = RHS(this%n,:,:)     + a10 *(f(this%n-1,:,:) - f(this%n-1,:,:)) &
-                                                                  + b10 *(f(this%n-2,:,:) - f(this%n-2,:,:)) &
-                                                                  + c10 *(f(this%n-3,:,:) - f(this%n-3,:,:))
+
+                        !!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!
+ 
                         case(-1)
-                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a10 * (f(this%n-2,:,:) - f(this%n-3,:,:)) &
-                                                                  + b10 * (f(this%n-1,:,:) - f(this%n-4,:,:)) &
-                                                                  + c10 *(-f(this%n-1,:,:) - f(this%n-5,:,:))
-                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a10 * (f(this%n-1,:,:) - f(this%n-2,:,:)) &
-                                                                  + b10 *(-f(this%n-1,:,:) - f(this%n-3,:,:)) &
-                                                                  + c10 *(-f(this%n-2,:,:) - f(this%n-4,:,:))
-                            RHS(this%n,:,:) = RHS(this%n,:,:)     + a10 *(-f(this%n-1,:,:) - f(this%n-1,:,:)) &
-                                                                  + b10 *(-f(this%n-2,:,:) - f(this%n-2,:,:)) &
-                                                                  + c10 *(-f(this%n-3,:,:) - f(this%n-3,:,:))
+
+                        !!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!
+
                         case(0)
-                            RHS(this%n,:,:)   = RHS(this%n  ,:,:) + a101 *(f(this%n-1,:,:) - f(this%n-2,:,:))
-                            RHS(this%n-1,:,:) = RHS(this%n-1,:,:) + a102 *(f(this%n-1,:,:) - f(this%n-2,:,:))
-                            RHS(this%n-2,:,:) = RHS(this%n-2,:,:) + a104 *(f(this%n-2,:,:) - f(this%n-3,:,:)) &
-                                                                  + b104 *(f(this%n-1,:,:) - f(this%n-4,:,:))
+                         
+                          do k = 1,n3
+                             do j = 1, n2
+                                 RHS(this%n-2  ,j,k) =   a_np_3*(f(this%n-2  ,j,k) - f(this%n-3  ,j,k)) &
+                                        +   b_np_3*(f(this%n-1    ,j,k) - f(this%n-4  ,j,k))
+
+                                 RHS(this%n-1  ,j,k) =   a_np_2*(f(this%n-1    ,j,k) - f(this%n-2  ,j,k))
+
+                                 RHS(this%n    ,j,k) = -a_np_1* f(this%n-1    ,j,k) - b_np_1*f(this%n-2  ,j,k)   &
+                                        -   c_np_1* f(this%n-3  ,j,k) - d_np_1*f(this%n-4  ,j,k)
+                             end do
+                          end do
                     end select
 
                 case("N2F")
@@ -785,81 +694,72 @@ contains
 
           end select
         case (.FALSE.)
-            a10 = aD06d1 * this%onebydx
-            b10 = bD06d1 * this%onebydx * third
-            c10 = cD06d1 * this%onebydx * fifth
             RHS = 0.0d0
+              
+            a06 = a06d1 * this%onebydx
+            b06 = b06d1 * this%onebydx
 
-            a102 = one * this%onebydx
-            a101 = a102
+            a_np_3 = w3*q_pp * this%onebydx
+            b_np_3 = w3*r_pp * this%onebydx
 
-            a104 =  9.0d0/8.0d0  * this%onebydx
-            b104 = -1.0d0/24.0d0 * this%onebydx       
+            a_np_2 = w2*p_p * this%onebydx
+
+            a_np_1 = w1*(  p * this%onebydx)
+            b_np_1 = w1*(  q * this%onebydx)
+            c_np_1 = w1*(  r * this%onebydx)
+            d_np_1 = w1*(  s * this%onebydx)
+
+    
           select case(dir)
 
             case("N2F")
 
             case("F2N")
 
-              RHS(:,3:this%n-2,k) = a06 * ( f(:,3:this%n-2,k) -f(:,2:this%n-3,k) ) &
-                                        + b06 * ( f(:,4:this%n-1  ,k) -f(:,1:this%n-4,k) )
+              do k = 1, n3
+
+                 RHS(:,4:this%n-3,k) = a06 * ( f(:,4:this%n-3,k) -f(:,3:this%n-4,k) ) &
+                                        + b06 * ( f(:,5:this%n-2  ,k) -f(:,2:this%n-5,k) )
+              end do
 
               select case(bc1)
                         ! left boundary (1:3)
                         case(1)
-                            RHS(:,3,:) = RHS(:,3,:) + a10 * (f(:,3,:) -f(:,2,:)) &
-                                                    + b10 * (f(:,4,:) -f(:,1,:)) &
-                                                    + c10 * (f(:,5,:) -f(:,1,:))
-                            RHS(:,2,:) = RHS(:,2,:) + a10 * (f(:,2,:) -f(:,1,:)) &
-                                                    + b10 * (f(:,3,:) -f(:,1,:)) &
-                                                    + c10 * (f(:,4,:) -f(:,2,:))
-                            RHS(:,1,:) = RHS(:,1,:) + a10 * (f(:,1,:) -f(:,1,:)) &
-                                                    + b10 * (f(:,2,:) -f(:,2,:)) &
-                                                    + c10 * (f(:,3,:) -f(:,3,:))
+ 
+                        !!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
-                            RHS(:,3,:) = RHS(:,3,:) + a10 * (f(:,3,:) -f(:,2,:)) &
-                                                    + b10 * (f(:,4,:) -f(:,1,:)) &
-                                                    + c10 * (f(:,5,:) +f(:,1,:))
-                            RHS(:,2,:) = RHS(:,2,:) + a10 * (f(:,2,:) -f(:,1,:)) &
-                                                    + b10 * (f(:,3,:) +f(:,1,:)) &
-                                                    + c10 * (f(:,4,:) +f(:,2,:))
-                            RHS(:,1,:) = RHS(:,1,:) + a10 * (f(:,1,:) +f(:,1,:)) &
-                                                    + b10 * (f(:,2,:) +f(:,2,:)) &
-                                                    + c10 * (f(:,3,:) +f(:,3,:))
+                        !!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!
                         case(0)
-                            RHS(:,1,:) = RHS(:,1,:) + a101 * (f(:,2,:) -f(:,1,:))
-                            RHS(:,2,:) = RHS(:,2,:) + a102 * (f(:,2,:) -f(:,1,:))
-                            RHS(:,3,:) = RHS(:,3,:) + a104 * (f(:,3,:) -f(:,2,:)) &
-                                                    + b104 * (f(:,4,:) -f(:,1,:))
+
+                           do k =  1,n3
+                               RHS(:,1         ,k) =   a_np_1* f(:,1         ,k) + b_np_1*f(:,2         ,k)   &
+                                                       +   c_np_1* f(:,3         ,k) + d_np_1*f(:,4         ,k)
+
+                               RHS(:,2         ,k) =   a_np_2*(f(:,2         ,k) - f(:,1         ,k))
+
+                               RHS(:,3         ,k) =   a_np_3*(f(:,3         ,k) - f(:,2         ,k)) &
+                                                       +   b_np_3*(f(:,4         ,k) - f(:,1         ,k))
+                           end do
                     end select
 
                     select case(bcn)
                         !right boundary (n-2:n)
                         case(1)
-                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a10 *(f(:,this%n-2,:) - f(:,this%n-3,:)) &
-                                                                  + b10 *(f(:,this%n-1,:) - f(:,this%n-4,:)) &
-                                                                  + c10 *(f(:,this%n-1,:) - f(:,this%n-5,:))
-                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a10 *(f(:,this%n-1,:) - f(:,this%n-2,:)) &
-                                                                  + b10 *(f(:,this%n-1,:) - f(:,this%n-3,:)) &
-                                                                  + c10 *(f(:,this%n-2,:) - f(:,this%n-4,:))
-                            RHS(:,this%n,:) = RHS(:,this%n,:)     + a10 *(f(:,this%n-1,:) - f(:,this%n-1,:)) &
-                                                                  + b10 *(f(:,this%n-2,:) - f(:,this%n-2,:)) &
-                                                                  + c10 *(f(:,this%n-3,:) - f(:,this%n-3,:))
+                        !!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
-                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a10 * (f(:,this%n-2,:) - f(:,this%n-3,:)) &
-                                                                  + b10 * (f(:,this%n-1,:) - f(:,this%n-4,:)) &
-                                                                  + c10 *(-f(:,this%n-1,:) - f(:,this%n-5,:))
-                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a10 * (f(:,this%n-1,:) - f(:,this%n-2,:)) &
-                                                                  + b10 *(-f(:,this%n-1,:) - f(:,this%n-3,:)) &
-                                                                  + c10 *(-f(:,this%n-2,:) - f(:,this%n-4,:))
-                            RHS(:,this%n,:) = RHS(:,this%n,:)     + a10 *(-f(:,this%n-1,:) - f(:,this%n-1,:)) &
-                                                                  + b10 *(-f(:,this%n-2,:) - f(:,this%n-2,:)) &
-                                                                  + c10 *(-f(:,this%n-3,:) - f(:,this%n-3,:))
+                        !!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!
                         case(0)
-                            RHS(:,this%n,:)   = RHS(:,this%n  ,:) + a101 *(f(:,this%n-1,:) - f(:,this%n-2,:))
-                            RHS(:,this%n-1,:) = RHS(:,this%n-1,:) + a102 *(f(:,this%n-1,:) - f(:,this%n-2,:))
-                            RHS(:,this%n-2,:) = RHS(:,this%n-2,:) + a104 *(f(:,this%n-2,:) - f(:,this%n-3,:)) &
-                                                                  + b104 *(f(:,this%n-1,:) - f(:,this%n-4,:))
+
+                           do k = 1, n3
+                              RHS(:,this%n-2  ,k) =   a_np_3*(f(:,this%n-2  ,k) - f(:,this%n-3  ,k)) &
+                                                      +   b_np_3*(f(:,this%n-1  ,k) - f(:,this%n-4  ,k))
+
+                              RHS(:,this%n-1  ,k) =   a_np_2*(f(:,this%n - 1,k) - f(:,this%n-2  ,k))
+
+                              RHS(:,this%n    ,k) =  -a_np_1* f(:,this%n-1  ,k) - b_np_1*f(:,this%n-2  ,k)   &
+                                                     -   c_np_1* f(:,this%n-3  ,k) - d_np_1*f(:,this%n-4  ,k)
+                           end do
+
                     end select
 
 
@@ -911,16 +811,20 @@ contains
          end select
         case (.FALSE.)
 
-            a10 = aD06d1 * this%onebydx
-            b10 = bD06d1 * this%onebydx * third
-            c10 = cD06d1 * this%onebydx * fifth
             RHS = 0.0d0
+            a06 = a06d1 * this%onebydx
+            b06 = b06d1 * this%onebydx
 
-            a102 = one * this%onebydx
-            a101 = a102
+            a_np_3 = w3*q_pp * this%onebydx
+            b_np_3 = w3*r_pp * this%onebydx
 
-            a104 =  9.0d0/8.0d0  * this%onebydx
-            b104 = -1.0d0/24.0d0 * this%onebydx
+            a_np_2 = w2*p_p * this%onebydx
+
+            a_np_1 = w1*(  p * this%onebydx)
+            b_np_1 = w1*(  q * this%onebydx)
+            c_np_1 = w1*(  r * this%onebydx)
+            d_np_1 = w1*(  s * this%onebydx)
+
 
             select case (dir)
 
@@ -928,65 +832,41 @@ contains
 
                case ("F2N")!TODO: implement better non-periodic BC: currently12466...66421
                     !interior    
-                    RHS(:,:,3:this%n-2) = a06 * ( f(:,:,3:this%n-2) -f(:,:,2:this%n-3) ) &
-                               + b06 * ( f(:,:,4:this%n-1) - f(:,:,1:this%n-4) )
+                    RHS(:,:,4:this%n-3) = a06 * ( f(:,:,4:this%n-3) -f(:,:,3:this%n-4) ) &
+                               + b06 * ( f(:,:,5:this%n-2) - f(:,:,2:this%n-5) )
 
                     select case(bc1)
                         ! left boundary (1:3)
                         case(1)
-                            RHS(:,:,3) = RHS(:,:,3) + a10 * (f(:,:,3) -f(:,:,2)) &
-                                                    + b10 * (f(:,:,4) -f(:,:,1)) &
-                                                    + c10 * (f(:,:,5) -f(:,:,1))
-                            RHS(:,:,2) = RHS(:,:,2) + a10 * (f(:,:,2) -f(:,:,1)) &
-                                                    + b10 * (f(:,:,3) -f(:,:,1)) &
-                                                    + c10 * (f(:,:,4) -f(:,:,2))
-                            RHS(:,:,1) = RHS(:,:,1) + a10 * (f(:,:,1) -f(:,:,1)) &
-                                                    + b10 * (f(:,:,2) -f(:,:,2)) &
-                                                    + c10 * (f(:,:,3) -f(:,:,3))
+                        !!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
-                            RHS(:,:,3) = RHS(:,:,3) + a10 * (f(:,:,3) -f(:,:,2)) &
-                                                    + b10 * (f(:,:,4) -f(:,:,1)) &
-                                                    + c10 * (f(:,:,5) +f(:,:,1))
-                            RHS(:,:,2) = RHS(:,:,2) + a10 * (f(:,:,2) -f(:,:,1)) &
-                                                    + b10 * (f(:,:,3) +f(:,:,1)) &
-                                                    + c10 * (f(:,:,4) +f(:,:,2))
-                            RHS(:,:,1) = RHS(:,:,1) + a10 * (f(:,:,1) +f(:,:,1)) &
-                                                    + b10 * (f(:,:,2) +f(:,:,2)) &
-                                                    + c10 * (f(:,:,3) +f(:,:,3))
+                        !!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!
                         case(0)
-                            RHS(:,:,1) = RHS(:,:,1) + a101 * (f(:,:,2) -f(:,:,1))
-                            RHS(:,:,2) = RHS(:,:,2) + a102 * (f(:,:,2) -f(:,:,1))
-                            RHS(:,:,3) = RHS(:,:,3) + a104 * (f(:,:,3) -f(:,:,2)) &
-                                                    + b104 * (f(:,:,4) -f(:,:,1))
+                             RHS(:,:,1) =   a_np_1* f(:,:,1) + b_np_1*f(:,:,2)   &
+                                                     +   c_np_1* f(:,:,3) +  d_np_1*f(:,:,4)
+
+                             RHS(:,:,2) =   a_np_2*(f(:,:,2) -         f(:,:,1))
+
+                             RHS(:,:,3) =   a_np_3*(f(:,:,3) -         f(:,:,2)) &
+                                +   b_np_3*(f(:,:,4) -         f(:,:,1))
+
                     end select
 
                     select case(bcn)
                         !right boundary (n-2:n)
                         case(1)
-                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a10 *(f(:,:,this%n-2) - f(:,:,this%n-3)) &
-                                                                  + b10 *(f(:,:,this%n-1) - f(:,:,this%n-4)) &
-                                                                  + c10 *(f(:,:,this%n-1) - f(:,:,this%n-5))
-                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a10 *(f(:,:,this%n-1) - f(:,:,this%n-2)) &
-                                                                  + b10 *(f(:,:,this%n-1) - f(:,:,this%n-3)) &
-                                                                  + c10 *(f(:,:,this%n-2) - f(:,:,this%n-4))
-                            RHS(:,:,this%n) = RHS(:,:,this%n)     + a10 *(f(:,:,this%n-1) - f(:,:,this%n-1)) &
-                                                                  + b10 *(f(:,:,this%n-2) - f(:,:,this%n-2)) &
-                                                                  + c10 *(f(:,:,this%n-3) - f(:,:,this%n-3))
+                        !!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
-                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a10 * (f(:,:,this%n-2) - f(:,:,this%n-3)) &
-                                                                  + b10 * (f(:,:,this%n-1) - f(:,:,this%n-4)) &
-                                                                  + c10 *(-f(:,:,this%n-1) - f(:,:,this%n-5))
-                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a10 * (f(:,:,this%n-1) - f(:,:,this%n-2)) &
-                                                                  + b10 *(-f(:,:,this%n-1) - f(:,:,this%n-3)) &
-                                                                  + c10 *(-f(:,:,this%n-2) - f(:,:,this%n-4))
-                            RHS(:,:,this%n) = RHS(:,:,this%n)     + a10 *(-f(:,:,this%n-1) - f(:,:,this%n-1)) &
-                                                                  + b10 *(-f(:,:,this%n-2) - f(:,:,this%n-2)) &
-                                                                  + c10 *(-f(:,:,this%n-3) - f(:,:,this%n-3))
+                        !!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                         case(0)
-                            RHS(:,:,this%n)   = RHS(:,:,this%n  ) + a101 *(f(:,:,this%n-1) - f(:,:,this%n-2))
-                            RHS(:,:,this%n-1) = RHS(:,:,this%n-1) + a102 *(f(:,:,this%n-1) - f(:,:,this%n-2))
-                            RHS(:,:,this%n-2) = RHS(:,:,this%n-2) + a104 *(f(:,:,this%n-2) - f(:,:,this%n-3)) &
-                                                                  + b104 *(f(:,:,this%n-1) - f(:,:,this%n-4))
+                             RHS(:,:,this%n-2  ) =   a_np_3*(f(:,:,this%n-2  )- f(:,:,this%n-3  )) &
+                                +   b_np_3*(f(:,:,this%n-1  ) -f(:,:,this%n-4  ))
+
+                             RHS(:,:,this%n-1  ) =   a_np_2*(f(:,:,this%n-1  ) -f(:,:,this%n-2  ))
+
+                             RHS(:,:,this%n    ) =  -a_np_1* f(:,:,this%n-1  ) - b_np_1*f(:,:,this%n-2  )   &
+                                                    -   c_np_1* f(:,:,this%n-3  ) - d_np_1*f(:,:,this%n-4  )
+
                     end select
 
 
@@ -1062,7 +942,7 @@ contains
         case (.TRUE.)
            call this%SolveXLU1(df,na,nb)
         case (.FALSE.) 
-           call this%SolveXLU1_BC(df,na,nb)
+           call this%SolveXTri1(df,na,nb)
         end select
 
 
@@ -1110,7 +990,7 @@ contains
         case (.TRUE.)
            call this%SolveXLU1(df,na,nb)
         case (.FALSE.)
-           call this%SolveXLU1_BC(df,na,nb)
+           call this%SolveXTri1(df,na,nb)
         end select
 
 
@@ -1158,7 +1038,7 @@ contains
         case (.TRUE.)
            call this%SolveYLU1(df,na,nb)
         case (.FALSE.) 
-           call this%SolveYLU1_BC(df,na,nb)
+           call this%SolveYTri1(df,na,nb)
         end select
 
 
@@ -1206,7 +1086,7 @@ contains
         case (.TRUE.)
            call this%SolveYLU1(df,na,nb)
         case (.FALSE.)
-           call this%SolveYLU1_BC(df,na,nb)
+           call this%SolveYTri1(df,na,nb)
         end select
 
 
@@ -1253,7 +1133,7 @@ contains
         case (.TRUE.)
            call this%SolveZLU1(df,na,nb)
         case (.FALSE.) 
-           call this%SolveZLU1_BC(df,na,nb)
+           call this%SolveZTri1(df,na,nb)
         end select
 
 
@@ -1301,7 +1181,7 @@ contains
         case (.TRUE.)
            call this%SolveZLU1(df,na,nb)
         case (.FALSE.)
-           call this%SolveZLU1_BC(df,na,nb)
+           call this%SolveZTri1(df,na,nb)
         end select
 
 

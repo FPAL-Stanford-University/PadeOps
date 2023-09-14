@@ -159,6 +159,7 @@ module SolidMod
         procedure :: filter
         procedure :: filter_g
         procedure :: YsUpwind
+        procedure :: getLAD_VF
         final     :: destroy
 
     end type
@@ -4653,6 +4654,7 @@ contains
         else
            call this%getRHS_Ys(rho,u,v,w,rhsYs,dy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         endif
+
         call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
 
         ! advance sub-step
@@ -4800,7 +4802,6 @@ contains
              call gradient(this%decomp,this%der,this%Ys,dYdx, dYdy,dYdz,x_bc,y_bc,z_bc)
              call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)
              call divergence(this%decomp,this%der,this%diff*dYdx,this%diff*dYdy,this%diff*dYdz,this%YsLAD,-x_bc,-y_bc,-z_bc)
-             print *, 'YsLAD: ', this%YsLAD(1,1,1)
           endif
 
           rhsYs = rhsYs + this%YsLAD
@@ -4820,7 +4821,6 @@ contains
 
            endif
 
-
            call interpolateFV_x(this%decomp,this%interpMid,u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV_y(this%decomp,this%interpMid,v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV_z(this%decomp,this%interpMid,w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -4829,6 +4829,7 @@ contains
         !  call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,rhoYs_int,periodicx, periodicy, periodicz, x_bc, y_bc,z_bc)
 
            call divergenceFV(this%decomp,this%derStagg,-u_int*rho_int(:,:,:,1)*Ys_int(:,:,:,1),-v_int*rho_int(:,:,:,2)*Ys_int(:,:,:,2),-w_int*rho_int(:,:,:,3)*Ys_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
          !call divergenceFV(this%decomp,this%derStagg,-u_int*rhoYs_int(:,:,:,1),-v_int*rhoYs_int(:,:,:,2),-w_int*rhoYs_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
      
 
@@ -5038,6 +5039,22 @@ contains
 
         endif
 
+
+    end subroutine
+
+    subroutine getLAD_VF(this,rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        use operators, only: gradient,divergence
+        use constants, only: one
+        class(solid), intent(inout)  :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+        logical :: periodicx,periodicy,periodicz
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2,tmp3, tmp4, tmp5, tmp6,rhocsq1, rhocsq2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx, dVFdy, dVFdz
+    
+        call gradient(this%decomp,this%der,this%VF,dVFdx,dVFdy,dVFdz,x_bc,y_bc,z_bc)
+
+        call divergence(this%decomp,this%der,this%rhodiff*dVFdx,this%rhodiff*dVFdy,this%rhodiff*dVFdz,this%vfLAD,-x_bc,-y_bc,-z_bc)
 
     end subroutine
 
@@ -5304,7 +5321,6 @@ contains
            call this%hydro%get_enthalpy(this%T,enthalpy)
         elseif (this%pEqb) then
            call this%hydro%get_enthalpy_5eqn(this%p,this%rhom,enthalpy)
-           print *, "5eqn"
         endif
     end subroutine
 

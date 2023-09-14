@@ -162,9 +162,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx !- two  ! x \in (-2,4]
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
+                    x(i,j,k) = real( ix1  + i - 1, rkind ) * dx !- two  ! x \in (-2,4]
+                    y(i,j,k) = real( iy1  + j - 1, rkind ) * dy
+                    z(i,j,k) = real( iz1  + k - 1, rkind ) * dz
                 end do
             end do
         end do
@@ -371,7 +371,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         ! shock_init = interface_init - 0.3_rkind  ! (10*thick) grid points away from the interface
         ! dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
 
-        u   = v0 !(u2-u1)*dum
+        u   = v0 !+ v0* (noise-0.5)*1d-6 !(u2-u1)*dum
         v   = 0
         w   = zero
 
@@ -381,7 +381,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         !tmp = half * ( one - erf((0.25 - (x-interface_init)*(x-interface_init) - (y-3.0_rkind)*(y-3.0_rkind))/(thick*dx) ) )
         !tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) - (y-0.5)*(y-0.5))/(thick*dx) ) )
          tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) -(y-0.5)*(y-0.5))/(thick*dx) ) ) 
-
+        ! tmp = half * ( one - erf((0.25_rkind**2 - (x-0.5)*(x-0.5)-(y-0.5)*(y-0.5))/(thick*dx) ) )
        ! tmp = half * ( one - erf((0.35**2 - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
 
 
@@ -401,10 +401,10 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
         !mix%material(2)%g11 = mix%material(1)%g11
 
-        mix%material(1)%p  = p_amb !+ (noise-0.5)*1d-8 !p2*dum + p1*(one-dum)
+        mix%material(1)%p  = p_amb ! + (noise-0.5)*1d-6   !66666dum + p1*(one-dum)
         mix%material(2)%p  = mix%material(1)%p
 
-        mix%material(1)%VF = minVF + (one-two*minVF)*tmp
+        mix%material(1)%VF = minVF + (one-two*minVF)*tmp !+  (noise-0.5)*1d-7
         mix%material(2)%VF = one - mix%material(1)%VF
 
 

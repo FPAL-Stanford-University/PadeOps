@@ -59,8 +59,12 @@ module SolidGrid
     integer, parameter :: xflux_e_index       = 37
     integer, parameter :: yflux_e_index       = 38
     integer, parameter :: zflux_e_index       = 39
-
-    integer, parameter :: nfields = 39
+    integer, parameter :: uJ_index            = 40
+    integer, parameter :: vJ_index            = 41
+    integer, parameter :: wJ_index            = 42
+    integer, parameter :: keJ_index           = 43
+    integer, parameter :: eJ_index            = 44
+    integer, parameter :: nfields = 44
 
     integer, parameter :: mom_index = 1
     integer, parameter :: TE_index = mom_index+3
@@ -88,7 +92,7 @@ module SolidGrid
     type, extends(grid) :: sgrid
        
         type(filters),          allocatable :: gfil
-        type(derivatives),      allocatable :: derD02, derD06, derD04
+        type(derivatives),      allocatable :: derD02, derD06, derD04,derCD06
         type(solid_mixture),    allocatable :: mix
         type(ladobject),        allocatable :: LAD
         type(derivativesStagg), allocatable :: derStagg
@@ -173,7 +177,8 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: syy
         real(rkind), dimension(:,:,:), pointer :: syz
         real(rkind), dimension(:,:,:), pointer :: szz
-
+        
+        real(rkind), dimension(:,:,:), pointer :: keJ, uJ, vJ, wJ, eJ
         real(rkind) :: phys_mu1, phys_mu2
         real(rkind) :: phys_bulk1, phys_bulk2
         real(rkind) :: phys_kap1, phys_kap2
@@ -400,7 +405,6 @@ contains
         ! Initialize decomp
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%decomp)
-        
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
         
@@ -434,7 +438,6 @@ contains
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         call alloc_buffs(this%mesh,3,'y',this%decomp)
-        
         ! Associate pointers for ease of use
         this%x    => this%mesh  (:,:,:, 1) 
         this%y    => this%mesh  (:,:,:, 2) 
@@ -458,7 +461,6 @@ contains
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
-
         ! Allocate der
         if ( allocated(this%der) ) deallocate(this%der)
         allocate(this%der)
@@ -484,6 +486,7 @@ contains
                               .false.,       .false.,        .false., &
                               .false.)     
 
+
         if ( allocated(this%derD04) ) deallocate(this%derD04)
         allocate(this%derD04)
 
@@ -507,6 +510,17 @@ contains
                                               "d06",  "d06",   "d06", &
                               .false.,       .false.,        .false., &
                               .false.)      
+         ! Allocate derCD06
+        if ( allocated(this%derCD06) ) deallocate(this%derCD06)
+        allocate(this%derCD06)
+
+        ! Initialize derivatives 
+        call this%derCD06%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "cd06",  "cd06",   "cd06", &
+                              .false.,       .false.,        .false., &
+                              .false.)
 
         ! Allocate derStagg
         if ( allocated(this%derStagg) ) deallocate(this%derStagg)
@@ -546,7 +560,6 @@ contains
                            .false.,       .false.,        .false., &
                            .false.)      
 
-
         
         ! Allocate interpMid
         if ( allocated(this%interpMid) ) deallocate(this%interpMid)
@@ -560,7 +573,6 @@ contains
                            .false.,       .false.,        .false., &
                            .false.)
 
-        
 
         ! Allocate fil and gfil
         if ( allocated(this%fil) ) deallocate(this%fil)
@@ -571,11 +583,10 @@ contains
         ! Initialize filters
         call this%fil%init(                           this%decomp, &
                          periodicx,     periodicy,      periodicz, &
-                          filter_x,      filter_y,       filter_z ,filter_alpha )      
+                          filter_x,      filter_y,       filter_z ,filter_alpha )     
         call this%gfil%init(                          this%decomp, &
                          periodicx,     periodicy,      periodicz, &
                         "gaussian",    "gaussian",     "gaussian"  )      
-
         ! Allocate LAD object
         if ( allocated(this%LAD) ) deallocate(this%LAD)
         allocate(this%LAD)
@@ -586,11 +597,12 @@ contains
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
         allocate(this%mix)      
- 
+  
 
 
   ! Initialize derivatives
-        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derStaggd02,this%derD06,this%derD04,this%interpMid,this%interpMid02,this%use_Stagg,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%twoPhaseLAD,this%LAD5eqn,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension, this%use_gradXi,this%energy_surfTen, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV,this%use_XiLS, this%XiLS_eps, this%use_D04, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc)
+        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derStaggd02,this%derD06,this%derCD06,this%derD04,this%interpMid,this%interpMid02,this%use_Stagg,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%twoPhaseLAD,this%LAD5eqn,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension, this%use_gradXi,this%energy_surfTen, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV,this%use_XiLS, this%XiLS_eps, this%use_D04, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc)
+
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -655,9 +667,13 @@ contains
         this%xflux_e   => this%fields(:,:,:, xflux_e_index)
         this%yflux_e   => this%fields(:,:,:, yflux_e_index)
         this%zflux_e   => this%fields(:,:,:, zflux_e_index)
+        this%uJ        => this%fields(:,:,:, uJ_index)
+        this%vJ        => this%fields(:,:,:, vJ_index)
+        this%wJ        => this%fields(:,:,:, wJ_index)
+        this%keJ       => this%fields(:,:,:, keJ_index)
+        this%eJ        => this%fields(:,:,:,eJ_index)
 
-        
-        ! Initialize everything to a constant Zero
+       ! Initialize everything to a constant Zero
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
@@ -715,7 +731,11 @@ contains
         varnames(37) = 'xflux_e'      
         varnames(38) = 'yflux_e' 
         varnames(39) = 'zflux_e' 
-         
+        varnames(40) = 'uJ'
+        varnames(41) = 'vJ'
+        varnames(42) = 'wJ'
+        varnames(43) = 'keJ'
+        varnames(44) = 'eJ'  
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
@@ -769,7 +789,11 @@ contains
         nullify(this%xflux_e  )
         nullify(this%yflux_e  )
         nullify(this%zflux_e  )
-
+        nullify(this%uJ)
+        nullify(this%vJ)
+        nullify(this%wJ)
+        nullify(this%keJ)
+        nullify(this%eJ)
 
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
@@ -786,6 +810,9 @@ contains
         call this%derD06%destroy()
         if (allocated(this%derD06)) deallocate(this%derD06)
   
+        call this%derCD06%destroy()
+        if (allocated(this%derCD06)) deallocate(this%derCD06)
+
         call this%fil%destroy()
         if (allocated(this%fil)) deallocate(this%fil) 
         
@@ -966,33 +993,47 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out)    :: rhsP
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,tmp1,tmp2,tmp3,u_int,v_int, w_int,flux,divu, Gam,esum,ksum
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,tmp1,tmp2,tmp3,u_int,v_int, w_int,flux,divu, Gam,esum,ksum, esumJ
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rho_int,Ys_int,rhoYs_int, p_int
         integer :: i
        ! vcon = 100
-       if(.NOT. this%use_Stagg) then
-
-       else
-
+      
          Gam = 0
          esum = 0
          do i = 1,2
 
             Gam = Gam + this%mix%material(i)%VF/(this%mix%material(i)%hydro%gam- 1 )
             esum = esum + this%mix%material(i)%eh*this%mix%material(i)%rhom*this%mix%material(i)%intSharp_aFV
-            
+
          enddo
+
+       if(.NOT. this%use_Stagg) then
+
+
+         call this%gradient(this%p, tmp1, tmp2, tmp3, this%x_bc,  this%y_bc,this%z_bc)
+         call divergence(this%decomp, this%der,this%u, this%v, this%w, divu, this%x_bc, this%y_bc, this%z_bc)
+       
+       else
 
          call interpolateFV_x(this%decomp,this%interpMid,this%u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV_y(this%decomp,this%interpMid,this%v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV_z(this%decomp,this%interpMid,this%w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV(this%decomp,this%interpMid,this%p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
+         !this%u_int = u_int
+         !this%v_int = v_int
+         !this%w_int = w_int
+         !this%tauxy_int  = p_int(:,:,:,1)
+         !this%tauyy_int = p_int(:,:,:,2)
+         !this%tauyz_int = p_int(:,:,:,3)
          call gradFV_x(this%decomp,this%derStagg,-p_int(:,:,:,1),tmp1,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call gradFV_y(this%decomp,this%derStagg,-p_int(:,:,:,2),tmp2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call gradFV_z(this%decomp,this%derStagg,-p_int(:,:,:,3),tmp3,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          !call divergenceFV(this%decomp,this%derStagg,-u_int*p_int(:,:,:,1),-v_int*p_int(:,:,:,2),-w_int*p_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call divergenceFV(this%decomp,this%derStagg,-u_int,-v_int,-w_int,divu,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+       endif
+
 
          if( .NOT. this%intSharp) then
    
@@ -1004,7 +1045,23 @@ contains
 
          endif
 
-       endif
+
+         if( this%twoPhaseLAD ) then
+
+            esumJ = 0
+            do i = 1,2
+                
+                call this%mix%material(i)%getLAD_VF(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
+                esumJ = esumJ + this%mix%material(i)%eh*this%mix%material(i)%rhom*this%mix%material(i)%vfLAD
+
+            enddo
+
+
+            rhsP = rhsP + (1/Gam) * (this%eJ - esumJ) 
+
+         end if
+
+       
     end subroutine
 
 
@@ -1080,8 +1137,9 @@ contains
          !       this%mix%surfaceTension_f = this%mix%gradp
         endif
 
-     !   call this%mix%Test_Der(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
+        !call this%mix%Test_Der(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        !print *, "before test"
+        !call this%mix%Test_Der_Periodic(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         if(this%use_CnsrvSurfaceTension) then
             if(this%mix%ns.ne.2) then
                 call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
@@ -1224,8 +1282,11 @@ contains
 
             !print *, '----', nrank, isub
             call this%get_conserved()
+        
+            !!!!!!!!!!!!!!!!!!!!!! COMMENTED OUT G STUFF !!!!!!!!!!!!!!!!!!!!!!
             call this%get_conserved_g()
- 
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
                 !write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
@@ -1233,13 +1294,15 @@ contains
                 call GracefulExit(trim(charout), 999)
             end if
             call this%mix%checkNaN()
+             
 
             ! Pre-compute stress, LAD, J, etc.
             ! call this%mix%getSOS(this%rho,this%p,this%sos)
             call this%mix%getLAD(this%rho,this%p,this%e,this%sos,this%use_gTg,this%strainHard,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+ 
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
-            
+
             if(this%intSharp) then
                if(this%mix%ns.ne.2) then
                   call GracefulExit("Problem if ns=1, should work for ns>2 but not tested",4634)
@@ -1249,6 +1312,7 @@ contains
                !    if ((isub.eq.one).and.(nrank.eq.0)) print*,"intSharp off for startup"
                ! else
                   call this%mix%get_intSharp(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)  ! Compute interface sharpening terms
+              
                !   call this%mix%get_intSharp_clean(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w) ! Compute interface sharpening terms
 
                !endif
@@ -1304,18 +1368,29 @@ contains
             endif
 
 
+           !!!!!!!!!!!!!! UNCOMMENT            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
            Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
            this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
+           !!!!!!!!!!!!!!!!!!! UNCOMMENT       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  
+
             ! calculate sources if they are needed
             if(.not. this%PTeqb) call this%mix%calculate_source(this%rho,divu,this%u,this%v,this%w,this%p,Fsource,this%x_bc,this%y_bc,this%z_bc) ! -- actually, source terms should be included for PTeqb as well --NSG
 
-
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! COMMENTED OUT UPDATE G             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             ! Now update all the individual species variables
             !check eps
             call this%mix%update_g(isub,max(this%dt,eps),this%rho,this%u,this%v,this%w,this%x,this%y,this%z,Fsource,this%tsim,this%x_bc,this%y_bc,this%z_bc)               ! g tensor
+
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
             !call this%get_primitive_g()
 
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
+
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
             !    call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
@@ -1325,16 +1400,17 @@ contains
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
             end if
 
+
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
 
 !            this%p = 10
-!            this%w = 0
-!            this%e = 2.941
-!            this%T = 10
-!            this%u = -1*(sin(pi*this%x)**2)*sin(2*pi*this%y)*cos(pi*this%tsim/4)
-!            this%v = (sin(pi*this%y)**2)*sin(2*pi*this%x)*cos(pi*this%tsim/4)
+            !this%w = 0
+            !this%e = 2.941
+            !this%T = 10
+            !this%u = 10
+            !this%v = 0 !(sin(pi*this%y)**2)*sin(2*pi*this%x)*cos(pi*this%tsim/4)
             ! !print *, '-----', 8, this%Wcnsrv(179,1,1,1:4)
             ! !do i = 1, size(this%Wcnsrv,1)
             ! !    write(*,'(4(e21.14,1x))') this%Wcnsrv(i,1,1,1:4)
@@ -1391,24 +1467,28 @@ contains
             !    endif
             ! else
             
+
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !              if(.NOT. this%use_Stagg) then
                   ! Filter the conserved variables
                   call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
                   call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
                   call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
                   call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-                  call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+                  !call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
                   !print *, '-----', 9, this%Wcnsrv(179,1,1,1:4)
                   !do i = 1, size(this%Wcnsrv,1)
                   !    write(*,'(4(e21.14,1x))') this%Wcnsrv(i,1,1,1:4)
                   !enddo
-
+             
+           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                   ! Filter the individual species variables
-                  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
+                  !call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
 !              end if 
            !  endif
-
+           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
             if(this%use_CnsrvSurfaceTension) then
 
@@ -1419,9 +1499,11 @@ contains
 
             call this%get_primitive()
 
+            !!!!!!!!!!! COMMENTED OUT THINGS TO DO WITH G             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             call this%get_primitive_g()
             call this%mix%implicit_plastic(this%rho) !implicit plastic deformation using new g and new rho
-            call this%mix%filter_g(1, this%x_bc, this%y_bc, this%z_bc)
+            !call this%mix%filter_g(1, this%x_bc, this%y_bc, this%z_bc)
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
             ! if (.NOT. this%explPlast) then
             !     if (this%plastic) then
@@ -1455,12 +1537,12 @@ contains
             elseif (this%pEqb) then
             !    call this%mix%equilibratePressure(this%rho, this%e, this%p)
                  call this%mix%updateP_VF(this%rho,this%e,this%p)
+                 call this%mix%CheckP(this%rho,this%p, this%e)
             elseif (this%pRelax) then
                 call this%mix%relaxPressure(this%rho, this%e, this%p)
                 !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
             end if
             !print *, nrank, 11
-
             !#####################################################################
             if(this%intSharp_flp) then  !high pressure ratio shocks require additional dealiasing
                call this%filter(this%p, this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
@@ -1473,15 +1555,16 @@ contains
 
             
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
-            
             if(this%pEqb) then
             call this%post_bc_2()
             else
             call this%post_bc()
             endif
+
             !print *, nrank, 12
         end do
 
+          
       !  if(this%pEqb) then
       !    call this%mix%MLong_relax(this%rho, this%e, this%p)
       !    call this%post_bc_2()
@@ -1511,6 +1594,23 @@ contains
         ! continuum
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz   &
                + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) + one/(this%dz**2) ))
+
+        !print *, "u maxval"
+        !print *, P_MAXVAL( ABS(this%u)/this%dx )
+        !print *, "v maxval"
+        !print *, P_MAXVAL( ABS(this%v)/this%dy )
+        !print *, "w maxval"
+        !print *, P_MAXVAL( ABS(this%w)/this%dz )        
+        !print *, "sos"
+        !print *, P_MAXVAL( this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) +one/(this%dz**2) ) )
+        !print *, "dy"
+        !print *, this%dy
+        !print *, "dx"
+        !print *, this%dx
+        !print *, "dz"
+        !print *, this%dz
+        !print *, "sosmax"
+        !print *, P_MAXVAL( this%sos)
         dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)! * this%CFL
 
         !dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
@@ -1843,7 +1943,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: u_int, v_int,w_int
         integer :: imat,i
         !logical :: useNewSPF = .FALSE.
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: ke,tmp,uJ, vJ, wJ, keJ, dJ,eJ,drhodx,drhody,drhodz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: ke,tmp,dJ,drhodx,drhody,drhodz, uJ, vJ, wJ, keJ, eJ
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: drhoedx,drhoedy, drhoedz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, 3) :: J,Frho,Fenergy
         real(rkind) :: g = 0.1
@@ -2030,16 +2130,16 @@ contains
           ke = half*( this%u**2 + this%v**2 + this%w**2 )
           call this%mix%getLAD_5eqn(this%rho,this%p,Frho,Fenergy,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz)
 
-          call divergence(this%decomp,this%der,this%u*Frho(:,:,:,1), this%u*Frho(:,:,:,2), this%u*Frho(:,:,:,3),uJ,this%x_bc,this%y_bc,this%z_bc)
-          call divergence(this%decomp,this%der,this%v*Frho(:,:,:,1),this%v*Frho(:,:,:,2), this%v*Frho(:,:,:,3),vJ,this%x_bc,this%y_bc,this%z_bc)
-          call divergence(this%decomp,this%der,this%w*Frho(:,:,:,1),this%w*Frho(:,:,:,2), this%w*Frho(:,:,:,3),wJ,this%x_bc,this%y_bc,this%z_bc)
-          call divergence(this%decomp,this%der,ke*Frho(:,:,:,1),ke*Frho(:,:,:,2), ke*Frho(:,:,:,3),keJ,this%x_bc,this%y_bc,this%z_bc)
-          call divergence(this%decomp,this%der,Fenergy(:,:,:,1),Fenergy(:,:,:,2), Fenergy(:,:,:,3),eJ,this%x_bc,this%y_bc,this%z_bc)
+          call divergence(this%decomp,this%der,this%u*Frho(:,:,:,1), this%u*Frho(:,:,:,2), this%u*Frho(:,:,:,3),this%uJ,this%x_bc,this%y_bc,this%z_bc)
+          call divergence(this%decomp,this%der,this%v*Frho(:,:,:,1),this%v*Frho(:,:,:,2), this%v*Frho(:,:,:,3),this%vJ,this%x_bc,this%y_bc,this%z_bc)
+          call divergence(this%decomp,this%der,this%w*Frho(:,:,:,1),this%w*Frho(:,:,:,2), this%w*Frho(:,:,:,3),this%wJ,this%x_bc,this%y_bc,this%z_bc)
+          call divergence(this%decomp,this%der,ke*Frho(:,:,:,1),ke*Frho(:,:,:,2), ke*Frho(:,:,:,3),this%keJ,this%x_bc,this%y_bc,this%z_bc)
+          call divergence(this%decomp,this%der,Fenergy(:,:,:,1),Fenergy(:,:,:,2), Fenergy(:,:,:,3),this%eJ,this%x_bc,this%y_bc,this%z_bc)
 
-          rhs(:,:,:, mom_index   ) = rhs(:,:,:,mom_index   ) + uJ
-          rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + vJ
-          rhs(:,:,:, mom_index+2 ) = rhs(:,:,:,mom_index+2 ) + wJ
-          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + keJ + eJ
+          rhs(:,:,:, mom_index   ) = rhs(:,:,:,mom_index   ) + this%uJ
+          rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + this%vJ
+          rhs(:,:,:, mom_index+2 ) = rhs(:,:,:,mom_index+2 ) + this%wJ
+          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%keJ + this%eJ
 
         endif
 
@@ -2607,7 +2707,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE, u_int,v_int, w_int, p_int, tauxx_int, tauxy_int, tauxz_int, qx_int, e_int, rho_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int,spe_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int,spe_int 
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         integer :: i
 
@@ -2620,20 +2720,17 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call interpolateFV_x(this%decomp,this%interpMid,tauxx,tauxx_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_x(this%decomp,this%interpMid,tauxy,tauxy_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_x(this%decomp,this%interpMid,tauxz,tauxz_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_x(this%decomp,this%interpMid,this%u*this%rho,rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_x(this%decomp,this%interpMid,this%v*this%rho,rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_x(this%decomp,this%interpMid,this%w*this%rho,rhow_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_x(this%decomp,this%interpMid,this%e*this%rho,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_x(this%decomp,this%interpMid,qx,qx_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        
-        buff = rho_int*u_int*u_int + p_int - tauxx_int !x-momentum
+
+        flux = 0.0
+        buff = rho_int*u_int*u_int + p_int !- tauxx_int !x-momentum
         !buff = rhou_int*u_int + p_int - tauxx_int
 !print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
-        if(this%use_CnsrvSurfaceTension) then
+        !if(this%use_CnsrvSurfaceTension) then
 
-            buff = buff - this%mix%surfaceTension_fxx
+        !    buff = buff - this%mix%surfaceTension_fxx
 
-        endif
+        !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%xflux_x = flux
@@ -2641,37 +2738,48 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux =0.0
         buff = rho_int*u_int*v_int ! - tauxy_int !y-momentum
         !buff = rhov_int*u_int - tauxy_int
-        if(this%use_CnsrvSurfaceTension) then
+        !if(this%use_CnsrvSurfaceTension) then
 
-            buff = buff - this%mix%surfaceTension_fxy_x
+        !    buff = buff - this%mix%surfaceTension_fxy_x
 
-        endif
+        !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%xflux_y = flux
 
-        buff = rho_int*u_int*w_int - tauxz_int !z-momentum
-        if(this%use_CnsrvSurfaceTension) then
+        buff = rho_int*u_int*w_int !- tauxz_int !z-momentum
+        !if(this%use_CnsrvSurfaceTension) then
 
-            buff = buff - this%mix%surfaceTension_fxz_x
+        !    buff = buff - this%mix%surfaceTension_fxz_x
 
-        endif
+        !endif
         !buff = rhow_int*u_int - tauxz_int
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
         this%xflux_z = flux
+        flux = 0.0
 
         TE = rho_int*(e_int + half*(u_int*u_int + v_int*v_int + w_int*w_int) )
         !TE = rhoe_int + half*(u_int*rhou_int + v_int*rhov_int + w_int*rhow_int)
-        buff = ( TE + p_int - tauxx_int )*u_int + qx_int - v_int*tauxy_int - w_int*tauxz_int
-        if(this%use_CnsrvSurfaceTension) then
+        !buff = ( TE + p_int - tauxx_int )*u_int + qx_int - v_int*tauxy_int - w_int*tauxz_int
+        buff = ( TE + p_int )*u_int ! qx_int - v_int*tauxy_int - w_int*tauxz_int
 
-            buff = buff + this%mix%surfaceTension_pe_x*u_int -this%mix%surfaceTension_fxx*u_int - this%mix%surfaceTension_fxy_x*v_int - this%mix%surfaceTension_fxz_x*w_int
+        !if(this%use_CnsrvSurfaceTension) then
 
-        endif       
+        !    buff = buff + this%mix%surfaceTension_pe_x*u_int -this%mix%surfaceTension_fxx*u_int - this%mix%surfaceTension_fxy_x*v_int - this%mix%surfaceTension_fxz_x*w_int
+
+        !endif       
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
         this%xflux_e = flux
+
+        this%rho_int = rho_int
+        this%u_int = u_int
+        this%v_int = v_int
+        this%w_int = w_int
+        this%e_int     = e_int
+        this%p_int     = p_int
+
     end subroutine
 
     subroutine getRHS_yStagg( this,  rhs, tauxy,tauyy,tauyz, qy)
@@ -2694,69 +2802,67 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call interpolateFV_y(this%decomp,this%interpMid,tauxy,tauxy_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_y(this%decomp,this%interpMid,tauyy,tauyy_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_y(this%decomp,this%interpMid,tauyz,tauyz_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_y(this%decomp,this%interpMid,this%u*this%rho,rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_y(this%decomp,this%interpMid,this%v*this%rho,rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_y(this%decomp,this%interpMid,this%w*this%rho,rhow_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_y(this%decomp,this%interpMid,this%e*this%rho,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_y(this%decomp,this%interpMid,qy,qy_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      
-        buff = rho_int*v_int*u_int  - tauxy_int !x-momentum
+        flux = 0.0
+        buff = rho_int*v_int*u_int ! - tauxy_int !x-momentum
         !buff = rhou_int*v_int - tauxy_int
 !print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
-        if(this%use_CnsrvSurfaceTension) then
+        !if(this%use_CnsrvSurfaceTension) then
 
-            buff = buff - this%mix%surfaceTension_fxy_y
+        !    buff = buff - this%mix%surfaceTension_fxy_y
 
-        endif
+        !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%yflux_x = flux
 
+        flux = 0.0
         buff = rho_int*v_int*v_int + p_int ! - tauyy_int !y-momentum
         !buff = rhov_int*v_int + p_int - tauyy_int
-        if(this%use_CnsrvSurfaceTension) then
+        !if(this%use_CnsrvSurfaceTension) then
 
-            buff = buff - this%mix%surfaceTension_fyy
+        !    buff = buff - this%mix%surfaceTension_fyy
 
-        endif
+        !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%yflux_y = flux
 
-        buff = rho_int*v_int*w_int - tauyz_int !z-momentum
+        flux = 0.0
+        buff = rho_int*v_int*w_int ! - tauyz_int !z-momentum
         !buff = rhow_int*w_int -tauyz_int
-                if(this%use_CnsrvSurfaceTension) then
+        !        if(this%use_CnsrvSurfaceTension) then
 
-            buff = buff - this%mix%surfaceTension_fxy_y
+        !    buff = buff - this%mix%surfaceTension_fxy_y
 
-        endif
+        !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
         this%yflux_z = flux
 
+        flux = 0.0
         TE = rho_int*(e_int + half*(u_int*u_int + v_int*v_int + w_int*w_int) )
         !TE = rhoe_int + half*(rhou_int*u_int + v_int*rhov_int + w_int*rhow_int)
-        buff = ( TE + p_int - tauyy_int )*v_int + qy_int - u_int*tauxy_int -w_int*tauyz_int
-         if(this%use_CnsrvSurfaceTension) then
+        !buff = ( TE + p_int - tauyy_int )*v_int + qy_int - u_int*tauxy_int -w_int*tauyz_int
+        buff = ( TE + p_int  )*v_int 
 
-            buff = buff + this%mix%surfaceTension_pe_y*v_int - this%mix%surfaceTension_fxy_y*u_int - this%mix%surfaceTension_fyy*v_int - this%mix%surfaceTension_fyz_y*w_int
+        ! if(this%use_CnsrvSurfaceTension) then
 
-        endif
+        !    buff = buff + this%mix%surfaceTension_pe_y*v_int - this%mix%surfaceTension_fxy_y*u_int - this%mix%surfaceTension_fyy*v_int - this%mix%surfaceTension_fyz_y*w_int
+
+        !endif
 
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
         this%yflux_e = flux
 
-        this%rho_int = rho_int
-        this%u_int = u_int
-        this%v_int = v_int
-        this%w_int = w_int
-        this%tauxy_int = tauxy_int
-        this%tauyy_int = tauyy_int
-        this%tauyz_int = tauyz_int
-        this%e_int     = e_int
-        this%qy_int    = qy_int
-        this%p_int     = p_int
+        !this%rho_int = rho_int
+        !this%u_int = u_int
+        !this%v_int = v_int
+        !this%w_int = w_int
+        !this%e_int     = e_int
+        !this%p_int     = p_int
+
     end subroutine
 
    
@@ -2781,15 +2887,11 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call interpolateFV_z(this%decomp,this%interpMid,tauxz,tauxz_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_z(this%decomp,this%interpMid,tauyz,tauyz_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_z(this%decomp,this%interpMid,tauzz,tauzz_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_z(this%decomp,this%interpMid,this%u*this%rho,rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_z(this%decomp,this%interpMid,this%v*this%rho,rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_z(this%decomp,this%interpMid,this%w*this%rho,rhow_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_z(this%decomp,this%interpMid,this%e*this%rho,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_z(this%decomp,this%interpMid,qz,qz_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         
         flux  = 0
         buff  = 0
-        buff = rho_int*w_int*u_int  - tauxz_int !x-momentum
+        buff = rho_int*w_int*u_int ! - tauxz_int !x-momentum
         !buff = rhou_int*w_int -tauxz_int
         if(this%use_CnsrvSurfaceTension) then
 
@@ -2800,7 +2902,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%zflux_x = flux 
-        buff = rho_int*w_int*v_int  - tauyz_int !y-momentum
+
+        flux = 0.0
+        buff = rho_int*w_int*v_int !  - tauyz_int !y-momentum
         !buff = rhov_int*w_int - tauyz_int
         if(this%use_CnsrvSurfaceTension) then
 
@@ -2810,7 +2914,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%zflux_y = flux
-        buff = rho_int*w_int*w_int + p_int - tauzz_int !z-momentum
+
+        flux = 0.0
+        buff = rho_int*w_int*w_int + p_int ! - tauzz_int !z-momentum
         !buff = rhow_int*w_int + p_int -tauzz_int
         if(this%use_CnsrvSurfaceTension) then
 
@@ -2821,11 +2927,12 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
         this%zflux_z = flux
-
+        flux = 0.0
         !TE = rhoe_int + half*(rhou_int*u_int + rhov_int*v_int + rhow_int*w_int)
         TE = rho_int*(e_int + half*(u_int*u_int + v_int*v_int + w_int*w_int) )
 
-        buff = ( TE + p_int - tauzz_int )*w_int + qz_int - u_int*tauxz_int-v_int*tauyz_int
+        !buff = ( TE + p_int - tauzz_int )*w_int + qz_int - u_int*tauxz_int-v_int*tauyz_int
+        buff = ( TE + p_int )*w_int 
         if(this%use_CnsrvSurfaceTension) then
 
             buff = buff + this%mix%surfaceTension_pe_z*w_int - this%mix%surfaceTension_fxz_z*u_int - this%mix%surfaceTension_fyz_z*v_int - this%mix%surfaceTension_fzz*w_int
@@ -2867,6 +2974,8 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 !  write(*,'(4(e21.14,1x))') xtmp1(i,1,1), xtmp2(i,1,1)
 !enddo
         call transpose_x_to_y(xtmp2,flux,this%decomp)
+        this%xflux_x = flux
+
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%v          - tauxy   ! y-momentum
         if(this%use_CnsrvSurfaceTension) then
@@ -2879,7 +2988,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
- 
+        this%xflux_y = flux 
 
         flux = this%Wcnsrv(:,:,:,mom_index  )*this%w          - tauxz  ! z-momentum
         if(this%use_CnsrvSurfaceTension) then
@@ -2892,6 +3001,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
+        this%xflux_z = flux
 
         !call interpolateFV_x(this%decomp,this%interpMid,this%u,u_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         !call gradFV_x(this%decomp,this%derStagg,p_int*u_int,ddx_up,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -2907,6 +3017,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call this%der%ddx(xtmp1,xtmp2,-this%x_bc(1),-this%x_bc(2)) ! Anti-symmetric for all but x-momentum
         call transpose_x_to_y(xtmp2,flux,this%decomp)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux 
+        this%xflux_e = flux
 
     end subroutine
 
@@ -2933,7 +3044,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - ytmp1
-
+        this%yflux_x = flux
 
        ! call interpolateFV_y(this%decomp,this%interpMid,this%p,p_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
        ! call gradFV_y(this%decomp,this%derStagg,p_int,ddy_p,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -2946,7 +3057,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         endif
         call this%der%ddy(flux,ytmp1, this%y_bc(1), this%y_bc(2)) ! Symmetric for y-momentum
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - ytmp1 
-
+        this%yflux_y = flux
 
         flux = this%Wcnsrv(:,:,:,mom_index+1)*this%w          - tauyz !z-momentum
         if(this%use_CnsrvSurfaceTension) then
@@ -2956,6 +3067,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         endif
         call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - ytmp1 
+        this%yflux_z = flux
 
         !call interpolateFV_y(this%decomp,this%interpMid,this%v,v_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         !call gradFV_y(this%decomp,this%derStagg,p_int*v_int,ddy_vp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -2969,6 +3081,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         
         call this%der%ddy(flux,ytmp1,-this%y_bc(1),-this%y_bc(2)) ! Anti-symmetric for all but y-momentum
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - ytmp1 
+        this%yflux_e = flux
 
     end subroutine
 
@@ -3041,7 +3154,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call this%der%ddz(ztmp1,ztmp2,-this%z_bc(1),-this%z_bc(2)) ! Anti-symmetric for all but z-momentum
         call transpose_z_to_y(ztmp2,flux,this%decomp)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux 
-        this%zflux_z = flux
+        this%zflux_e = flux
 
     end subroutine
 

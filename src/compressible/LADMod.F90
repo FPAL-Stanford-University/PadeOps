@@ -447,17 +447,18 @@ contains
         diff = diff + diffstar
     end subroutine
 
-     subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,sos,adiff,rhodiff,x_bc,y_bc,z_bc)
+     subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,minYs,minVF, sos,adiff,rhodiff,x_bc,y_bc,z_bc)
         class(ladobject),  intent(in) :: this
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: rhoYs,sos,VF,rho 
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
-
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3
+        real(rkind), intent(in) :: minYs, minVF
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2, ztmp3,ztmp4,Ys
-
+        real(rkind) :: nmask = 40d0
+        
         ! -------- Artificial Diffusivity ---------
 
 
@@ -465,25 +466,28 @@ contains
 
         ! Step 1: Construct Heaviside Functions
 
-        where( abs(VF*(1 - VF)) .GT. 0)
+        where( abs((VF-minVF)*(1 - (VF-minVF))) .GT. 0)
            H1 = 1
         elsewhere
            H1 = 0
         endwhere
 
 
-        where( (VF - 1) .GT. 0)
+        where( VF - 1 - minVF .GT. 0)
            H2 = 1
         elsewhere
            H2 = 0
         endwhere
 
 
-        where( VF .GT. 0)
+        where( VF - minVF .GT. 0)
           H3 = 1
         elsewhere
           H3 = 0
         endwhere
+
+        mask = ( 1 - 4*Ys*(1-Ys) )**nmask
+
 
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
@@ -506,7 +510,7 @@ contains
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
         ytmp4 = ytmp5*this%dy**5
         diffstar = diffstar + ytmp4 !* ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
-        ytmp5 = this%CY*sos*( half*(abs(Ys)-one + abs(Ys-one)) )*(this%dy*this%dx*this%dz)**(1/3)
+        ytmp5 = this%CY*sos*( half*(abs(Ys-minYs)-(one-minYs) + abs((Ys-minYs)-(one-minYs))) )*(this%dy*this%dx*this%dz)**(1/3)
         diffstar = sos*abs(diffstar) ! CD part of diff
         call this%filter(diffstar, x_bc, y_bc, z_bc)
         call this%filter(ytmp5, x_bc, y_bc, z_bc)
@@ -539,7 +543,7 @@ contains
         adiffstar = adiffstar + ytmp6
 
         adiffstar = this%Cvf1*sos*abs(adiffstar)
-        ytmp5 = this%Cvf2*sos*( (VF-1)*H2 - VF*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one + abs(Ys-one)) )*ytmp4 ! CY partof diff
+        ytmp5 = this%Cvf2*sos*( (VF - 1 - minVF)*H2 - (VF - minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one + abs(Ys-one)) )*ytmp4 ! CY partof diff
 
         call this%filter(adiffstar, x_bc, y_bc, z_bc)
         call this%filter(ytmp5, x_bc, y_bc, z_bc)
