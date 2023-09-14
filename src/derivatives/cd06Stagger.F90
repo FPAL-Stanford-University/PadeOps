@@ -38,6 +38,11 @@ module cd06Staggerstuff
     real(rkind), parameter                   :: r     =  -31._rkind / 8._rkind  !3._rkind / 2._rkind
     real(rkind), parameter                   :: s     =  23._rkind  / 24._rkind !-1._rkind / 6._rkind
 
+    real(rkind), parameter                   :: alpha_N2F =  0._rkind !3._rkind
+    real(rkind), parameter                   :: p_N2F     =  -23._rkind / 24._rkind !17._rkind / 6._rkind
+    real(rkind), parameter                   :: q_N2F     =  7._rkind / 8._rkind  !3._rkind / 2._rkind
+    real(rkind), parameter                   :: r_N2F     =  1._rkind / 8._rkind !3._rkind / 2._rkind
+    real(rkind), parameter                   :: s_N2F     =  -1._rkind  / 24._rkind !-1._rkind / 6._rkind
 
     !!  Calculate the corressponding weights
     ! Step 1: Assign the interior scheme
@@ -61,7 +66,19 @@ module cd06Staggerstuff
     real(rkind), parameter                   :: w2 = 11473._rkind / 10540._rkind !((8*alpha_hat + 7)*q - 6*(2*alpha_hat + 1)*r &
     real(rkind), parameter                   :: w3 = 1.1
     
-    
+    real(rkind), parameter                   :: w1_N2F = 223._rkind /186._rkind
+    real(rkind), parameter                   :: w2_N2F = 61._rkind/62._rkind
+    real(rkind), parameter                   :: w3_N2F = 0._rkind
+    real(rkind), parameter                   :: alpha_p_N2F = 37._rkind / 183._rkind
+    real(rkind), parameter                   :: p_p_N2F = 3._rkind/8._rkind*(3._rkind - 2._rkind *alpha_p_N2F)
+    real(rkind), parameter                   :: q_p_N2F = 1._rkind/8._rkind*(-1._rkind + alpha_p_N2F / 22._rkind) / 3._rkind
+    real(rkind), parameter                   :: alpha_pp_N2F = alpha06d1    !((40*alpha_hat - 1)*q  + 7*(4*alpha_hat &                                            
+    real(rkind), parameter                   :: q_pp_N2F     = a06d1        !(1._rkind/3._rkind)*(alpha_pp + 2)
+    real(rkind), parameter                   :: r_pp_N2F     = b06d1 / 3._rkind           !(1._rkind/12._rkind)*(4*alpha_pp - 1)
+    real(rkind), parameter                   :: s_pp_N2F     =  0._rkind
+
+ 
+
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
@@ -86,7 +103,7 @@ module cd06Staggerstuff
 
         real(rkind), allocatable, dimension(:,:) :: LU1, LU1_BC
         real(rkind), allocatable, dimension(:,:) :: LU2
-        real(rkind), allocatable, dimension(:,:) :: Tri1
+        real(rkind), allocatable, dimension(:,:) :: Tri1, Tri1_N2F
         real(rkind), allocatable, dimension(:,:) :: Tri2
 
         contains
@@ -103,15 +120,21 @@ module cd06Staggerstuff
         procedure, private :: SolveXLU1
         procedure, private :: SolveYLU1
         procedure, private :: SolveZLU1
-    
+   
+         
         procedure, private :: SolveLU2
        
         procedure, private :: ComputeTri1
         procedure, private :: ComputeTri2
+        procedure, private :: ComputeTri1_N2F
 
         procedure, private :: SolveXTri1
         procedure, private :: SolveYTri1
         procedure, private :: SolveZTri1
+
+        procedure, private :: SolveXTri1_N2F
+        procedure, private :: SolveYTri1_N2F
+        procedure, private :: SolveZTri1_N2F
         
         procedure, private :: SolveTri2
         
@@ -179,12 +202,15 @@ contains
         else
             ! Allocate 1st derivative Tri matrices.
             if(allocated( this%tri1 )) deallocate( this%tri1 ); allocate( this%tri1(n_,3) )
-  
+            if(allocated( this%Tri1_N2F )) deallocate( this%Tri1_N2F ); allocate(this%Tri1_N2F(n_,3) )
+ 
             if (n_ .GE. 8) then             
 
                 call this%ComputeTri1(bc1_,bcn_)
+                call this%ComputeTri1_N2F(bc1_,bcn_)
             else if (n_ .EQ. 1) then
                 this%Tri1 = one
+                this%Tri1_N2F = one
             else
                 ierr = 2
                 return 
@@ -336,7 +362,71 @@ contains
            
     end subroutine
     
-    
+   subroutine ComputeTri1_N2F(this,bc1,bcn)
+        class (cd06Stagger), intent(inout) :: this
+        integer, intent(in) :: bc1, bcn
+        integer             :: i
+        real(rkind), dimension(this%n) :: a, b, c, cp, den
+
+        a  = alpha_hat
+        b  = one
+        c  = alpha_hat
+
+        select case (bc1)
+        case(0)
+            a (1) = w1_N2F*zero
+            a (2) = w2_N2F*alpha_p_N2F
+            a (3) = w3_N2F*alpha_pp_N2F
+
+            b (1) = w1_N2F*one
+            b (2) = w2_N2F*one
+            b (3) = w3_N2F*one
+
+            c (1) = w1_N2F*alpha_N2F
+            c (2) = w2_N2F*alpha_p_N2F
+            c (3) = w3_N2F*alpha_pp_N2F
+
+        case(1)
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            ! Incomplete
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        end select
+
+        select case (bcn)
+        case(0)
+            c (this%n  ) = w1_N2F*zero
+            c (this%n-1) = w2_N2F*alpha_p_N2F
+            c (this%n-2) = w3_N2F*alpha_pp_N2F
+
+            b (this%n  ) = w1_N2F*one
+            b (this%n-1) = w2_N2F*one
+            b (this%n-2) = w3_N2F*one
+
+            a (this%n  ) = w1_N2F*alpha_N2F
+            a (this%n-1) = w2_N2F*alpha_p_N2F
+            a (this%n-2) = w3_N2F*alpha_pp_N2F
+        case(1)
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            ! Incomplete
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        end select
+
+        cp(1) = c(1)/b(1)
+        do i = 2,this%n-1
+            cp(i) = c(i)/(b(i) - a(i)*cp(i-1))
+        end do
+
+        den(1) = one/b(1)
+        den(2:this%n) = one/(b(2:this%n) - a(2:this%n)*cp(1:this%n-1))
+
+        this%Tri1_N2F(:,1) = a*den
+        this%Tri1_N2F(:,2) = den
+        this%Tri1_N2F(:,3) = cp
+
+    end subroutine
+ 
     subroutine ComputeTri2(this,bc1,bcn)
         class (cd06Stagger), intent(inout) :: this
         integer, intent(in) :: bc1, bcn
@@ -382,7 +472,6 @@ contains
     
     end subroutine
 
- 
     subroutine SolveYLU1(this,y,n1,n3)
         
         class (cd06Stagger), intent(in) :: this
@@ -437,7 +526,7 @@ contains
     
     end subroutine
 
-    subroutine SolveXTri1(this,y,n2,n3)
+    subroutine SolveXTri1_N2F(this,y,n2,n3)
     
         class (cd06Stagger), intent(in) :: this
         integer, intent(in) :: n2,n3
@@ -446,13 +535,13 @@ contains
   
         do k = 1,n3
             do j = 1,n2
-                y(1,j,k) = y(1,j,k)*this%Tri1(1,2)
+                y(1,j,k) = y(1,j,k)*this%Tri1_N2F(1,2)
                 do i = 2,this%n
-                    y(i,j,k) = y(i,j,k)*this%Tri1(i,2) - y(i-1,j,k)*this%Tri1(i,1)
+                    y(i,j,k) = y(i,j,k)*this%Tri1_N2F(i,2) - y(i-1,j,k)*this%Tri1_N2F(i,1)
                 end do
                 
                 do i = this%n-1,1,-1
-                    y(i,j,k) = y(i,j,k) - this%Tri1(i,3)*y(i+1,j,k)
+                    y(i,j,k) = y(i,j,k) - this%Tri1_N2F(i,3)*y(i+1,j,k)
                 end do 
             end do 
         end do 
@@ -478,7 +567,27 @@ contains
         end do 
         
     end subroutine
-    
+  
+    subroutine SolveYTri1_N2F(this,y,n1,n3)
+
+        class (cd06Stagger), intent(in) :: this
+        integer, intent(in) :: n1,n3
+        real(rkind), dimension(n1,this%n,n3), intent(inout) :: y
+        integer :: j, k
+
+        do k = 1,n3
+                y(:,1,k) = y(:,1,k)*this%Tri1_N2F(1,2)
+                do j = 2,this%n
+                    y(:,j,k) = y(:,j,k)*this%Tri1_N2F(j,2) - y(:,j-1,k)*this%Tri1_N2F(j,1)
+                end do
+
+                do j = this%n-1,1,-1
+                    y(:,j,k) = y(:,j,k) - this%Tri1_N2F(j,3)*y(:,j+1,k)
+                end do
+        end do
+
+    end subroutine
+  
     subroutine SolveZTri1(this,y,n1,n2)
     
         class (cd06Stagger), intent(in) :: this
@@ -496,6 +605,25 @@ contains
                 end do 
         
     end subroutine
+
+    subroutine SolveZTri1_N2F(this,y,n1,n2)
+
+        class (cd06Stagger), intent(in) :: this
+        integer, intent(in) :: n1,n2
+        real(rkind), dimension(n1,n2,this%n), intent(inout) :: y
+        integer :: k
+
+                y(:,:,1) = y(:,:,1)*this%Tri1_N2F(1,2)
+                do k = 2,this%n
+                    y(:,:,k) = y(:,:,k)*this%Tri1_N2F(k,2) - y(:,:,k-1)*this%Tri1_N2F(k,1)
+                end do
+
+                do k = this%n-1,1,-1
+                    y(:,:,k) = y(:,:,k) - this%Tri1_N2F(k,3)*y(:,:,k+1)
+                end do
+
+    end subroutine
+
 
     subroutine SolveLU2(this,y,n2,n3)
         
@@ -561,6 +689,22 @@ contains
             end do 
           case("N2F")
           !!!!!!!!!!!!!!!!!!!!! To do     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+              do k = 1,n3
+                do j = 1,n2
+                    RHS(1         ,j,k) = a06 * ( f(2,j,k)          - f(1,j,k) ) &
+                                        + b06 * ( f(3,j,k)          - f(this%n,j,k) )
+
+
+                    RHS(2:this%n-2,j,k) = a06 * ( f(3:this%n-1,j,k) - f(2:this%n-2,j,k) ) &
+                                        + b06 * ( f(4:this%n,j,k)   - f(1:this%n-3,j,k) )
+
+                    RHS(this%n-1  ,j,k) = a06 * ( f(this%n,j,k)     - f(this%n-1,j,k) ) &
+                                        + b06 * ( f(1,j,k)          - f(this%n-2,j,k) )
+
+                    RHS(this%n    ,j,k) = a06 * ( f(1,j,k)          -  f(this%n,j,k) ) &
+                                        + b06 * ( f(2,j,k)          -  f(this%n-1,j,k) )
+                end do
+            end do
 
         end select
 
@@ -691,6 +835,23 @@ contains
             end do 
            case("N2F")
          !!!!!!!!!!!!!!!!!!!!!!!!!!   TO DO        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            do k = 1,n3
+                    RHS(:,1         ,k) = a06 * ( f(:,1,k)          - f(:,this%n,k) ) &
+                                        + b06 * ( f(:,2,k)          - f(:,this%n-1,k) )
+
+                    RHS(:,2         ,k) = a06 * ( f(:,2,k)          - f(:,1,k) ) &
+                                        + b06 * ( f(:,3,k)          - f(:,this%n,k) )
+
+                    RHS(:,3:this%n-2,k) = a06 * ( f(:,3:this%n-2,k) - f(:,2:this%n-3,k) ) &
+                                        + b06 * ( f(:,4:this%n-1  ,k) - f(:,1:this%n-4,k) )
+
+                    RHS(:,this%n-1  ,k) = a06 * ( f(:,this%n-1,k)         - f(:,this%n-2,k) ) &
+                                        + b06 * ( f(:,this%n,k)          -  f(:,this%n-3,k) )
+
+                    RHS(:,this%n    ,k) = a06 * ( f(:,this%n,k)          -  f(:,this%n-1,k) ) &
+                                        + b06 * ( f(:,1,k)          -f(:,this%n-2,k) )
+                !end do
+            end do
 
           end select
         case (.FALSE.)
@@ -807,6 +968,17 @@ contains
             case("N2F")
 
             !!!!! To Do      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            RHS(:,:,1         ) = a06 * ( f(:,:,2)          - f(:,:,1) ) &
+                                + b06 * ( f(:,:,3)          - f(:,:,this%n) )
+
+            RHS(:,:,2:this%n-2) = a06 * ( f(:,:,3:this%n-1) - f(:,:,2:this%n-2)) &
+                               + b06 * ( f(:,:,4:this%n) - f(:,:,1:this%n-3) )
+
+            RHS(:,:, this%n-1  ) = a06 * ( f(:,:, this%n)         - f(:,:,this%n-1) ) &
+                               + b06 * ( f(:,:,1)            - f(:,:, this%n-2) )
+
+            RHS(:,:,this%n    ) = a06 * ( f(:,:,1)          - f(:,:, this%n) ) &
+                                + b06 * ( f(:,:,2)          - f(:,:, this%n-1 ) )
  
          end select
         case (.FALSE.)

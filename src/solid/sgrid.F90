@@ -1137,6 +1137,8 @@ contains
          !       this%mix%surfaceTension_f = this%mix%gradp
         endif
 
+        call this%mix%Test_Der_N2F(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
         !call this%mix%Test_Der(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         !print *, "before test"
         !call this%mix%Test_Der_Periodic(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)

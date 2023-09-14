@@ -331,6 +331,88 @@ contains
 
     end subroutine
  
+    subroutine gradFV_N2Fx(decomp,derStagg,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        type(decomp_info), intent(in) :: decomp
+        type(derivativesStagg), intent(in) :: derStagg
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)),intent(in) :: nodes
+        real(rkind), dimension(size(nodes,1), size(nodes,2),size(nodes,3)),intent(out)  :: faces
+        real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: tmp
+        logical, intent(in) :: periodicx,periodicy,periodicz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xdiv
+        real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ybuf
+        real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ydiv
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
+        integer :: i,j,k, one = 1
+
+        faces = 0.0
+        xbuf  = 0.0
+        xdiv  = 0.0
+
+        ! i nodes
+        if(decomp%xsz(1).gt. one) then
+           call transpose_y_to_x(nodes,xbuf,decomp)
+           call derStagg % ddxN2F(xbuf,xdiv,x_bc(1),x_bc(2)) !TODO: add BCs(onlycorrect if interface is away from boundary)
+           call transpose_x_to_y(xdiv,faces,decomp)
+        endif
+
+
+    end subroutine gradFV_N2Fx
+
+    subroutine gradFV_N2Fy(decomp,derStagg,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        type(decomp_info), intent(in) :: decomp
+        type(derivativesStagg), intent(in) :: derStagg
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)),intent(in) :: nodes
+        real(rkind), dimension(size(nodes,1),size(nodes,2),size(nodes,3)),intent(out)  :: faces
+        real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: tmp
+        logical, intent(in) :: periodicx,periodicy,periodicz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xdiv
+        real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ybuf
+        real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ydiv
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
+        integer :: i,j,k, one = 1
+
+        faces = 0.0
+
+        ! j nodes
+        if(decomp%ysz(2).gt.one) then
+           call derStagg % ddyN2F(nodes,faces,y_bc(1),y_bc(2)) !TODO: add BCs(only correct if interface is away from boundary)
+        endif
+
+
+    end subroutine gradFV_N2Fy
+
+    subroutine gradFV_N2Fz(decomp,derStagg,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        type(decomp_info), intent(in) :: decomp
+        type(derivativesStagg), intent(in) :: derStagg
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)),intent(in) :: nodes
+        real(rkind), dimension(size(nodes,1),size(nodes,2),size(nodes,3)),intent(out)  :: faces
+        real(rkind), dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: tmp
+        logical, intent(in) :: periodicx,periodicy,periodicz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xdiv
+        real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ybuf
+        real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ydiv
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
+        integer :: i,j,k, one = 1
+
+        faces = 0.0
+        zbuf  = 0.0
+        zdiv = 0.0
+        if(decomp%zsz(3).gt.one) then
+           call transpose_y_to_z(nodes,zbuf,decomp)
+           call derStagg % ddzN2F(zbuf,zdiv,z_bc(1),z_bc(2)) !TODO: add BCs(onlycorrect if interface is away from boundary)
+           call transpose_z_to_y(zdiv,faces,decomp)
+        endif
+
+    end subroutine gradFV_N2Fz
 
     subroutine curl(decomp, der, u, v, w, curlu, x_bc_, y_bc_, z_bc_)
         type(decomp_info), intent(in) :: decomp
