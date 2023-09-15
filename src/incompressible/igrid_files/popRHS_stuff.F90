@@ -72,6 +72,9 @@
            end if
        end if
 
+       ! Subtract w*dT0dz because we are solving for the temperature fluctuations 
+       if (this%isStratified) this%T_rhs = this%T_rhs - this%w*this%dT0dz
+
        call this%populate_RHS_extraTerms(copyFringeRHS, .false.)
 
    end subroutine
