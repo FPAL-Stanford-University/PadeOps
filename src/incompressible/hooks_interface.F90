@@ -100,10 +100,12 @@ module igrid_hooks
     end interface
 
     interface setDirichletBC_Temp
-        subroutine setDirichletBC_Temp(inpDirectory, Tsurf, dTsurfdt)
+        subroutine setDirichletBC_Temp(inpDirectory, Tfield, Tsurf, dTsurfdt, whichSide)
             import :: rkind
             character(len=*), intent(in) :: inpDirectory
+            real(rkind), dimension(:,:,:), intent(in) :: Tfield
             real(rkind), intent(out) :: Tsurf, dTsurfdt
+            character(len=3), intent(in) :: whichSide
 
         end subroutine 
     end interface

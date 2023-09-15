@@ -262,25 +262,27 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     ! Do nothing really since this is an unstratified simulation
 end subroutine
 
-subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
+subroutine setDirichletBC_Temp(inputfile, Tfield, Tsurf, dTsurf_dt, whichSide)
     use kind_parameters,    only: rkind, clen
     use constants,          only: zero, one
+    use reductions,         only: p_minval, p_maxval
     implicit none
 
     character(len=*),                intent(in)    :: inputfile
+    real(rkind), dimension(:,:,:), intent(in) :: Tfield
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
+    character(len=3), intent(in) :: whichSide
     real(rkind) :: Lx, Ly, Lz, zmin
     logical :: symmetricDomain
     integer :: iounit
     namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
     
-    Tsurf = zero; dTsurf_dt = zero
-    
-
-    ioUnit = 11
-    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
-    read(unit=ioUnit, NML=SMinput)
-    close(ioUnit)    
+    dTsurf_dt = zero
+    if (whichSide == 'top') then
+        Tsurf = p_maxval(maxval(Tfield))
+    elseif (whichSide == 'bot') then
+        Tsurf = p_minval(minval(Tfield))
+    end if
 
 end subroutine
 

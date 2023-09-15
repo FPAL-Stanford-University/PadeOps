@@ -844,7 +844,7 @@ contains
            end if
           
            if (botBC_Temp == 0) then
-               call setDirichletBC_Temp(inputfile, this%Tsurf, this%dTsurf_dt)
+               call setDirichletBC_Temp(inputfile, this%T, this%Tsurf, this%dTsurf_dt, 'bot')
                this%Tsurf0 = this%Tsurf
                this%Tsurf = this%Tsurf0 + this%dTsurf_dt*this%tsim
            else if (botBC_Temp == 1) then
@@ -861,7 +861,7 @@ contains
                    & this time. Set botBC_Temp = 0 or 1 or 2",341)        
            end if
            if (topBC_Temp == 0) then
-               call setDirichletBC_Temp(inputfile, this%TsurfTop, this%dTsurfTop_dt)
+               call setDirichletBC_Temp(inputfile, this%T, this%TsurfTop, this%dTsurfTop_dt, 'top')
                this%Tsurf0 = this%TsurfTop
                this%TsurfTop = this%Tsurf0 + this%dTsurfTop_dt*this%tsim
            end if 
