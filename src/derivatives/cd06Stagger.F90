@@ -68,13 +68,13 @@ module cd06Staggerstuff
     
     real(rkind), parameter                   :: w1_N2F = 223._rkind /186._rkind
     real(rkind), parameter                   :: w2_N2F = 61._rkind/62._rkind
-    real(rkind), parameter                   :: w3_N2F = 0._rkind
+    real(rkind), parameter                   :: w3_N2F = 1._rkind
     real(rkind), parameter                   :: alpha_p_N2F = 37._rkind / 183._rkind
     real(rkind), parameter                   :: p_p_N2F = 3._rkind/8._rkind*(3._rkind - 2._rkind *alpha_p_N2F)
-    real(rkind), parameter                   :: q_p_N2F = 1._rkind/8._rkind*(-1._rkind + alpha_p_N2F / 22._rkind) / 3._rkind
+    real(rkind), parameter                   :: q_p_N2F = 1._rkind/8._rkind*(-1._rkind + alpha_p_N2F * 22._rkind) / 3._rkind
     real(rkind), parameter                   :: alpha_pp_N2F = alpha06d1    !((40*alpha_hat - 1)*q  + 7*(4*alpha_hat &                                            
     real(rkind), parameter                   :: q_pp_N2F     = a06d1        !(1._rkind/3._rkind)*(alpha_pp + 2)
-    real(rkind), parameter                   :: r_pp_N2F     = b06d1 / 3._rkind           !(1._rkind/12._rkind)*(4*alpha_pp - 1)
+    real(rkind), parameter                   :: r_pp_N2F     = b06d1        !(1._rkind/12._rkind)*(4*alpha_pp - 1)
     real(rkind), parameter                   :: s_pp_N2F     =  0._rkind
 
  
@@ -163,13 +163,13 @@ contains
         real(rkind), intent(in) :: dx_
         logical, intent(in) :: periodic_
         integer, intent(in) :: bc1_, bcn_
-        integer :: ierr
+        integer :: ierr, n1
     
         this%n = n_
         this%dx = dx_
         this%onebydx = one/dx_
         this%onebydx2 = this%onebydx/dx_
-    
+        n1 = this%n - 1
         this%periodic = periodic_
     
         this%bc1 = bc1_
@@ -202,12 +202,13 @@ contains
         else
             ! Allocate 1st derivative Tri matrices.
             if(allocated( this%tri1 )) deallocate( this%tri1 ); allocate( this%tri1(n_,3) )
-            if(allocated( this%Tri1_N2F )) deallocate( this%Tri1_N2F ); allocate(this%Tri1_N2F(n_,3) )
+            if(allocated( this%tri1_N2F )) deallocate( this%tri1_N2F ); allocate(this%tri1_N2F(n1,3) )
  
             if (n_ .GE. 8) then             
 
                 call this%ComputeTri1(bc1_,bcn_)
                 call this%ComputeTri1_N2F(bc1_,bcn_)
+                
             else if (n_ .EQ. 1) then
                 this%Tri1 = one
                 this%Tri1_N2F = one
@@ -248,7 +249,10 @@ contains
 
         ! Dellocate 1st derivative tri matrix.
         if(allocated( this%tri1 )) deallocate( this%tri1 )
-    
+
+        ! Dellocate 2nd derivative tri matrix.
+        if(allocated( this%tri1_N2F )) deallocate( this%tri1_N2F )
+  
         ! Dellocate 2nd derivative tri matrix.
         if(allocated( this%tri2 )) deallocate( this%tri2 )
 
@@ -366,12 +370,13 @@ contains
         class (cd06Stagger), intent(inout) :: this
         integer, intent(in) :: bc1, bcn
         integer             :: i
-        real(rkind), dimension(this%n) :: a, b, c, cp, den
+        real(rkind), dimension(this%n-1) :: a, b, c, cp, den
 
         a  = alpha_hat
         b  = one
         c  = alpha_hat
-
+        
+        
         select case (bc1)
         case(0)
             a (1) = w1_N2F*zero
@@ -395,17 +400,17 @@ contains
 
         select case (bcn)
         case(0)
-            c (this%n  ) = w1_N2F*zero
-            c (this%n-1) = w2_N2F*alpha_p_N2F
-            c (this%n-2) = w3_N2F*alpha_pp_N2F
+            c (this%n-1  ) = w1_N2F*zero
+            c (this%n-2) = w2_N2F*alpha_p_N2F
+            c (this%n-3) = w3_N2F*alpha_pp_N2F
 
-            b (this%n  ) = w1_N2F*one
-            b (this%n-1) = w2_N2F*one
-            b (this%n-2) = w3_N2F*one
+            b (this%n-1) = w1_N2F*one
+            b (this%n-2) = w2_N2F*one
+            b (this%n-3) = w3_N2F*one
 
-            a (this%n  ) = w1_N2F*alpha_N2F
-            a (this%n-1) = w2_N2F*alpha_p_N2F
-            a (this%n-2) = w3_N2F*alpha_pp_N2F
+            a (this%n-1) = w1_N2F*alpha_N2F
+            a (this%n-2) = w2_N2F*alpha_p_N2F
+            a (this%n-3) = w3_N2F*alpha_pp_N2F
         case(1)
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             ! Incomplete
@@ -414,17 +419,16 @@ contains
         end select
 
         cp(1) = c(1)/b(1)
-        do i = 2,this%n-1
+        do i = 2,this%n-2
             cp(i) = c(i)/(b(i) - a(i)*cp(i-1))
         end do
 
         den(1) = one/b(1)
-        den(2:this%n) = one/(b(2:this%n) - a(2:this%n)*cp(1:this%n-1))
+        den(2:this%n-1) = one/(b(2:this%n-1) - a(2:this%n-1)*cp(1:this%n-2))
 
         this%Tri1_N2F(:,1) = a*den
         this%Tri1_N2F(:,2) = den
         this%Tri1_N2F(:,3) = cp
-
     end subroutine
  
     subroutine ComputeTri2(this,bc1,bcn)
@@ -449,7 +453,6 @@ contains
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHS and put solution into it
         integer :: i, j, k
         real(rkind) :: sum1 
-
         do k = 1,n3
             do j = 1,n2
                 ! Step 2
@@ -526,6 +529,28 @@ contains
     
     end subroutine
 
+    subroutine SolveXTri1(this,y,n2,n3)
+
+        class (cd06Stagger), intent(in) :: this
+        integer, intent(in) :: n2,n3
+        real(rkind), dimension(this%n,n2,n3), intent(inout) :: y
+        integer :: i, j, k
+
+        do k = 1,n3
+            do j = 1,n2
+                y(1,j,k) = y(1,j,k)*this%Tri1(1,2)
+                do i = 2,this%n
+                    y(i,j,k) = y(i,j,k)*this%Tri1(i,2) - y(i-1,j,k)*this%Tri1(i,1)
+                end do
+
+                do i = this%n-1,1,-1
+                    y(i,j,k) = y(i,j,k) - this%Tri1(i,3)*y(i+1,j,k)
+                end do
+            end do
+        end do
+
+    end subroutine
+
     subroutine SolveXTri1_N2F(this,y,n2,n3)
     
         class (cd06Stagger), intent(in) :: this
@@ -536,16 +561,18 @@ contains
         do k = 1,n3
             do j = 1,n2
                 y(1,j,k) = y(1,j,k)*this%Tri1_N2F(1,2)
-                do i = 2,this%n
+                do i = 2,this%n-1
                     y(i,j,k) = y(i,j,k)*this%Tri1_N2F(i,2) - y(i-1,j,k)*this%Tri1_N2F(i,1)
                 end do
                 
-                do i = this%n-1,1,-1
+                do i = this%n-2,1,-1
                     y(i,j,k) = y(i,j,k) - this%Tri1_N2F(i,3)*y(i+1,j,k)
                 end do 
             end do 
+
         end do 
-        
+
+        y(this%n,:,:) = 0        
     end subroutine
    
     subroutine SolveYTri1(this,y,n1,n3)
@@ -565,7 +592,6 @@ contains
                     y(:,j,k) = y(:,j,k) - this%Tri1(j,3)*y(:,j+1,k)
                 end do 
         end do 
-        
     end subroutine
   
     subroutine SolveYTri1_N2F(this,y,n1,n3)
@@ -577,15 +603,15 @@ contains
 
         do k = 1,n3
                 y(:,1,k) = y(:,1,k)*this%Tri1_N2F(1,2)
-                do j = 2,this%n
+                do j = 2,this%n-1
                     y(:,j,k) = y(:,j,k)*this%Tri1_N2F(j,2) - y(:,j-1,k)*this%Tri1_N2F(j,1)
                 end do
 
-                do j = this%n-1,1,-1
+                do j = this%n-2,1,-1
                     y(:,j,k) = y(:,j,k) - this%Tri1_N2F(j,3)*y(:,j+1,k)
                 end do
         end do
-
+         y(:,this%n,:) = 0
     end subroutine
   
     subroutine SolveZTri1(this,y,n1,n2)
@@ -614,14 +640,14 @@ contains
         integer :: k
 
                 y(:,:,1) = y(:,:,1)*this%Tri1_N2F(1,2)
-                do k = 2,this%n
+                do k = 2,this%n-1
                     y(:,:,k) = y(:,:,k)*this%Tri1_N2F(k,2) - y(:,:,k-1)*this%Tri1_N2F(k,1)
                 end do
 
-                do k = this%n-1,1,-1
+                do k = this%n-2,1,-1
                     y(:,:,k) = y(:,:,k) - this%Tri1_N2F(k,3)*y(:,:,k+1)
                 end do
-
+                y(:,:,this%n) = 0
     end subroutine
 
 
@@ -659,7 +685,7 @@ contains
         real(rkind) :: a06, b06,a10,a102,a104,b10,b104,b102,c10,c102,c104,a101
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_3, b_np_3   
-        real(rkind) :: a_np_2
+        real(rkind) :: a_np_2, b_np_2
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
 
         select case (this%periodic)
@@ -758,9 +784,9 @@ contains
                                         +   b_np_3*(f(4,j,k) - f(1,j,k))
                               end do
                            end do
-                    end select
+                end select
 
-                    select case(bcn)
+                 select case(bcn)
                         !right boundary (n-2:n)
                         case(1)
 
@@ -786,6 +812,58 @@ contains
                     end select
 
                 case("N2F")
+                   RHS = 0.0d0
+                   a06 = a06d1 * this%onebydx
+                   b06 = b06d1 * this%onebydx
+                                       
+                   a_np_2 = w2_N2F*p_p_N2F * this%onebydx
+                   b_np_2 = w2_N2F*q_p_N2F * this%onebydx
+
+                   a_np_1 = w1_N2F*(  p_N2F * this%onebydx)
+                   b_np_1 = w1_N2F*(  q_N2F * this%onebydx)
+                   c_np_1 = w1_N2F*(  r_N2F * this%onebydx)
+                   d_np_1 = w1_N2F*(  s_N2F * this%onebydx)
+
+                   do k = 1,n3
+                      do j = 1,n2
+
+
+                        RHS(3:this%n-3,j,k) = a06 * ( f(4:this%n-2,j,k) - f(3:this%n-3,j,k) ) &
+                                        + b06 * ( f(5:this%n-1,j,k)   - f(2:this%n-4,j,k) )
+                     end do
+                   end do
+  
+                   select case(bc1)
+                       case(1)
+                       case(-1)
+                       case(0)
+
+                          do k = 1,n3
+                              do j = 1,n2
+
+
+                                RHS(1,j,k) = a_np_1*f(1,j,k) + b_np_1*f(2,j,k) + c_np_1*f(3,j,k) + d_np_1*f(4,j,k)
+                                RHS(2,j,k) = a_np_2*( f(3,j,k) - f(2,j,k) ) + b_np_2*( f(4,j,k) - f(1,j,k))
+                              end do
+                             end do
+                  end select
+
+                  
+                  select case(bcn)
+                       case(1)
+                       case(-1)
+                       case(0)
+
+                          do k = 1,n3
+                              do j = 1,n2
+
+
+                                RHS(this%n-1,j,k) = -a_np_1*f(this%n,j,k) - b_np_1*f(this%n-1,j,k) - c_np_1*f(this%n-2,j,k) - d_np_1*f(this%n-3,j,k)
+                                RHS(this%n-2,j,k) = a_np_2*( f(this%n-1,j,k) - f(this%n-2,j,k) ) + b_np_2*( f(this%n,j,k) - f(this%n-3,j,k) )
+                              end do
+                          end do
+                  end select
+
 
             end select           
         end select
@@ -805,7 +883,7 @@ contains
         real(rkind) :: a06, b06, a10,a102,a104,b10,b104,b102,c10,c102,c104,a101
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_3, b_np_3   
-        real(rkind) :: a_np_2
+        real(rkind) :: a_np_2, b_np_2
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
 
         select case (this%periodic)
@@ -836,20 +914,19 @@ contains
            case("N2F")
          !!!!!!!!!!!!!!!!!!!!!!!!!!   TO DO        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             do k = 1,n3
-                    RHS(:,1         ,k) = a06 * ( f(:,1,k)          - f(:,this%n,k) ) &
-                                        + b06 * ( f(:,2,k)          - f(:,this%n-1,k) )
 
-                    RHS(:,2         ,k) = a06 * ( f(:,2,k)          - f(:,1,k) ) &
-                                        + b06 * ( f(:,3,k)          - f(:,this%n,k) )
+               RHS(:,1, k         )  = a06 * ( f(:,2,k)          - f(:,1,k) ) &
+                                + b06 * ( f(:,3,k)          - f(:,this%n,k) )
 
-                    RHS(:,3:this%n-2,k) = a06 * ( f(:,3:this%n-2,k) - f(:,2:this%n-3,k) ) &
-                                        + b06 * ( f(:,4:this%n-1  ,k) - f(:,1:this%n-4,k) )
+               RHS(:,2:this%n-2,k)   = a06 * ( f(:,3:this%n-1,k) - f(:,2:this%n-2,k)) &
+                               + b06 * ( f(:,4:this%n,k) - f(:,1:this%n-3,k) )
 
-                    RHS(:,this%n-1  ,k) = a06 * ( f(:,this%n-1,k)         - f(:,this%n-2,k) ) &
-                                        + b06 * ( f(:,this%n,k)          -  f(:,this%n-3,k) )
+               RHS(:, this%n-1, k  ) = a06 * ( f(:,this%n,k)         -   f(:,this%n-1,k) ) &
+                               + b06 * ( f(:,1,k)            - f(:,this%n-2,k) )
 
-                    RHS(:,this%n    ,k) = a06 * ( f(:,this%n,k)          -  f(:,this%n-1,k) ) &
-                                        + b06 * ( f(:,1,k)          -f(:,this%n-2,k) )
+               RHS(:,this%n, k    ) = a06 * ( f(:,1,k)          - f(:,this%n,k) ) &
+                                + b06 * ( f(:,2,k)          - f(:,this%n-1,k ) )
+
                 !end do
             end do
 
@@ -874,6 +951,53 @@ contains
           select case(dir)
 
             case("N2F")
+               RHS = 0.0d0
+               a06 = a06d1 * this%onebydx
+               b06 = b06d1 * this%onebydx
+
+               a_np_2 = w2_N2F*p_p_N2F * this%onebydx
+               b_np_2 = w2_N2F*q_p_N2F * this%onebydx
+
+               a_np_1 = w1_N2F*(  p_N2F * this%onebydx)
+               b_np_1 = w1_N2F*(  q_N2F * this%onebydx)
+               c_np_1 = w1_N2F*(  r_N2F * this%onebydx)
+               d_np_1 = w1_N2F*(  s_N2F * this%onebydx)
+
+               do k = 1,n3
+
+                     RHS(:,3:this%n-3,k) = a06 * ( f(:,4:this%n-2,k) - f(:,3:this%n-3,k) ) &
+                                        + b06 * ( f(:,5:this%n-1,k)   - f(:,2:this%n-4,k) )
+               end do
+
+                select case(bc1)
+                    case(1)
+                    case(-1)
+                    case(0)
+
+                        do k = 1,n3
+
+                             RHS(:,1,k) = a_np_1*f(:,1,k) + b_np_1*f(:,2,k) + c_np_1*f(:,3,k) + d_np_1*f(:,4,k)
+                             RHS(:,2,k) = a_np_2*( f(:,3,k) - f(:,2,k) ) +    b_np_2*( f(:,4,k) - f(:,1,k))
+
+                        end do
+
+                  end select
+
+
+                  select case(bcn)
+                       case(1)
+                       case(-1)
+                       case(0)
+ 
+                         
+                          do k = 1,n3
+           
+                             RHS(:,this%n-1,k) = -a_np_1*f(:,this%n,k) - b_np_1*f(:,this%n-1,k) - c_np_1*f(:,this%n-2,k) - d_np_1*f(:,this%n-3,k)
+                             RHS(:,this%n-2,k) = a_np_2*( f(:,this%n-1,k) - f(:,this%n-2,k) ) + b_np_2*( f(:,this%n,k) - f(:,this%n-3,k) )
+
+                          end do
+                  end select
+ 
 
             case("F2N")
 
@@ -941,7 +1065,7 @@ contains
         real(rkind) :: a06, b06, a10,a102,a104,b10,b104,b102,c10,c102,c104,a101
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_3, b_np_3   
-        real(rkind) :: a_np_2
+        real(rkind) :: a_np_2, b_np_2
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
 
         select case (this%periodic)
@@ -1001,6 +1125,43 @@ contains
             select case (dir)
 
                case ("N2F")
+                 RHS = 0.0d0
+                 a06 = a06d1 * this%onebydx
+                 b06 = b06d1 * this%onebydx
+                 a_np_2 = w2_N2F*p_p_N2F * this%onebydx
+                 b_np_2 = w2_N2F*q_p_N2F * this%onebydx
+
+                 a_np_1 = w1_N2F*(  p_N2F * this%onebydx)
+                 b_np_1 = w1_N2F*(  q_N2F * this%onebydx)
+                 c_np_1 = w1_N2F*(  r_N2F * this%onebydx)
+                 d_np_1 = w1_N2F*(  s_N2F * this%onebydx)
+
+
+                 RHS(:,:,3:this%n-3) = a06 * ( f(:,:,4:this%n-2) - f(:,:,3:this%n-3) ) &
+                                        + b06 * ( f(:,:,5:this%n-1)   - f(:,:,2:this%n-4) )
+
+                select case(bc1)
+                    case(1)
+                    case(-1)
+                    case(0)
+
+                        RHS(:,:,1) = a_np_1*f(:,:,1) + b_np_1*f(:,:,2) + c_np_1*f(:,:,3) + d_np_1*f(:,:,4)
+                        RHS(:,:,2) = a_np_2*( f(:,:,3) - f(:,:,2) ) + b_np_2*( f(:,:,4) - f(:,:,1) )
+
+                  end select
+
+                  select case(bcn)
+                       case(1)
+                       case(-1)
+                       case(0)
+
+                         RHS(:,:,this%n-1) = -a_np_1*f(:,:,this%n) - b_np_1*f(:,:,this%n-1) - c_np_1*f(:,:,this%n-2) - d_np_1*f(:,:,this%n-3)
+                         RHS(:,:,this%n-2) = a_np_2*( f(:,:,this%n-1) - f(:,:,this%n-2) ) + b_np_2*( f(:,:,this%n) - f(:,:,this%n-3) )
+
+                  end select
+
+
+
 
                case ("F2N")!TODO: implement better non-periodic BC: currently12466...66421
                     !interior    
@@ -1127,7 +1288,7 @@ contains
         real(rkind), dimension(this%n,na,nb), intent(in)  :: f
         real(rkind), dimension(this%n,na,nb), intent(out) :: df
         integer, optional, intent(in) :: bc1_, bcn_
-
+        df = 0.0
         if(this%n == 1) then
             df = zero
             return
@@ -1156,13 +1317,12 @@ contains
             df = zero
             return
         end if
-
         call this%ComputeXD1RHS(f, df,"N2F", na, nb,bc1,bcn)
         select case (this%periodic)
         case (.TRUE.)
            call this%SolveXLU1(df,na,nb)
         case (.FALSE.)
-           call this%SolveXTri1(df,na,nb)
+           call this%SolveXTri1_N2F(df,na,nb)
         end select
 
 
@@ -1223,7 +1383,7 @@ contains
         real(rkind), dimension(na,this%n,nb), intent(in)  :: f
         real(rkind), dimension(na,this%n,nb), intent(out) :: df
         integer, optional, intent(in) :: bc1_, bcn_
-
+        df = 0.0
         if(this%n == 1) then
             df = zero
             return
@@ -1258,7 +1418,7 @@ contains
         case (.TRUE.)
            call this%SolveYLU1(df,na,nb)
         case (.FALSE.)
-           call this%SolveYTri1(df,na,nb)
+           call this%SolveYTri1_N2F(df,na,nb)
         end select
 
 
@@ -1271,7 +1431,7 @@ contains
         real(rkind), dimension(na,nb,this%n), intent(in)  :: f
         real(rkind), dimension(na,nb,this%n), intent(out) :: df
         integer, optional, intent(in) :: bc1_, bcn_
-
+        df = 0.0
         if(this%n == 1) then
             df = zero
             return
@@ -1318,7 +1478,7 @@ contains
         real(rkind), dimension(na,nb,this%n), intent(in)  :: f
         real(rkind), dimension(na,nb,this%n), intent(out) :: df
         integer, optional, intent(in) :: bc1_, bcn_
-
+        df = 0.0
         if(this%n == 1) then
             df = zero
             return
@@ -1353,7 +1513,7 @@ contains
         case (.TRUE.)
            call this%SolveZLU1(df,na,nb)
         case (.FALSE.)
-           call this%SolveZTri1(df,na,nb)
+           call this%SolveZTri1_N2F(df,na,nb)
         end select
 
 

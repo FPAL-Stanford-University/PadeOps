@@ -90,6 +90,7 @@ module SolidMixtureMod
         procedure :: calculate_source
         procedure :: update_g
         procedure :: implicit_plastic
+        procedure :: Test_Der_NP
         procedure :: Test_Der_N2F
         procedure :: Test_Der
         procedure :: Test_Der_Periodic
@@ -5195,9 +5196,11 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         x_half = x+0.5*dx;
         y_half = y+0.5*dy;
 
-        testfunc = sin(2*x)*cos(4*y) + sin(x) + cos(y)
-        this%ddy_exact = -4*sin(2*x_half)*sin(4*y_half) - sin(y_half)
-        this%ddx_exact = 2*cos(2*x_half)*sin(4*y_half) + cos(x_half)
+        this%ddx_exact = ( 2.0) * cos(2.0*x_half) *cos(4.0*y) -3*sin(x_half)
+        this%ddy_exact =  (-4.0) * sin(2.0*x) *sin(4.0*y_half) + 5*cos(y_half)
+
+        testfunc = sin(2.0*x)*cos(4.0*y) + 5*sin(y) + 3*cos(x)
+        this%lap_error = testfunc
 
         call gradFV_N2Fx(this%decomp,this%derStagg,testfunc,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -5208,7 +5211,44 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 
     end subroutine
-   
+  
+    subroutine Test_Der_NP(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z,transpose_z_to_y
+        use operators, only: gradFV_N2Fx, gradFV_N2Fy,gradFV_N2Fz
+        use constants,       only: zero,epssmall,eps,one,two,third,half, pi
+        use exits,           only: GracefulExit
+        use reductions, only : P_MAXVAL
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        logical :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: x_half,y_half,ddx,ddy, testfunc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int
+        integer :: imat
+        real(rkind) :: dx, dy
+
+        dx = x(2,1,1)-x(1,1,1)
+        dy = y(1,2,1) -y(1,1,1)
+        x_half = x+0.5*dx;
+        y_half = y+0.5*dy;
+
+        this%ddx_exact = ( 3.0) * cos(3.0*x_half) *cos(5.0*y) -3*sin(x_half)
+        this%ddy_exact =  (-5.0) * sin(3.0*x) *sin(5.0*y_half) + 5*cos(y_half)
+        this%ddx_exact(this%nxp,:,:) = 0
+        this%ddy_exact(:,this%nyp,:) = 0       
+        testfunc = sin(3.0*x)*cos(5.0*y) + 5*sin(y) + 3*cos(x)
+        this%lap_error = testfunc
+ 
+        call gradFV_N2Fx(this%decomp,this%derStagg,testfunc,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_N2Fz(this%decomp,this%derStagg,testfunc,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+        this%derX_error = abs(this%DerX - this%ddx_exact)
+        this%derY_error = abs(this%DerY - this%ddy_exact)
+
+
+    end subroutine
+ 
     subroutine Test_Der_Periodic(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z,transpose_z_to_y
         use operators, only: gradFV_x, gradFV_y,gradFV_z,interpolateFV_x,interpolateFV_y, interpolateFV_z, divergenceFV, laplacian, gradient

@@ -94,13 +94,18 @@ module cd06stuff
         procedure, private :: ComputeYD1RHS
         procedure, private :: ComputeZD1RHS
         
-        procedure, private :: ComputeD2RHS
+        procedure, private :: ComputeXD2RHS
+        procedure, private :: ComputeYD2RHS
+        procedure, private :: ComputeZD2RHS
 
         procedure, private :: SolveXLU1
         procedure, private :: SolveYLU1
         procedure, private :: SolveZLU1
+
+        procedure, private :: SolveXLU2
+        procedure, private :: SolveYLU2
+        procedure, private :: SolveZLU2
         
-        procedure, private :: SolveLU2
        
         procedure, private :: ComputeTri1
         procedure, private :: ComputeTri2
@@ -114,7 +119,9 @@ module cd06stuff
         procedure :: dd1
         procedure :: dd2
         procedure :: dd3
-        procedure :: cd06der2
+        procedure :: d2d1
+        procedure :: d2d2
+        procedure :: d2d3
 
     end type
 
@@ -372,6 +379,35 @@ contains
     
     end subroutine
 
+    subroutine SolveXLU2(this,y,n2,n3)
+        class (cd06), intent(in) :: this
+        integer, intent(in) :: n2,n3
+        real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHSand put solution into it
+        integer :: i, j, k
+        real(rkind) :: sum1
+
+        do k = 1,n3
+            do j = 1,n2
+                ! Step 2
+                sum1 = this%LU2(1,2)*y(1,j,k)
+                do i = 2,this%n-1
+                    y(i,j,k) = y(i,j,k) - this%LU2(i,1)*y(i-1,j,k)
+                    sum1 = sum1 + this%LU2(i,2)*y(i,j,k)
+                end do
+                y(this%n,j,k) = y(this%n,j,k) - sum1
+
+                ! Step 3
+                y(this%n,j,k)   = y(this%n,j,k) * this%LU2(this%n,3)
+
+                y(this%n-1,j,k) =  y(this%n-1,j,k) * this%LU2(this%n-1,3) -y(this%n,j,k) * this%LU2(this%n-1,5)
+                do i = this%n-2,1,-1
+                    y(i,j,k) =  y(i,j,k) * this%LU2(i,3)- y(i+1,j,k) *this%LU2(i,4)- y(this%n,j,k) * this%LU2(i,5)
+                end do
+            end do
+        end do
+
+    end subroutine
+
     
     subroutine SolveYLU1(this,y,n1,n3)
         
@@ -401,7 +437,34 @@ contains
     
     end subroutine
 
-    
+    subroutine SolveYLU2(this,y,n1,n3)
+
+        class (cd06), intent(in) :: this
+        integer, intent(in) :: n1,n3
+        real(rkind), dimension(n1,this%n,n3), intent(inout) :: y  ! Take in RHS and put solution into it
+        integer ::  j, k
+        real(rkind), dimension(n1) :: sum1
+
+        do k = 1,n3
+                ! Step 2
+                sum1 = this%LU2(1,2)*y(:,1,k)
+                do j = 2,this%n-1
+                    y(:,j,k) = y(:,j,k) - this%LU2(j,1)*y(:,j-1,k)
+                    sum1 = sum1 + this%LU2(j,2)*y(:,j,k)
+                end do
+                y(:,this%n,k) = y(:,this%n,k) - sum1
+
+                ! Step 3
+                y(:,this%n,k)   = y(:,this%n,k) * this%LU2(this%n,3)
+
+                y(:,this%n-1,k) =  y(:,this%n-1,k) * this%LU2(this%n-1,3) - y(:,this%n,k) * this%LU2(this%n-1,5)
+                do j = this%n-2,1,-1
+                    y(:,j,k) =  y(:,j,k) * this%LU2(j,3)- y(:,j+1,k) * this%LU2(j,4)- y(:,this%n,k) * this%LU2(j,5)
+                end do
+        end do
+
+    end subroutine
+
     subroutine SolveZLU1(this,y,n1,n2)
         
         class (cd06), intent(in) :: this
@@ -428,7 +491,33 @@ contains
     
     end subroutine
 
-    
+    subroutine SolveZLU2(this,y,n1,n2)
+
+        class (cd06), intent(in) :: this
+        integer, intent(in) :: n1,n2
+        real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  ! Take in RHSand put solution into it
+        integer ::  k
+        real(rkind), dimension(n1,n2) :: sum1
+
+        ! Step 2
+        sum1 = this%LU2(1,2)*y(:,:,1)
+        do k = 2,this%n-1
+            y(:,:,k) = y(:,:,k) - this%LU2(k,1)*y(:,:,k-1)
+            sum1 = sum1 + this%LU2(k,2)*y(:,:,k)
+        end do
+        y(:,:,this%n) = y(:,:,this%n) - sum1
+
+        ! Step 3
+        y(:,:,this%n)   = y(:,:,this%n) * this%LU2(this%n,3)
+
+        y(:,:,this%n-1) =  y(:,:,this%n-1) * this%LU2(this%n-1,3) -y(:,:,this%n) * this%LU2(this%n-1,5)
+        do k = this%n-2,1,-1
+            y(:,:,k) =  y(:,:,k) * this%LU2(k,3)- y(:,:,k+1) * this%LU2(k,4)-y(:,:,this%n) * this%LU2(k,5)
+        end do
+
+    end subroutine
+
+
     subroutine SolveXTri1(this,y,n2,n3)
     
         class (cd06), intent(in) :: this
@@ -489,20 +578,6 @@ contains
         
     end subroutine
 
-    subroutine SolveLU2(this,y,n2,n3)
-        
-        class (cd06), intent(in) :: this
-        integer, intent(in) :: n2,n3
-        real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHS and put solution into it
-
-        
-        y = zero
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
-                ! Incomplete
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    end subroutine 
-     
     subroutine SolveTri2(this,y,n2,n3)
     
         class (cd06), intent(in) :: this
@@ -742,35 +817,134 @@ contains
     end subroutine
    
 
-    pure function ComputeD2RHS(this,f) result (RHS)
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
-                ! Incomplete / Needs to be updated
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    
+    subroutine ComputeXD2RHS(this,f, RHS, n2, n3)
+
         class( cd06 ), intent(in) :: this
-        real(rkind), dimension(this%n), intent(in) :: f
-        real(rkind), dimension(this%n) :: RHS
-        integer :: i
-    
+        integer, intent(in) :: n2, n3
+        real(rkind), dimension(this%n,n2,n3), intent(in) :: f
+        real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
+        integer ::  j, k
+        real(rkind) :: a06, b06
+        ! Non-periodic boundary a, b and c
+        real(rkind) :: a_np_3, b_np_3
+        real(rkind) :: a_np_2
+        real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
+        
         select case (this%periodic)
         case (.TRUE.)
-            RHS(1) = a06d2 * ( f(2) - two*f(1) + f(this%n)   ) &
-                   + b06d2 * ( f(3) - two*f(1) + f(this%n-1) ) 
-            RHS(2) = a06d2 * ( f(3) - two*f(2) + f(1)        ) &
-                   + b06d2 * ( f(4) - two*f(2) + f(this%n)   ) 
-            do i = 3,this%n-2
-                RHS(i) = a06d2 * ( f(i+1) - two*f(i) + f(i-1) ) &
-                       + b06d2 * ( f(i+2) - two*f(i) + f(i-2) ) 
+            a06 = a06d2 * this%onebydx2
+            b06 = b06d2 * this%onebydx2
+
+            do k = 1,n3
+                do j = 1,n2
+                    RHS(1         ,j,k) = a06 * ( f(2,j,k)          - two*f(1,j,k) + f(this%n,j,k) ) &
+                                        + b06 * ( f(3,j,k)          - two*f(1,j,k) + f(this%n-1,j,k) )
+
+                    RHS(2         ,j,k) = a06 * ( f(3,j,k)          - two*f(2,j,k) + f(1,j,k) ) &
+                                        + b06 * ( f(4,j,k)          - two*f(2,j,k) + f(this%n,j,k) )
+
+                    RHS(3:this%n-2,j,k) = a06 * ( f(4:this%n-1,j,k) - two*f(3:this%n-2,j,k) + f(2:this%n-3,j,k) ) &
+                                        + b06 * ( f(5:this%n  ,j,k) - two*f(3:this%n-2,j,k) + f(1:this%n-4,j,k) )
+
+                    RHS(this%n-1  ,j,k) = a06 * ( f(this%n,j,k)     - two*f(this%n-1,j,k) + f(this%n-2,j,k) ) &
+                                        + b06 * ( f(1,j,k)          - two*f(this%n-1,j,k) + f(this%n-3,j,k) )
+
+                    RHS(this%n    ,j,k) = a06 * ( f(1,j,k)          - two*f(this%n,j,k)   + f(this%n-1,j,k) ) &
+                                        + b06 * ( f(2,j,k)          - two*f(this%n,j,k)   + f(this%n-2,j,k) )
+                end do
             end do
-            RHS(this%n-1) = a06d2 * ( f(this%n) - two*f(this%n-1) + f(this%n-2) ) &
-                          + b06d2 * ( f(1)      - two*f(this%n-1) + f(this%n-3) ) 
-            RHS(this%n)   = a06d2 * ( f(1)      - two*f(this%n)   + f(this%n-1) ) &
-                          + b06d2 * ( f(2)      - two*f(this%n)   + f(this%n-2) )
         case (.FALSE.)
-            RHS = zero
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
         end select
-    
-    end function
+
+    end subroutine
+
+     subroutine ComputeYD2RHS(this,f, RHS, n1, n3)
+
+        class( cd06 ), intent(in) :: this
+        integer, intent(in) :: n1, n3
+        real(rkind), dimension(n1,this%n,n3), intent(in) :: f
+        real(rkind), dimension(n1,this%n,n3), intent(out) :: RHS
+        integer ::  k
+        real(rkind) :: a06, b06
+        ! Non-periodic boundary a, b and c
+        real(rkind) :: a_np_3, b_np_3
+        real(rkind) :: a_np_2
+        real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
+
+        select case (this%periodic)
+        case (.TRUE.)
+            a06 = a06d2 * this%onebydx2
+            b06 = b06d2 * this%onebydx2
+
+            do k = 1,n3
+                    RHS(:,1         ,k) = a06 * ( f(:,2,k)          - two*f(:,1,k) + f(:,this%n,k) ) &
+                                        + b06 * ( f(:,3,k)          - two*f(:,1,k) + f(:,this%n-1,k) )
+
+                    RHS(:,2         ,k) = a06 * ( f(:,3,k)          - two*f(:,2,k) + f(:,1,k) ) &
+                                        + b06 * ( f(:,4,k)          - two*f(:,2,k) + f(:,this%n,k) )
+
+                    RHS(:,3:this%n-2,k) = a06 * ( f(:,4:this%n-1,k) - two*f(:,3:this%n-2,k) + f(:,2:this%n-3,k) ) &
+                                        + b06 * ( f(:,5:this%n  ,k) - two*f(:,3:this%n-2,k) + f(:,1:this%n-4,k) )
+
+                    RHS(:,this%n-1  ,k) = a06 * ( f(:,this%n,k)     - two*f(:,this%n-1,k)   + f(:,this%n-2,k) ) &
+                                        + b06 * ( f(:,1,k)          - two*f(:,this%n-1,k)   + f(:,this%n-3,k) )
+
+                    RHS(:,this%n    ,k) = a06 * ( f(:,1,k)          - two*f(:,this%n,k)     + f(:,this%n-1,k) ) &
+                                        + b06 * ( f(:,2,k)          - two*f(:,this%n,k)     + f(:,this%n-2,k) )
+                !end do 
+            end do
+        case (.FALSE.)
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        
+
+        end select
+
+    end subroutine
+
+     subroutine ComputeZD2RHS(this,f, RHS, n1, n2)
+
+        class( cd06 ), intent(in) :: this
+        integer, intent(in) :: n1, n2
+        real(rkind), dimension(n1,n2,this%n), intent(in) :: f
+        real(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
+        real(rkind) :: a06, b06
+        ! Non-periodic boundary a, b and c
+        real(rkind) :: a_np_3, b_np_3
+        real(rkind) :: a_np_2
+        real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
+
+        select case (this%periodic)
+        case (.TRUE.)
+            a06 = a06d2 * this%onebydx2
+            b06 = b06d2 * this%onebydx2
+
+            RHS(:,:,1         ) = a06 * ( f(:,:,2)          - two*f(:,:,1) + f(:,:,this%n  ) ) &
+                                + b06 * ( f(:,:,3)          - two*f(:,:,1) + f(:,:,this%n-1) )
+
+            RHS(:,:,2         ) = a06 * ( f(:,:,3)          - two*f(:,:,2) + f(:,:,1       ) ) &
+                               + b06 * ( f(:,:,4)           - two*f(:,:,2) + f(:,:,this%n  ) )
+
+            RHS(:,:,3:this%n-2) = a06 * ( f(:,:,4:this%n-1) - two*f(:,:,3:this%n-2) + f(:,:,2:this%n-3) ) &
+                               + b06 * ( f(:,:,5:this%n  )  - two*f(:,:,3:this%n-2) + f(:,:,1:this%n-4) )
+
+            RHS(:,:,this%n-1  ) = a06 * ( f(:,:,this%n)     - two*f(:,:,this%n-1) + f(:,:,this%n-2) ) &
+                               + b06 * ( f(:,:,1)           - two*f(:,:,this%n-1) + f(:,:,this%n-3) )
+
+            RHS(:,:,this%n    ) = a06 * ( f(:,:,1)          - two*f(:,:,this%n) + f(:,:,this%n-1) ) &
+                                + b06 * ( f(:,:,2)          - two*f(:,:,this%n) + f(:,:,this%n-2) )
+        case (.FALSE.)
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        end select
+    end subroutine
 
     subroutine dd1(this, f, df, na, nb)
         class( cd06 ), intent(in) :: this
@@ -838,18 +1012,81 @@ contains
 
     end subroutine
     
-    function cd06der2(this, f) result(df)
-        
+    subroutine d2d1(this, f, df, na, nb)
         class( cd06 ), intent(in) :: this
-        real(rkind), dimension(this%n), intent(in) :: f
-        real(rkind), dimension(this%n) :: df
+        integer, intent(in) :: na, nb
+        real(rkind), dimension(this%n,na,nb), intent(in)  :: f
+        real(rkind), dimension(this%n,na,nb), intent(out) :: df
 
-        print*, f(1)
+        if (this%n == 1) then
             df = zero
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
-                ! Incomplete / Needs to be updated
-                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            return
+        end if
 
-    end function
+        call this%ComputeXD2RHS(f, df, na, nb)
+        select case (this%periodic)
+        case (.TRUE.)
+           call this%SolveXLU2(df,na,nb)
+        case (.FALSE.)
+
+           !!!! TO DO !!!!!!
+           !!!!!!!!!!!!!!!!!
+
+        end select
+
+
+    end subroutine
+
+    subroutine d2d2(this, f, df, na, nb)
+        class( cd06 ), intent(in) :: this
+        integer, intent(in) :: na, nb
+        real(rkind), dimension(na,this%n,nb), intent(in)  :: f
+        real(rkind), dimension(na,this%n,nb), intent(out) :: df
+
+        if (this%n == 1) then
+            df = zero
+            return
+        end if
+
+        call this%ComputeYD2RHS(f, df, na, nb)
+        select case (this%periodic)
+        case (.TRUE.)
+           call this%SolveYLU2(df,na,nb)
+        case (.FALSE.)
+            
+            !!!!!!!! TO DO !!!!!!!!!!
+            !!!!!!!!!!!!!!!!!!!!!!!!!
+
+        end select
+
+
+    end subroutine
+
+    subroutine d2d3(this, f, df, na, nb)
+        class( cd06 ), intent(in) :: this
+        integer, intent(in) :: na, nb
+        real(rkind), dimension(na,nb,this%n), intent(in)  :: f
+        real(rkind), dimension(na,nb,this%n), intent(out) :: df
+
+        if (this%n == 1) then
+            df = zero
+            return
+        end if
+
+        call this%ComputeZD2RHS(f, df, na, nb)
+        select case (this%periodic)
+        case (.TRUE.)
+           call this%SolveZLU2(df,na,nb)
+        case (.FALSE.)
+
+           !!!!!!!!! TO DO !!!!!!!!!!!
+           !!!!!!!!!!!!!!!!!!!!!!!!!!!
+            
+        end select
+
+
+    end subroutine
+
+
 
 end module
