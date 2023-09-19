@@ -110,7 +110,7 @@ module IncompressibleGrid
 
         real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat, uEhat, vEhat
-        real(rkind) :: dT0dz
+        !real(rkind) :: dT0dz
         
         complex(rkind), dimension(:,:,:), pointer :: uhat1, vhat1, what1, That1
         complex(rkind), dimension(:,:,:), pointer :: uhat2, vhat2, what2, That2
@@ -756,7 +756,7 @@ contains
        this%T => this%PfieldsC(:,:,:,7); this%That => this%SfieldsC(:,:,:,4)
        this%TE => this%PfieldsE(:,:,:,4); this%T_rhs => this%rhsC(:,:,:,3)
        this%T_Orhs => this%OrhsC(:,:,:,3); this%TEhat => this%SfieldsE(:,:,:,2)
-       this%dT0dz = 0.d0
+       !this%dT0dz = 0.d0
        !end if
 
        ! Allocate buffers
@@ -832,10 +832,10 @@ contains
        end if 
        
        ! Compute dT0dz
-       zmax = p_maxval(maxval(this%mesh(:,:,:,3))) + this%dz/2.d0
-       zmin = p_minval(minval(this%mesh(:,:,:,3))) - this%dz/2.d0
-       DeltaT0 = p_maxval(maxval(this%T)) - p_minval(minval(this%T))
-       this%dT0dz = DeltaT0/(zmax - zmin)
+       !zmax = p_maxval(maxval(this%mesh(:,:,:,3))) + this%dz/2.d0
+       !zmin = p_minval(minval(this%mesh(:,:,:,3))) - this%dz/2.d0
+       !DeltaT0 = p_maxval(maxval(this%T)) - p_minval(minval(this%T))
+       !this%dT0dz = DeltaT0/(zmax - zmin)
    
        if (this%isStratified) then
            if (BuoyancyTermType == 1) then
