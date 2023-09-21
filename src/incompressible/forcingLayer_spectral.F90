@@ -198,6 +198,7 @@ module spectralForcingLayerMod
           if (this%spectC%carryingZeroK) then
               this%fxhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
               this%fyhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
+              this%fzhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
           end if
           
           ! Step 4: Get physical space forcing
