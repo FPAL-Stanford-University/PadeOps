@@ -42,9 +42,9 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     logical :: symmetricDomain = .true.
-    real(rkind) :: zmin = -one
+    real(rkind) :: zmin = -one, Tref
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin 
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -125,7 +125,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind)  :: Lx = one, Ly = one, Lz = one
 !    real(rkind)  :: zTop_cell, zBot_cell, zMid
     type(cd06stagg), allocatable :: der
-    real(rkind) :: dz, zmin
+    real(rkind) :: dz, zmin, Tref
     integer :: ioUnit, ierr
     integer :: i, j
     logical :: symmetricDomain
@@ -151,7 +151,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     logical :: isStratified = .false., removeMean = .false.
 
     ! Read input file
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
     namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                     useRestartFile, restartFile_TID, restartFile_RID, CviscDT, &
                     nstepConstDt, restartFromDifferentGrid, nxS, nyS, nzS
@@ -245,11 +245,11 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, zmin
+    real(rkind) :: Lx, Ly, Lz, zmin, Tref
     logical :: symmetricDomain
     integer :: iounit
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
     
     wTh_surf = zero
     
@@ -272,10 +272,10 @@ subroutine setDirichletBC_Temp(inputfile, Tfield, Tsurf, dTsurf_dt, whichSide)
     real(rkind), dimension(:,:,:), intent(in) :: Tfield
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=3), intent(in) :: whichSide
-    real(rkind) :: Lx, Ly, Lz, zmin
+    real(rkind) :: Lx, Ly, Lz, zmin, Tref
     logical :: symmetricDomain
     integer :: iounit
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
     
     dTsurf_dt = zero
     if (whichSide == 'top') then
@@ -287,25 +287,23 @@ subroutine setDirichletBC_Temp(inputfile, Tfield, Tsurf, dTsurf_dt, whichSide)
 end subroutine
 
 
-subroutine set_Reference_Temperature(inputfile, Tref)
+subroutine set_Reference_Temperature(inputfile, Trefout)
     use kind_parameters,    only: rkind, clen
     implicit none 
     character(len=*),                intent(in)    :: inputfile
-    real(rkind), intent(out) :: Tref
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, zmin
+    real(rkind), intent(out) :: Trefout
+    real(rkind) :: Tref = 1.d0, Lx, Ly, Lz, zmin
     logical :: symmetricDomain
     integer :: iounit
     
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=SMinput)
     close(ioUnit)    
-     
-    Tref = 1.d0
     
-    ! Do nothing really since this is an unstratified simulation
+    Trefout = Tref
 
 end subroutine
 
