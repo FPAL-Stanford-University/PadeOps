@@ -79,22 +79,23 @@
        end if
    end subroutine 
 
-   subroutine getSpongeTerms(this,usp_hat,vsp_hat,wsp_hat,usp,vsp,wsp)
+   subroutine getSpongeTerms(this,usp_hat,vsp_hat,wsp_hat,Tsp_hat,usp,vsp,wsp,Tsp)
        class(igrid), intent(inout) :: this
-       complex(rkind), dimension(:,:,:), intent(out) :: usp_hat, vsp_hat, wsp_hat
-       real(rkind), dimension(:,:,:), intent(out) :: usp, vsp, wsp
+       complex(rkind), dimension(:,:,:), intent(out) :: usp_hat, vsp_hat, wsp_hat, Tsp_hat
+       real(rkind), dimension(:,:,:), intent(out) :: usp, vsp, wsp, Tsp
        
        usp_hat = im0
        vsp_hat = im0
        wsp_hat = im0
+       Tsp_hat = im0
        
-       call this%addSponge(usp_hat,vsp_hat,wsp_hat)
-       call this%ifft_CCE(usp_hat,vsp_hat,wsp_hat,usp,vsp,wsp)
+       call this%addSponge(usp_hat,vsp_hat,wsp_hat,Tsp_hat)
+       call this%ifft_CCE(usp_hat,vsp_hat,wsp_hat,Tsp_hat,usp,vsp,wsp,Tsp)
    end subroutine 
 
-   subroutine addSponge(this,urhs,vrhs,wrhs)
+   subroutine addSponge(this,urhs,vrhs,wrhs,Trhs)
        class(igrid), intent(inout), target :: this
-       complex(rkind), dimension(:,:,:), intent(inout), optional :: urhs, vrhs, wrhs
+       complex(rkind), dimension(:,:,:), intent(inout), optional :: urhs, vrhs, wrhs, Trhs
        complex(rkind), dimension(:,:,:), pointer :: deviationC
 
        deviationC => this%cbuffyC(:,:,:,1)
@@ -128,12 +129,16 @@
        deviationC = this%That 
        if (this%spectC%carryingZeroK) then
            deviationC(1,1,:) = cmplx(zero,zero,rkind)
-       end if 
-       this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
+       end if
+       if (present(Trhs)) then
+           Trhs = Trhs - (this%RdampC/this%dt)*deviationC
+       else
+           this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
+       end if
    end subroutine  
    
 
-   subroutine addNonLinearTerm_Rot(this, u_rhs, v_rhs, w_rhs)
+   subroutine addNonLinearTerm_Rot(this, u_rhs, v_rhs, w_rhs, T_rhs)
        class(igrid), intent(inout), target :: this
        real(rkind),    dimension(:,:,:), pointer :: dudy, dudz, dudx
        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
@@ -143,7 +148,7 @@
        real(rkind),    dimension(:,:,:), pointer :: T1C, T2C, T1E, T2E 
        complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E 
        complex(rkind), dimension(:,:,:), pointer :: tzC, tzE
-       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: u_rhs, v_rhs
+       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: u_rhs, v_rhs, T_rhs
        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: w_rhs
 
        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
@@ -211,8 +216,8 @@
              "fT2E? -- rhs_stuff.F90", ierr)
            call transpose_y_to_z(fT2E,tzE, this%sp_gpE)
            call this%Pade6opZ%interpz_E2C(tzE,tzC,WdTdzBC_bottom,WdTdzBC_top)
-           call transpose_z_to_y(tzC,this%T_rhs, this%sp_gpC)
-           this%T_rhs = this%T_rhs + fT1C
+           call transpose_z_to_y(tzC,T_rhs, this%sp_gpC)
+           T_rhs = T_rhs + fT1C
        end if
 
    end subroutine
@@ -237,10 +242,10 @@
 
    end subroutine
 
-   subroutine getSGSTerms(this,usgs_hat,vsgs_hat,wsgs_hat,usgs,vsgs,wsgs)
+   subroutine getSGSTerms(this,usgs_hat,vsgs_hat,wsgs_hat,Tsgs_hat,usgs,vsgs,wsgs,Tsgs)
        class(igrid), intent(inout) :: this
-       complex(rkind), dimension(:,:,:), intent(inout) :: usgs_hat, vsgs_hat, wsgs_hat
-       real(rkind), dimension(:,:,:), intent(inout) :: usgs, vsgs, wsgs
+       complex(rkind), dimension(:,:,:), intent(inout) :: usgs_hat, vsgs_hat, wsgs_hat, Tsgs_hat
+       real(rkind), dimension(:,:,:), intent(inout) :: usgs, vsgs, wsgs, Tsgs
 
        usgs_hat = im0
        vsgs_hat = im0
@@ -250,55 +255,60 @@
          this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
          this%v,     this%wC,    this%T,          this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
          this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
+       if (this%isStratified .or. this%initspinup) then
+          call this%sgsmodel%getRHS_SGS_Scalar(Tsgs_hat, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
+                                     this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
+       end if
 
-       call this%ifft_CCE(usgs_hat,vsgs_hat,wsgs_hat,usgs, vsgs, wsgs)
+       call this%ifft_CCE(usgs_hat,vsgs_hat,wsgs_hat,Tsgs_hat,usgs, vsgs, wsgs,Tsgs)
    end subroutine
    
-   subroutine getViscousTerms(this,uvisc_hat,vvisc_hat,wvisc_hat,uvisc,vvisc,wvisc)
+   subroutine getViscousTerms(this,uvisc_hat,vvisc_hat,wvisc_hat,Tvisc_hat,uvisc,vvisc,wvisc,Tvisc)
        class(igrid), intent(inout) :: this
-       real(rkind), dimension(:,:,:), intent(inout) :: uvisc, vvisc, wvisc
-       complex(rkind), dimension(:,:,:), intent(inout) :: uvisc_hat, vvisc_hat, wvisc_hat
+       real(rkind), dimension(:,:,:), intent(inout) :: uvisc, vvisc, wvisc, Tvisc
+       complex(rkind), dimension(:,:,:), intent(inout) :: uvisc_hat, vvisc_hat, wvisc_hat, Tvisc_hat
 
        uvisc_hat = im0
        vvisc_hat = im0
        wvisc_hat = im0
 
-       call this%addViscousTerm(uvisc_hat,vvisc_hat,wvisc_hat)
+       call this%addViscousTerm(uvisc_hat,vvisc_hat,wvisc_hat,Tvisc_hat)
 
-       call this%ifft_CCE(uvisc_hat,vvisc_hat,wvisc_hat,uvisc, vvisc, wvisc)
+       call this%ifft_CCE(uvisc_hat,vvisc_hat,wvisc_hat, Tvisc_hat, uvisc, vvisc, wvisc, Tvisc)
    end subroutine
   
-   subroutine ifft_CCE(this,uhat,vhat,what,u,v,w)
+   subroutine ifft_CCE(this,uhat,vhat,what,That, u,v,w,T)
        class(igrid), intent(inout) :: this
-       complex(rkind), dimension(:,:,:), intent(in) :: uhat, vhat, what
-       real(rkind), dimension(:,:,:), intent(out) :: u, v, w
+       complex(rkind), dimension(:,:,:), intent(in) :: uhat, vhat, what, That
+       real(rkind), dimension(:,:,:), intent(out) :: u, v, w, T
 
        call this%spectC%ifft(uhat,u)
        call this%spectC%ifft(vhat,v)
        call this%spectE%ifft(what,w)
+       call this%spectC%ifft(That,T)
 
    end subroutine
 
-   subroutine getConvectiveTerms(this,uconv_hat,vconv_hat,wconv_hat,uconv,vconv,wconv)
+   subroutine getConvectiveTerms(this,uconv_hat,vconv_hat,wconv_hat,Tconv_hat,uconv,vconv,wconv,Tconv)
        class(igrid), intent(inout) :: this
-       real(rkind), dimension(:,:,:), intent(inout) :: uconv, vconv, wconv
-       complex(rkind), dimension(:,:,:), intent(inout) :: uconv_hat, vconv_hat, wconv_hat
+       real(rkind), dimension(:,:,:), intent(inout) :: uconv, vconv, wconv, Tconv
+       complex(rkind), dimension(:,:,:), intent(inout) :: uconv_hat, vconv_hat, wconv_hat, Tconv_hat
       
        uconv_hat = im0 
        vconv_hat = im0 
        wconv_hat = im0 
        
        if (useSkewSymm) then
-           call this%addNonLinearTerm_skewSymm(uconv_hat, vconv_hat, wconv_hat)
+           call this%addNonLinearTerm_skewSymm(uconv_hat, vconv_hat, wconv_hat, Tconv_hat)
        else
-           call this%addNonLinearTerm_Rot(uconv_hat, vconv_hat, wconv_hat)
+           call this%addNonLinearTerm_Rot(uconv_hat, vconv_hat, wconv_hat, Tconv_hat)
        end if
 
-       call this%ifft_CCE(uconv_hat, vconv_hat, wconv_hat, &
-         uconv, vconv, wconv)
+       call this%ifft_CCE(uconv_hat, vconv_hat, wconv_hat, Tconv_hat, &
+         uconv, vconv, wconv, Tconv)
    end subroutine
    
-   subroutine addNonLinearTerm_skewSymm(this, urhs, vrhs, wrhs)
+   subroutine addNonLinearTerm_skewSymm(this, urhs, vrhs, wrhs, Trhs)
        class(igrid), intent(inout), target :: this
        real(rkind),    dimension(:,:,:), pointer :: dudy, dudz, dudx
        real(rkind),    dimension(:,:,:), pointer :: dvdx, dvdy, dvdz
@@ -308,7 +318,7 @@
        real(rkind),    dimension(:,:,:), pointer :: T1C, T2C, T1E, T2E 
        complex(rkind), dimension(:,:,:), pointer :: fT1C, fT2C, fT1E, fT2E 
        complex(rkind), dimension(:,:,:), pointer :: tzC, tzE
-       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
+       complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs, Trhs
        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)), intent(inout) :: wrhs
 
        dudx  => this%duidxjC(:,:,:,1); dudy  => this%duidxjC(:,:,:,2); dudzC => this%duidxjC(:,:,:,3); 
@@ -430,18 +440,18 @@
 
        if (this%isStratified .or. this%initspinup) then
            T1C = -this%u*this%T
-           call this%spectC%fft(T1C,this%T_rhs)
-           call this%spectC%mtimes_ik1_ip(this%T_rhs)
+           call this%spectC%fft(T1C,Trhs)
+           call this%spectC%mtimes_ik1_ip(Trhs)
            T1C = -this%v*this%T
            call this%spectC%fft(T1C,fT1C)
            call this%spectC%mtimes_ik2_ip(fT1C)
-           this%T_rhs = this%T_rhs + fT1C
+           Trhs = Trhs + fT1C
            T1E = -this%w * this%TE
            call this%spectE%fft(T1E,fT1E)
            call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
            call this%Pade6opZ%ddz_E2C(tzE,tzC,WTBC_bottom,WTBC_top)
            call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
-           this%T_rhs = this%T_rhs + fT1C
+           Trhs = Trhs + fT1C
        end if 
    end subroutine
 
@@ -539,8 +549,6 @@
              do i = 1,size(this%u_rhs,1)
                  tmp1 = -this%spectC%kabs_sq(i,j,k)*this%uhat(i,j,k) + this%d2udz2hatC(i,j,k)
                  tmp2 = -this%spectC%kabs_sq(i,j,k)*this%vhat(i,j,k) + this%d2vdz2hatC(i,j,k)
-                 !this%u_rhs(i,j,k) = this%u_rhs(i,j,k) + oneByRe*tmp1
-                 !this%v_rhs(i,j,k) = this%v_rhs(i,j,k) + oneByRe*tmp2
                  u_rhs(i,j,k) = u_rhs(i,j,k) + oneByRe*tmp1
                  v_rhs(i,j,k) = v_rhs(i,j,k) + oneByRe*tmp2
               end do
@@ -552,7 +560,6 @@
              !$omp simd
              do i = 1,size(this%w_rhs,1)
                  tmp1 = -this%spectE%kabs_sq(i,j,k)*this%what(i,j,k) + this%d2wdz2hatE(i,j,k)
-                 !this%w_rhs(i,j,k) = this%w_rhs(i,j,k) + oneByRe*tmp1
                  w_rhs(i,j,k) = w_rhs(i,j,k) + oneByRe*tmp1
               end do
            end do

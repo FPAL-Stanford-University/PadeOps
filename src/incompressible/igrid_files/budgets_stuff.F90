@@ -1,6 +1,9 @@
-subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb)  
+subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, &
+    uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, &
+    Tc, Tvisc, Tsgs)  
     class(igrid), intent(inout) :: this
-    complex(rkind), dimension(:,:,:), intent(in), target :: uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb 
+    complex(rkind), dimension(:,:,:), intent(in), target :: uc, vc, wc, usgs, vsgs, wsgs, &
+      uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb, Tc, Tvisc, Tsgs
 
     this%ucon => uc
     this%vcon => vc
@@ -39,6 +42,16 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, uvisc, vvisc
     this%HITforcing_x => null()
     this%HITforcing_y => null()
     this%HITforcing_z => null()
+
+    if (this%isStratified) then
+        this%Tcon => Tc
+        this%Tvisc => Tvisc
+        this%Tsgs => Tsgs
+    else
+        this%Tcon => null()
+        this%Tvisc => null()
+        this%Tsgs => null()
+    end if
 
     ! Safeguards
     this%StoreForBudgets = .true. 
@@ -163,13 +176,15 @@ subroutine set_budget_rhs_to_zero(this)
     if(associated(this%ucon)) then
         this%ucon = czero 
         this%vcon = czero 
-        this%wcon = czero 
+        this%wcon = czero
+        this%Tcon = czero 
     endif
 
     if(associated(this%usgs)) then
         this%usgs = czero 
         this%vsgs = czero 
         this%wsgs = czero 
+        this%Tsgs = czero
     endif
 
     if(associated(this%px)) then
@@ -182,6 +197,7 @@ subroutine set_budget_rhs_to_zero(this)
         this%uvisc = czero 
         this%vvisc = czero 
         this%wvisc = czero 
+        this%Tvisc = czero
     endif
 
     if (associated(this%ucor)) then

@@ -4,7 +4,6 @@ module temporalHook
     use reductions,         only: P_MAXVAL, p_minval, p_sum
     use exits,              only: message, message_min_max
     use constants,          only: half
-    use timer,              only: tic, toc 
     use mpi
 
     implicit none 

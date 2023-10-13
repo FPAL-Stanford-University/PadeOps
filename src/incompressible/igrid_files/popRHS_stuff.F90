@@ -19,9 +19,9 @@
       
        ! Step 1: Non Linear Term 
        if (useSkewSymm) then
-           call this%addNonLinearTerm_skewSymm(this%u_rhs, this%v_rhs, this%w_rhs)
+           call this%addNonLinearTerm_skewSymm(this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
        else
-           call this%AddNonLinearTerm_Rot(this%u_rhs, this%v_rhs, this%w_rhs)
+           call this%AddNonLinearTerm_Rot(this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
        end if
 
        ! Step 2: Coriolis Term
@@ -102,16 +102,17 @@
       
        ! Step 1: Non Linear Term 
        if (useSkewSymm) then
-           !call this%addNonLinearTerm_skewSymm(this%ucon, this%vcon, this%wcon)
-           call this%addNonLinearTerm_skewSymm(this%u_rhs, this%v_rhs, this%w_rhs)
+           call this%addNonLinearTerm_skewSymm(this%ucon, this%vcon, this%wcon, this%Tcon)
+           !call this%addNonLinearTerm_skewSymm(this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
        else
-           !call this%AddNonLinearTerm_Rot(this%ucon, this%vcon, this%wcon)
-           call this%AddNonLinearTerm_Rot(this%u_rhs, this%v_rhs, this%w_rhs)
+           call this%AddNonLinearTerm_Rot(this%ucon, this%vcon, this%wcon, this%Tcon)
+           !call this%AddNonLinearTerm_Rot(this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
        end if
        if(associated(this%ucon)) then
-           this%ucon = this%u_rhs 
-           this%vcon = this%v_rhs 
-           this%wcon = this%w_rhs
+           this%u_rhs = this%u_rhs + this%ucon
+           this%v_rhs = this%v_rhs + this%vcon
+           this%w_rhs = this%w_rhs + this%wcon
+           this%T_rhs = this%T_rhs + this%Tcon
        endif
 
        ! Step 2: Coriolis Term
@@ -155,37 +156,44 @@
 
        ! Step 6a: SGS  Stress Terms
        if (this%useSGS) then
-         if(associated(this%usgs)) then
-           call this%sgsmodel%getRHS_SGS(this%usgs, this%vsgs, this%wsgs,      this%duidxjC, this%duidxjE,    &
-                                         this%uhat,  this%vhat,  this%whatC,   this%That,    this%u,       &
-                                         this%v,     this%wC,    this%T,       this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
-                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
-         else
-           call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,   this%duidxjC, this%duidxjE, &
-                                         this%uhat,  this%vhat,  this%whatC,   this%That,    this%u,       &
-                                         this%v,     this%wC,    this%T,       this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
-                                         this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
-         end if
+           if(associated(this%usgs)) then
+             call this%sgsmodel%getRHS_SGS(this%usgs, this%vsgs, this%wsgs,      this%duidxjC, this%duidxjE,    &
+                                           this%uhat,  this%vhat,  this%whatC,   this%That,    this%u,       &
+                                           this%v,     this%wC,    this%T,       this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
+                                           this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
+           else
+             call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,   this%duidxjC, this%duidxjE, &
+                                           this%uhat,  this%vhat,  this%whatC,   this%That,    this%u,       &
+                                           this%v,     this%wC,    this%T,       this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
+                                           this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE)
+           end if
 
            if (this%isStratified .or. this%initspinup) then
-              call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
-                                         this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
+              if (associated(this%Tsgs)) then
+                call this%sgsmodel%getRHS_SGS_Scalar(this%Tsgs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
+                                           this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
+              else
+                call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
+                                           this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
+              end if
            end if
 
          if(associated(this%usgs)) then
            this%u_rhs = this%u_rhs + this%usgs
            this%v_rhs = this%v_rhs + this%vsgs
            this%w_rhs = this%w_rhs + this%wsgs
+           this%T_rhs = this%T_rhs + this%Tsgs
          end if
            
            ! viscous term evaluate separately  
            if ((.not. this%isInviscid) .and. associated(this%uvisc)) then
-               call this%addViscousTerm(this%uvisc, this%vvisc, this%wvisc)
+               call this%addViscousTerm(this%uvisc, this%vvisc, this%wvisc, this%Tvisc)
                
                ! Now correct the SGS term 
                this%usgs = this%usgs - this%uvisc 
                this%vsgs = this%vsgs - this%vvisc 
                this%wsgs = this%wsgs - this%wvisc 
+               this%Tsgs = this%Tsgs - this%Tvisc
            end if  
           
        else

@@ -1,7 +1,7 @@
 module budgets_xy_avg_mod
    use kind_parameters, only: rkind, clen, mpirkind
    use decomp_2d
-   use reductions, only: p_sum
+   use reductions, only: p_sum, p_minval
    use incompressibleGrid, only: igrid  
    use exits, only: message, GracefulExit
    use constants, only: half,two,one,zero
@@ -73,7 +73,7 @@ module budgets_xy_avg_mod
 
    ! 12: Z eqn - Advection term
    ! 13: Z eqn - SGS term 
-   ! 14: Z eqn - Pressure gradient term (the mean coriolis, and buoyancy terms are removed)  
+   ! 14: Z eqn - Pressure gradient term (the mean coriolis, and buoyancy terms are removed) 
 
 
    ! BUDGET_2 term indices: 
@@ -87,7 +87,11 @@ module budgets_xy_avg_mod
    ! 8:  SGS dissipation
    ! 9:  SGS transport
    ! 10: Force production
-
+   ! 11: Buoyancy frequency
+   ! 12: Buoyancy transfer
+   ! 13: Turbulent transport of mean temperature (times N^2)
+   ! 14: Diffusive transport of mean tempearture (times N^2)
+   ! 15: Mean potential energy destruction (times N^2)
 
    ! BUDGET_3 term indices:
    ! 1. TKE production
@@ -101,6 +105,12 @@ module budgets_xy_avg_mod
    ! 9.  SGS transport
    ! 10. SGS dissipation
    ! 11. Force production
+   ! 12. turbulent transport of buoyancy variance (var(b))
+   ! 13. Viscous transport of var(b)
+   ! 14. SGS transport of var(b)
+   ! 15. Viscous dissipation of var(b)
+   ! 16. SGS dissipation of var(b)
+   ! XX. Convective transport of var(b) (Not implemented)
 
 
    ! BUDGET_4_ij term indices: 
@@ -120,9 +130,10 @@ module budgets_xy_avg_mod
 
         complex(rkind), dimension(:,:,:), allocatable :: uc, vc, wc, usgs, vsgs, wsgs, &
           uvisc, vvisc, wvisc, px, py, pz, wb, ucor, vcor, wcor, uturb!, uold, vold, wold
+        complex(rkind), dimension(:,:,:), allocatable :: Tc, Tsgs, Tvisc
         type(igrid), pointer :: igrid_sim 
         type(decomp_info), pointer :: gpC, gpE
-        real(rkind), dimension(:), allocatable :: U_mean, V_mean, dUdz, dVdz, uw, vw
+        real(rkind), dimension(:), allocatable :: U_mean, V_mean, T_mean, dUdz, dVdz, dTdz, uw, vw, q3_mean, dq3dz
         real(rkind), dimension(:), allocatable :: dUdzE, dVdzE
         
         real(rkind), dimension(:,:), allocatable :: budget_0, budget_1, budget_2, budget_4s
@@ -139,13 +150,19 @@ module budgets_xy_avg_mod
         real(rkind), dimension(:), allocatable :: meanZ_bcast
         real(rkind), dimension(:,:), allocatable :: tmpz1, tmpz2
 
+        ! For the forcing layer
+        real(rkind), dimension(:,:,:), pointer :: fx, fy, fz
+        real(rkind), pointer :: forceFact
+
 
         integer :: tidx_dump 
         integer :: tidx_compute
         integer :: tidx_budget_start 
         real(rkind) :: time_budget_start 
         logical :: do_budgets, do_spectra, do_autocorrel, forceDump
-        integer :: version
+
+        real(rkind) :: Tref
+        real(rkind) :: oneOnPrRe, oneOnFr2, oneOnFr4
 
     contains
         procedure           :: init
@@ -197,7 +214,8 @@ contains
         logical :: do_budgets = .false., do_spectra = .false., do_autocorrel = .false.
         real(rkind) :: time_budget_start = -1.0d0
         character(len=clen) :: mssg
-        integer :: version = 1
+        integer :: version = 2
+        integer :: nvars_budg0, nvars_budg1, nvars_budg2, nvars_budg3, nvars_budg4
         namelist /BUDGET_XY_AVG/ budgetType, budgets_dir, restart_budgets, restart_rid, restart_tid, restart_counter, tidx_dump, tidx_compute, do_budgets, tidx_budget_start, time_budget_start, do_spectra, do_autocorrel, version
         
         ! STEP 1: Read in inputs, link pointers and allocate budget vectors
@@ -219,11 +237,15 @@ contains
         this%tidx_budget_start = tidx_budget_start  
         this%time_budget_start = time_budget_start  
         this%forceDump = .false.
-        this%version = version
 
         this%budgets_dir = budgets_dir
         this%budgetType = budgetType 
         this%avgFact = 1.d0/(real(igrid_sim%nx,rkind)*real(igrid_sim%ny,rkind))
+
+        this%Tref = this%igrid_sim%ThetaRef
+        this%oneOnPrRe = 1.d0/(igrid_sim%PrandtlFluid*igrid_sim%Re)
+        this%oneOnFr2 = 1.d0/(igrid_sim%Fr*igrid_sim%Fr)
+        this%oneOnFr4 = this%oneOnFr2*this%oneOnFr2
 
         if (.not. this%igrid_sim%fastCalcPressure) then
             call GracefulExit("Cannot perform budget calculaitons if IGRID"//&
@@ -235,36 +257,34 @@ contains
         endif
 
         if(this%do_budgets) then
-            allocate(this%Budget_1(this%nz,14))
-            allocate(this%Budget_1s(this%nz,14))
-            if (this%version == 1) then
-                allocate(this%Budget_0s(this%nz,21))
-                allocate(this%Budget_0(this%nz,21))
-                allocate(this%Budget_2(this%nz,7))
-                allocate(this%Budget_3(this%nz,8))
-                allocate(this%Budget_3s(this%nz,8))
-            else
-                if (this%igrid_sim%localizedForceLayer == 1) then
-                    allocate(this%Budget_0s(this%nz,30))
-                    allocate(this%Budget_0(this%nz,30))
-                    allocate(this%Budget_2(this%nz,10))
-                    allocate(this%Budget_3(this%nz,11))
-                    allocate(this%Budget_3s(this%nz,11))
-                else
-                    allocate(this%Budget_0s(this%nz,27))
-                    allocate(this%Budget_0(this%nz,27))
-                    allocate(this%Budget_2(this%nz,9))
-                    allocate(this%Budget_3(this%nz,10))
-                    allocate(this%Budget_3s(this%nz,10))
-                end if
+            nvars_budg0 = 31
+            nvars_budg1 = 17
+            nvars_budg2 = 16
+            nvars_budg3 = 16
+            nvars_budg4 = 9 
+
+            if (this%igrid_sim%isStratified) then
+                call assert(this%igrid_sim%BuoyancyTermType == 1,'MPE/TPE '//&
+                  'budgets assume the equations are scaled such that the buoyancy '//&
+                  'term is proportainal to 1/Fr^2. If using a different scaling, '// &
+                  'special care needs to be taken when computing the budget terms. '//&
+                  'Namely, anywhere that this%igrid_sim%thetaRef gets used needs to '//&
+                  'be modified')
             end if
             
+            allocate(this%Budget_0s(this%nz,nvars_budg0))
+            allocate(this%Budget_0( this%nz,nvars_budg0))
+            allocate(this%Budget_1( this%nz,nvars_budg1))
+            allocate(this%Budget_1s(this%nz,nvars_budg1))
+            allocate(this%Budget_2( this%nz,nvars_budg2))
+            allocate(this%Budget_3( this%nz,nvars_budg3))
+            allocate(this%Budget_3s(this%nz,nvars_budg3))
             
-            allocate(this%Budget_4s(this%nz,9))
-            allocate(this%Budget_4_13(this%nz,9))
-            allocate(this%Budget_4_23(this%nz,9))
-            allocate(this%Budget_4_33(this%nz,9))
-            allocate(this%Budget_4_11(this%nz,9))
+            allocate(this%Budget_4s(  this%nz,nvars_budg4))
+            allocate(this%Budget_4_13(this%nz,nvars_budg4))
+            allocate(this%Budget_4_23(this%nz,nvars_budg4))
+            allocate(this%Budget_4_33(this%nz,nvars_budg4))
+            allocate(this%Budget_4_11(this%nz,nvars_budg4))
 
             if ((trim(budgets_dir) .eq. "null") .or.(trim(budgets_dir) .eq. "NULL")) then
                 this%budgets_dir = igrid_sim%outputDir
@@ -314,6 +334,8 @@ contains
             allocate(this%tmpE_1d(1,1,this%nz+1)) 
             allocate(this%U_mean(this%nz), this%V_mean(this%nz))
             allocate(this%dUdz(this%nz), this%dVdz(this%nz))
+            allocate(this%T_mean(this%nz), this%dTdz(this%nz))
+            allocate(this%q3_mean(this%nz), this%dq3dz(this%nz))
             allocate(this%dUdzE(this%nz+1), this%dVdzE(this%nz+1))
             allocate(this%uw(this%nz), this%vw(this%nz))
             allocate(this%wTh(this%nz))
@@ -343,6 +365,12 @@ contains
             call igrid_sim%spectE%alloc_r2c_out(this%pz)
             call igrid_sim%spectE%alloc_r2c_out(this%wb)
 
+            if (igrid_sim%isStratified) then
+                call igrid_sim%spectC%alloc_r2c_out(this%Tc)
+                call igrid_sim%spectC%alloc_r2c_out(this%Tvisc)
+                call igrid_sim%spectC%alloc_r2c_out(this%Tsgs)
+            end if
+
             !allocate(this%uold(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             !allocate(this%vold(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             !allocate(this%wold(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
@@ -350,7 +378,24 @@ contains
             ! STEP 3: Now instrument igrid 
             call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
                        & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
-                       & this%vcor, this%wcor, this%uturb)
+                       & this%vcor, this%wcor, this%uturb, this%Tc, this%Tvisc, this%Tsgs)
+
+            ! Point to forcing layer arrays
+            if (igrid_sim%localizedForceLayer == 1) then
+              this%fx => igrid_sim%forceLayer%fx
+              this%fy => igrid_sim%forceLayer%fy
+              this%fz => igrid_sim%forceLayer%fz
+              this%forceFact => igrid_sim%forceLayer%ampFact
+            elseif (igrid_sim%localizedForceLayer == 2) then
+              this%fx => igrid_sim%spectForceLayer%fx
+              this%fy => igrid_sim%spectForceLayer%fy
+              this%fz => igrid_sim%spectForceLayer%fz
+              this%forceFact => igrid_sim%spectForceLayer%ampFact
+            else
+              this%fx => null()
+              this%fy => null()
+              this%fz => null()
+            end if
 
             call assert(allocated(this%budget_0),'Budget_0 not allocated')
             call message("Budget_xy_avg initialized successfully!")
@@ -436,6 +481,10 @@ contains
                 deallocate(this%RFx, this%RFy, this%RFz, this%tmpz1, this%tmpz2)
             endif
         endif
+        if (allocated(this%T_mean)) deallocate(this%T_mean)
+        if (allocated(this%dTdz)) deallocate(this%dTdz)
+        if (allocated(this%q3_mean)) deallocate(this%q3_mean)
+        if (allocated(this%dq3dz)) deallocate(this%dq3dz)
 
     end subroutine 
 
@@ -554,34 +603,22 @@ contains
             ! TKE transport = TOTAL KE transport - MKE trasport  
             this%budget_3s(:,2) = this%budget_3s(:,2) - this%budget_2(:,2)
 
+
             ! Pressure transport 
             ! Done already because <dpdx> and <dpdy> are 0. 
 
             ! SGS + Viscous Terms
-            if (this%version == 1) then
-                ! Dissipation
-                this%budget_3s(:,5) = this%budget_3s(:,5) - this%budget_0s(:,14)*this%dUdz - this%budget_0s(:,15)*this%dVdz
-           
-                ! Transport 
-                ! First get time average
-                this%budget_3s(:,4) = this%budget_3s(:,4) - this%budget_1s(:,2)*this%U_mean - this%budget_1s(:,3)*this%U_mean &
-                                    - this%budget_1s(:,8)*this%V_mean - this%budget_1s(:,9)*this%V_mean 
-                ! Now subtract out the dissipation
-                this%budget_3s(:,4) = this%budget_3s(:,4) - this%budget_3s(:,5)
-            else
-                ! Dissipation
-                this%budget_3s(:,5)  = this%budget_3s(:,5)  - this%budget_0s(:,14)*this%dUdz - this%budget_0s(:,15)*this%dVdz
-                this%budget_3s(:,10) = this%budget_3s(:,10) - this%budget_0s(:,22)*this%dUdz - this%budget_0s(:,23)*this%dVdz
+            ! Dissipation
+            this%budget_3s(:,5)  = this%budget_3s(:,5)  - this%budget_0s(:,14)*this%dUdz - this%budget_0s(:,15)*this%dVdz
+            this%budget_3s(:,10) = this%budget_3s(:,10) - this%budget_0s(:,22)*this%dUdz - this%budget_0s(:,23)*this%dVdz
+            ! Transport 
+            ! First get time average
+            this%budget_3s(:,4) = this%budget_3s(:,4) - this%budget_1s(:,3)*this%U_mean - this%budget_1s(:,9)*this%V_mean 
+            this%budget_3s(:,9) = this%budget_3s(:,9) - this%budget_1s(:,2)*this%U_mean - this%budget_1s(:,8)*this%V_mean
 
-                ! Transport 
-                ! First get time average
-                this%budget_3s(:,4) = this%budget_3s(:,4) - this%budget_1s(:,3)*this%U_mean - this%budget_1s(:,9)*this%V_mean 
-                this%budget_3s(:,9) = this%budget_3s(:,9) - this%budget_1s(:,2)*this%U_mean - this%budget_1s(:,8)*this%V_mean
-
-                ! Now subtract out the dissipation
-                this%budget_3s(:,4) = this%budget_3s(:,4) - this%budget_3s(:,5 )
-                this%budget_3s(:,9) = this%budget_3s(:,9) - this%budget_3s(:,10)
-            end if
+            ! Now subtract out the dissipation
+            this%budget_3s(:,4) = this%budget_3s(:,4) - this%budget_3s(:,5 )
+            this%budget_3s(:,9) = this%budget_3s(:,9) - this%budget_3s(:,10)
 
             ! Turbine  
             this%budget_3s(:,6) = this%budget_3s(:,6) - this%U_mean*this%budget_1s(:,6)
@@ -590,20 +627,39 @@ contains
             this%budget_3s(:,7) = this%budget_3s(:,7) - this%U_mean*this%budget_1s(:,4) - this%V_mean*this%budget_1s(:,10)
 
             ! Force production
-            if (this%igrid_sim%localizedForceLayer == 1) then
-                call assert(this%version > 1, 'this%version > 1 -- dumpBudgets()')
-                this%budget_3s(:,11) = this%budget_3s(:,11) - this%budget_2(:,10)
-            end if
+             this%budget_3s(:,11) = this%budget_3s(:,11) - this%budget_2(:,10)
 
-            call printBudget3Residual(this%budget_3s)
 
             ! Buoyancy 
             ! nothing to do since <W> = 0
+
+            if (this%igrid_sim%isStratified) then
+              ! 12. Turbulent transport of buoyancy variance
+              this%budget_3s(:,12) = this%budget_3s(:,12) - this%budget_2(:,12)
+
+              ! 13. Diffusive transport (molecular)
+              this%budget_3s(:,13) = this%budget_3s(:,13) - this%budget_2(:,13) - this%budget_3s(:,15)
+
+              ! 14. Diffusive transport (SGS)
+              call this%ddz_1d_cell2cell(this%budget_0s(:,31),this%tmp_meanC,0,0)
+              this%budget_3s(:,14) = -this%oneOnFr4*this%tmp_meanC - this%budget_2(:,14)
+
+              ! 15. TPE dissipation (molecular)
+              this%budget_3s(:,15) = this%budget_3s(:,15) - this%budget_2(:,15)
+
+              ! 16. TPE dissipation (SGS)
+              this%budget_3s(:,16) = this%budget_3s(:,16) - this%budget_2(:,16)
+
+            end if
+            
+            call printBudget3Residual(this%budget_3s)
+            
             if (this%budgetType>2) then
                 write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget3","_t",this%igrid_sim%step,"_n",this%counter,".stt"
                 fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
                 call write_2d_ascii(this%budget_3s, fname) 
             end if
+            
 
             ! Budget 4: 
             ! 13 component:
@@ -1595,104 +1651,88 @@ contains
         this%budget_0(:,17) = this%budget_0(:,17) + this%tmp_meanC
         
         ! STEP 3: SGS stress (also viscous stress if finite reynolds number is being used)
-        if (this%version == 1) then
-            call this%get_xy_meanE_from_fE(this%igrid_sim%tau13, this%tmp_meanE) 
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-            this%budget_0(:,14) = this%budget_0(:,14) + this%tmp_meanC
-
-            call this%get_xy_meanE_from_fE(this%igrid_sim%tau23, this%tmp_meanE) 
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-            this%budget_0(:,15) = this%budget_0(:,15) + this%tmp_meanC
-
-            ! Get mean tau_11
-            call this%get_xy_meanC_from_fC(this%igrid_sim%tauSGS_ij(:,:,:,1), this%tmp_meanC)
-            this%budget_0(:,18) = this%budget_0(:,18) + this%tmp_meanC
-
-            ! Get mean tau_12
-            call this%get_xy_meanC_from_fC(this%igrid_sim%tauSGS_ij(:,:,:,2), this%tmp_meanC)
-            this%budget_0(:,19) = this%budget_0(:,19) + this%tmp_meanC
-
-            ! Get mean tau_22
-            call this%get_xy_meanC_from_fC(this%igrid_sim%tauSGS_ij(:,:,:,4), this%tmp_meanC)
-            this%budget_0(:,20) = this%budget_0(:,20) + this%tmp_meanC
-
-            ! Get mean tau_23
-            call this%get_xy_meanC_from_fC(this%igrid_sim%tauSGS_ij(:,:,:,6), this%tmp_meanC)
-            this%budget_0(:,21) = this%budget_0(:,21) + this%tmp_meanC
+        if (this%igrid_sim%isInviscid) then
+            TwobyRe = 0.d0
         else
-            if (this%igrid_sim%isInviscid) then
-                TwobyRe = 0.d0
-            else
-                TwobyRe = 2.d0/this%igrid_sim%Re
-            end if
-            this%igrid_sim%rbuffxE(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3)
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE) 
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-            this%budget_0(:,14) = this%budget_0(:,14) + this%tmp_meanC
-            
-            this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%tau13 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3)
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE) 
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-            this%budget_0(:,22) = this%budget_0(:,22) + this%tmp_meanC
-
-            ! tau_23
-            this%igrid_sim%rbuffxE(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5)
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE) 
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-            this%budget_0(:,15) = this%budget_0(:,15) + this%tmp_meanC
-            
-            this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%tau23 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5)
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE) 
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-            this%budget_0(:,23) = this%budget_0(:,23) + this%tmp_meanC
-        
-            ! Get mean tau_11
-            this%igrid_sim%rbuffxC(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,1)
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-            this%budget_0(:,18) = this%budget_0(:,18) + this%tmp_meanC
-
-            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,1) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,1)
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-            this%budget_0(:,24) = this%budget_0(:,24) + this%tmp_meanC
-
-            ! Get mean tau_12
-            this%igrid_sim%rbuffxC(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2)
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-            this%budget_0(:,19) = this%budget_0(:,19) + this%tmp_meanC
-       
-            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,2) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2) 
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-            this%budget_0(:,25) = this%budget_0(:,25) + this%tmp_meanC
-
-            ! Get mean tau_22
-            this%igrid_sim%rbuffxC(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,4)
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-            this%budget_0(:,20) = this%budget_0(:,20) + this%tmp_meanC
-       
-            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,4) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,4) 
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-            this%budget_0(:,26) = this%budget_0(:,26) + this%tmp_meanC
-
-            ! Get mean tau_23
-            this%igrid_sim%rbuffxC(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,6)
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-            this%budget_0(:,21) = this%budget_0(:,21) + this%tmp_meanC
-            
-            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,6) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,6)
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
-            this%budget_0(:,27) = this%budget_0(:,27) + this%tmp_meanC
+            TwobyRe = 2.d0/this%igrid_sim%Re
         end if
+        this%igrid_sim%rbuffxE(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE) 
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
+        this%budget_0(:,14) = this%budget_0(:,14) + this%tmp_meanC
         
-        if (this%igrid_sim%localizedForceLayer == 1) then
-            call assert(this%version > 1,'this%version > 1')
-            call this%get_xy_meanC_from_fC(this%igrid_sim%forceLayer%fx,this%tmp_meanC)
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%tau13 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE) 
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
+        this%budget_0(:,22) = this%budget_0(:,22) + this%tmp_meanC
+
+        ! tau_23
+        this%igrid_sim%rbuffxE(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE) 
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
+        this%budget_0(:,15) = this%budget_0(:,15) + this%tmp_meanC
+        
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%tau23 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE) 
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
+        this%budget_0(:,23) = this%budget_0(:,23) + this%tmp_meanC
+        
+        ! Get mean tau_11
+        this%igrid_sim%rbuffxC(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,1)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+        this%budget_0(:,18) = this%budget_0(:,18) + this%tmp_meanC
+
+        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,1) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,1)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+        this%budget_0(:,24) = this%budget_0(:,24) + this%tmp_meanC
+
+        ! Get mean tau_12
+        this%igrid_sim%rbuffxC(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+        this%budget_0(:,19) = this%budget_0(:,19) + this%tmp_meanC
+       
+        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,2) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2) 
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+        this%budget_0(:,25) = this%budget_0(:,25) + this%tmp_meanC
+
+        ! Get mean tau_22
+        this%igrid_sim%rbuffxC(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,4)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+        this%budget_0(:,20) = this%budget_0(:,20) + this%tmp_meanC
+       
+        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,4) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,4) 
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+        this%budget_0(:,26) = this%budget_0(:,26) + this%tmp_meanC
+
+        ! Get mean tau_23
+        this%igrid_sim%rbuffxC(:,:,:,1) = TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,6)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+        this%budget_0(:,21) = this%budget_0(:,21) + this%tmp_meanC
+        
+        this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,6) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,6)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
+        this%budget_0(:,27) = this%budget_0(:,27) + this%tmp_meanC
+
+        
+        if (this%igrid_sim%localizedForceLayer > 0) then
+            call this%get_xy_meanC_from_fC(this%forceFact*this%fx,this%tmp_meanC)
             this%budget_0(:,28) = this%budget_0(:,28) + this%tmp_meanC
-            call this%get_xy_meanC_from_fC(this%igrid_sim%forceLayer%fy,this%tmp_meanC)
+            call this%get_xy_meanC_from_fC(this%forceFact*this%fy,this%tmp_meanC)
             this%budget_0(:,29) = this%budget_0(:,29) + this%tmp_meanC
-            call this%get_xy_meanE_from_fE(this%igrid_sim%forceLayer%fz,this%tmp_meanE)
+            call this%get_xy_meanE_from_fE(this%forceFact*this%fz,this%tmp_meanE)
             call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
             this%budget_0(:,30) = this%budget_0(:,30) + this%tmp_meanC
-
+            
+        end if
+       
+        ! <q3*T> 
+        if (this%igrid_sim%isStratified) then
+            call assert(associated(this%igrid_sim%q3),'associated(this%igrid_sim%q3) -- budget_xy.F90')
+            
+            call this%igrid_sim%Pade6OpZ%interpz_E2C(this%igrid_sim%q3,this%igrid_sim%rbuffxC(:,:,:,1),0,0)
+            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%rbuffxC(:,:,:,1)*this%igrid_sim%T
+            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
+            this%budget_0(:,31) = this%budget_0(:,31) + this%tmp_meanC
         end if
 
     end subroutine 
@@ -1751,6 +1791,18 @@ contains
         call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
         this%budget_1(:,14) = this%budget_1(:,14) + this%tmp_meanC
 
+        ! Get Temperature equation
+        if (this%igrid_sim%isStratified) then
+            call this%get_xy_meanC_from_fhatC(this%Tc, this%tmp_meanC)
+            this%budget_1(:,15) = this%budget_1(:,15) + this%tmp_meanC
+            
+            call this%get_xy_meanC_from_fhatC(this%Tvisc, this%tmp_meanC)
+            this%budget_1(:,16) = this%budget_1(:,16) + this%tmp_meanC
+            
+            call this%get_xy_meanC_from_fhatC(this%Tsgs, this%tmp_meanC)
+            this%budget_1(:,17) = this%budget_1(:,17) + this%tmp_meanC
+        end if
+
     end subroutine
 
 
@@ -1761,12 +1813,14 @@ contains
 
             this%U_mean = this%budget_0(:,1)/real(this%counter,rkind)
             this%V_mean = this%budget_0(:,2)/real(this%counter,rkind)
+            this%T_mean = this%budget_0(:,3)/real(this%counter,rkind)
 
             this%uw = this%budget_0(:,6)/real(this%counter,rkind)
             this%vw = this%budget_0(:,8)/real(this%counter,rkind)
 
             call this%ddz_1d_Cell2Cell(this%U_mean, this%dUdz, 0, 0)
             call this%ddz_1d_Cell2Cell(this%V_mean, this%dVdz, 0, 0)
+            call this%ddz_1d_Cell2Cell(this%T_mean, this%dTdz, 0, 0)
 
             ! Loss of MKE to Resolved TKE
             this%budget_2(:,1) = this%uw*this%dUdz + this%vw*this%dVdz
@@ -1778,32 +1832,22 @@ contains
             this%budget_2(:,2) = this%tmp_meanC + this%budget_2(:,1)
             !this%budget_2(:,2) = this%tmp_meanC - this%budget_2(:,1)
 
-            if (this%version == 1) then
-                ! Loss of MKE to SGS TKE + viscous dissipation 
-                this%budget_2(:,3) = (this%budget_0(:,14)/real(this%counter+1,rkind))*this%dUdz &
-                                   + (this%budget_0(:,15)/real(this%counter+1,rkind))*this%dVdz
+            ! Loss of MKE to SGS TKE + viscous dissipation 
+            this%budget_2(:,3) = (this%budget_0(:,14)/real(this%counter+1,rkind))*this%dUdz &
+                               + (this%budget_0(:,15)/real(this%counter+1,rkind))*this%dVdz
+            
+            this%budget_2(:,8) = (this%budget_0(:,22)/real(this%counter+1,rkind))*this%dUdz &
+                               + (this%budget_0(:,23)/real(this%counter+1,rkind))*this%dVdz
        
-                ! Viscous + SGS transport
-                this%tmp_meanC = this%U_mean*((this%budget_1(:,2) + this%budget_1(:,3))/real(this%counter,rkind))
-                this%tmp_meanC = this%tmp_meanC + this%V_mean*((this%budget_1(:,8) + this%budget_1(:,9))/real(this%counter,rkind))
-                this%budget_2(:,4) = this%tmp_meanC - this%budget_2(:,3)
-            else
-                ! Loss of MKE to SGS TKE + viscous dissipation 
-                this%budget_2(:,3) = (this%budget_0(:,14)/real(this%counter+1,rkind))*this%dUdz &
-                                   + (this%budget_0(:,15)/real(this%counter+1,rkind))*this%dVdz
-                
-                this%budget_2(:,8) = (this%budget_0(:,22)/real(this%counter+1,rkind))*this%dUdz &
-                                   + (this%budget_0(:,23)/real(this%counter+1,rkind))*this%dVdz
-       
-                ! Viscous + SGS transport
-                this%tmp_meanC = this%U_mean*(this%budget_1(:,3)/real(this%counter,rkind))
-                this%tmp_meanC = this%tmp_meanC + this%V_mean*(this%budget_1(:,9)/real(this%counter,rkind))
-                this%budget_2(:,4) = this%tmp_meanC - this%budget_2(:,3)
-                
-                this%tmp_meanC = this%U_mean*(this%budget_1(:,2)/real(this%counter,rkind))
-                this%tmp_meanC = this%tmp_meanC + this%V_mean*(this%budget_1(:,8)/real(this%counter,rkind))
-                this%budget_2(:,9) = this%tmp_meanC - this%budget_2(:,8)
-            end if
+            ! Viscous + SGS transport
+            this%tmp_meanC = this%U_mean*(this%budget_1(:,3)/real(this%counter,rkind))
+            this%tmp_meanC = this%tmp_meanC + this%V_mean*(this%budget_1(:,9)/real(this%counter,rkind))
+            this%budget_2(:,4) = this%tmp_meanC - this%budget_2(:,3)
+            
+            this%tmp_meanC = this%U_mean*(this%budget_1(:,2)/real(this%counter,rkind))
+            this%tmp_meanC = this%tmp_meanC + this%V_mean*(this%budget_1(:,8)/real(this%counter,rkind))
+            this%budget_2(:,9) = this%tmp_meanC - this%budget_2(:,8)
+            
             ! Actuator disk sink
             this%budget_2(:,5) = this%U_mean*(this%budget_1(:,6)/real(this%counter,rkind))
 
@@ -1815,11 +1859,39 @@ contains
             this%budget_2(:,7) = this%U_mean*(this%budget_1(:,4)/real(this%counter,rkind)) &
                                + this%V_mean*(this%budget_1(:,10)/real(this%counter,rkind))
 
-            if (this%igrid_sim%localizedForceLayer == 1) then
-                call assert(this%version > 1,'this%version > 1 -- budget 2')
+            if (this%igrid_sim%localizedForceLayer > 0) then
                 this%budget_2(:,10) = this%U_mean*(this%budget_0(:,28)/real(this%counter,rkind)) &
                   + this%V_mean*(this%budget_0(:,29)/real(this%counter,rkind))
             end if
+
+            if (this%igrid_sim%isStratified) then
+
+                ! 11. N^2 = (Tref/Fr^2)*ddz(<T>)
+                this%budget_2(:,11) = this%Tref*this%oneOnFr2*this%dTdz
+                
+                ! 12. (-1/Fr^4)*ddz(<w'T'><T>)
+                call this%ddz_1d_Cell2Cell(this%budget_0(:,12)/real(this%counter,rkind)*this%T_mean, &
+                  this%budget_2(:,12), 0, 0) 
+                this%budget_2(:,12) = -this%oneOnFr4*this%budget_2(:,12)
+               
+                ! 15. (1/Fr^4)(1/PrRe)*ddz(<T>)*ddz(<T>)
+                this%budget_2(:,15) = -this%oneOnFr4*this%oneOnPrRe*this%dTdz*this%dTdz
+
+                ! 13. (1/Fr^4)(1/PrRe)*ddz(ddz(<T><T>/2)) 
+                this%budget_2(:,13) = this%oneOnFr4*this%T_mean*this%budget_1(:,16)/real(this%counter,rkind) - this%budget_2(:,15)
+               
+                ! 14. (1/Fr^4) ddz(<T><q3>)
+                this%q3_mean = this%budget_0(:,16)/real(this%counter,rkind)
+                call this%ddz_1d_Cell2Cell(this%T_mean*this%q3_mean,this%tmp_meanC,0,0)
+                this%budget_2(:,14) = -this%oneOnFr4*this%tmp_meanC 
+
+                ! 16. -(1/Fr^4)<q3>ddz(<T>)
+                this%budget_2(:,16) = this%oneOnFr4*this%q3_mean*this%dTdz
+
+                call message("Min value of -1*(<q3>*d<T>dz)",-1.d0*p_minval(minval(this%q3_mean*this%dTdz)))
+
+            end if
+
         end if 
 
     end subroutine 
@@ -1864,120 +1936,84 @@ contains
         call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
         this%budget_3(:,3) = this%budget_3(:,3)  + this%tmp_meanC 
 
-        if (this%version == 1) then
-            ! SGS transport 
-            this%igrid_sim%cbuffyC(:,:,:,1) = this%usgs + this%uvisc
-            call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
-            this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,3)
-            this%igrid_sim%cbuffyC(:,:,:,1) = this%vsgs + this%vvisc
-            call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
-            this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%rbuffxC(:,:,:,4) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,3)
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
-            this%budget_3(:,4) = this%budget_3(:,4) + this%tmp_meanC
-            this%igrid_sim%cbuffyE(:,:,:,1) = this%wsgs + this%wvisc
-            call this%igrid_sim%spectE%ifft(this%igrid_sim%cbuffyE(:,:,:,1),this%igrid_sim%rbuffxE(:,:,:,1))
-            this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-            this%budget_3(:,4) = this%budget_3(:,4) + this%tmp_meanC 
-            
-            ! SGS dissipation
-            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%tauSGS_ij(:,:,:,1)*this%igrid_sim%duidxjC(:,:,:,1) &
-                                            + this%igrid_sim%tauSGS_ij(:,:,:,2)*this%igrid_sim%duidxjC(:,:,:,4) &
-                                            + this%igrid_sim%tauSGS_ij(:,:,:,4)*this%igrid_sim%duidxjC(:,:,:,5) &
-                                            + this%igrid_sim%tauSGS_ij(:,:,:,2)*this%igrid_sim%duidxjC(:,:,:,2) &
-                                            + this%igrid_sim%tauSGS_ij(:,:,:,6)*this%igrid_sim%duidxjC(:,:,:,9) 
+        ! Viscous transport
+        this%igrid_sim%cbuffyC(:,:,:,1) = this%uvisc
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,3)
+        this%igrid_sim%cbuffyC(:,:,:,1) = this%vvisc
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%rbuffxC(:,:,:,4) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,3)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
+        this%budget_3(:,4) = this%budget_3(:,4) + this%tmp_meanC
+        this%igrid_sim%cbuffyE(:,:,:,1) = this%wvisc
+        call this%igrid_sim%spectE%ifft(this%igrid_sim%cbuffyE(:,:,:,1),this%igrid_sim%rbuffxE(:,:,:,1))
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
+        this%budget_3(:,4) = this%budget_3(:,4) + this%tmp_meanC 
+        
+        ! SGS transport 
+        this%igrid_sim%cbuffyC(:,:,:,1) = this%usgs
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,3)
+        this%igrid_sim%cbuffyC(:,:,:,1) = this%vsgs
+        call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
+        this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%rbuffxC(:,:,:,4) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,3)
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
+        this%budget_3(:,9) = this%budget_3(:,9) + this%tmp_meanC
+        this%igrid_sim%cbuffyE(:,:,:,1) = this%wsgs
+        call this%igrid_sim%spectE%ifft(this%igrid_sim%cbuffyE(:,:,:,1),this%igrid_sim%rbuffxE(:,:,:,1))
+        this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
+        this%budget_3(:,9) = this%budget_3(:,9) + this%tmp_meanC 
 
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
-            this%budget_3(:,5) = this%budget_3(:,5) + this%tmp_meanC
-
-            this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%tau13*this%igrid_sim%duidxjE(:,:,:,3) &
-                                            + this%igrid_sim%tau23*this%igrid_sim%duidxjE(:,:,:,6) &
-                                            + this%igrid_sim%tau13*this%igrid_sim%duidxjE(:,:,:,7) &
-                                            + this%igrid_sim%tau23*this%igrid_sim%duidxjE(:,:,:,8) 
-
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1),this%tmp_meanE)
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
-            this%budget_3(:,5) = this%budget_3(:,5) + this%tmp_meanC 
+        ! Viscous dissipation
+        if (this%igrid_sim%isInviscid) then
+            TwobyRe = 0.d0
         else
-            ! Viscous transport
-            this%igrid_sim%cbuffyC(:,:,:,1) = this%uvisc
-            call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
-            this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,3)
-            this%igrid_sim%cbuffyC(:,:,:,1) = this%vvisc
-            call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
-            this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%rbuffxC(:,:,:,4) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,3)
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
-            this%budget_3(:,4) = this%budget_3(:,4) + this%tmp_meanC
-            this%igrid_sim%cbuffyE(:,:,:,1) = this%wvisc
-            call this%igrid_sim%spectE%ifft(this%igrid_sim%cbuffyE(:,:,:,1),this%igrid_sim%rbuffxE(:,:,:,1))
-            this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-            this%budget_3(:,4) = this%budget_3(:,4) + this%tmp_meanC 
-            
-            ! SGS transport 
-            this%igrid_sim%cbuffyC(:,:,:,1) = this%usgs
-            call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
-            this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,3)
-            this%igrid_sim%cbuffyC(:,:,:,1) = this%vsgs
-            call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,3))
-            this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%rbuffxC(:,:,:,4) + this%igrid_sim%v*this%igrid_sim%rbuffxC(:,:,:,3)
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
-            this%budget_3(:,9) = this%budget_3(:,9) + this%tmp_meanC
-            this%igrid_sim%cbuffyE(:,:,:,1) = this%wsgs
-            call this%igrid_sim%spectE%ifft(this%igrid_sim%cbuffyE(:,:,:,1),this%igrid_sim%rbuffxE(:,:,:,1))
-            this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-            this%budget_3(:,9) = this%budget_3(:,9) + this%tmp_meanC 
-
-            ! Viscous dissipation
-            if (this%igrid_sim%isInviscid) then
-                TwobyRe = 0.d0
-            else
-                TwobyRe = 2.d0/this%igrid_sim%Re
-            end if
-            this%igrid_sim%rbuffxC(:,:,:,1) = -( TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,1)*this%igrid_sim%duidxjC(:,:,:,1) &
-                                            +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2)*this%igrid_sim%duidxjC(:,:,:,4) &
-                                            +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,4)*this%igrid_sim%duidxjC(:,:,:,5) &
-                                            +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2)*this%igrid_sim%duidxjC(:,:,:,2) &
-                                            +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,6)*this%igrid_sim%duidxjC(:,:,:,9) ) 
- 
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
-            this%budget_3(:,5) = this%budget_3(:,5) + this%tmp_meanC
-
-            this%igrid_sim%rbuffxE(:,:,:,1) = -( TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3)*this%igrid_sim%duidxjE(:,:,:,3) &
-                                            +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5)*this%igrid_sim%duidxjE(:,:,:,6) &
-                                            +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3)*this%igrid_sim%duidxjE(:,:,:,7) &
-                                            +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5)*this%igrid_sim%duidxjE(:,:,:,8) ) 
-
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1),this%tmp_meanE)
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
-            this%budget_3(:,5) = this%budget_3(:,5) + this%tmp_meanC 
-            
-            ! SGS dissipation
-            ! Split tauij into SGS and viscous components
-            this%igrid_sim%rbuffxC(:,:,:,1) = &
-              (this%igrid_sim%tauSGS_ij(:,:,:,1) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,1))*this%igrid_sim%duidxjC(:,:,:,1)+&
-              (this%igrid_sim%tauSGS_ij(:,:,:,2) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2))*this%igrid_sim%duidxjC(:,:,:,4)+&
-              (this%igrid_sim%tauSGS_ij(:,:,:,4) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,4))*this%igrid_sim%duidxjC(:,:,:,5)+&
-              (this%igrid_sim%tauSGS_ij(:,:,:,2) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2))*this%igrid_sim%duidxjC(:,:,:,2)+&
-              (this%igrid_sim%tauSGS_ij(:,:,:,6) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,6))*this%igrid_sim%duidxjC(:,:,:,9) 
-
-            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
-            this%budget_3(:,10) = this%budget_3(:,10) + this%tmp_meanC
-
-            this%igrid_sim%rbuffxE(:,:,:,1) = &
-              (this%igrid_sim%tau13 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3))*this%igrid_sim%duidxjE(:,:,:,3) + &
-              (this%igrid_sim%tau23 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5))*this%igrid_sim%duidxjE(:,:,:,6) + &
-              (this%igrid_sim%tau13 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3))*this%igrid_sim%duidxjE(:,:,:,7) + &
-              (this%igrid_sim%tau23 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5))*this%igrid_sim%duidxjE(:,:,:,8) 
-
-            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1),this%tmp_meanE)
-            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
-            this%budget_3(:,10) = this%budget_3(:,10) + this%tmp_meanC 
+            TwobyRe = 2.d0/this%igrid_sim%Re
         end if
+        this%igrid_sim%rbuffxC(:,:,:,1) = -( TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,1)*this%igrid_sim%duidxjC(:,:,:,1) &
+                                        +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2)*this%igrid_sim%duidxjC(:,:,:,4) &
+                                        +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,4)*this%igrid_sim%duidxjC(:,:,:,5) &
+                                        +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2)*this%igrid_sim%duidxjC(:,:,:,2) &
+                                        +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,6)*this%igrid_sim%duidxjC(:,:,:,9) ) 
+ 
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
+        this%budget_3(:,5) = this%budget_3(:,5) + this%tmp_meanC
+
+        this%igrid_sim%rbuffxE(:,:,:,1) = -( TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3)*this%igrid_sim%duidxjE(:,:,:,3) &
+                                        +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5)*this%igrid_sim%duidxjE(:,:,:,6) &
+                                        +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3)*this%igrid_sim%duidxjE(:,:,:,7) &
+                                        +    TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5)*this%igrid_sim%duidxjE(:,:,:,8) ) 
+
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1),this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
+        this%budget_3(:,5) = this%budget_3(:,5) + this%tmp_meanC 
+        
+        ! SGS dissipation
+        ! Split tauij into SGS and viscous components
+        this%igrid_sim%rbuffxC(:,:,:,1) = &
+          (this%igrid_sim%tauSGS_ij(:,:,:,1) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,1))*this%igrid_sim%duidxjC(:,:,:,1)+&
+          (this%igrid_sim%tauSGS_ij(:,:,:,2) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2))*this%igrid_sim%duidxjC(:,:,:,4)+&
+          (this%igrid_sim%tauSGS_ij(:,:,:,4) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,4))*this%igrid_sim%duidxjC(:,:,:,5)+&
+          (this%igrid_sim%tauSGS_ij(:,:,:,2) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,2))*this%igrid_sim%duidxjC(:,:,:,2)+&
+          (this%igrid_sim%tauSGS_ij(:,:,:,6) + TwobyRe*this%igrid_sim%sgsmodel%S_ij_C(:,:,:,6))*this%igrid_sim%duidxjC(:,:,:,9) 
+
+        call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
+        this%budget_3(:,10) = this%budget_3(:,10) + this%tmp_meanC
+
+        this%igrid_sim%rbuffxE(:,:,:,1) = &
+          (this%igrid_sim%tau13 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3))*this%igrid_sim%duidxjE(:,:,:,3) + &
+          (this%igrid_sim%tau23 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5))*this%igrid_sim%duidxjE(:,:,:,6) + &
+          (this%igrid_sim%tau13 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,3))*this%igrid_sim%duidxjE(:,:,:,7) + &
+          (this%igrid_sim%tau23 + TwobyRe*this%igrid_sim%sgsmodel%S_ij_E(:,:,:,5))*this%igrid_sim%duidxjE(:,:,:,8) 
+
+        call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1),this%tmp_meanE)
+        call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC, 0, 0)
+        this%budget_3(:,10) = this%budget_3(:,10) + this%tmp_meanC 
+        
         ! Turbine sink
         call this%igrid_sim%spectC%ifft(this%uturb,this%igrid_sim%rbuffxC(:,:,:,3))
         this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%rbuffxC(:,:,:,3)*this%igrid_sim%u
@@ -2008,25 +2044,67 @@ contains
         this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%rbuffxE(:,:,:,1)
         call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
         call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
-        this%budget_3(:,8) = this%budget_3(:,8) + this%tmp_meanC
+        this%budget_3(:,8) = this%budget_3(:,8) - this%tmp_meanC
 
        ! Force production
-       if (this%igrid_sim%localizedForceLayer == 1) then
-           call assert(this%version > 1,'this%version > 1 -- budget 3')
+       if (this%igrid_sim%localizedForceLayer > 0) then
            
-           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%igrid_sim%forceLayer%fx
+           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%forceFact*this%fx
            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
            this%budget_3(:,11) = this%budget_3(:,11) + this%tmp_meanC
            
-           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%v*this%igrid_sim%forceLayer%fy
+           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%v*this%forceFact*this%fy
            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
            this%budget_3(:,11) = this%budget_3(:,11) + this%tmp_meanC
            
-           this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%igrid_sim%forceLayer%fz
+           this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%forceFact*this%fz
            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
            this%budget_3(:,11) = this%budget_3(:,11) + this%tmp_meanC
             
+       end if
+
+       ! TPE stuff
+       if (this%igrid_sim%isStratified) then
+           ! NOTE: Most of these are corrected during dumpBudgets using
+           ! budget_2. If trying to understand the formulas, be sure to consult
+           ! that routine
+
+           ! 12. Turbulent transport of TPE
+           call this%igrid_sim%spectC%ifft(this%Tc,this%igrid_sim%rbuffxC(:,:,:,1))
+           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%T*this%igrid_sim%rbuffxC(:,:,:,1)
+           call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
+           this%budget_3(:,12) = this%budget_3(:,12) + this%oneOnFr4*this%tmp_meanC 
+
+           ! 14. Diffusive transport (SGS)
+           ! Computed during dumpBudget
+
+           ! 15. Dissipation of buoyancy variance (molecular)
+           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%dTdxC*this%igrid_sim%dTdxC + &
+                                             this%igrid_sim%dTdyC*this%igrid_sim%dTdyC + &
+                                             this%igrid_sim%dTdzC*this%igrid_sim%dTdzC
+           call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
+           this%budget_3(:,15) = this%budget_3(:,15) - this%oneOnFr4*this%oneOnPrRe*this%tmp_meanC
+
+           ! 13. Diffusive transport (molecular)
+           call this%igrid_sim%spectC%ifft(this%Tvisc,this%igrid_sim%rbuffxC(:,:,:,1))
+           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%T*this%igrid_sim%rbuffxC(:,:,:,1)
+           !this%igrid_sim%cbuffyC(:,:,:,1) = (1.d0/this%igrid_sim%Re/this%igrid_sim%PrandtlFluid)* &  
+           !  (-this%igrid_sim%spectC%kabs_sq*this%igrid_sim%That + this%igrid_sim%d2Tdz2hatC)
+           !call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,1))
+           !this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%T*this%igrid_sim%rbuffxC(:,:,:,1)
+           call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
+           this%budget_3(:,13) = this%budget_3(:,13) + this%oneOnFr4*this%tmp_meanC
+
+           ! 16. Dissipation of buoyancy variance (SGS)
+           this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%q3*this%igrid_sim%dTdzE
+           call this%igrid_sim%Pade6OpZ%interpz_E2C(this%igrid_sim%rbuffxE(:,:,:,1),&
+             this%igrid_sim%rbuffxC(:,:,:,1),0,0)
+           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%rbuffxC(:,:,:,1) + &
+                                             this%igrid_sim%q1 * this%igrid_sim%dTdxC + &
+                                             this%igrid_sim%q2 * this%igrid_sim%dTdyC
+           call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
+           this%budget_3(:,16) = this%budget_3(:,16) + this%oneOnFr4*this%tmp_meanC
        end if 
 
     end subroutine

@@ -10,6 +10,7 @@ program shearlessMixing
     use temporalhook,       only: doTemporalStuff
     use exits,              only: message
     use budgets_xy_avg_mod, only: budgets_xy_avg
+    use timer,              only: tic, toc 
 
     implicit none
 
@@ -31,10 +32,12 @@ program shearlessMixing
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
-    do while (SM%tsim < SM%tstop .and. SM%step < SM%nsteps) 
+    do while (SM%tsim < SM%tstop .and. SM%step < SM%nsteps)
+       call tic() 
        call SM%timeAdvance()
        call budg%doBudgets()
        call doTemporalStuff(SM) 
+       call toc()
     end do
 
     call message("==========================================================")
