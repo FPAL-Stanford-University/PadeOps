@@ -161,8 +161,7 @@ module budgets_xy_avg_mod
         real(rkind) :: time_budget_start 
         logical :: do_budgets, do_spectra, do_autocorrel, forceDump
 
-        real(rkind) :: Tref
-        real(rkind) :: oneOnPrRe, oneOnFr2, oneOnFr4
+        real(rkind) :: Tref, oneOnPrRe, oneOnFr2, buoyancyFact, buoyancyFact2
 
     contains
         procedure           :: init
@@ -245,7 +244,15 @@ contains
         this%Tref = this%igrid_sim%ThetaRef
         this%oneOnPrRe = 1.d0/(igrid_sim%PrandtlFluid*igrid_sim%Re)
         this%oneOnFr2 = 1.d0/(igrid_sim%Fr*igrid_sim%Fr)
-        this%oneOnFr4 = this%oneOnFr2*this%oneOnFr2
+        this%buoyancyFact = this%igrid_sim%buoyancyFact
+        this%buoyancyFact2 = this%buoyancyFact*this%buoyancyFact
+        
+        ! Everything assumes buoyancy fact = 1/(Tref * Fr^2). Will need to
+        ! revisit term definitions/scalings if using a different
+        ! nondimensionalization
+        call assert(abs(this%buoyancyFact - 1.d0/(this%Tref)*this%oneOnFr2) < 1.d-14,&
+          'abs(this%buoyancyFact - 1.d0/(this%Tref)*this%oneOnFr2) = ',&
+          abs(this%buoyancyFact - 1.d0/(this%Tref)*this%oneOnFr2))
 
         if (.not. this%igrid_sim%fastCalcPressure) then
             call GracefulExit("Cannot perform budget calculaitons if IGRID"//&
@@ -642,7 +649,7 @@ contains
 
               ! 14. Diffusive transport (SGS)
               call this%ddz_1d_cell2cell(this%budget_0s(:,31),this%tmp_meanC,0,0)
-              this%budget_3s(:,14) = -this%oneOnFr4*this%tmp_meanC - this%budget_2(:,14)
+              this%budget_3s(:,14) = -this%buoyancyFact2*this%tmp_meanC - this%budget_2(:,14)
 
               ! 15. TPE dissipation (molecular)
               this%budget_3s(:,15) = this%budget_3s(:,15) - this%budget_2(:,15)
@@ -1866,27 +1873,27 @@ contains
 
             if (this%igrid_sim%isStratified) then
 
-                ! 11. N^2 = (Tref/Fr^2)*ddz(<T>)
-                this%budget_2(:,11) = this%Tref*this%oneOnFr2*this%dTdz
+                ! 11. N^2 = (1/Tref*Fr^2)*ddz(<T>)
+                this%budget_2(:,11) = this%buoyancyFact*this%dTdz
                 
-                ! 12. (-1/Fr^4)*ddz(<w'T'><T>)
+                ! 12. (-epsilon^2/Fr^4)*ddz(<w'T'><T>)
                 call this%ddz_1d_Cell2Cell(this%budget_0(:,12)/real(this%counter,rkind)*this%T_mean, &
                   this%budget_2(:,12), 0, 0) 
-                this%budget_2(:,12) = -this%oneOnFr4*this%budget_2(:,12)
+                this%budget_2(:,12) = -this%buoyancyFact2*this%budget_2(:,12)
                
-                ! 15. (1/Fr^4)(1/PrRe)*ddz(<T>)*ddz(<T>)
-                this%budget_2(:,15) = -this%oneOnFr4*this%oneOnPrRe*this%dTdz*this%dTdz
+                ! 15. (epsilon^2/Fr^4)(1/PrRe)*ddz(<T>)*ddz(<T>)
+                this%budget_2(:,15) = -this%buoyancyFact2*this%oneOnPrRe*this%dTdz*this%dTdz
 
-                ! 13. (1/Fr^4)(1/PrRe)*ddz(ddz(<T><T>/2)) 
-                this%budget_2(:,13) = this%oneOnFr4*this%T_mean*this%budget_1(:,16)/real(this%counter,rkind) - this%budget_2(:,15)
+                ! 13. (epsilon^2/Fr^4)(1/PrRe)*ddz(ddz(<T><T>/2)) 
+                this%budget_2(:,13) = this%buoyancyFact2*this%T_mean*this%budget_1(:,16)/real(this%counter,rkind) - this%budget_2(:,15)
                
-                ! 14. (1/Fr^4) ddz(<T><q3>)
+                ! 14. (epsilon^2/Fr^4) ddz(<T><q3>)
                 this%q3_mean = this%budget_0(:,16)/real(this%counter,rkind)
                 call this%ddz_1d_Cell2Cell(this%T_mean*this%q3_mean,this%tmp_meanC,0,0)
-                this%budget_2(:,14) = -this%oneOnFr4*this%tmp_meanC 
+                this%budget_2(:,14) = -this%buoyancyFact2*this%tmp_meanC 
 
-                ! 16. -(1/Fr^4)<q3>ddz(<T>)
-                this%budget_2(:,16) = this%oneOnFr4*this%q3_mean*this%dTdz
+                ! 16. -(epsilon^2/Fr^4)<q3>ddz(<T>)
+                this%budget_2(:,16) = this%buoyancyFact2*this%q3_mean*this%dTdz
 
                 call message("Min value of -1*(<q3>*d<T>dz)",-1.d0*p_minval(minval(this%q3_mean*this%dTdz)))
 
@@ -2074,7 +2081,7 @@ contains
            call this%igrid_sim%spectC%ifft(this%Tc,this%igrid_sim%rbuffxC(:,:,:,1))
            this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%T*this%igrid_sim%rbuffxC(:,:,:,1)
            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
-           this%budget_3(:,12) = this%budget_3(:,12) + this%oneOnFr4*this%tmp_meanC 
+           this%budget_3(:,12) = this%budget_3(:,12) + this%buoyancyFact2*this%tmp_meanC 
 
            ! 14. Diffusive transport (SGS)
            ! Computed during dumpBudget
@@ -2084,7 +2091,7 @@ contains
                                              this%igrid_sim%dTdyC*this%igrid_sim%dTdyC + &
                                              this%igrid_sim%dTdzC*this%igrid_sim%dTdzC
            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
-           this%budget_3(:,15) = this%budget_3(:,15) - this%oneOnFr4*this%oneOnPrRe*this%tmp_meanC
+           this%budget_3(:,15) = this%budget_3(:,15) - this%buoyancyFact2*this%oneOnPrRe*this%tmp_meanC
 
            ! 13. Diffusive transport (molecular)
            call this%igrid_sim%spectC%ifft(this%Tvisc,this%igrid_sim%rbuffxC(:,:,:,1))
@@ -2094,7 +2101,7 @@ contains
            !call this%igrid_sim%spectC%ifft(this%igrid_sim%cbuffyC(:,:,:,1),this%igrid_sim%rbuffxC(:,:,:,1))
            !this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%T*this%igrid_sim%rbuffxC(:,:,:,1)
            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
-           this%budget_3(:,13) = this%budget_3(:,13) + this%oneOnFr4*this%tmp_meanC
+           this%budget_3(:,13) = this%budget_3(:,13) + this%buoyancyFact2*this%tmp_meanC
 
            ! 16. Dissipation of buoyancy variance (SGS)
            this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%q3*this%igrid_sim%dTdzE
@@ -2104,7 +2111,7 @@ contains
                                              this%igrid_sim%q1 * this%igrid_sim%dTdxC + &
                                              this%igrid_sim%q2 * this%igrid_sim%dTdyC
            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1),this%tmp_meanC)
-           this%budget_3(:,16) = this%budget_3(:,16) + this%oneOnFr4*this%tmp_meanC
+           this%budget_3(:,16) = this%budget_3(:,16) + this%buoyancyFact2*this%tmp_meanC
        end if 
 
     end subroutine
