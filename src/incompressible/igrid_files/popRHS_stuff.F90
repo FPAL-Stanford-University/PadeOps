@@ -112,7 +112,7 @@
            this%u_rhs = this%u_rhs + this%ucon
            this%v_rhs = this%v_rhs + this%vcon
            this%w_rhs = this%w_rhs + this%wcon
-           this%T_rhs = this%T_rhs + this%Tcon
+           if (this%isStratified) this%T_rhs = this%T_rhs + this%Tcon
        endif
 
        ! Step 2: Coriolis Term
@@ -182,7 +182,7 @@
            this%u_rhs = this%u_rhs + this%usgs
            this%v_rhs = this%v_rhs + this%vsgs
            this%w_rhs = this%w_rhs + this%wsgs
-           this%T_rhs = this%T_rhs + this%Tsgs
+           if (this%isStratified) this%T_rhs = this%T_rhs + this%Tsgs
          end if
            
            ! viscous term evaluate separately  
@@ -193,7 +193,7 @@
                this%usgs = this%usgs - this%uvisc 
                this%vsgs = this%vsgs - this%vvisc 
                this%wsgs = this%wsgs - this%wvisc 
-               this%Tsgs = this%Tsgs - this%Tvisc
+               if (this%isStratified) this%Tsgs = this%Tsgs - this%Tvisc
            end if  
           
        else

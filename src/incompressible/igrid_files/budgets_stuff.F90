@@ -21,6 +21,10 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, &
     this%ucor => ucor
     this%vcor => vcor
     this%wcor => wcor
+    
+    this%Tcon => Tc
+    this%Tvisc => Tvisc
+    this%Tsgs => Tsgs
 
     this%px => px
     this%py => py
@@ -42,16 +46,6 @@ subroutine instrumentForBudgets(this, uc, vc, wc, usgs, vsgs, wsgs, &
     this%HITforcing_x => null()
     this%HITforcing_y => null()
     this%HITforcing_z => null()
-
-    if (this%isStratified) then
-        this%Tcon => Tc
-        this%Tvisc => Tvisc
-        this%Tsgs => Tsgs
-    else
-        this%Tcon => null()
-        this%Tvisc => null()
-        this%Tsgs => null()
-    end if
 
     ! Safeguards
     this%StoreForBudgets = .true. 

@@ -296,3 +296,16 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
 
     scalarSource = 0.d0
 end subroutine 
+
+subroutine hook_source(tsim,mesh,Re,w,urhs,vrhs,wrhs,duidxjC,duidxjE)
+    use kind_parameters, only: rkind
+    real(rkind),                        intent(in)    :: tsim, Re
+    real(rkind),    dimension(:,:,:,:), intent(in)    :: mesh
+    complex(rkind), dimension(:,:,:),   intent(in)    :: w
+    complex(rkind), dimension(:,:,:),   intent(inout) :: urhs, vrhs, wrhs
+    complex(rkind), dimension(:,:,:,:), intent(in)    :: duidxjC, duidxjE
+
+    urhs = 1.d0*urhs
+    vrhs = 1.d0*vrhs
+    wrhs = 1.d0*wrhs
+end subroutine

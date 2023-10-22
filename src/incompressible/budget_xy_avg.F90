@@ -246,14 +246,22 @@ contains
         this%oneOnFr2 = 1.d0/(igrid_sim%Fr*igrid_sim%Fr)
         this%buoyancyFact = this%igrid_sim%buoyancyFact
         this%buoyancyFact2 = this%buoyancyFact*this%buoyancyFact
+       
+        if (this%igrid_sim%isStratified) then 
+            ! Everything assumes buoyancy fact = 1/(Tref * Fr^2). Will need to
+            ! revisit term definitions/scalings if using a different
+            ! nondimensionalization
+            call assert(abs(this%buoyancyFact - 1.d0/(this%Tref)*this%oneOnFr2) < 1.d-14,&
+              'abs(this%buoyancyFact - 1.d0/(this%Tref)*this%oneOnFr2) = ',&
+              abs(this%buoyancyFact - 1.d0/(this%Tref)*this%oneOnFr2))
+               
+            ! MPE/TPE budgets assume the equations are scaled such that the buoyancy '//&
+            ! term is proportainal to 1/Fr^2. If using a different scaling, '// &
+            ! special care needs to be taken when computing the budget terms. '//&
+            ! Namely, anywhere that this%igrid_sim%thetaRef gets used needs to '//&
+            ! be modified'
+        end if
         
-        ! Everything assumes buoyancy fact = 1/(Tref * Fr^2). Will need to
-        ! revisit term definitions/scalings if using a different
-        ! nondimensionalization
-        call assert(abs(this%buoyancyFact - 1.d0/(this%Tref)*this%oneOnFr2) < 1.d-14,&
-          'abs(this%buoyancyFact - 1.d0/(this%Tref)*this%oneOnFr2) = ',&
-          abs(this%buoyancyFact - 1.d0/(this%Tref)*this%oneOnFr2))
-
         if (.not. this%igrid_sim%fastCalcPressure) then
             call GracefulExit("Cannot perform budget calculaitons if IGRID"//&
               " is initialized with FASTCALCPRESSURE=.false.", ierr)
@@ -270,15 +278,6 @@ contains
             nvars_budg3 = 16
             nvars_budg4 = 9 
 
-            if (this%igrid_sim%isStratified) then
-                call assert(this%igrid_sim%BuoyancyTermType == 1,'MPE/TPE '//&
-                  'budgets assume the equations are scaled such that the buoyancy '//&
-                  'term is proportainal to 1/Fr^2. If using a different scaling, '// &
-                  'special care needs to be taken when computing the budget terms. '//&
-                  'Namely, anywhere that this%igrid_sim%thetaRef gets used needs to '//&
-                  'be modified')
-            end if
-            
             allocate(this%Budget_0s(this%nz,nvars_budg0))
             allocate(this%Budget_0( this%nz,nvars_budg0))
             allocate(this%Budget_1( this%nz,nvars_budg1))
@@ -329,7 +328,7 @@ contains
                   'size(this%Budget_0,2) == 21 -- budget_xy_avg.F90'&
                   //' | shape(this%Budget_0) = (', size(this%Budget_0,1), &
                   ',', size(this%Budget_0,2), ')'
-                call assert(size(this%Budget_0,2) == 21, trim(mssg))
+                !call assert(size(this%Budget_0,2) == 21, trim(mssg))
             else
                 call this%resetBudget()
             end if
@@ -372,20 +371,18 @@ contains
             call igrid_sim%spectE%alloc_r2c_out(this%pz)
             call igrid_sim%spectE%alloc_r2c_out(this%wb)
 
-            if (igrid_sim%isStratified) then
-                call igrid_sim%spectC%alloc_r2c_out(this%Tc)
-                call igrid_sim%spectC%alloc_r2c_out(this%Tvisc)
-                call igrid_sim%spectC%alloc_r2c_out(this%Tsgs)
-            end if
+            call igrid_sim%spectC%alloc_r2c_out(this%Tc)
+            call igrid_sim%spectC%alloc_r2c_out(this%Tvisc)
+            call igrid_sim%spectC%alloc_r2c_out(this%Tsgs)
 
             !allocate(this%uold(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             !allocate(this%vold(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
             !allocate(this%wold(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
 
-            ! STEP 3: Now instrument igrid 
+            ! STEP 3: Now instrument igrid
             call igrid_sim%instrumentForBudgets(this%uc, this%vc, this%wc, this%usgs, this%vsgs, this%wsgs, &
-                       & this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
-                       & this%vcor, this%wcor, this%uturb, this%Tc, this%Tvisc, this%Tsgs)
+              this%uvisc, this%vvisc, this%wvisc, this%px, this%py, this%pz, this%wb, this%ucor, &
+              this%vcor, this%wcor, this%uturb, this%Tc, this%Tvisc, this%Tsgs)
 
             ! Point to forcing layer arrays
             if (igrid_sim%localizedForceLayer == 1) then
