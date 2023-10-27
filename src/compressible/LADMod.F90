@@ -297,10 +297,9 @@ contains
         integer :: i,j,k
 
         ! -------- Artificial Conductivity --------
-
+        
         ! Step 1: Get components of grad(e) squared individually
         call gradient(this%decomp,this%der,e,ytmp1,ytmp2,ytmp3,x_bc,y_bc,z_bc) ! Does not use any Y buffers
-        ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
 
@@ -387,7 +386,6 @@ contains
 
         ! Filter kapstar
         call this%filter(kapstar, x_bc, y_bc, z_bc)
-
         kap = kap + kapstar
     end subroutine
 
@@ -404,7 +402,6 @@ contains
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2
 
         ! -------- Artificial Diffusivity ---------
-
         ! Step 1: Get components of grad(Ys) squared individually
         ytmp1 = dYsdx*dYsdx
         ytmp2 = dYsdy*dYsdy
@@ -415,7 +412,7 @@ contains
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         xtmp2 = xtmp1*this%dx**4
-        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+        call transpose_x_to_y(xtmp2,ytmp4,this%decomp) 
         diffstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
@@ -441,7 +438,6 @@ contains
         ! Filter each part
         call this%filter(diffstar, x_bc, y_bc, z_bc)
         call this%filter(ytmp5, x_bc, y_bc, z_bc)
-
         diffstar = max(diffstar, ytmp5) ! Take max of both terms instead of add to minimize the dissipation
 
         diff = diff + diffstar
@@ -488,7 +484,6 @@ contains
 
         mask = ( 1 - 4*Ys*(1-Ys) )**nmask
 
-
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
@@ -511,9 +506,9 @@ contains
         ytmp4 = ytmp5*this%dy**5
         diffstar = diffstar + ytmp4 !* ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
         ytmp5 = this%CY*sos*( half*(abs(Ys-minYs)-(one-minYs) + abs((Ys-minYs)-(one-minYs))) )*(this%dy*this%dx*this%dz)**(1/3)
-        diffstar = sos*abs(diffstar) ! CD part of diff
-        call this%filter(diffstar, x_bc, y_bc, z_bc)
-        call this%filter(ytmp5, x_bc, y_bc, z_bc)
+        diffstar = sos*abs(diffstar) !/rho ! CD part of diff
+        !call this%filter(diffstar, x_bc, y_bc, z_bc)
+        !call this%filter(ytmp5, x_bc, y_bc, z_bc)
         rhodiff = this%Crho*diffstar + ytmp5
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -545,12 +540,13 @@ contains
         adiffstar = this%Cvf1*sos*abs(adiffstar)
         ytmp5 = this%Cvf2*sos*( (VF - 1 - minVF)*H2 - (VF - minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one + abs(Ys-one)) )*ytmp4 ! CY partof diff
 
-        call this%filter(adiffstar, x_bc, y_bc, z_bc)
-        call this%filter(ytmp5, x_bc, y_bc, z_bc)
+        !call this%filter(adiffstar, x_bc, y_bc, z_bc)
+        !call this%filter(ytmp5, x_bc, y_bc, z_bc)
 
         adiff = adiffstar + ytmp5
         ! Filter each part
 
+        !rhodiff = rhodiff + ytmp5
 
     end subroutine
 

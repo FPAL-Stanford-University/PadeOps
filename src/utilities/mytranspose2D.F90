@@ -68,10 +68,10 @@ contains
                 end do
             end do
         end do
-
+        print *, "arranged data"
         ! Do the All-to-All collective
         call MPI_Alltoall(trans, this%ax*this%ay, mpirkind, output, this%ax*this%ay, mpirkind, this%comm, ierr)
-
+        print *, "mpi all to all" 
     end subroutine
 
     subroutine transpose_y_to_x(this, input, output)
@@ -82,9 +82,10 @@ contains
         real(rkind), dimension(this%ax,this%ny) :: trans
         integer :: i, j, iblock, ierr
 
+        print *, "mpi"
         ! Do the All-to-All collective
         call MPI_Alltoall(input, this%ax*this%ay, mpirkind, trans, this%ax*this%ay, mpirkind, this%comm, ierr)
-
+        print *, "MPI all to all"
         ! Rearrange local data
         do j = 1,this%ay
             do iblock = 1,this%nprocs
@@ -93,7 +94,7 @@ contains
                 end do
             end do
         end do
-
+        print *, "arranged data"
     end subroutine
 
 end module

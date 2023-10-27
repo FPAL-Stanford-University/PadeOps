@@ -147,7 +147,13 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     ! If base decomposition is in Y
     ix1 = decomp%yst(1); iy1 = decomp%yst(2); iz1 = decomp%yst(3)
     ixn = decomp%yen(1); iyn = decomp%yen(2); izn = decomp%yen(3)
-    
+   
+    print *, "ix1 = ", ix1
+    print *, "ixn = ", ixn
+    print *, "iy1 = ", iy1
+    print *, "iyn = ", iyn
+    print *, "iz1 = ", iz1
+    print *, "izn = ", izn 
     ! Create mesh from [0,1)x[0,1)x[0,1) using nx, ny, nz points in x, y and z respectively
     ! Need to set x, y and z as well as  dx, dy and dz
 
@@ -155,7 +161,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
         dx = Lx/real(nx,rkind)
         dy = Ly/real(ny,rkind)
-        dz = dx
+        dz = min(dx,dy)
 
         if(abs(dx-dy)>1.0d-13) then
           call warning("dx not equal to dy")
@@ -164,9 +170,12 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx 
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx 
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
+                    print *, " x = ", x(i,j,k)
+                    print *, " y = ", y(i,j,k)
+                    print *, " z = ", z(i,j,k)
                 end do
             end do
         end do
@@ -271,7 +280,8 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         ! Set up smearing function for VF based on interface location and thickness
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 
-        eta =(x-interface_init)
+        eta = y - interface_init
+        !eta =(x-interface_init)
         !eta = x-interface_init
         !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
@@ -280,7 +290,8 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
 !        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (y-0.5)*(y-0.5))/(thick*dx) ) )
 
-        tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
+        tmp = (half)*(erf( (eta+width)/(thick*dy) ) - erf((eta-width)/(thick*dy)))
+        !tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp
@@ -291,8 +302,8 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
-        u = v0
-        v = 0
+        u = 0
+        v = v0
         w = 0
 
         !tmp2 = half*(erf( (y-0.8+0.1_rkind)/(thick*dy) ) - erf((y-0.8-0.1_rkind)/(thick*dy)))

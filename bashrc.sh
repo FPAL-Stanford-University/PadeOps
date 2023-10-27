@@ -9,6 +9,8 @@ alias cdp="cd ~/Codes/PadeOps"
 ###Needed for PadeOps
 module load ifort/2018 icc/2018 impi/2018 imkl/2018 cmake
 
+#visit
+ml apps/visit/3.1.4
 # Modules to load 
 if [[ "$SHERLOCK" == "1" ]]; then
     echo "In Sherlock 1"

@@ -20,7 +20,7 @@ module Osc_Drop_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 4, Lx = 4, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 1
+    real(rkind) :: Ly = 6, Lx = 6, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 1
     integer     :: pointx = 1, pointy = 1
     real(rkind) :: tau0_2=1d0, Nvel=1d0, minYs,etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
 
@@ -167,7 +167,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1  + i - 1, rkind ) * dx   ! x \in (-2,4]
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
+                    y(i,j,k) = real( iy1  + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -301,7 +301,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
        ! p = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = sqrt(((x - 2)**2)/(1.25)**2 + ((y - 2)**2)/(0.8)**2)
+	eta = sqrt(((x - 3.0)**2)/(1.25)**2 + ((y - 3.0)**2)/(0.8)**2)
 
         !eta = ((x-2)**2 + (y-0.5)**2)	
 
@@ -733,69 +733,69 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         mix%material(2)%g21 = zero; mix%material(2)%g22 = one;  mix%material(2)%g23 = zero
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
-        if(decomp%yst(1)==1) then
-          if(x_bc(1)==0) then
-              rho( 1,:,:) = rhoL
-              u  ( 1,:,:) = zero
-              v  ( 1,:,:) = 0
-              w  ( 1,:,:) = zero
-              mix%material(1)%p(1,:,:) = p_amb
-              mix%material(2)%p(1,:,:) = p_amb
-        !      
-              mix%material(1)%VF ( 1,:,:) = minVF
-              mix%material(2)%VF ( 1,:,:) = one - minVF
-              mix%material(1)%Ys ( 1,:,:) = minYs
-              mix%material(2)%Ys ( 1,:,:) = one - minYs
-          end if
-        endif
+!        if(decomp%yst(1)==1) then
+!          if(x_bc(1)==0) then
+!              rho( 1,:,:) = rhoL
+!              u  ( 1,:,:) = zero
+!              v  ( 1,:,:) = 0
+!              w  ( 1,:,:) = zero
+!              mix%material(1)%p(1,:,:) = p_amb
+!              mix%material(2)%p(1,:,:) = p_amb
+!        !      
+!              mix%material(1)%VF ( 1,:,:) = minVF
+!              mix%material(2)%VF ( 1,:,:) = one - minVF
+!              mix%material(1)%Ys ( 1,:,:) = minYs
+!              mix%material(2)%Ys ( 1,:,:) = one - minYs
+!          end if
+!        endif
 
-        if(decomp%yen(1)==decomp%xsz(1)) then
-          if(x_bc(2)==0) then
-              rho( nx,:,:) = rhoR
-              u  ( nx,:,:) = zero
-              v  ( nx,:,:) = 0
-              w  ( nx,:,:) = zero
-              mix%material(1)%p(nx,:,:) = p_amb
-              mix%material(2)%p(nx,:,:) = p_amb
+!        if(decomp%yen(1)==decomp%xsz(1)) then
+!          if(x_bc(2)==0) then
+!              rho( nx,:,:) = rhoR
+!1              u  ( nx,:,:) = zero
+!              v  ( nx,:,:) = 0
+!              w  ( nx,:,:) = zero
+!              mix%material(1)%p(nx,:,:) = p_amb
+!              mix%material(2)%p(nx,:,:) = p_amb
 
-              mix%material(1)%VF ( nx,:,:) = minVF
-              mix%material(2)%VF ( nx,:,:) = one - minVF
-              mix%material(1)%Ys ( nx,:,:) = minYs
-              mix%material(2)%Ys ( nx,:,:) = one - minYs
-          end if
-        endif
+!              mix%material(1)%VF ( nx,:,:) = minVF
+!              mix%material(2)%VF ( nx,:,:) = one - minVF
+!              mix%material(1)%Ys ( nx,:,:) = minYs
+!              mix%material(2)%Ys ( nx,:,:) = one - minYs
+!          end if
+!        endif
 
-        if(decomp%yst(2)==1) then
-          if(y_bc(1)==0) then
-              rho( :,1,:) = rhoL
-              u  ( :,1,:) = zero
-              v  ( :,1,:) = 0
-              w  ( :,1,:) = zero
-              mix%material(1)%p(:,1,:) = p_amb
-              mix%material(2)%p(:,1,:) = p_amb
+!        if(decomp%yst(2)==1) then
+!          if(y_bc(1)==0) then
+!              rho( :,1,:) = rhoL
+!              u  ( :,1,:) = zero
+!              v  ( :,1,:) = 0
+!              w  ( :,1,:) = zero
+!              mix%material(1)%p(:,1,:) = p_amb
+!              mix%material(2)%p(:,1,:) = p_amb
         !
-              mix%material(1)%VF ( :,1,:) = minVF
-              mix%material(2)%VF ( :,1,:) = one - minVF
-              mix%material(1)%Ys ( :,1,:) = minYs
-              mix%material(2)%Ys ( :,1,:) = one - minYs
-          end if
-        end if
+!              mix%material(1)%VF ( :,1,:) = minVF
+!              mix%material(2)%VF ( :,1,:) = one - minVF
+!              mix%material(1)%Ys ( :,1,:) = minYs
+!              mix%material(2)%Ys ( :,1,:) = one - minYs
+!          end if
+!        end if
 
-       if(decomp%yen(2)==decomp%ysz(2)) then
-          if(y_bc(2)==0) then
-              rho( :,ny,:) = rhoR
-              u  ( :,ny,:) = zero
-              v  ( :,ny,:) = zero
-              w  ( :,ny,:) = zero
-              mix%material(1)%p(:,ny,:) = p_amb
-              mix%material(2)%p(:,ny,:) = p_amb
+!       if(decomp%yen(2)==decomp%ysz(2)) then
+!          if(y_bc(2)==0) then
+!              rho( :,ny,:) = rhoR
+!              u  ( :,ny,:) = zero
+!              v  ( :,ny,:) = zero
+!              w  ( :,ny,:) = zero
+!              mix%material(1)%p(:,ny,:) = p_amb
+!              mix%material(2)%p(:,ny,:) = p_amb
         !
-              mix%material(1)%VF ( :,ny,:) = minVF
-              mix%material(2)%VF ( :,ny,:) = one - minVF
-              mix%material(1)%Ys ( :,ny,:) = minYs
-              mix%material(2)%Ys ( :,ny,:) = one - minYs
-          end if
-        endif
+!              mix%material(1)%VF ( :,ny,:) = minVF
+!              mix%material(2)%VF ( :,ny,:) = one - minVF
+!              mix%material(1)%Ys ( :,ny,:) = minYs
+!              mix%material(2)%Ys ( :,ny,:) = one - minYs
+!          end !if
+!        endif
 
 
 

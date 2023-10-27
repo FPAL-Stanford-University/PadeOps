@@ -766,7 +766,19 @@ contains
                select case(bc1)
                         ! left boundary (1:3)
                         case(1)
+                         !o k = 1,n3
+                         !  do j = 1, n2
 
+                         !      RHS(1,j,k) = zero
+                                
+                         !      RHS(2,j,k) = a06*( f(2,j,k) - f(1,j,k) ) &
+                         !                 + b06*(f(3,j,k) - f(2,j,k) )
+
+                         !      RHS(3,j,k) = a06*( f(3,j,k) - f(2,j,k) ) &
+                
+                         !  enddo
+                        !enddo
+                        
                         !!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
 
