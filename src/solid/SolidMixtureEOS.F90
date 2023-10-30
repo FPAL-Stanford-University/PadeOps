@@ -881,8 +881,8 @@ stop
              (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1
 
         this%material(1)%VF = (mixrhoE -  (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1)/fac
-        this%material(2)%VF = (-mixrhoE +  (mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1)/fac
-        !this%material(1)%VF = 1 - this%material(2)%VF
+        !this%material(2)%VF = (-mixrhoE +  (mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1)/fac
+        this%material(2)%VF = 1 - this%material(1)%VF
         !call this%filter(1, this%x_bc, this%y_bc, this%z_bc)
         num = 0.0
         den = 0.0
@@ -895,6 +895,14 @@ stop
         enddo
 
         mixP = ( mixRho*mixE - num )/den
+
+        fac = (mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1 - &
+             (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1
+
+        this%material(1)%VF = (mixrhoE -  (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1)/fac
+        !this%material(2)%VF = (-mixrhoE +  (mixP +this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1)/fac
+        !call filter3D(this%decomp, this%fil, this%material(1)%VF, 1, this%x_bc, this%y_bc,this%z_bc)
+        this%material(2)%VF = 1 - this%material(1)%VF
 
         do imat = 1, this%ns
 
@@ -923,7 +931,7 @@ stop
         ! subtract elastic energy to determine hydrostatic energy. Temperature
         ! is assumed a function of only hydrostatic energy. Not sure if this is
         ! correct.
-        ehmix = mixE*mixRho
+        ehmix = mixE !*mixRho
         mixrhoE = ehmix
      !   ehmix = ehmix*mixRho
         tmp = zero
@@ -988,16 +996,17 @@ stop
        ! this%material(2)%VF = 1 - this%material(1)%VF
        ! this%material(2)%Ys = 1 - this%material(1)%Ys
 
-!        do imat = 1, this%ns
+!       do imat = 1, this%ns
 
-!          call this%material(imat)%getSpeciesDensity(mixRho,rhom)
+!         call this%material(imat)%getSpeciesDensity(mixRho,rhom)
 
-!        enddo     
+!       enddo     
+
         do imat = 1, this%ns
         
       
 !       ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
-
+        call this%material(imat)%getSpeciesDensity(mixRho,rhom)
         gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
 
     !    where( this%material(imat)%VF .LE. thresh)
@@ -1019,9 +1028,9 @@ stop
 
       !  elsewhere
 
-         ehmix = ehmix - gamfac*this%material(imat)%VF
-         tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
-
+         ehmix = ehmix - gamfac*this%material(imat)%Ys/rhom
+        ! tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
+         tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%Ys/rhom
       !  endwhere
             
 
@@ -1045,11 +1054,11 @@ stop
 
        mixP = ehmix/tmp
        
-       call filter3D(this%decomp, this%fil, mixP, 1, this%x_bc, this%y_bc,this%z_bc)
-       fac = (mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1 - &
-             (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1
-       this%material(1)%VF = (mixrhoE -  (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1)/fac 
-       this%material(2)%VF = (-mixrhoE +  (mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1)/fac       
+       !call filter3D(this%decomp, this%fil, mixP, 1, this%x_bc, this%y_bc,this%z_bc)
+       !fac = (mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1 - &
+       !      (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1
+       !this%material(1)%VF = (mixrhoE -  (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1)/fac 
+       !this%material(2)%VF = (-mixrhoE +  (mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1)/fac       
          ! a = minloc(ehmix)
          ! !a(1) = 122; a(2:3) = 1
          ! print *, "Mat1 Ys, VF = ", this%material(1)%Ys(a(1),a(2),a(3)), this%material(1)%VF(a(1),a(2),a(3))
@@ -2340,8 +2349,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
              Frho(:,:,:,imat)    = Frho(:,:,:,imat) + rhodiff_int(:,:,:,imat)*gradRYs_int(:,:,:,imat) !   +this%material(i)%rhodiff*gradRYs(:,:,:,imat)
              !Fenergy(:,:,:,imat)    = Fenergy(:,:,:,imat) + 
              !hi*this%material(i)%rhodiff*gradRYs(:,:,:,imat)
-             !Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*( (p_int(:,:,:,imat) + this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1)
-              Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*hi_int(:,:,:,imat)
+             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*( (p_int(:,:,:,imat) + this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1)
+             ! Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*hi_int(:,:,:,imat)
             enddo
           !this%material(i)%rhodiff*gradVF(:,:,:,imat)*( (p +
           !this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1

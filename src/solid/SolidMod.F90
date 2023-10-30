@@ -5100,10 +5100,10 @@ contains
           call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dVFdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dVFdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dVFdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          !call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          !call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dVFdx_x,rhodiff_int(:,:,:,2)*dVFdy_y,rhodiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dVFdx_x,rhodiff_int(:,:,:,2)*dVFdy_y,rhodiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          !call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          !call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         else
  
@@ -5236,11 +5236,11 @@ contains
         ! call filter3D(this%decomp, fil_, this%rpe, iflag, x_bc, y_bc, z_bc)
 
         ! filter Ys
-        !call filter3D(this%decomp, fil_, this%consrv(:,:,:,1), iflag, x_bc, y_bc, z_bc)
+        call filter3D(this%decomp, fil_, this%consrv(:,:,:,1), iflag, x_bc, y_bc, z_bc)
 
         if(this%pEqb) then
             ! filter VF
-            call filter3D(this%decomp, fil_, this%VF, iflag, x_bc, y_bc,z_bc)
+        !    call filter3D(this%decomp, fil_, this%VF, iflag, x_bc, y_bc,z_bc)
         endif
 
         if(this%pRelax) then

@@ -507,8 +507,8 @@ contains
         diffstar = diffstar + ytmp4 !* ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
         ytmp5 = this%CY*sos*( half*(abs(Ys-minYs)-(one-minYs) + abs((Ys-minYs)-(one-minYs))) )*(this%dy*this%dx*this%dz)**(1/3)
         diffstar = sos*abs(diffstar) !/rho ! CD part of diff
-        !call this%filter(diffstar, x_bc, y_bc, z_bc)
-        !call this%filter(ytmp5, x_bc, y_bc, z_bc)
+        call this%filter(diffstar, x_bc, y_bc, z_bc)
+        call this%filter(ytmp5, x_bc, y_bc, z_bc)
         rhodiff = this%Crho*diffstar + ytmp5
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -540,13 +540,13 @@ contains
         adiffstar = this%Cvf1*sos*abs(adiffstar)
         ytmp5 = this%Cvf2*sos*( (VF - 1 - minVF)*H2 - (VF - minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one + abs(Ys-one)) )*ytmp4 ! CY partof diff
 
-        !call this%filter(adiffstar, x_bc, y_bc, z_bc)
-        !call this%filter(ytmp5, x_bc, y_bc, z_bc)
+        call this%filter(adiffstar, x_bc, y_bc, z_bc)
+        call this%filter(ytmp5, x_bc, y_bc, z_bc)
 
         adiff = adiffstar + ytmp5
         ! Filter each part
 
-        !rhodiff = rhodiff + ytmp5
+        rhodiff = rhodiff + adiff
 
     end subroutine
 

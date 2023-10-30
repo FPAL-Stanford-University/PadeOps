@@ -380,9 +380,9 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
         !tmp = half * ( one - erf((0.25 - (x-interface_init)*(x-interface_init) - (y-3.0_rkind)*(y-3.0_rkind))/(thick*dx) ) )
         !tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) - (y-0.5)*(y-0.5))/(thick*dx) ) )
-         tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) -(y-0.5)*(y-0.5))/(thick*dx) ) ) 
+        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) -(y-0.5)*(y-0.5))/(thick*dx) ) ) 
         ! tmp = half * ( one - erf((0.25_rkind**2 - (x-0.5)*(x-0.5)-(y-0.5)*(y-0.5))/(thick*dx) ) )
-       ! tmp = half * ( one - erf((0.35**2 - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
+        ! tmp = half * ( one - erf((0.35**2 - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
 
 
 
