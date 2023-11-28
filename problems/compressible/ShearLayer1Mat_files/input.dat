@@ -28,6 +28,10 @@ filter_x = "cf90"         ! filter to use in X: "cf90", "gaussian", "lstsq", "sp
 filter_y = "cf90"         ! filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
 filter_z = "cf90"         ! filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
 
+xmetric = .false.         ! Streching in x-direction
+ymetric = .true.          ! Streching in y-direction
+zmetric = .false.         ! Streching in z-direction
+
 prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 
@@ -51,22 +55,30 @@ y_bcn    = 1                         ! Right Y BC (0 => general, 1 => symmetric)
 /
 
 &SGS_MODEL
-DynamicProcedureType     =  0
-SGSmodelID               =  1        !0=Smagorinsky  1=sigma 2=AMD 3=MGM
+DynamicProcedureType     =  1        !0=Static  1=Local_mgm  2=Global_mgm
+SGSmodelID               =  2        !0=Smagorinsky  1=sigma 2=AMD 3=MGM
 useWallDamping           =  .false. 
 ncWall                   =  1.0D0
 Csgs                     =  1.3D0
+Ctke                     =  0.1D0
 DynProcFreq              =  1
 useSGSDynamicRestartFile =  .false.
 DomainAveraged_DynProc   =  .false.
-SGSDynamicRestartFile    =  .false.
+SGSDynamicRestartFile    =  "null"
+filter_in_x              =  .true. 
+filter_in_y              =  .true.
+filter_in_z              =  .true.
+testfilter_x             =  "box2"
+testfilter_y             =  "box2"   
+testfilter_z             =  "box2"
+DeltaRatio               =   2.0D0
 isEddyViscosityModel     =  .true.
 isEddyDiffmodel          =  .true.
-isTurbPrandtlconst       =  .true.
+isTurbPrandtlconst       =  .false.
 useDynamicProcedureScalar=  .false.
-PrSGS
+PrSGS                    =   0.7D0
 /
-                    =   0.7D0
+
 &PROBINPUT
 Lx      = 68.D0         ! Pantano 2002        
 Ly      = 59.D0         ! Pantano 2002
@@ -84,3 +96,14 @@ fname_prefix = "/home/nghaisas/runs/PadeOps_startup/compressible/shearlayer"
 use_lstab    = .false.
 no_pert      = .true. 
 /
+
+&METRICS
+xmetric_flag = 1        !flags: 1=conc towards centre, 2=conc towards both ends, 3=arbitrary, 4=finite-difference evaluation of metrics
+ymetric_flag = 1
+zmetric_flag = 1
+metric_params(2,1) = 0.0D0      !focus 
+metric_params(2,2) = 2.0D0      !stretching parameter :tau 
+metric_params(2,3) = -100.0D0   !start: -Ly/2
+metric_params(2,4) = 100.0D0    !hh: Ly/2
+/
+

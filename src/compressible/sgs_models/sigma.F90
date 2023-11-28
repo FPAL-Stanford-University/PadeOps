@@ -1,6 +1,6 @@
 subroutine init_sigma(this)
    class(sgs_cgrid), intent(inout) :: this
-   real(rkind) :: deltaLES
+   !real(rkind) :: deltaLES
 
    ! Set the type of mnodel constant (default is constant global). 
    ! Can be reset to false via dynamic procedure initialization, 
@@ -89,7 +89,7 @@ subroutine get_sigma_kernel(this, duidxj, nusgs)
             sigma3 = sqrt(sigma3)
 
             nusgs(i,j,k) = sigma3*(sigma1 - sigma2)*(sigma2 - sigma3)/(sigma1sq + 1.d-15)
-            nusgs(i,j,k) = nusgs(i,j,k) * (this%deltaLES**2)
+            nusgs(i,j,k) = nusgs(i,j,k) * (this%deltaLES(i,j,k)**2)
          end do 
       end do 
    end do

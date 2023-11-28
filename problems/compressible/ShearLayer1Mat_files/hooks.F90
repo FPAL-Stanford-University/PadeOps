@@ -2,7 +2,7 @@ module ShearLayer_data
     use kind_parameters,  only: rkind, mpirkind, clen
     use constants,        only: zero, half, one, two, four, pi, imi
     use FiltersMod,       only: filters
-    use decomp_2d,        only: decomp_info, nrank
+    use decomp_2d,        only: decomp_info, nrank, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use basic_io,         only: read_2d_ascii 
     use reductions,       only: P_MAXVAL,P_MINVAL
     use exits,            only: message, message_min_max
@@ -37,6 +37,53 @@ module ShearLayer_data
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 contains
+    subroutine stretched_coordinates(decomp, y, eta, ymetric, ymetric_flag, yfocus, ytau, ystart, yh)
+    use constants,        only: zero, half, one
+    use decomp_2d,        only: decomp_info, nrank
+    use exits,            only: GracefulExit, message, nancheck
+
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind), dimension(:,:,:),   intent(inout) :: y
+    real(rkind), dimension(:,:,:  ), intent(inout) :: eta
+    logical,                         intent(in   ) :: ymetric
+    integer,                         intent(in)    :: ymetric_flag
+    real(rkind),                     intent(in)    :: yfocus, ytau, ystart, yh
+    integer     :: i,j,k
+    real(rkind) :: yfocus_adj, num, den, BB, yuniform_adj
+
+    !print*, yfocus, ytau, ystart, yh, ymetric, ymetric_flag
+    !print*, decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)
+
+    if(ymetric_flag==1) then
+       ! concentrate towards the center -- Pletcher, Tannehill, Anderson
+       ! (Section 5.6, Transformation 3, pg. 332) 
+       yfocus_adj = yfocus - ystart
+       num = one + (yfocus_adj/yh) * (exp( ytau) - one)
+       den = one + (yfocus_adj/yh) * (exp(-ytau) - one)
+       BB = half/ytau*log(num/den)
+       do k=1,decomp%ysz(3)
+          do j=1,decomp%ysz(2)
+             do i=1,decomp%ysz(1)
+                ! adjust for starting point
+                yuniform_adj = (eta(i,j,k) - ystart) !/ yh
+                ! stretched location
+                num = sinh(ytau*BB)
+                y(i,j,k) = yfocus_adj * (one + sinh(ytau * (yuniform_adj/yh-BB))/num) + ystart
+             end do
+          end do
+       end do
+       elseif(ymetric_flag==2) then
+          ! concentrate towards the two ends
+          call GracefulExit("flag = 2 (concentrate towards two ends) is incomplete right now",21)
+       elseif(ymetric_flag==3) then
+          ! concentrate at arbitrary point
+          call GracefulExit("flag = 3 (concentrate at arbitrary point) is incomplete right now",21)
+       elseif(ymetric_flag==10) then
+          ! finite-difference evaluation of metrics (reduces order of accuracy)
+          call GracefulExit("flag = 4 (finite-difference evaluation of metrics) is incomplete right now",21)
+       endif
+    end subroutine
+
     subroutine perturb_potential_v2(gp,x,y,z,nx,ny,nz,nxl,nyl,nzl,Lx,Lz,u,v,w,p,rho,fname_prefix)
         use decomp_2d,        only: nrank
         use decomp_2d_io
@@ -195,10 +242,11 @@ contains
 end module
 
 
-subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetric, xi, eta, zeta)
+subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetric, xi, eta, zeta, dxs, dys, dzs, xbuf, zbuf)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one
-    use decomp_2d,        only: decomp_info, nrank
+    use decomp_2d,        only: decomp_info, nrank, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+    use exits,            only: GracefulExit, message, nancheck
     use ShearLayer_data
 
     implicit none
@@ -208,17 +256,38 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     character(len=*),                intent(in)    :: inputfile
     logical,                         intent(in   ) :: xmetric, ymetric, zmetric
     real(rkind), dimension(:,:,:  ), intent(inout) :: xi, eta, zeta
+    real(rkind), dimension(:      ), intent(inout) :: dxs, dys, dzs
+    real(rkind), dimension(:,:,:,:), target,intent(in):: xbuf, zbuf
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-    !character(clen) :: inputfile='input.dat'
+    real(rkind) :: xfocus, xtau, xh, xstart
+    real(rkind) :: yfocus, ytau, yh, ystart
+    real(rkind) :: zfocus, ztau, zh, zstart
+    integer     ::  xmetric_flag,  ymetric_flag, zmetric_flag
+    real(rkind), allocatable, dimension(:,:) :: metric_params
+    character(len=clen) :: outputfile,str
+    real(rkind), dimension(:,:,:), pointer :: xtmp1, xtmp2, ztmp1, ztmp2
 
     namelist /PROBINPUT/ Lx, Ly, Lz,Mc, Re, Pr, Sc,&
                         T_ref, p_ref, rho_ref, rho_ratio,&
                         noiseAmp, fname_prefix, use_lstab, no_pert
+
+    namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
+
     ioUnit = 11
     open(unit=ioUnit, file=inputfile, form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
     
+    allocate(metric_params(3,5))    ! 3 :: (x,y,z); 5 :: max no of parameters
+    metric_params = zero
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=METRICS)
+    close(ioUnit)
+
+
+    xtmp1 => xbuf(:,:,:,1); xtmp2 => xbuf(:,:,:,2) 
+    ztmp1 => zbuf(:,:,:,1); ztmp2 => zbuf(:,:,:,2) 
+
     ! Global domain size 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -248,12 +317,90 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
             end do
         end do
 
-    if(ymetric) then
-        eta = y
-        !! set y same as in derivatives.F90
+    xfocus = metric_params(1,1);  xtau   = metric_params(1,2);  xstart = metric_params(1,3); xh = metric_params(1,4)
+    yfocus = metric_params(2,1);  ytau   = metric_params(2,2);  ystart = metric_params(2,3); yh = metric_params(2,4)
+    zfocus = metric_params(3,1);  ztau   = metric_params(3,2);  zstart = metric_params(3,3); zh = metric_params(3,4)
+
+    !print*, xfocus, xtau, xstart, xh, xmetric, xmetric_flag
+    !print*, yfocus, ytau, ystart, yh, ymetric, ymetric_flag
+    !print*, zfocus, ztau, zstart, zh, zmetric, zmetric_flag
+    
+    if(xmetric) then
+      xi = x
+      call stretched_coordinates(decomp, x, xi, xmetric, xmetric_flag, xfocus, xtau, xstart, xh)
     endif
 
+    if(ymetric) then
+      eta = y
+      call stretched_coordinates(decomp, y, eta, ymetric, ymetric_flag, yfocus, ytau, ystart, yh)
+    endif
+
+    if(zmetric) then
+      zeta = z
+      call stretched_coordinates(decomp, z, zeta, zmetric, zmetric_flag, zfocus, ztau, zstart, zh)
+    endif
+
+
+    !print*, "nrank=",nrank, "ix1=",ix1, "ixn=",ixn
+    !print*, "nrank=",nrank, "iy1=",iy1, "iyn=",iyn
+    !print*, "nrank=",nrank, "iz1=",iz1, "izn=",izn
+
+    ! Grid width on stretched/uniform mesh
+    call transpose_y_to_x(x,xtmp1,decomp)   ! Decomposition in x
+    xtmp2(1,:,:) = xtmp1(1,:,:) - x1
+    do i = 2, nx
+       xtmp2(i,:,:) =  xtmp1(i,:,:) - xtmp1(i-1,:,:)
+    end do
+   
+    do i = 1, decomp%ysz(1)
+       dxs(i) = xtmp2(ix1 + i -1, 1, 1)
+    end do
+
+    dys(1) = y(1,1,1) - y1  ! Base decomposition in Y
+    do j=2, decomp%ysz(2)
+       dys(j) =  y(1,j,1) - y(1,j-1,1)
+    end do
+
+    call transpose_y_to_z(z,ztmp1,decomp)   ! Decomposition in z
+    ztmp2(:,:,1) = ztmp1(:,:,1) - z1
+    do k = 2, nz
+       ztmp2(:,:,k) =  ztmp1(:,:,k) - ztmp1(:,:,k-1)
+    end do
+   
+    do k = 1, decomp%ysz(3)
+       dzs(k) = ztmp2(1, 1, iz1 + k -1)
+    end do
+
+    !!! Write grid width to a file
+    write(outputfile, '(a,i0,a)') 'grid_x_', nrank, '.dat'
+    open(11,file=outputfile,status='unknown')
+    do i=1,decomp%ysz(1)
+       write(11,'(2(e19.12),1x)') x(i,1,1), dxs(i)
+    enddo
+    close(11)
+
+    if(nrank==0) then
+      write(outputfile, '(a)') 'grid_y.dat'
+      open(10,file=outputfile,status='unknown')
+      do j=1,decomp%ysz(2)
+         write(10,'(2(e19.12),1x)') y(1,j,1), dys(j)
+      enddo
+      close(10)
+    endif
+
+    write(outputfile, '(a,i0,a)') 'grid_z_', nrank, '.dat'
+    open(13,file=outputfile,status='unknown')
+    do k=1,decomp%ysz(3)
+       write(13,'(2(e19.12),1x)') z(1,1,k), dzs(k)
+    enddo
+    close(13)
     end associate
+
+    nullify(xtmp1)
+    nullify(xtmp2)
+    nullify(ztmp1)
+    nullify(ztmp2)
+
 end subroutine
 
 
@@ -540,7 +687,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 end subroutine
 
 
-subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
+subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,two
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
@@ -555,11 +702,11 @@ subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
     implicit none
     type(decomp_info),               intent(in) :: decomp
     type(mixture),                   intent(in) :: mix
-    type(sgs_cgrid),                 intent(in) :: sgsmodel
     integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    type(sgs_cgrid),optional,        intent(in) :: sgsmodel
 
     real(rkind) :: dx, Ythick, oob
     integer :: ny  , j
@@ -581,7 +728,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,sgsmodel,step,tsim)
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
         call message(2,"Maximum diffusivity",P_MAXVAL(diff))
 
-        !!if(useSGS)
+        !if(useSGS)
           !if(sgsmodel%DynamicProcedureType==1) then
              call message_min_max(2,"Bounds for LD-Coeff-tke  : ",     &
                     sgsmodel%get_Max_LocalDynamicProcedure_Coeff_tke(),   &

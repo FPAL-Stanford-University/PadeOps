@@ -103,6 +103,7 @@ module CompressibleGrid
         ! stretched and curvilinear meshes
         logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
         real(rkind), dimension(:,:,:), allocatable :: xi, eta, zeta
+        real(rkind), dimension(:),     allocatable :: dxs, dys, dzs
 
         contains
             procedure          :: init
@@ -264,6 +265,10 @@ contains
         end do  
 
         ! setup metrics for stretched grids
+        allocate(this%dxs(this%decomp%ysz(1)))
+        allocate(this%dys(this%decomp%ysz(2)))
+        allocate(this%dzs(this%decomp%ysz(3)))
+
         this%xmetric = xmetric;   this%ymetric = ymetric;   this%zmetric = zmetric  
         if(this%xmetric) then
             allocate(this%xi(this%decomp%ysz(1), this%decomp%ysz(2), this%decomp%ysz(3)))
@@ -280,10 +285,15 @@ contains
         else
             allocate(this%zeta(0,0,0))
         endif
+        
+        ! Allocate 2 buffers for each of the three decompositions
+        call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
+        call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
+        call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
 
         ! Go to hooks if a different mesh is desired
-        call meshgen(this%decomp,this%dx, this%dy, this%dz, this%mesh, inputfile, &
-              this%xmetric, this%ymetric, this%zmetric, this%xi, this%eta, this%zeta)
+        call meshgen(this%decomp,this%dx, this%dy, this%dz, this%mesh, inputfile, this%xmetric, this%ymetric, this%zmetric, &
+                     this%xi, this%eta, this%zeta, this%dxs, this%dys, this%dzs, this%xbuf, this%zbuf)
 
         if (ns .LT. 1) call GracefulExit("Cannot have less than 1 species. Must have ns >= 1.",4568)
 
@@ -370,7 +380,7 @@ contains
                             this%x,        this%y,         this%z, &
                            xmetric,       ymetric,        zmetric, &
                            .false.,     inputfile,                 &
-                           this%xi,      this%eta,      this%zeta)
+                           this%xi,      this%eta,      this%zeta, this%xbuf, this%zbuf)
 
         ! Allocate fil and gfil
         if ( allocated(this%fil) ) deallocate(this%fil)
@@ -394,9 +404,9 @@ contains
 
 
         ! Allocate 2 buffers for each of the three decompositions
-        call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
-        call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
-        call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
+        !call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
+        !call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
+        !call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
 
         this%SkewSymm = SkewSymm
 
@@ -417,7 +427,7 @@ contains
            
             allocate(this%sgsmodel)
             
-            call this%sgsmodel%init(this%der, this%decomp, Cp, Pr, this%dx, this%dy, this%dz, inputfile, this%xbuf, this%ybuf, this%zbuf, periodicx, periodicy, periodicz, x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn)
+            call this%sgsmodel%init(this%der, this%decomp, Cp, Pr, this%dx, this%dy, this%dz, inputfile, this%xbuf, this%ybuf, this%zbuf, periodicx, periodicy, periodicz, x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, this%xmetric, this%ymetric, this%zmetric, this%dxs, this%dys, this%dzs)
          
         endif
 
@@ -544,6 +554,9 @@ contains
         if(allocated(this%xi)  ) deallocate(this%xi  )
         if(allocated(this%eta) ) deallocate(this%eta )
         if(allocated(this%zeta)) deallocate(this%zeta)
+        if(allocated(this%dxs) ) deallocate(this%dxs)
+        if(allocated(this%dys) ) deallocate(this%dys)
+        if(allocated(this%dzs) ) deallocate(this%dzs)
 
         call this%der%destroy()
         if (allocated(this%der)) deallocate(this%der) 
@@ -1566,7 +1579,7 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, this%mix%ns), optional, intent(in) :: dYsdx,dYsdy,dYsdz
         
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar,bulkstar,kapstar,diffstar,func
-        integer :: i
+        integer :: i, j, k, p
         
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         real(rkind), dimension(:,:,:), pointer :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6
@@ -1577,7 +1590,6 @@ contains
         ytmp1 => this%ybuf(:,:,:,1); ytmp2 => this%ybuf(:,:,:,2)
         ytmp3 => this%ybuf(:,:,:,3); ytmp4 => this%ybuf(:,:,:,4)
         ytmp5 => this%ybuf(:,:,:,5); ytmp6 => this%ybuf(:,:,:,6)
-        
         ztmp1 => this%zbuf(:,:,:,1); ztmp2 => this%zbuf(:,:,:,2)
 
         ! -------- Artificial Shear Viscosity --------
@@ -1591,21 +1603,41 @@ contains
         call transpose_y_to_x(func,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-        xtmp2 = xtmp1*this%dx**6
-        call transpose_x_to_y(xtmp2,mustar,this%decomp)
+        !xtmp2(i,j,k) = xtmp1(i,j,k)*this%dxs(i)**6
+        !call transpose_x_to_y(xtmp2,mustar,this%decomp)
+        !!! To include dxs
+        call transpose_x_to_y(xtmp1,ytmp1,this%decomp)
+        do k = 1, this%nzp
+           do j = 1, this%nyp
+              do i = 1, this%nxp
+                 mustar(i,j,k) = ytmp1(i,j,k)*this%dxs(i)**6
+              end do
+           end do
+        end do
         
         ! Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-        ztmp2 = ztmp1*this%dz**6
-        call transpose_z_to_y(ztmp2,ytmp1,this%decomp)
-        mustar = mustar + ytmp1
+        !ztmp2(:,:,k) = ztmp1(:,:,k)*this%dzs(k)**6
+        !call transpose_z_to_y(ztmp2,ytmp1,this%decomp)
+        !!! To include dzs
+        call transpose_z_to_y(ztmp1,ytmp1,this%decomp)
+        do k = 1, this%nzp
+           ytmp2(:,:,k) = ytmp1(:,:,k)*this%dzs(k)**6
+        end do
+        mustar = mustar + ytmp2
         
         ! Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp1,this%y_bc(1),this%y_bc(2))
         call this%der%d2dy2(ytmp1,ytmp2,this%y_bc(1),this%y_bc(2))
-        ytmp1 = ytmp2*this%dy**6
+        !ytmp1 = ytmp2*this%dy**6
+        !!! To include dys
+        do k = 1, this%nzp
+           do j = 1, this%nyp
+              ytmp1(:,j,k) = ytmp2(:,j,k)*this%dys(j)**6
+           end do
+        end do
         mustar = mustar + ytmp1
 
         mustar = this%Cmu*this%rho*abs(mustar)
@@ -1627,23 +1659,49 @@ contains
         call transpose_y_to_x(func,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-        xtmp2 = xtmp1*this%dx**4
-        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+        !xtmp2 = xtmp1*this%dx**4
+        !call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+        !bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+        !!! To include dxs
+        call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
+        do k = 1, this%nzp
+           do j = 1, this%nyp
+              do i = 1, this%nxp
+                 ytmp5(i,j,k)    = ytmp4(i,j,k) * this%dxs(i)**4
+                 bulkstar(i,j,k) = ytmp5(i,j,k) * ( this%dxs(i) * ytmp1(i,j,k) / (ytmp1(i,j,k) + &
+                                      ytmp2(i,j,k) + ytmp3(i,j,k) + real(1.0D-32,rkind)) )**2
+              end do
+           end do
+        end do
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-        ztmp2 = ztmp1*this%dz**4
-        call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+        !ztmp2 = ztmp1*this%dz**4
+        !call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+        !bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+        !!! To include dzs
+        call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
+        do k = 1, this%nzp
+           ytmp5(:,:,k) = ytmp4(:,:,k)*this%dzs(k)**4
+           bulkstar(:,:,k) = bulkstar(:,:,k) + ytmp5(:,:,k) * ( this%dzs(k) * ytmp3(:,:,k) / (ytmp1(:,:,k) + &
+                               ytmp2(:,:,k) + ytmp3(:,:,k) + real(1.0D-32,rkind)) )**2
+        end do
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
-        ytmp4 = ytmp5*this%dy**4
-        bulkstar = bulkstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+        !ytmp4 = ytmp5*this%dy**4
+        !bulkstar = bulkstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+        !!! To include dys
+        do k = 1, this%nzp
+           do j = 1, this%nyp
+              ytmp4(:,j,k)    = ytmp5(:,j,k)*this%dys(j)**4
+              bulkstar(:,j,k) = bulkstar(:,j,k) + ytmp4(:,j,k) * ( this%dys(j) * ytmp2(:,j,k) / (ytmp1(:,j,k) &
+                                  + ytmp2(:,j,k) + ytmp3(:,j,k) + real(1.0D-32,rkind)) )**2
+           end do
+        end do
 
         ! Now, all ytmps are free to use
         ytmp1 = dwdy-dvdz; ytmp2 = dudz-dwdx; ytmp3 = dvdx-dudy
@@ -1673,23 +1731,49 @@ contains
         call transpose_y_to_x(this%e,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-        xtmp2 = xtmp1*this%dx**4
-        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        kapstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        !xtmp2 = xtmp1*this%dx**4
+        !call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+        !kapstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        !!! To include dxs
+        call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
+        do k = 1, this%nzp
+           do j = 1, this%nyp
+              do i = 1, this%nxp
+                 ytmp5(i,j,k) = ytmp4(i,j,k)*this%dxs(i)**4
+                 kapstar(i,j,k) = ytmp5(i,j,k) * ( this%dxs(i) * ytmp1(i,j,k) / (ytmp1(i,j,k) &
+                                    + ytmp2(i,j,k) + ytmp3(i,j,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+              end do
+           end do
+        end do
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(this%e,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-        ztmp2 = ztmp1*this%dz**4
-        call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        kapstar = kapstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        !ztmp2 = ztmp1*this%dz**4
+        !call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+        !kapstar = kapstar + ytmp4 * ( this%dz * ytmp3/(ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)))! Add eps in case denominator is zero
+        !!! To include dzs 
+        call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
+        do k = 1, this%nzp
+           ytmp5(:,:,k) = ytmp4(:,:,k)*this%dzs(k)**4
+           kapstar(:,:,k) = kapstar(:,:,k) + ytmp5(:,:,k) * ( this%dzs(k) * ytmp3(:,:,k) / (ytmp1(:,:,k) &
+                              + ytmp2(:,:,k) + ytmp3(:,:,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        end do
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
-        ytmp4 = ytmp5*this%dy**4
-        kapstar = kapstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        !ytmp4 = ytmp5*this%dy**4
+        !kapstar = kapstar + ytmp4 * (this%dy * ytmp2/(ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind))) ! Add eps in case denominator is zero
+        !!! To include dys
+        do k = 1, this%nzp
+           do j = 1, this%nyp
+              ytmp4(:,j,k) = ytmp5(:,j,k)*this%dys(j)**4
+              kapstar(:,j,k) = kapstar(:,j,k) + ytmp4(:,j,k) * ( this%dys(j) * ytmp2(:,j,k) / &
+                          (ytmp1(:,j,k) + ytmp2(:,j,k) + ytmp3(:,j,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+           end do
+        end do
 
         ! Now, all ytmps are free to use
         call this%mix%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound
@@ -1702,42 +1786,76 @@ contains
         ! -------- Artificial Diffusivity ---------
         if (present(dYsdx) .AND. present(dYsdy) .AND. present(dYsdz)) then
             if (this%mix%ns .GT. 1) then
-                do i = 1,this%mix%ns
+                do p = 1,this%mix%ns
                     ! Step 1: Get components of grad(Ys) squared individually
-                    ytmp1 = dYsdx(:,:,:,i)*dYsdx(:,:,:,i)
-                    ytmp2 = dYsdy(:,:,:,i)*dYsdy(:,:,:,i)
-                    ytmp3 = dYsdz(:,:,:,i)*dYsdz(:,:,:,i)
+                    ytmp1 = dYsdx(:,:,:,p)*dYsdx(:,:,:,p)
+                    ytmp2 = dYsdy(:,:,:,p)*dYsdy(:,:,:,p)
+                    ytmp3 = dYsdz(:,:,:,p)*dYsdz(:,:,:,p)
 
-                    call this%mix%get_sos(this%rho,this%p,ytmp6)  ! Speed of sound
+                    call this%mix%get_sos(this%rho,this%p,ytmp6)  ! Speed of sound  
 
                     ! Step 2: Get 4th derivative in X
-                    call transpose_y_to_x(this%Ys(:,:,:,i),xtmp1,this%decomp)
+                    call transpose_y_to_x(this%Ys(:,:,:,p),xtmp1,this%decomp)
                     call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
                     call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
-                    xtmp2 = xtmp1*this%dx**4
-                    call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-                    diffstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    !xtmp2 = xtmp1*this%dx**4
+                    !call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+                    !diffstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    !!! To include dxs
+                    call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
+                    do k = 1, this%nzp
+                       do j = 1, this%nyp
+                          do i = 1, this%nxp
+                             ytmp5(i,j,k) = ytmp4(i,j,k)*this%dxs(i)**4
+                             diffstar(i,j,k) = ytmp5(i,j,k) * ( this%dxs(i) * ytmp1(i,j,k) / (ytmp1(i,j,k) + &
+                                           ytmp2(i,j,k) + ytmp3(i,j,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                          end do
+                       end do
+                    end do
 
                     ! Step 3: Get 4th derivative in Z
-                    call transpose_y_to_z(this%Ys(:,:,:,i),ztmp1,this%decomp)
+                    call transpose_y_to_z(this%Ys(:,:,:,p),ztmp1,this%decomp)
                     call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
                     call this%der%d2dz2(ztmp2,ztmp1,this%z_bc(1),this%z_bc(2))
-                    ztmp2 = ztmp1*this%dz**4
-                    call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-                    diffstar = diffstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    !ztmp2 = ztmp1*this%dz**4
+                    !call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+                    !diffstar = diffstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    !!! To include dzs
+                    call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
+                    do k = 1, this%nzp
+                       ytmp5(:,:,k) = ytmp4(:,:,k)*this%dzs(k)**4
+                       diffstar(:,:,k) = diffstar(:,:,k) + ytmp5(:,:,k) * ( this%dzs(k) * ytmp3(:,:,k) / (ytmp1(:,:,k) &
+                                  + ytmp2(:,:,k) + ytmp3(:,:,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    end do
 
                     ! Step 4: Get 4th derivative in Y
-                    call this%der%d2dy2(this%Ys(:,:,:,i),ytmp4,this%y_bc(1),this%y_bc(2))
+                    call this%der%d2dy2(this%Ys(:,:,:,p),ytmp4,this%y_bc(1),this%y_bc(2))
                     call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
-                    ytmp4 = ytmp5*this%dy**4
-                    diffstar = diffstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    !ytmp4 = ytmp5*this%dy**4
+                    !diffstar = diffstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                    !!! To include dys
+                    do k = 1, this%nzp
+                       do j = 1, this%nyp
+                          ytmp4(:,j,k)    = ytmp5(:,j,k)*this%dys(j)**4
+                          diffstar(:,j,k) = diffstar(:,j,k) + ytmp4(:,j,k) * ( this%dys(j) * ytmp2(:,j,k) / (ytmp1(:,j,k) + &
+                                           ytmp2(:,j,k) + ytmp3(:,j,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+                       end do
+                    end do
 
+                    diffstar = this%Cdiff*ytmp6*abs(diffstar)     ! CD part of diff
+                    !ytmp4 = (sqrt(ytmp1)*this%dx + sqrt(ytmp2)*this%dy + sqrt(ytmp3)*this%dz) &
+                    !               / ( sqrt(ytmp1+ytmp2+ytmp3) + real(1.0D-32,rkind) ) ! grid scale 
+                    !!! To include dxs, dys, dzs
+                    do k = 1, this%nzp
+                       do j = 1, this%nyp
+                          do i = 1, this%nxp
+                              ytmp4(i,j,k) = (sqrt(ytmp1(i,j,k))*this%dxs(i) + sqrt(ytmp2(i,j,k))*this%dys(j) + &
+                                  sqrt(ytmp3(i,j,k))*this%dzs(k)) / ( sqrt(ytmp1(i,j,k)+ytmp2(i,j,k)+ytmp3(i,j,k)) + real(1.0D-32,rkind) )
+                          end do
+                       end do
+                    end do
 
-                    diffstar = this%Cdiff*ytmp6*abs(diffstar) ! CD part of diff
-
-                    ytmp4 = (sqrt(ytmp1)*this%dx + sqrt(ytmp2)*this%dy + sqrt(ytmp3)*this%dz) &
-                                    / ( sqrt(ytmp1+ytmp2+ytmp3) + real(1.0D-32,rkind) ) ! grid scale
-                    ytmp5 = this%CY*ytmp6*( half*(abs(this%Ys(:,:,:,i))-one + abs(this%Ys(:,:,:,i)-one)) )*ytmp4 ! CY part of diff
+                    ytmp5 = this%CY*ytmp6*( half*(abs(this%Ys(:,:,:,p))-one + abs(this%Ys(:,:,:,p)-one)) )*ytmp4 ! CY part of diff
 
                     diffstar = max(diffstar, ytmp5) ! Take max of both terms instead of add to minimize the dissipation
 
@@ -1745,7 +1863,7 @@ contains
                     call this%filter(diffstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
 
                     ! Add to physical diffusivity
-                    this%diff(:,:,:,i) = this%diff(:,:,:,i) + diffstar
+                    this%diff(:,:,:,p) = this%diff(:,:,:,p) + diffstar
                 end do
             end if
         end if

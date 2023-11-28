@@ -1,6 +1,6 @@
 subroutine init_smagorinsky(this)
    class(sgs_cgrid), intent(inout) :: this
-   real(rkind) :: deltaLES
+   !real(rkind) :: deltaLES
 
    ! Set the type of mnodel constant (default is wall function). 
    ! Can be reset to true via dynamic procedure initialization, 
@@ -48,7 +48,5 @@ subroutine get_smagorinsky_kernel(this, modS_sq, nusgs)
 
    nusgs = sqrt(modS_sq) 
    nusgs = sqrt(modS_sq) * (this%deltaLES**2)
-
-
 
 end subroutine
