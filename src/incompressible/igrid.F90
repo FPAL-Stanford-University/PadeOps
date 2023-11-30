@@ -365,6 +365,7 @@ module IncompressibleGrid
             procedure, private :: addForcedStratification
             procedure, private :: dumpRestartFile
             procedure, private :: readRestartFile
+            procedure, private :: readVizForRestart
             procedure, private :: compute_z_mean 
             procedure, private :: compute_deltaT
             procedure, private :: dump_pointProbes
@@ -443,6 +444,7 @@ contains
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0, moistureFactor = 0.61_rkind
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false. 
+        logical :: restartFromViz = .false.
         logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical :: addExtraSourceTerm = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
@@ -488,7 +490,7 @@ contains
         integer :: nxS = 100, nyS = 100, nzS = 100
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
-                        useRestartFile, restartFile_TID, restartFile_RID, CviscDT, nstepConstDt, &
+                        useRestartFile, restartFromViz, restartFile_TID, restartFile_RID, CviscDT, nstepConstDt, &
                         restartFromDifferentGrid, nxS, nyS, nzS
         namelist /IO/ vizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
@@ -824,6 +826,10 @@ contains
            call this%readRestartFile(restartfile_TID, restartfile_RID, &
              this%u, this%v, this%w, this%T, this%gpC, this%gpE)
            this%step = restartfile_TID
+       else if (restartFromViz) then
+           call this%readVizForRestart(restartfile_TID,restartfile_RID, &
+             this%u, this%v, this%w, this%wC, this%T, this%gpC)
+           this%step = restartfile_TID
        else 
            call initfields_wallM(this%gpC, this%gpE, inputfile, this%mesh, this%PfieldsC, this%PfieldsE)! <-- this procedure is part of user defined HOOKS
            this%step = 0
@@ -981,7 +987,7 @@ contains
             ! Compute nSGS (or tau_ij for non eddy viscosity models) for initialization data dump
             ! if restarting the simulation. Otherwise, the nSGS file at the
             ! restart TID will be overwritten with zeros
-            if (useRestartFile) then
+            if (useRestartFile .or. restartFromViz) then
                 call this%sgsModel%getTauSGS(this%duidxjC, this%duidxjE, this%uhat, &
                     this%vhat, this%whatC, this%That, this%u, this%v, this%wC, this%T, &
                     this%newTimeStep, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdxE, &
@@ -1328,7 +1334,7 @@ contains
            allocate(this%spectForceLayer)
            call this%spectForceLayer%init(inputfile,this%spectC,this%spectE,&
              this%mesh,this%zE,this%gpC,this%gpE, this%Pade6opZ,this%outputdir)
-           if (useRestartFile) then ! Compute the forcing so we don't dump zeros during initialization data dump
+           if (useRestartFile .or. restartFromViz) then ! Compute the forcing so we don't dump zeros during initialization data dump
                call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
                  this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
                  this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
@@ -1462,7 +1468,7 @@ contains
        this%DumpThisStep = .false. 
        if (this%vizDump_Schedule == 1) then
            this%deltaT_dump = deltaT_dump
-           if (useRestartFile) then
+           if (useRestartFile .or. restartFromViz) then
                this%t_NextDump = this%tsim - mod(this%tsim,deltaT_dump) + deltaT_dump
            else
                this%t_NextDump = this%tsim + deltaT_dump
@@ -1972,7 +1978,7 @@ contains
 
    end subroutine
 
-    subroutine reinit(this,tid_reinit)
+    subroutine reinit(this,tid_reinit,restartFromViz)
         ! Re-initialize igrid with new data from a fresh restart file (Different
         ! from the one read during init). Assumes the same problem size so no
         ! arrays need to be deallocated/reallocated and assumes all parameters
@@ -1981,11 +1987,21 @@ contains
 
         class(igrid), intent(inout), target :: this       
         integer, intent(in) :: tid_reinit
+        logical, intent(in), optional :: restartFromViz
+        logical :: restartFromVisualization
         integer :: ierr 
 
+        restartFromVisualization = .false.
+        if (present(restartFromViz)) restartFromVisualization = restartFromViz
+        
        ! STEP 7: INITIALIZE THE FIELDS
-       call this%readRestartFile(tid_reinit, this%runID, this%u, this%v, &
-         this%w, this%T, this%gpC, this%gpE)
+       if (restartFromVisualization) then
+           call this%readVizForRestart(tid_reinit, this%runID, &
+             this%u, this%v, this%w, this%wC, this%T, this%gpC)
+       else
+         call this%readRestartFile(tid_reinit, this%runID, this%u, this%v, &
+           this%w, this%T, this%gpC, this%gpE)
+       end if
        this%step = tid_reinit
        this%newTimeStep = .true.
    
@@ -2000,6 +2016,7 @@ contains
        ! Pressure projection
        call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
        call this%padepoiss%PressureProjection(this%uhat,this%vhat,this%what)
+       call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
 
        ! Take it back to physical fields
        call this%spectC%ifft(this%uhat,this%u)
@@ -2014,11 +2031,19 @@ contains
        call this%compute_duidxj()
        if (this%isStratified) call this%compute_dTdxi()
 
+       ! Get tauij_SGS
+       call this%sgsModel%getTauSGS(this%duidxjC, this%duidxjE, this%uhat, &
+           this%vhat, this%whatC, this%That, this%u, this%v, this%wC, this%T, &
+           this%newTimeStep, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdxE, &
+           this%dTdyE, this%dTdzE)
+
        ! Force Layer
        if (this%localizedForceLayer == 1) then
            call this%forceLayer%reinit(this%runID,tid_reinit,this%cbuffxC,this%cbuffxE)
        elseif (this%localizedForceLayer == 2) then
-           call gracefulExit('Reinitializing spectral force layer has not been implemented -- igrid.F90',ierr) 
+           call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
+             this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
+             this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
        end if 
       
        ! STEP 28: Compute the timestep

@@ -576,6 +576,60 @@
 
    end subroutine
 
+   subroutine readVizForRestart(this, tid, rid, u, v, w, wC, T, gpC)
+       use decomp_2d_io
+       use mpi
+       use exits, only: message
+       use kind_parameters, only: mpirkind
+       class(igrid), intent(inout) :: this
+       integer, intent(in) :: tid, rid
+       real(rkind), dimension(:,:,:), intent(inout) :: u, v, w, wC, T
+       class(decomp_info), intent(in) :: gpC
+       character(len=clen) :: tempname, fname
+       integer :: ierr, fid 
+
+       write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid, "_uVel_t",tid,".out"
+       fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+       call decomp_2d_read_one(1,u,fname, gpC)
+
+       write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid, "_vVel_t",tid,".out"
+       fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+       call decomp_2d_read_one(1,v,fname, gpC)
+
+       write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid, "_wVel_t",tid,".out"
+       fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+       call decomp_2d_read_one(1,wC,fname, gpC)
+       call transpose_x_to_y(this%wC, this%rbuffyC(:,:,:,1), gpC)
+       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), gpC)
+       call this%Pade6opZ%interpz_C2E(this%rbuffzC(:,:,:,1), this%wC, wBC_bottom, wBC_top)
+
+       if (this%isStratified) then
+           write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid,"_potT_t",tid,".out"
+           fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+           call decomp_2d_read_one(1,T,fname, gpC)
+       end if
+       
+       if (nrank == 0) then
+         write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid, "_info_t",tid,".out"
+         fname = this%inputdir(:len_trim(this%inputdir))//"/"//trim(tempname)
+         open(unit=10,file=fname,access='sequential',form='formatted')
+         read (10, *)  this%tsim
+         close(10)
+         call message(0, "Reading visualization data dumped at tSIM=", this%tsim)
+       end if 
+
+       call mpi_barrier(mpi_comm_world, ierr)
+       call mpi_bcast(this%tsim,1,mpirkind,0,mpi_comm_world,ierr)
+       call mpi_barrier(mpi_comm_world, ierr)
+       call message("============== RESTARTING FROM VISUALIZATION  ============")
+       call message(0, "Simulation Time at restart:", this%tsim)
+       call message_min_max(0,"u bounds:",p_minval(minval(u)),p_maxval(maxval(u)))
+       call message_min_max(0,"v bounds:",p_minval(minval(v)),p_maxval(maxval(v)))
+       call message_min_max(0,"w bounds:",p_minval(minval(w)),p_maxval(maxval(w)))
+       call message("=================================== ======================")
+
+   end subroutine
+
    subroutine initialize_hdf5_io(this)
        class(igrid), intent(inout) :: this
        character(len=5) :: filename_prefix

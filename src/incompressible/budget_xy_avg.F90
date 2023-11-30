@@ -23,7 +23,6 @@ module budgets_xy_avg_mod
    ! BUDGET 3: TKE budget (Budget 0, 1 and 2 also included)
    ! BUDGET 4: RS budgets (Budget 0, 1, 2, and 4 also included)
 
-
    ! BUDGET_0 term indices:
    ! 1:  <U> 
    ! 2:  <V>
@@ -168,6 +167,7 @@ module budgets_xy_avg_mod
         procedure           :: destroy
         procedure           :: ResetBudget
         procedure           :: DoBudgets
+        procedure, private  :: append_time_info
         procedure, private  :: updateBudget
         procedure, private  :: DumpBudget
         procedure, private  :: restartBudget
@@ -544,6 +544,9 @@ contains
         if (this%budgetType>1) call this%AssembleBudget2()
         
         if (nrank == 0) then
+            ! Append time info
+            call this%append_time_info()
+
             ! Budget 0: 
             write(tempname,"(A3,I2.2,A8,A2,I6.6,A2,I6.6,A4)") "Run",this%run_id,"_budget0","_t",this%igrid_sim%step,"_n",this%counter,".stt"
             fname = this%budgets_Dir(:len_trim(this%budgets_Dir))//"/"//trim(tempname)
@@ -615,6 +618,7 @@ contains
             ! Dissipation
             this%budget_3s(:,5)  = this%budget_3s(:,5)  - this%budget_0s(:,14)*this%dUdz - this%budget_0s(:,15)*this%dVdz
             this%budget_3s(:,10) = this%budget_3s(:,10) - this%budget_0s(:,22)*this%dUdz - this%budget_0s(:,23)*this%dVdz
+
             ! Transport 
             ! First get time average
             this%budget_3s(:,4) = this%budget_3s(:,4) - this%budget_1s(:,3)*this%U_mean - this%budget_1s(:,9)*this%V_mean 
@@ -639,7 +643,7 @@ contains
 
             if (this%igrid_sim%isStratified) then
               ! 12. Turbulent transport of buoyancy variance
-              this%budget_3s(:,12) = this%budget_3s(:,12) - this%budget_2(:,12)
+              this%budget_3s(:,12) = -(this%budget_3s(:,12) + this%budget_2(:,12))
 
               ! 13. Diffusive transport (molecular)
               this%budget_3s(:,13) = this%budget_3s(:,13) - this%budget_2(:,13) - this%budget_3s(:,15)
@@ -2433,6 +2437,27 @@ contains
         this%igrid_sim%rbuffxC(:,:,:,4) = this%igrid_sim%u*this%igrid_sim%rbuffxC(:,:,:,3)
         call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,4),this%tmp_meanC)
         this%budget_4_11(:,9) = this%budget_4_11(:,9) + 2.d0*this%tmp_meanC
+
+    end subroutine
+    
+    subroutine append_time_info(this)
+        class(budgets_xy_avg), intent(inout) :: this
+        character(len=clen) :: tempname, fname 
+        logical :: exists 
+
+        write(tempname,"(A3,I2.2,A16)") "Run",this%igrid_sim%runID, "_budget_info.smm"
+        fname = this%budgets_dir(:len_trim(this%budgets_dir))//"/"//trim(tempname)
+
+        if (nrank == 0) then
+            inquire(file=fname, exist=exists)
+            if (exists) then
+                open(12, file=fname, status="old", position="append", action="write")
+            else
+                open(12, file=fname, status="new", action="write")
+            end if
+            write(12,*) this%igrid_sim%tsim, this%igrid_sim%step
+            close(12)
+        end if 
 
     end subroutine
 
