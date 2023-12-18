@@ -5,6 +5,7 @@ module IncompressibleGrid
     use gridtools, only: alloc_buffs, destroy_buffs
     use igrid_hooks!, only: setDirichletBC_Temp, set_Reference_Temperature, meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
     use decomp_2d
+    use decomp_2d_io
     use StaggOpsMod, only: staggOps  
     use exits, only: GracefulExit, message, check_exit, message_min_max
     use spectralMod, only: spectral  
@@ -416,6 +417,8 @@ module IncompressibleGrid
             procedure, private :: advance_RK4_all_stages
             procedure          :: advance_RK4_Stage 
             procedure          :: getMaxOddballModes 
+            procedure, private :: readVizFile
+            procedure, private :: vizFileExists 
    end type
 
 contains 
@@ -988,16 +991,19 @@ contains
             ! if restarting the simulation. Otherwise, the nSGS file at the
             ! restart TID will be overwritten with zeros
             if (useRestartFile .or. restartFromViz) then
-                call this%sgsModel%getTauSGS(this%duidxjC, this%duidxjE, this%uhat, &
-                    this%vhat, this%whatC, this%That, this%u, this%v, this%wC, this%T, &
-                    this%newTimeStep, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdxE, &
-                    this%dTdyE, this%dTdzE)
+                !if (vizFileExists('nSGS',this%tid)) then
+                !    call this%
+                !else
+                    call this%sgsModel%getTauSGS(this%duidxjC, this%duidxjE, this%uhat, &
+                        this%vhat, this%whatC, this%That, this%u, this%v, this%wC, this%T, &
+                        this%newTimeStep, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdxE, &
+                        this%dTdyE, this%dTdzE)
+                !end if
             end if
 
             call message(0,"SGS model initialized successfully")
         end if 
         this%max_nuSGS = zero
-
 
         ! STEP 12: Set Sponge Layer
         if (this%useSponge) then
@@ -1335,9 +1341,28 @@ contains
            call this%spectForceLayer%init(inputfile,this%spectC,this%spectE,&
              this%mesh,this%zE,this%gpC,this%gpE, this%Pade6opZ,this%outputdir)
            if (useRestartFile .or. restartFromViz) then ! Compute the forcing so we don't dump zeros during initialization data dump
-               call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
-                 this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
-                 this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
+               if (this%vizFileExists('frcx',this%step)) then
+                   call this%readVizFile('frcx',this%step,this%spectForceLayer%fx)
+                   call this%readVizFile('frcy',this%step,this%spectForceLayer%fy)
+                   call this%readVizFile('frcz',this%step,this%rbuffxC(:,:,:,1))
+
+                   call transpose_x_to_y(this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
+                   call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+                   call this%Pade6opZ%interpz_C2E(this%rbuffzC(:,:,:,1), this%spectForceLayer%fz,0,0) 
+
+                   call this%spectC%fft(this%spectForceLayer%fx,this%spectForceLayer%fxhat)
+                   call this%spectC%fft(this%spectForceLayer%fy,this%spectForceLayer%fyhat)
+                   call this%spectE%fft(this%spectForceLayer%fz,this%spectForceLayer%fzhat)
+
+               else
+                   ! BEGIN DEBUG
+                   call assert(.false.,'Force files do not exist')
+                   ! END DEBUG
+
+                   call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
+                     this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
+                     this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
+               end if
            end if
        end if
        
@@ -2041,9 +2066,27 @@ contains
        if (this%localizedForceLayer == 1) then
            call this%forceLayer%reinit(this%runID,tid_reinit,this%cbuffxC,this%cbuffxE)
        elseif (this%localizedForceLayer == 2) then
-           call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
-             this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
-             this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
+           if ((restartFromViz) .and. this%vizFileExists('frcx',this%step)) then
+               call this%readVizFile('frcx',this%step,this%spectForceLayer%fx)
+               call this%readVizFile('frcy',this%step,this%spectForceLayer%fy)
+               call this%readVizFile('frcz',this%step,this%rbuffxC(:,:,:,1))
+
+               call transpose_x_to_y(this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
+               call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+               call this%Pade6opZ%interpz_C2E(this%rbuffzC(:,:,:,1), this%spectForceLayer%fz,0,0) 
+
+               call this%spectC%fft(this%spectForceLayer%fx,this%spectForceLayer%fxhat)
+               call this%spectC%fft(this%spectForceLayer%fy,this%spectForceLayer%fyhat)
+               call this%spectE%fft(this%spectForceLayer%fz,this%spectForceLayer%fzhat)
+           else
+               ! BEGIN DEBUG
+               call assert(.false.,'Force files do not exist')
+               ! END DEBUG
+
+               call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
+                 this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
+                 this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
+           end if
        end if 
       
        ! STEP 28: Compute the timestep

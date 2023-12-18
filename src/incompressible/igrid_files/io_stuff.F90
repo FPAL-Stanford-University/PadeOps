@@ -523,7 +523,6 @@
    end subroutine
 
    subroutine readRestartFile(this, tid, rid, u, v, w, T, gpC, gpE)
-       use decomp_2d_io
        use mpi
        use exits, only: message
        use kind_parameters, only: mpirkind
@@ -959,4 +958,29 @@
            end do 
        end if
        
+   end subroutine
+
+   function vizFileExists(this,varname,tid) result(res)
+       class(igrid), intent(in) :: this
+       character(len=4), intent(in) :: varname
+       integer, intent(in) :: tid
+       character(len=clen) :: fname
+       logical :: res
+
+       write(fname,"(A,I2.2,A1,A4,A2,I6.6,A4)")&
+         trim(this%inputdir)//'/Run',this%runID,'_',varname,'_t',tid,'.out'
+       inquire( file=trim(fname), exist=res )
+   end function
+
+   subroutine readVizFile(this,varname,tid,field)
+       class(igrid), intent(in) :: this
+       character(len=4), intent(in) :: varname
+       integer, intent(in) :: tid
+       real(rkind), dimension(:,:,:), intent(inout) :: field
+       character(len=clen) :: fname
+
+       write(fname,"(A,I2.2,A1,A4,A2,I6.6,A4)")&
+         trim(this%inputdir)//'/Run',this%runID,'_',varname,'_t',tid,'.out'
+       call decomp_2d_read_one(1,field,trim(fname),this%gpC)
+
    end subroutine

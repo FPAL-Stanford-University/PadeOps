@@ -71,13 +71,10 @@ program shearlessMixing_Bodart_ddt_tke
 
         call message(1,"TID",tid)
 
-        ! Time advance to u^{n+2}
+        ! Time advance to u^{n+1}
         call SM%timeAdvance(dtForce)
 
         ! Compute bugdet RHS
-
-        ! Take net step
-        call SM%timeAdvance(dtForce)
 
         ! Compute ddt(Total KE) with central difference
         SM%rbuffxC(:,:,:,1) = 0.5*(u*u + v*v + w*w)
@@ -86,7 +83,7 @@ program shearlessMixing_Bodart_ddt_tke
         ! Take x-y average
         call get_xy_average(SM%rbuffxC(:,:,:,1), SM, kn)
         call get_xy_average(SM%rbuffxC(:,:,:,2), SM, knp2)
-        dkdt = (knp2 - kn)/(2.d0*dtForce)
+        dkdt = (knp2 - kn)/(dtForce)
         call message_min_max(2,"dkdt bounds",p_maxval(maxval(abs(dkdt))),p_minval(minval(abs(dkdt))))
 
         ! Compute ddt(MKE)
@@ -98,7 +95,7 @@ program shearlessMixing_Bodart_ddt_tke
         call get_xy_average(SM%wC,SM,wavg_np2)
 
         if (SM%isStratified) then
-          SM%rbuffxC(:,:,:,1) = (0.5*(SM%T*SM%T) - 0.5*(T*T))/(2.d0*dtForce)
+          SM%rbuffxC(:,:,:,1) = (0.5*(SM%T*SM%T) - 0.5*(T*T))/(dtForce)
           call get_xy_average(SM%rbuffxC(:,:,:,1), SM, dTTdt)
           call message_min_max(2,"dTTdt bounds",p_maxval(maxval(abs(dTTdt))),p_minval(minval(abs(dTTdt))))
           call get_xy_average(T,SM,Tavg_n)
@@ -107,7 +104,7 @@ program shearlessMixing_Bodart_ddt_tke
 
         if (nrank == 0) then
             ddt_MKE = (0.5*(uavg_np2*uavg_np2 + vavg_np2*vavg_np2 + wavg_np2*wavg_np2) - &
-              0.5*(uavg_n*uavg_n + vavg_n*vavg_n + wavg_n*wavg_n))/(2.d0*dtForce)
+              0.5*(uavg_n*uavg_n + vavg_n*vavg_n + wavg_n*wavg_n))/(dtForce)
 
             ! Subtract ddt(MKE) to get ddt(TKE)
             dkdt = dkdt - ddt_MKE
@@ -118,7 +115,7 @@ program shearlessMixing_Bodart_ddt_tke
             call write_1d_ascii(dkdt,trim(fname))
 
             if (SM%isStratified) then
-              ddt_MPE = (0.5*Tavg_np2*Tavg_np2 - 0.5*Tavg_n*Tavg_n)/(2.d0*dtForce)
+              ddt_MPE = (0.5*Tavg_np2*Tavg_np2 - 0.5*Tavg_n*Tavg_n)/(dtForce)
               dTTdt = dTTdt - ddt_MPE
               write(tempname,"(A3,I2.2,A8,I6.6,A4)")"Run",SM%runID,"_dTTdt_t",tid,".stt"
               fname = trim(outputdir)//'/'//trim(tempname)
