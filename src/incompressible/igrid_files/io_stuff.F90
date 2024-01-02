@@ -129,14 +129,21 @@
 
        
      if (nrank == 0) then
-           write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_","info","_t",this%step,".out"
-           fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-           OPEN(UNIT=10, FILE=trim(fname))
+           write(tempname,"(a3,i2.2,a1,a4,a2,i6.6,a4)") "Run",this%runid, "_","info","_t",this%step,".out"
+           fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
+           open(unit=10, file=trim(fname))
            write(10,"(100g17.9)") this%tsim
            write(10,"(100g17.9)") real(this%nx,rkind)
            write(10,"(100g17.9)") real(this%ny,rkind)
            write(10,"(100g17.9)") real(this%nz,rkind)
            close(10)
+
+           if (this%localizedForceLayer == 2) then
+               write(tempname,"(A3,I2.2,A1,A10,A2,I6.6,A4)") "Run",this%runID, "_","force_info","_t",this%step,".out"
+               fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+               write(10,"(100g17.9)") this%spectForceLayer%ampFact
+               close(10)
+           end if
        end if 
    end subroutine
 

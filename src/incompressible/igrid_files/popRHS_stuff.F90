@@ -62,7 +62,8 @@
 
            if (this%isStratified .or. this%initspinup) then
               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
-                                         this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
+                                         this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr, &
+                                         q1 = this%q1_T, q2 = this%q2_T, q3 = this%q3_T)
            end if
        else
            ! IMPORTANT: If SGS model is used, the viscous term is evaluated

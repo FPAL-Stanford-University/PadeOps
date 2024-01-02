@@ -57,6 +57,7 @@ module PadeDerOps
       procedure          :: ddz_1d_C2C
       procedure          :: ddz_1d_C2E
       procedure          :: interp_1d_E2C
+      procedure          :: d2dz2_C2C_1d
   end type
 
 contains
@@ -407,6 +408,52 @@ subroutine d2dz2_E2E_cmplx(this,input,output,bot,top)
          end select
       end select
    end if 
+
+end subroutine 
+
+subroutine d2dz2_C2C_1d(this,input,output,bot,top)
+   use fortran_assert, only: assert
+   class(Pade6stagg), intent(in) :: this
+   real(rkind), dimension(1,1,this%gp%zsz(3)), intent(in)  :: input
+   real(rkind), dimension(1,1,this%gp%zsz(3)), intent(out) :: output
+   integer, intent(in) :: bot, top
+
+   call assert(.not. this%isPeriodic,'d2dz2_C2C_1d only supports cd06')
+   call assert(this%scheme == cd06,'d2dz2_C2C_1d only supports cd06')
+   select case (bot)
+   case(-1) 
+      if     (top == -1) then
+         call this%derOO%d2dz2_C2C(input,output,1,1)
+      elseif (top ==  1) then
+         call this%derEO%d2dz2_C2C(input,output,1,1)
+      elseif (top == 0) then 
+         call this%derSO%d2dz2_C2C(input,output,1,1)
+      else
+         output = 0.d0
+      end if
+   case(1)  ! bottom = even
+      if     (top == -1) then
+         call this%derOE%d2dz2_C2C(input,output,1,1)
+      elseif (top ==  1) then
+         call this%derEE%d2dz2_C2C(input,output,1,1)
+      elseif (top == 0) then
+         call this%derSE%d2dz2_C2C(input,output,1,1)
+      else
+         output = 0.d0
+      end if
+   case(0) ! bottom = sides
+     if     (top == -1) then
+         call this%derOS%d2dz2_C2C(input,output,1,1)
+     elseif (top == 1) then
+         call this%derES%d2dz2_C2C(input,output,1,1)
+     elseif (top == 0) then
+         call this%derSS%d2dz2_C2C(input,output,1,1)
+     else
+       output = 0.d0
+     end if
+   case default
+      output = 0.d0
+   end select
 
 end subroutine 
 

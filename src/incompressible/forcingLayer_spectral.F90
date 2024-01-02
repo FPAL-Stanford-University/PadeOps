@@ -261,6 +261,13 @@ module spectralForcingLayerMod
           if (allocated(this%fx)) deallocate(this%fx)
           if (allocated(this%fy)) deallocate(this%fy)
           if (allocated(this%fz)) deallocate(this%fz)
+          if (allocated(this%integralMask)) deallocate(this%integralMask)
+
+          if (associated(this%spectC)) nullify(this%spectC)
+          if (associated(this%spectE)) nullify(this%spectE)
+          if (associated(this%gpC)) nullify(this%gpC)
+          if (associated(this%gpE)) nullify(this%gpE)
+          if (associated(this%Pade6opZ)) nullify(this%Pade6opZ)
 
       end subroutine
 

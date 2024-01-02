@@ -215,6 +215,7 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
         real(rkind), dimension(:,:,:)  , pointer :: kappaSGS, nu_SGS, tau13, tau23, kappa_bounding
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3 
+        real(rkind), dimension(:,:,:), allocatable :: q1_T, q2_T, q3_T
         real(rkind), dimension(:,:,:), allocatable :: fbody_x, fbody_y, fbody_z
         logical                                      :: storeFbody
 
@@ -487,6 +488,9 @@ contains
         real(rkind) :: Lx, Ly
         real(rkind) :: zmin, zmax, DeltaT0
 
+        character(len=clen) :: tempname, fname
+        logical :: exists = .false.
+
         ! Used for restarting from data generated on different resolution mesh.
         ! "S" stands for "S"ource
         logical :: restartFromDifferentGrid = .false.
@@ -742,7 +746,8 @@ contains
        allocate(this%duidxjE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9))
        call this%spectC%alloc_r2c_out(this%duidxjChat,9)
        call this%spectE%alloc_r2c_out(this%duidxjEhat,9)
-       call this%spectE%alloc_r2c_out(this%rhsE,1); call this%spectE%alloc_r2c_out(this%OrhsE,1)
+       call this%spectE%alloc_r2c_out(this%rhsE,1)
+       call this%spectE%alloc_r2c_out(this%OrhsE,1)
        
        this%u => this%PfieldsC(:,:,:,1) ; this%v => this%PfieldsC(:,:,:,2) ; this%wC => this%PfieldsC(:,:,:,3) 
        this%w => this%PfieldsE(:,:,:,1) ; this%uE => this%PfieldsE(:,:,:,2) ; this%vE => this%PfieldsE(:,:,:,3) 
@@ -775,6 +780,9 @@ contains
        allocate(this%rbuffyC(this%gpC%ysz(1),this%gpC%ysz(2),this%gpC%ysz(3),2))
        allocate(this%rbuffzC(this%gpC%zsz(1),this%gpC%zsz(2),this%gpC%zsz(3),4))
 
+       allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
+       allocate(this%rbuffzE(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),4))
+
        if (this%localizedForceLayer == 1) then
          allocate(this%cbuffxC(this%sp_gpC%xsz(1),this%sp_gpC%xsz(2),this%sp_gpC%xsz(3)))
          allocate(this%cbuffxE(this%sp_gpE%xsz(1),this%sp_gpE%xsz(2),this%sp_gpE%xsz(3)))
@@ -782,8 +790,7 @@ contains
        else
          allocate(this%rbuffxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
        end if
-       allocate(this%rbuffyE(this%gpE%ysz(1),this%gpE%ysz(2),this%gpE%ysz(3),2))
-       allocate(this%rbuffzE(this%gpE%zsz(1),this%gpE%zsz(2),this%gpE%zsz(3),4))
+
        if (.not.this%isinviscid) then
            allocate(this%d2udz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
            allocate(this%d2vdz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
@@ -792,11 +799,18 @@ contains
               allocate(this%d2Tdz2hatC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
            end if 
        end if 
+
        this%nxZ = size(this%cbuffzE,1); this%nyZ = size(this%cbuffzE,2)
        allocate(this%fbody_x(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
        allocate(this%fbody_y(this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3)))
        allocate(this%fbody_z(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3)))
        this%storeFbody = .true. ! Cant think of a case where this will be false 
+
+       if (this%isStratified) then
+           allocate(this%q1_T(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+           allocate(this%q2_T(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+           allocate(this%q3_T(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+       end if
 
        ! Generate mesh (edge-based) -- zE is needed for all cases, but xE
        ! and yE depending on the problems
@@ -972,8 +986,8 @@ contains
        end if  
 
         ! STEP 11: Initialize SGS model
-        allocate(this%SGSmodel)
         if (this%useSGS) then
+            allocate(this%SGSmodel)
             if ((this%initSpinup) .or. (this%useScalars) .or. (this%isStratified)) then
                sgsmod_stratified = .true. 
             else
@@ -1139,7 +1153,6 @@ contains
 
        ! STEP 13: Set visualization planes for io
        call set_planes_io(this%xplanes, this%yplanes, this%zplanes)
-
 
        ! STEP 14a : Probes
        if (this%useProbes) then
@@ -1342,23 +1355,47 @@ contains
              this%mesh,this%zE,this%gpC,this%gpE, this%Pade6opZ,this%outputdir)
            if (useRestartFile .or. restartFromViz) then ! Compute the forcing so we don't dump zeros during initialization data dump
                if (this%vizFileExists('frcx',this%step)) then
-                   call this%readVizFile('frcx',this%step,this%spectForceLayer%fx)
-                   call this%readVizFile('frcy',this%step,this%spectForceLayer%fy)
-                   call this%readVizFile('frcz',this%step,this%rbuffxC(:,:,:,1))
+                   ! The force data written to disk is fx=ampFact*fx so we need
+                   ! to divide by ampFact for run-time
+                   write(tempname,"(A3,I2.2,A1,A10,A2,I6.6,A4)") "Run",this%runID, "_","force_info","_t",this%step,".out"
+                   fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                   inquire(file=fname,exist=exists)
 
-                   call transpose_x_to_y(this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
-                   call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
-                   call this%Pade6opZ%interpz_C2E(this%rbuffzC(:,:,:,1), this%spectForceLayer%fz,0,0) 
+                   if (exists) then
+                       ! Read in the force "info" file which has the amplification
+                       ! factor
+                       if (nrank == 0) then
+                           open(unit=10,file=trim(fname),status="old",action="read")
+                           read(10,"(100g17.9)") this%spectForceLayer%ampFact
+                           close(10)
+                       end if
+                       call MPI_Bcast(this%spectForceLayer%ampFact,1,mpirkind,0,MPI_COMM_WORLD,ierr)
 
-                   call this%spectC%fft(this%spectForceLayer%fx,this%spectForceLayer%fxhat)
-                   call this%spectC%fft(this%spectForceLayer%fy,this%spectForceLayer%fyhat)
-                   call this%spectE%fft(this%spectForceLayer%fz,this%spectForceLayer%fzhat)
+                       call this%readVizFile('frcx',this%step,this%spectForceLayer%fx)
+                       call this%readVizFile('frcy',this%step,this%spectForceLayer%fy)
+                       call this%readVizFile('frcz',this%step,this%rbuffxC(:,:,:,1))
 
+                       call transpose_x_to_y(this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), this%gpC)
+                       call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+                       call this%Pade6opZ%interpz_C2E(this%rbuffzC(:,:,:,1),this%rbuffzE(:,:,:,1),0,0) 
+                       call transpose_z_to_y(this%rbuffzE(:,:,:,1),this%rbuffyE(:,:,:,1),this%gpE)
+                       call transpose_y_to_x(this%rbuffyE(:,:,:,1),this%spectForceLayer%fz,this%gpE)
+
+
+                       ! Divide the force read from disk by the ampFact
+                       this%spectForceLayer%fx = this%spectForceLayer%fx/this%spectForceLayer%ampFact
+                       this%spectForceLayer%fy = this%spectForceLayer%fy/this%spectForceLayer%ampFact
+                       this%spectForceLayer%fz = this%spectForceLayer%fz/this%spectForceLayer%ampFact
+
+                       call this%spectC%fft(this%spectForceLayer%fx,this%spectForceLayer%fxhat)
+                       call this%spectC%fft(this%spectForceLayer%fy,this%spectForceLayer%fyhat)
+                       call this%spectE%fft(this%spectForceLayer%fz,this%spectForceLayer%fzhat)
+                   else
+                       call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
+                         this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
+                         this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
+                   end if
                else
-                   ! BEGIN DEBUG
-                   call assert(.false.,'Force files do not exist')
-                   ! END DEBUG
-
                    call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
                      this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
                      this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
@@ -1631,28 +1668,50 @@ contains
          call this%forceLayer%destroy()
          deallocate(this%forceLayer)
        elseif (this%localizedForceLayer == 2) then
-         call this%spectForceLayer%destroy()
-         deallocate(this%spectForceLayer)
+         if (allocated(this%spectForceLayer)) then
+             call this%spectForceLayer%destroy()
+             deallocate(this%spectForceLayer)
+         end if
        end if
        if (this%timeAvgFullFields) then
            call this%finalize_stats3d()
        else
        !    call this%finalize_stats()
        end if 
-       nullify(this%u, this%uhat, this%v, this%vhat, this%w, this%what, this%wC)
-       deallocate(this%PfieldsC, this%PfieldsE, this%SfieldsC, this%SfieldsE)
-       nullify(this%u_rhs, this%v_rhs, this%w_rhs)
-       deallocate(this%rhsC, this%rhsE, this%OrhsC, this%OrhsE)
-       deallocate(this%duidxjC, this%duidxjChat)
-       call this%spectC%destroy()
-       call this%spectE%destroy()
-       deallocate(this%spectC, this%spectE)
-       deallocate(this%zE)
-       nullify(this%nu_SGS, this%c_SGS, this%tauSGS_ij)
+
+       if (associated(this%c_SGS)) nullify(this%c_SGS)
+       if (associated(this%nu_SGS)) nullify(this%nu_SGS)
+       if (associated(this%tauSGS_ij)) nullify(this%tauSGS_ij)
+       if (associated(this%tau13)) nullify(this%tau13)
+       if (associated(this%tau23)) nullify(this%tau23)
+       if (associated(this%q1)) nullify(this%q1)
+       if (associated(this%q2)) nullify(this%q2)
+       if (associated(this%q3)) nullify(this%q3)
+       if (associated(this%kappaSGS)) nullify(this%kappaSGS)
        if (this%useSGS) then
           call this%sgsModel%destroy()
           deallocate(this%sgsModel)
        end if
+
+       nullify(this%u, this%uhat, this%v, this%vhat, this%w, this%what, this%wC)
+       if (allocated(this%PfieldsC)) deallocate(this%PfieldsC)
+       if (allocated(this%PfieldsE)) deallocate(this%PfieldsE)
+       if (allocated(this%SfieldsC)) deallocate(this%SfieldsC)
+       if (allocated(this%SfieldsE)) deallocate(this%SfieldsE)
+       !deallocate(this%PfieldsC, this%PfieldsE, this%SfieldsC, this%SfieldsE)
+       nullify(this%u_rhs, this%v_rhs, this%w_rhs)
+       deallocate(this%rhsC, this%rhsE, this%OrhsC, this%OrhsE)
+       deallocate(this%duidxjC, this%duidxjChat)
+
+       call this%spectC%destroy()
+       call this%spectE%destroy()
+       deallocate(this%spectC, this%spectE)
+       deallocate(this%zE)
+
+       if (allocated(this%q1_T)) deallocate(this%q1_T)
+       if (allocated(this%q2_T)) deallocate(this%q2_T)
+       if (allocated(this%q3_T)) deallocate(this%q3_T)
+
 
        if (allocated(this%scalars)) then
            do idx = 1,this%n_scalars
@@ -2080,7 +2139,7 @@ contains
                call this%spectE%fft(this%spectForceLayer%fz,this%spectForceLayer%fzhat)
            else
                ! BEGIN DEBUG
-               call assert(.false.,'Force files do not exist')
+               !call assert(.false.,'Force files do not exist')
                ! END DEBUG
 
                call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&

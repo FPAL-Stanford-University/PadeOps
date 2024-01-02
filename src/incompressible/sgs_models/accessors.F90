@@ -165,3 +165,38 @@ subroutine populate_tauij_E_to_C(this)
     this%uw_surf = uwglob(1)*this%meanfact
     this%vw_surf = uwglob(2)*this%meanfact
 end subroutine 
+
+subroutine get_tauijC(this,tau11,tau12,tau13,tau22,tau23,tau33)
+  class(sgs_igrid), intent(inout) :: this
+  real(rkind), dimension(:,:,:), intent(inout) :: tau11, tau12, tau13, tau22, tau23, tau33
+  real(rkind) :: TwobyRe
+
+   TwobyRe = 2.d0/this%Re
+   if (this%isInviscid) then
+      tau11 = this%tau_11 
+      tau12 = this%tau_12 
+      tau13 = this%tau_13C
+      tau22 = this%tau_22 
+      tau23 = this%tau_23C
+      tau33 = this%tau_33 
+   else
+      ! Removed viscous stress 
+      tau11 = this%tau_11  + TwobyRe*this%S_ij_C(:,:,:,1)
+      tau12 = this%tau_12  + TwobyRe*this%S_ij_C(:,:,:,2)
+      tau13 = this%tau_13C + TwobyRe*this%S_ij_C(:,:,:,3)
+      tau22 = this%tau_22  + TwobyRe*this%S_ij_C(:,:,:,4)
+      tau23 = this%tau_23C + TwobyRe*this%S_ij_C(:,:,:,5)
+      tau33 = this%tau_33  + TwobyRe*this%S_ij_C(:,:,:,6)
+   end if 
+
+end subroutine
+
+subroutine getSGSheatFlux(this,q1,q2,q3)
+    class(sgs_igrid), intent(inout) :: this
+    real(rkind), dimension(:,:,:), intent(out) :: q1, q2, q3
+
+    q1 = this%q1C
+    q2 = this%q2C
+    q3 = this%q3E
+
+end subroutine

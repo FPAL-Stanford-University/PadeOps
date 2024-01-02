@@ -25,8 +25,9 @@ module scalar_igridMod
       real(rkind), dimension(:,:,:), allocatable, public :: F
       complex(rkind), dimension(:,:,:), pointer, public :: Fhat
 
-      real(rkind), dimension(:,:,:), allocatable :: d2Fdz2, dFdxC, dFdyC, dFdzC
+      real(rkind), dimension(:,:,:), allocatable, public :: d2Fdz2, dFdxC, dFdyC, dFdzC
       real(rkind), dimension(:,:,:), allocatable :: dfdzE
+      real(rkind), dimension(:,:,:), allocatable, public :: q1, q2, q3
       
       complex(rkind), dimension(:,:,:), allocatable, public :: source_hat
 
@@ -50,7 +51,7 @@ module scalar_igridMod
 
       integer :: RunID, scalar_number
       integer, public :: bc_bottom, bc_top
-      type(sgs_igrid), pointer :: sgsmodel
+      type(sgs_igrid), pointer, public :: sgsmodel
       logical :: useSource, isinviscid, useSGS, usefringe, usedoublefringe
 
       real(rkind) :: lowbound, highbound 
@@ -145,7 +146,8 @@ subroutine populateRHS(this, dt)
 
    if (this%useSGS) then
       call this%sgsmodel%getRHS_SGS_Scalar(this%rhs, this%dFdxC, this%dFdyC, this%dFdzC, this%dFdzE, &
-         this%u, this%v, this%wC, this%F, this%Fhat, this%duidxj, this%TurbPrandtlNum, this%Cy, this%lowbound, this%highbound)
+         this%u, this%v, this%wC, this%F, this%Fhat, this%duidxj, this%TurbPrandtlNum, this%Cy, &
+         this%lowbound, this%highbound, this%q1, this%q2, this%q3)
    end if
 
    if (.not. this%isinviscid) then
@@ -290,6 +292,10 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    allocate(this%dFdyC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    allocate(this%dFdzC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    allocate(this%dFdzE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+
+   allocate(this%q1(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(this%q2(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(this%q3(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
   
    allocate(this%Sfields(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),4))
    allocate(this%rhs_storage(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),2))

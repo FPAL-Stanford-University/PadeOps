@@ -10,12 +10,13 @@ program shearlessMixing
     use temporalhook,       only: doTemporalStuff
     use exits,              only: message
     use budgets_xy_avg_mod, only: budgets_xy_avg
+    use stats_xy_mod,       only: stats_xy
     use timer,              only: tic, toc 
 
     implicit none
 
     type(igrid), allocatable, target :: SM
-    type(budgets_xy_avg) :: budg
+    type(stats_xy) :: stats
     character(len=clen) :: inputfile
     integer :: ierr
     
@@ -28,23 +29,25 @@ program shearlessMixing
     call SM%init(inputfile, .true.)                              
     call SM%start_io(.true.)                                          
     call SM%printDivergence()
-    call budg%init(inputfile,SM)
+    call stats%init(inputfile,SM)
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
     do while (SM%tsim < SM%tstop .and. SM%step < SM%nsteps)
        call tic() 
        call SM%timeAdvance()
-       call budg%doBudgets()
+       call stats%compute_stats()
        call doTemporalStuff(SM) 
        call toc()
     end do
 
     call message("==========================================================")
     call message(0,"Finalizing simulation")
+    call MPI_Barrier(MPI_COMM_WORLD,ierr)
+    call stats%destroy()
     call SM%finalize_io()
-    call budg%destroy()
     call SM%destroy()
+    call MPI_Barrier(MPI_COMM_WORLD,ierr)
     call message(0,"Simulation finalized")
    
     !deallocate(SM)

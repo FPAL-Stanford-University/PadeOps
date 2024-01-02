@@ -172,6 +172,8 @@ module sgsmod_igrid
             procedure          :: usingDynProc
             procedure          :: set_BuoyancyFactor
             procedure          :: populate_tauij_E_to_C 
+            procedure          :: get_tauijC
+            procedure          :: getSGSheatFlux
     end type 
 
 contains
@@ -366,7 +368,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
 
 end subroutine
 
-subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, TurbPrandtlNum, Cy, lowbound, highbound)
+subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, TurbPrandtlNum, Cy, lowbound, highbound, q1, q2, q3)
    class(sgs_igrid), intent(inout), target :: this
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
@@ -375,6 +377,7 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
    real(rkind), intent(in), optional :: TurbPrandtlNum, Cy, lowbound, highbound
+   real(rkind), dimension(:,:,:), intent(inout), optional :: q1, q2, q3
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
@@ -388,6 +391,12 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
 
    ! First get qj's 
    call this%getQjSGS(dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
+
+   if (present(q1)) then
+       q1 = this%q1C
+       q2 = this%q2C
+       q3 = this%q3E
+   end if
 
    ! ddx(q1)
    call this%spectC%fft(this%q1C, cbuffy1)
