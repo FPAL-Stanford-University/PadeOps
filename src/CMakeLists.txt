@@ -8,6 +8,15 @@ file(GLOB solid_source_files solid/*.F90)
 file(GLOB poisson_source_files incompressible/poisson/*.F90)
 file(GLOB incompressible_source_files incompressible/*.F90)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "$ENV{FORTRUAN_STDLIB_PATH}")
+
+find_package(fortran_stdlib REQUIRED)
+if ( fortran_stdlib_FOUND )
+  message(STATUS "fortran_stdlib FOUND ${fortran_stdlib}")
+else()
+  message(FATAL "fortran_stdlib NOT found")
+endif()
+
 # Where to look for FFTW
 set(FFTW_LIBRARY_PATH "${FFTW_PATH}/lib")
 set(FFTW_INCLUDE_PATH "${FFTW_PATH}/include")
@@ -56,7 +65,11 @@ endif()
 
 # Create a library called IncompressibleOps
 add_library(IncompressibleOps STATIC ${grid_source_files} ${poisson_source_files} ${incompressible_source_files})
-target_link_libraries(IncompressibleOps PadeOps ${MPI_LIBRARIES})
+target_link_libraries(IncompressibleOps PUBLIC 
+  PadeOps 
+  ${MPI_LIBRARIES}
+  fortran_stdlib::fortran_stdlib
+)
 
 if (MPI_Fortran_COMPILER_FLAGS)
     set_target_properties(IncompressibleOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")

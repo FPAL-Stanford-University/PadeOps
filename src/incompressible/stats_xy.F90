@@ -10,6 +10,7 @@ module stats_xy_mod
     use basic_io,           only: write_2d_ascii 
     use exits,              only: message
     use fortran_assert,     only: assert
+    !use stdlib_sorting,     only: sort_index
     implicit none
 
     private

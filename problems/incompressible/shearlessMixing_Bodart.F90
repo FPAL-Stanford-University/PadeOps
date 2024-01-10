@@ -31,6 +31,9 @@ program shearlessMixing
     call SM%printDivergence()
     call stats%init(inputfile,SM)
 
+    ! Get t=0 stats
+    call stats%compute_stats()
+
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
     do while (SM%tsim < SM%tstop .and. SM%step < SM%nsteps)
