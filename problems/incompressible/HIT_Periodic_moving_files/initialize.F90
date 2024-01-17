@@ -138,11 +138,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     y => mesh(:,:,:,2)
     x => mesh(:,:,:,1)
     
+    dz = z(1,1,2) - z(1,1,1)
+
     if (initType == 0) then
         
-       dz = z(1,1,2) - z(1,1,1)
-
-       
        call decomp_2d_read_one(1,u ,ufname, decompC)
        call decomp_2d_read_one(1,v ,vfname, decompC)
        call decomp_2d_read_one(1,wC,wfname, decompC)
