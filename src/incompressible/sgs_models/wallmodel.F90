@@ -71,6 +71,10 @@ subroutine initWallModel(this)
       !elsewhere
       !    this%mask_upstream = one
       !endwhere
+      
+   case (5) ! wall model Goit 
+      allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+   
    case default
       call gracefulExit("Invalid choice of Wallmodel.",324)
    end select
@@ -88,6 +92,7 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v
    complex(rkind), dimension(:,:,:), pointer :: cbuffz, cbuffy
    real(rkind) :: ust1fac, ustar1, epssmall = 1.0d-6, dzby2
+   real(rkind) :: Edash, fact
    integer, dimension(this%gpC%xsz(1), this%gpC%xsz(2)) :: modelregion
    integer :: i, j
 
@@ -126,7 +131,8 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
             this%WallMFactorvar = -(kappa/(log(this%dz/(two*this%z0var)) - this%PsiM))**2 
             call this%BouZeidLocalModel()
         else 
-            this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) - this%PsiM))**2 
+            !this%WallMFactor = -(kappa/(log(this%dz/(two*this%z0)) - this%PsiM))**2 
+            this%WallMFactor = -(kappa/(log(this%walldist_fact*this%dz/(this%z0)) - this%PsiM))**2  !! this is to filter the velocity at a distance away from the wall 
             
             call this%spectC%fft(this%filteredSpeedSq, cbuffy)
             call transpose_y_to_z(cbuffy, cbuffz, this%sp_gpC)
@@ -177,7 +183,7 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       ust1fac = ustar1/sqrt(this%kaplnzfac_s)
       this%ustar_upstream = ustar1
 
-      modelregion = 0; 
+      modelregion = 0; !epssmall = 1.0d-2
       where(this%lamfact > (one-epssmall))
           this%ustarsqvar = this%kaplnzfac_s*this%filteredSpeedSq(:,:,1)     ! not span-avg
           this%ustarsqspan = this%kaplnzfac_s*this%filteredSpeedSq(:,:,2)    !!!!! span-avg 
@@ -257,7 +263,32 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
       ! tau_23
       this%rbuffxC(:,:,1,1) = -this%ustarsqvar * this%Uyvar / (this%rbuffxC(:,:,1,2) + 1.0d-18)
       call this%set_tauijWM(this%rbuffxC(:,:,:,1), 2)
-
+   
+   case (5) !! wall model Goit
+      ! BZ-local method (twice-filtered)
+      call this%getfilteredSpeedSqAtWall(uhat, vhat)
+      if(this%is_z0_varying) then
+          !this%WallMFactorvar = -(kappa/(log(this%dz/(two*this%z0var)) - this%PsiM))**2 
+          !call this%BouZeidLocalModel()
+          call GracefulExit("This model is only for pblwt", 121)
+      else
+          Edash = (half*this%dz+this%fact_goit*this%z0)/(this%z0+this%fact_goit*1.0d-4)
+          this%WallMFactor = -(kappa/(log(max(Edash,one+1.0d-4)) - this%PsiM))**2 
+          
+          call this%spectC%fft(this%filteredSpeedSq, cbuffy)
+          call transpose_y_to_z(cbuffy, cbuffz, this%sp_gpC)
+          
+          ! tau_13
+          this%tauijWMhat_inZ(:,:,1,1) = (this%WallMFactor*this%umn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
+          call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,1), this%tauijWMhat_inY(:,:,:,1), this%sp_gpE)
+          call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,1), this%tauijWM(:,:,:,1))
+          
+          ! tau_23
+          this%tauijWMhat_inZ(:,:,1,2) = (this%WallMFactor*this%vmn/this%Uspmn) * cbuffz(:,:,this%WM_matchingIndex) 
+          call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
+          call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
+      endif
+      
    end select
 
 end subroutine
@@ -683,8 +714,10 @@ subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)
     call this%spectC%ifft(cbuffy,rbuffx2)
 
     if(this%is_z0_varying .and. (this%gpC%xst(3)==1)) then
-        this%Uxvar = rbuffx1(:,:,1)
-        this%Uyvar = rbuffx2(:,:,1)
+        !this%Uxvar = rbuffx1(:,:,1)
+        !this%Uyvar = rbuffx2(:,:,1)
+        this%Uxvar = rbuffx1(:,:,this%WM_matchingIndex)
+        this%Uyvar = rbuffx2(:,:,this%WM_matchingIndex)
     endif
 
     rbuffx1 = rbuffx1*rbuffx1
