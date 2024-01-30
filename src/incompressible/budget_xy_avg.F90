@@ -151,7 +151,7 @@ module budgets_xy_avg_mod
 
         ! For the forcing layer
         real(rkind), dimension(:,:,:), pointer :: fx, fy, fz
-        real(rkind), pointer :: forceFact
+        real(rkind), pointer :: forceFact_x, forceFact_y, forceFact_z
 
 
         integer :: tidx_dump 
@@ -389,12 +389,16 @@ contains
               this%fx => igrid_sim%forceLayer%fx
               this%fy => igrid_sim%forceLayer%fy
               this%fz => igrid_sim%forceLayer%fz
-              this%forceFact => igrid_sim%forceLayer%ampFact
+              this%forceFact_x => igrid_sim%forceLayer%ampFact
+              this%forceFact_y => igrid_sim%forceLayer%ampFact
+              this%forceFact_z => igrid_sim%forceLayer%ampFact
             elseif (igrid_sim%localizedForceLayer == 2) then
               this%fx => igrid_sim%spectForceLayer%fx
               this%fy => igrid_sim%spectForceLayer%fy
               this%fz => igrid_sim%spectForceLayer%fz
-              this%forceFact => igrid_sim%spectForceLayer%ampFact
+              this%forceFact_x => igrid_sim%spectForceLayer%ampFact_x
+              this%forceFact_y => igrid_sim%spectForceLayer%ampFact_y
+              this%forceFact_z => igrid_sim%spectForceLayer%ampFact_z
             else
               this%fx => null()
               this%fy => null()
@@ -1723,11 +1727,11 @@ contains
 
         
         if (this%igrid_sim%localizedForceLayer > 0) then
-            call this%get_xy_meanC_from_fC(this%forceFact*this%fx,this%tmp_meanC)
+            call this%get_xy_meanC_from_fC(this%forceFact_x*this%fx,this%tmp_meanC)
             this%budget_0(:,28) = this%budget_0(:,28) + this%tmp_meanC
-            call this%get_xy_meanC_from_fC(this%forceFact*this%fy,this%tmp_meanC)
+            call this%get_xy_meanC_from_fC(this%forceFact_y*this%fy,this%tmp_meanC)
             this%budget_0(:,29) = this%budget_0(:,29) + this%tmp_meanC
-            call this%get_xy_meanE_from_fE(this%forceFact*this%fz,this%tmp_meanE)
+            call this%get_xy_meanE_from_fE(this%forceFact_z*this%fz,this%tmp_meanE)
             call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
             this%budget_0(:,30) = this%budget_0(:,30) + this%tmp_meanC
             
@@ -2057,15 +2061,15 @@ contains
        ! Force production
        if (this%igrid_sim%localizedForceLayer > 0) then
            
-           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%forceFact*this%fx
+           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%u*this%forceFact_x*this%fx
            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
            this%budget_3(:,11) = this%budget_3(:,11) + this%tmp_meanC
            
-           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%v*this%forceFact*this%fy
+           this%igrid_sim%rbuffxC(:,:,:,1) = this%igrid_sim%v*this%forceFact_y*this%fy
            call this%get_xy_meanC_from_fC(this%igrid_sim%rbuffxC(:,:,:,1), this%tmp_meanC)
            this%budget_3(:,11) = this%budget_3(:,11) + this%tmp_meanC
            
-           this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%forceFact*this%fz
+           this%igrid_sim%rbuffxE(:,:,:,1) = this%igrid_sim%w*this%forceFact_z*this%fz
            call this%get_xy_meanE_from_fE(this%igrid_sim%rbuffxE(:,:,:,1), this%tmp_meanE)
            call this%interp_1d_Edge2Cell(this%tmp_meanE, this%tmp_meanC,0,0)
            this%budget_3(:,11) = this%budget_3(:,11) + this%tmp_meanC

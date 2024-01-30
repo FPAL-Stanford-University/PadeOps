@@ -200,3 +200,10 @@ subroutine getSGSheatFlux(this,q1,q2,q3)
     q3 = this%q3E
 
 end subroutine
+
+pure function IamEddyViscosityModel(this) result(res)
+    class(sgs_igrid), intent(in) :: this
+    logical :: res
+
+    res = this%isEddyViscosityModel
+end function

@@ -49,14 +49,14 @@ contains
                 call message(1,"Forcing layer divergence",gp%spectForceLayer%maxDiv)
                 call message(1,"Forcing layer max all-time divergence",gp%spectForceLayer%maxDivAllTime)
                 call message_min_max(1,"Bounds for fx:", &
-                  gp%spectForceLayer%ampFact*p_minval(minval(gp%spectForceLayer%fx)), &
-                  gp%spectForceLayer%ampFact*p_maxval(maxval(gp%spectForceLayer%fx)))
+                  gp%spectForceLayer%ampFact_x*p_minval(minval(gp%spectForceLayer%fx)), &
+                  gp%spectForceLayer%ampFact_x*p_maxval(maxval(gp%spectForceLayer%fx)))
                 call message_min_max(1,"Bounds for fy:", &
-                  gp%spectForceLayer%ampFact*p_minval(minval(gp%spectForceLayer%fy)), &
-                  gp%spectForceLayer%ampFact*p_maxval(maxval(gp%spectForceLayer%fy)))
+                  gp%spectForceLayer%ampFact_y*p_minval(minval(gp%spectForceLayer%fy)), &
+                  gp%spectForceLayer%ampFact_y*p_maxval(maxval(gp%spectForceLayer%fy)))
                 call message_min_max(1,"Bounds for fz:", &
-                  gp%spectForceLayer%ampFact*p_minval(minval(gp%spectForceLayer%fz)), &
-                  gp%spectForceLayer%ampFact*p_maxval(maxval(gp%spectForceLayer%fz)))
+                  gp%spectForceLayer%ampFact_z*p_minval(minval(gp%spectForceLayer%fz)), &
+                  gp%spectForceLayer%ampFact_z*p_maxval(maxval(gp%spectForceLayer%fz)))
 
             end if
             if (gp%useCFL) then

@@ -191,9 +191,9 @@ module stats_xy_mod
 
                  !   > mean force components
                  if (this%sim%localizedForceLayer == 2) then
-                     this%sim%rbuffxC(:,:,:,1) = this%sim%spectForceLayer%ampFact*this%sim%spectForceLayer%fx
-                     this%sim%rbuffxC(:,:,:,2) = this%sim%spectForceLayer%ampFact*this%sim%spectForceLayer%fy
-                     this%sim%rbuffxE(:,:,:,1) = this%sim%spectForceLayer%ampFact*this%sim%spectForceLayer%fz
+                     this%sim%rbuffxC(:,:,:,1) = this%sim%spectForceLayer%ampFact_x*this%sim%spectForceLayer%fx
+                     this%sim%rbuffxC(:,:,:,2) = this%sim%spectForceLayer%ampFact_y*this%sim%spectForceLayer%fy
+                     this%sim%rbuffxE(:,:,:,1) = this%sim%spectForceLayer%ampFact_z*this%sim%spectForceLayer%fz
                      call this%sim%spectForceLayer%interpE2C(&
                        this%sim%rbuffxE(:,:,:,1), this%sim%rbuffxC(:,:,:,3), &
                        this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
@@ -205,10 +205,12 @@ module stats_xy_mod
 
                      ! force variance
                      this%sim%rbuffxC(:,:,:,2) = &
-                       this%sim%spectForceLayer%ampFact*this%sim%spectForceLayer%ampFact*(&
+                       this%sim%spectForceLayer%ampFact_x*this%sim%spectForceLayer%ampFact_x*&
                        this%sim%spectForceLayer%fx*this%sim%spectForceLayer%fx + & 
+                       this%sim%spectForceLayer%ampFact_y*this%sim%spectForceLayer%ampFact_y*&
                        this%sim%spectForceLayer%fy*this%sim%spectForceLayer%fy + & 
-                       this%sim%rbuffxC(:,:,:,1)*this%sim%rbuffxC(:,:,:,1))
+                       this%sim%spectForceLayer%ampFact_z*this%sim%spectForceLayer%ampFact_z*&
+                       this%sim%rbuffxC(:,:,:,1)*this%sim%rbuffxC(:,:,:,1)
                      call this%mean(this%sim%rbuffxC(:,:,:,2),this%fifi)
                      this%fifi = this%fifi - (this%meanFx*this%meanFx + &
                        this%meanFy*this%meanFy + this%meanFz*this%meanFz)
@@ -379,11 +381,12 @@ module stats_xy_mod
               call this%covariance(this%sim%spectForceLayer%fx, this%sim%u,  this%zbuff(:,1))
               call this%covariance(this%sim%spectForceLayer%fy, this%sim%v,  this%zbuff(:,2))
               call this%covariance(this%sim%rbuffxC(:,:,:,1)  , this%sim%wC, this%zbuff(:,3))
-              tke_budget(:,3) = this%sim%spectForceLayer%ampFact*(&
-                this%zbuff(:,1) + this%zbuff(:,2) + this%zbuff(:,3))
-              R11_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact*this%zbuff(:,1)
-              R22_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact*this%zbuff(:,2)
-              R33_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact*this%zbuff(:,3)
+              tke_budget(:,3) = this%sim%spectForceLayer%ampFact_x*this%zbuff(:,1) + &
+                this%sim%spectForceLayer%ampFact_y*this%zbuff(:,2) + &
+                this%sim%spectForceLayer%ampFact_z*this%zbuff(:,3)
+              R11_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact_x*this%zbuff(:,1)
+              R22_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact_y*this%zbuff(:,2)
+              R33_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact_z*this%zbuff(:,3)
 
               ! Convective transport
               call this%convective_transport(this%uu,R11_budget(:,4))
@@ -576,7 +579,7 @@ module stats_xy_mod
               call this%gradient_production(dwdx,dwdy,dwdz,this%uT,this%vT,this%wT,this%wT_budget(:,3))
 
               ! Force production
-              this%sim%rbuffxE(:,:,:,1) = this%sim%spectForceLayer%ampFact*this%sim%spectForceLayer%fz
+              this%sim%rbuffxE(:,:,:,1) = this%sim%spectForceLayer%ampFact_z*this%sim%spectForceLayer%fz
               call this%sim%spectForceLayer%interpE2C(&
                 this%sim%rbuffxE(:,:,:,1), this%sim%rbuffxC(:,:,:,1), &
                 this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 

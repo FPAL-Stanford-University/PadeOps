@@ -1331,6 +1331,10 @@ contains
                                        this%rbuffxC, this%rbuffxE, this%cbuffyC, this%cbuffyE)   
            end if
        end if 
+
+       ! Set the buoyancy direction
+       this%buoyancyDirection = buoyancyDirection
+       this%useforcedStratification = useforcedStratification
        
        ! STEP 18: Set HIT Forcing
        if (this%useHITForcing) then
@@ -1352,7 +1356,12 @@ contains
            if (allocated(this%spectForceLayer)) deallocate(this%spectForceLayer)
            allocate(this%spectForceLayer)
            call this%spectForceLayer%init(inputfile,this%spectC,this%spectE,&
-             this%mesh,this%zE,this%gpC,this%gpE, this%Pade6opZ,this%outputdir)
+             this%mesh,this%zE,this%gpC,this%gpE, this%Pade6opZ,this%outputdir,&
+             this%sgsmodel,this%BuoyancyFact,this%buoyancyDirection,this%isStratified,&
+             this%Re,this%PrandtlFluid, this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), &
+             this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), this%rbuffzE(:,:,:,1), &
+             this%cbuffyC(:,:,:,1), this%cbuffyE(:,:,:,1), this%cbuffzC(:,:,:,1), &
+             this%cbuffzE(:,:,:,1))
            if (useRestartFile .or. restartFromViz) then ! Compute the forcing so we don't dump zeros during initialization data dump
                if (this%vizFileExists('frcx',this%step)) then
                    ! The force data written to disk is fx=ampFact*fx so we need
@@ -1366,10 +1375,14 @@ contains
                        ! factor
                        if (nrank == 0) then
                            open(unit=10,file=trim(fname),status="old",action="read")
-                           read(10,"(100g17.9)") this%spectForceLayer%ampFact
+                           read(10,"(100g17.9)") this%spectForceLayer%ampFact_x
+                           read(10,"(100g17.9)") this%spectForceLayer%ampFact_y
+                           read(10,"(100g17.9)") this%spectForceLayer%ampFact_z
                            close(10)
                        end if
-                       call MPI_Bcast(this%spectForceLayer%ampFact,1,mpirkind,0,MPI_COMM_WORLD,ierr)
+                       call MPI_Bcast(this%spectForceLayer%ampFact_x,1,mpirkind,0,MPI_COMM_WORLD,ierr)
+                       call MPI_Bcast(this%spectForceLayer%ampFact_y,1,mpirkind,0,MPI_COMM_WORLD,ierr)
+                       call MPI_Bcast(this%spectForceLayer%ampFact_z,1,mpirkind,0,MPI_COMM_WORLD,ierr)
 
                        call this%readVizFile('frcx',this%step,this%spectForceLayer%fx)
                        call this%readVizFile('frcy',this%step,this%spectForceLayer%fy)
@@ -1383,22 +1396,26 @@ contains
 
 
                        ! Divide the force read from disk by the ampFact
-                       this%spectForceLayer%fx = this%spectForceLayer%fx/this%spectForceLayer%ampFact
-                       this%spectForceLayer%fy = this%spectForceLayer%fy/this%spectForceLayer%ampFact
-                       this%spectForceLayer%fz = this%spectForceLayer%fz/this%spectForceLayer%ampFact
+                       this%spectForceLayer%fx = this%spectForceLayer%fx/this%spectForceLayer%ampFact_x
+                       this%spectForceLayer%fy = this%spectForceLayer%fy/this%spectForceLayer%ampFact_y
+                       this%spectForceLayer%fz = this%spectForceLayer%fz/this%spectForceLayer%ampFact_z
 
                        call this%spectC%fft(this%spectForceLayer%fx,this%spectForceLayer%fxhat)
                        call this%spectC%fft(this%spectForceLayer%fy,this%spectForceLayer%fyhat)
                        call this%spectE%fft(this%spectForceLayer%fz,this%spectForceLayer%fzhat)
                    else
-                       call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
-                         this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
-                         this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
+                       if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
+                       call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
+                         this%u,this%v,this%wC,this%TEhat,this%T,this%rbuffxC(:,:,:,2),&
+                         this%duidxjC, this%nu_SGS, this%dt,this%padepoiss, this%u_rhs, &
+                         this%v_rhs, this%w_rhs, this%T_rhs)
                    end if
                else
-                   call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
-                     this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
-                     this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
+                   if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
+                   call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
+                     this%u,this%v,this%wC,this%TEhat,this%T,this%rbuffxC(:,:,:,2),&
+                     this%duidxjC, this%nu_SGS, this%dt,this%padepoiss, this%u_rhs, &
+                     this%v_rhs, this%w_rhs, this%T_rhs)
                end if
            end if
        end if
@@ -1562,9 +1579,6 @@ contains
        this%dtRat = one 
       
 
-       ! STEP 29: Set the buoyancy direction
-       this%buoyancyDirection = buoyancyDirection
-       this%useforcedStratification = useforcedStratification
 
 
        ! STEP 30: Safeguard against user invalid user inputs
@@ -2142,9 +2156,11 @@ contains
                !call assert(.false.,'Force files do not exist')
                ! END DEBUG
 
-               call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,this%u,&
-                 this%v,this%wC,this%duidxjC,this%nu_SGS,this%rbuffxC(:,:,:,1),this%padePoiss,&
-                 this%Re,this%cbuffyC(:,:,:,1),this%cbuffyC(:,:,:,2), this%cbuffyE(:,:,:,1))
+               if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
+               call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
+                 this%u,this%v,this%wC,this%TEhat,this%T,this%rbuffxC(:,:,:,2),&
+                 this%duidxjC, this%nu_SGS, this%dt,this%padepoiss, this%u_rhs, &
+                 this%v_rhs, this%w_rhs, this%T_rhs)
            end if
        end if 
       

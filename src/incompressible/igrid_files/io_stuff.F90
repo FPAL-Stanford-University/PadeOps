@@ -141,7 +141,9 @@
            if (this%localizedForceLayer == 2) then
                write(tempname,"(A3,I2.2,A1,A10,A2,I6.6,A4)") "Run",this%runID, "_","force_info","_t",this%step,".out"
                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-               write(10,"(100g17.9)") this%spectForceLayer%ampFact
+               write(10,"(100g17.9)") this%spectForceLayer%ampFact_x
+               write(10,"(100g17.9)") this%spectForceLayer%ampFact_y
+               write(10,"(100g17.9)") this%spectForceLayer%ampFact_z
                close(10)
            end if
        end if 
@@ -763,13 +765,13 @@
                end if
            elseif (this%localizedForceLayer == 2) then
                if (this%spectForceLayer%dumpForce) then
-                   call this%dumpFullField(this%spectForceLayer%ampFact*this%spectForceLayer%fx, "frcx")
-                   call this%dumpFullField(this%spectForceLayer%ampFact*this%spectForceLayer%fy, "frcy")
+                   call this%dumpFullField(this%spectForceLayer%ampFact_x*this%spectForceLayer%fx, "frcx")
+                   call this%dumpFullField(this%spectForceLayer%ampFact_y*this%spectForceLayer%fy, "frcy")
                    call this%spectForceLayer%interpE2C(this%spectForceLayer%fz,&
                      this%rbuffxC(:,:,:,3), this%rbuffyC(:,:,:,1), &
                      this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
                      this%rbuffzE(:,:,:,1))
-                   call this%dumpFullField(this%spectForceLayer%ampFact*this%rbuffxC(:,:,:,3), "frcz")
+                   call this%dumpFullField(this%spectForceLayer%ampFact_z*this%rbuffxC(:,:,:,3), "frcz")
 
                end if
            end if

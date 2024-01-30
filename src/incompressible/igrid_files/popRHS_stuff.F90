@@ -225,7 +225,6 @@
        if (this%useHITForcing) then
            if(storeForBudget) then
                call this%hitforce%getRHS_HITForcing(this%HITforcing_x, this%HITforcing_y, this%HITforcing_z, this%uhat, this%vhat, this%what, this%newTimeStep)
-               !print '(a,i4.4,3(1x,e19.12))', '--------', nrank, maxval(abs(this%HITforcing_x)), maxval(abs(this%HITforcing_y)), maxval(abs(this%HITforcing_z))
                this%u_rhs = this%u_rhs + this%HITforcing_x
                this%v_rhs = this%v_rhs + this%HITforcing_y
                this%w_rhs = this%w_rhs + this%HITforcing_z
@@ -247,34 +246,12 @@
        elseif (this%localizedForceLayer == 2) then
            Re = this%Re
            if (this%isInviscid) Re = huge(1.0_rkind)
+           if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
            call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
-             this%u,this%v,this%wC,this%duidxjC, this%nu_SGS, &
-             this%rbuffxC(:,:,:,1),this%padepoiss, Re, this%u_rhs, this%v_rhs, this%w_rhs)
+             this%u,this%v,this%wC,this%TEhat,this%T,this%rbuffxC(:,:,:,2),this%duidxjC, this%nu_SGS, &
+             this%dt,this%padepoiss, this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
        end if 
 
-       !if (this%useHITRealSpaceLinearForcing) then
-       !    this%rbuffxC(:,:,:,1) = this%u/this%HITForceTimeScale
-       !    call this%spectC%fft(this%rbuffxC(:,:,:,1),this%cbuffyC(:,:,:,1))
-       !    this%u_rhs = this%u_rhs + this%cbuffyC(:,:,:,1)
-       !    if(storeForBudget) then
-       !        this%HITforcing_x = this%HITforcing_x + this%cbuffyC(:,:,:,1)
-       !    end if
-
-       !    this%rbuffxC(:,:,:,1) = this%v/this%HITForceTimeScale
-       !    call this%spectC%fft(this%rbuffxC(:,:,:,1),this%cbuffyC(:,:,:,1))
-       !    this%v_rhs = this%v_rhs + this%cbuffyC(:,:,:,1)
-       !    if(storeForBudget) then
-       !        this%HITforcing_y = this%HITforcing_y + this%cbuffyC(:,:,:,1)
-       !    end if
-       !    
-       !    this%rbuffxE(:,:,:,1) = this%w/this%HITForceTimeScale
-       !    call this%spectE%fft(this%rbuffxE(:,:,:,1),this%cbuffyE(:,:,:,1))
-       !    this%w_rhs = this%w_rhs + this%cbuffyE(:,:,:,1)
-       !    if(storeForBudget) then
-       !        this%HITforcing_z = this%HITforcing_z + this%cbuffyE(:,:,:,1)
-       !    end if
-       !end if 
-       
        ! Step 8: Fringe and sponge source terms
        if (this%useSponge) then
            call this%addSponge()
