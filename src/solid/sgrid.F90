@@ -183,6 +183,7 @@ module SolidGrid
         logical     :: use_normFV
         logical     :: use_normInt
         logical     :: use_CnsrvSurfaceTension
+        logical     :: 1DStretch
         real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
         real(rkind) :: R, p_amb, XiLS_eps
         logical :: filt_mask = .FALSE.             ! mask filter in high gradient regions
@@ -333,7 +334,7 @@ contains
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., usePhiForm = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .false., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .FALSE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-        logical     :: useAkshayForm = .FALSE.,twoPhaseLAD = .FALSE.,LAD5eqn = .FALSE., use_CnsrvSurfaceTension = .FALSE., use_surfaceTension = .FALSE., use_normFV = .false., use_normInt = .false.,use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_Stagg = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE., use_XiLS = .FALSE., LADN2F = .FALSE., LADInt = .FALSE.
+        logical     :: useAkshayForm = .FALSE.,twoPhaseLAD = .FALSE.,LAD5eqn = .FALSE., use_CnsrvSurfaceTension = .FALSE., use_surfaceTension = .FALSE., use_normFV = .false., use_normInt = .false.,use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_Stagg = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE., use_XiLS = .FALSE., LADN2F = .FALSE., LADInt = .FALSE., 1DStretch = .FALSE.
         real(rkind) :: surfaceTension_coeff = 0.0d0, R = 1d0, p_amb = 1d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0,Ys_wiggle = 0d0,VF_wiggle = 0d0, uthick = 0, rhothick = 0, pthick = 0,VF_thick = 0, Ys_thick = 0
@@ -360,7 +361,7 @@ contains
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
                            use_CnsrvSurfaceTension, use_surfaceTension, use_normFV, use_normInt, use_gradXi,energy_surfTen,use_gradphi, use_gradVF, use_Stagg, use_FV,use_D04, surface_mask, weightedcurvature, &
-                           surfaceTension_coeff, R, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F
+                           surfaceTension_coeff, R, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, 1DStretch
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -396,6 +397,7 @@ contains
         this%step = 0
         this%nsteps = nsteps
 
+        this%1DStretch     = 1DStretch
         this%useAkshayForm = useAkshayForm
         this%twoPhaseLAD   = twoPhaseLAD
         this%LAD5eqn       = LAD5eqn
@@ -505,6 +507,7 @@ contains
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         call alloc_buffs(this%mesh,3,'y',this%decomp)
+
         ! Associate pointers for ease of use
         this%x    => this%mesh  (:,:,:, 1) 
         this%y    => this%mesh  (:,:,:, 2) 
@@ -527,7 +530,16 @@ contains
         end do  
 
         ! Go to hooks if a different mesh is desired 
-        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
+        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh)
+
+
+        if( this%1DStretch ) then
+
+            if ( allocated(this%meshstretch) ) deallocate(this%meshstretch)
+            call alloc_buffs(this%meshstretch,3,'y',this%decomp)
+            call coordTransform(this%x,this%y,this%z, this%eta1, this%eta2,this%eta3, this%meshstretch,this%yMetric,this%xMetric, this%zMetric)
+        endif
+ 
         ! Allocate der
         if ( allocated(this%der) ) deallocate(this%der)
         allocate(this%der)
