@@ -39,7 +39,7 @@ module SolidMod
         real(rkind), dimension(:,:,:), allocatable :: eh
         real(rkind), dimension(:,:,:), allocatable :: eel
         real(rkind), dimension(:,:,:), allocatable ::  u_int,v_int,fluxYs, w_int
-        real(rkind), dimension(:,:,:), allocatable ::  YsLAD, vfLAD 
+        real(rkind), dimension(:,:,:), allocatable ::  YsLAD, vfLAD,YsDiffLAD
         real(rkind), dimension(:,:,:,:), allocatable :: g,g_t,g_p,rg,rg_t,rg_p,VF_int,Ys_int, rho_int
         real(rkind), dimension(:,:,:),   allocatable :: e_p,e_pp,pe,rpe
         real(rkind), dimension(:,:,:),   allocatable :: curl_e,curl_t,curl_p,det_e,det_t,det_p
@@ -71,16 +71,16 @@ module SolidMod
         real(rkind), dimension(:,:,:),   pointer     :: syz
         real(rkind), dimension(:,:,:),   pointer     :: szz
         
-        real(rkind), dimension(:,:,:),   allocatable :: rhom
+        real(rkind), dimension(:,:,:),   allocatable :: rhom, s
         real(rkind), dimension(:,:,:),   allocatable :: p
         real(rkind), dimension(:,:,:),   allocatable :: T
         real(rkind), dimension(:,:,:),   allocatable :: rho
-        
+        real(rkind), allocatable :: Ys_thick, VF_thick, Ys_wiggle, VF_wiggle        
         ! species-specific artificial properties
-        real(rkind), dimension(:,:,:),   allocatable :: adiff
-        real(rkind), dimension(:,:,:),   allocatable :: rhodiff
+        real(rkind), dimension(:,:,:),   allocatable :: adiff,fd
+        real(rkind), dimension(:,:,:),   allocatable :: rhodiff,outdiff,Ysdiff
         real(rkind), dimension(:,:,:),   allocatable :: kap
-        real(rkind), dimension(:,:,:,:), allocatable :: qi
+        real(rkind), dimension(:,:,:,:), allocatable :: qi,rhodiff_stagg,adiff_stagg
         real(rkind), dimension(:,:,:),   allocatable :: diff
         real(rkind), dimension(:,:,:),   allocatable :: diff_g
         real(rkind), dimension(:,:,:),   allocatable :: diff_gt
@@ -90,7 +90,7 @@ module SolidMod
         real(rkind), dimension(:,:,:,:), allocatable :: physmu
         ! species-specific variables for interface sharpening
         real(rkind), dimension(:,:,:,:), allocatable :: intSharp_a,intSharp_R,intSharp_aDiff,intSharp_RDiff
-        real(rkind), dimension(:,:,:),   allocatable :: intSharp_aFV,intSharp_RFV
+        real(rkind), dimension(:,:,:),   allocatable :: intSharp_aFV,intSharp_RFV,intSharp_aDiffFV,intSharp_RDiffFV
         real(rkind), dimension(:),       allocatable :: intSharp_ysc
         real(rkind) :: intSharp_cut
         real(rkind), dimension(:,:,:,:,:),allocatable :: intSharp_rg,intSharp_rgDiff,intSharp_rgt,intSharp_rgtDiff,intSharp_rgp,intSharp_rgpDiff
@@ -328,7 +328,9 @@ contains
         ! Allocate material density
         if( allocated( this%rhom ) ) deallocate( this%rhom )
         allocate( this%rhom(this%nxp,this%nyp,this%nzp) )
-       
+      
+        if( allocated( this%s ) ) deallocate( this%s )
+        allocate( this%s(this%nxp,this%nyp,this%nzp) ) 
 
         ! Allocate material massfraction
         if( allocated( this%Ys_int ) ) deallocate( this%Ys_int )
@@ -509,7 +511,19 @@ contains
         ! Allocate material diffusive flux
         if( allocated( this%qi ) ) deallocate( this%qi )
         allocate( this%qi(this%nxp,this%nyp,this%nzp,3) )
-        
+      
+        if( allocated( this%Ysdiff ) ) deallocate( this%Ysdiff )
+        allocate( this%Ysdiff(this%nxp,this%nyp,this%nzp) )
+
+        if( allocated( this%fd ) ) deallocate( this%fd )
+        allocate( this%fd(this%nxp,this%nyp,this%nzp) )
+ 
+        if( allocated( this%adiff_stagg ) ) deallocate( this%adiff_stagg )
+        allocate( this%adiff_stagg(this%nxp,this%nyp,this%nzp,3) )
+
+        if( allocated( this%rhodiff_stagg ) ) deallocate( this%rhodiff_stagg )
+        allocate( this%rhodiff_stagg(this%nxp,this%nyp,this%nzp,3) )
+ 
         ! Allocate material diffusivity array
         if( allocated( this%diff ) ) deallocate( this%diff )
         allocate( this%diff(this%nxp,this%nyp,this%nzp) )
@@ -540,9 +554,16 @@ contains
         if( allocated( this%rhodiff ) ) deallocate( this%rhodiff )
         allocate( this%rhodiff(this%nxp,this%nyp,this%nzp) )
 
+        if( allocated( this%outdiff ) ) deallocate( this%outdiff )
+        allocate( this%outdiff(this%nxp,this%nyp,this%nzp) )
+
         ! Allocate material diffusive flux
         if( allocated( this%YsLAD ) ) deallocate( this%YsLAD )
         allocate( this%YsLAD(this%nxp,this%nyp,this%nzp) )
+
+        ! Allocate material diffusive flux
+        if( allocated( this%YsDiffLAD ) ) deallocate( this%YsDiffLAD )
+        allocate( this%YsDiffLAD(this%nxp,this%nyp,this%nzp) )
 
         if( allocated( this%vfLAD ) ) deallocate( this%vfLAD )
         allocate( this%vfLAD(this%nxp,this%nyp,this%nzp) )
@@ -570,6 +591,14 @@ contains
         ! Allocate interface sharpening mass fraction FV flux
         if( allocated( this%intSharp_RFV ) ) deallocate( this%intSharp_RFV )
         allocate( this%intSharp_RFV(this%nxp,this%nyp,this%nzp) )
+
+        ! Allocate interface sharpening volume fraction FV flux
+        if( allocated( this%intSharp_aDiffFV ) ) deallocate( this%intSharp_aDiffFV )
+        allocate( this%intSharp_aDiffFV(this%nxp,this%nyp,this%nzp) )
+
+        ! Allocate interface sharpening mass fraction FV flux
+        if( allocated( this%intSharp_RDiffFV ) ) deallocate( this%intSharp_RDiffFV )
+        allocate( this%intSharp_RDiffFV(this%nxp,this%nyp,this%nzp) )
 
         ! Allocate interface sharpening rho*g flux
         if( allocated( this%intSharp_rg ) ) deallocate( this%intSharp_rg )
@@ -684,6 +713,8 @@ contains
         if( allocated( this%intSharp_RDiff )   ) deallocate( this%intSharp_RDiff )
         if( allocated( this%intSharp_aFV )   ) deallocate( this%intSharp_aFV )
         if( allocated( this%intSharp_RFV )   ) deallocate( this%intSharp_RFV )
+        if( allocated( this%intSharp_aDiffFV )   ) deallocate( this%intSharp_aDiffFV )
+        if( allocated( this%intSharp_RDiffFV )   ) deallocate( this%intSharp_RDiffFV )
         if( allocated( this%intSharp_rg )   ) deallocate( this%intSharp_rg )
         if( allocated( this%intSharp_rgDiff )   ) deallocate( this%intSharp_rgDiff )
         if( allocated( this%intSharp_rgFV )   ) deallocate( this%intSharp_rgFV )
@@ -698,11 +729,15 @@ contains
         if( allocated( this%intSharp_gpFV )   ) deallocate( this%intSharp_gpFV )
         if( allocated( this%intSharp_ysc )   ) deallocate( this%intSharp_ysc )
 
+        if( allocated( this%YsDiffLAD )   ) deallocate( this%YsDiffLAD )
         if( allocated( this%YsLAD )   ) deallocate( this%YsLAD )
         if( allocated( this%vfLAD )   ) deallocate( this%vfLAD )
         if( allocated( this%Ji )   ) deallocate( this%Ji )
         if( allocated( this%rhodiff )   ) deallocate( this%rhodiff )
         if( allocated( this%adiff )   ) deallocate( this%adiff )
+        if( allocated( this%outdiff )   ) deallocate( this%outdiff )
+        if( allocated( this%Ysdiff )   ) deallocate( this%Ysdiff )
+        if( allocated( this%fd )   ) deallocate( this%fd )
 
         if( allocated( this%diff ) ) deallocate( this%diff )
         if( allocated( this%diff_g ) ) deallocate( this%diff_g )
@@ -760,6 +795,7 @@ contains
 
 
         if( allocated( this%rhom) ) deallocate( this%rhom )
+        if( allocated( this%s) ) deallocate( this%s )
         if( allocated( this%eel ) ) deallocate( this%eel )
         if( allocated( this%eh )  ) deallocate( this%eh )
         if( allocated( this%VF )  ) deallocate( this%VF )
@@ -4643,9 +4679,9 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: tmp,tmp1,tmp2,tmp3,u_int,v_int,w_int,dYdx,dYdy,dYdz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)  :: Ys_int,rho_int,rhoYs_int, rhodiff_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x,dYdy_y,dYdz_z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: tmp,tmp1,tmp2,tmp3,u_int,v_int,w_int,dYdx,dYdy,dYdz,ysLAD2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)  :: Ys_int,rho_int,rhoYs_int, rhodiff_int, outdiff_int, Ysdiff_int, adiff_int,rhom_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x,dYdy_y,dYdz_z,outLAD, diffLAD,rhom
 
         if( this%LADInt) then
 
@@ -4654,16 +4690,45 @@ contains
            call interpolateFV_y(this%decomp,this%interpMid,dYdy,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV_z(this%decomp,this%interpMid,dYdz,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3),this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
+           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
 
         else if(this%LADN2F) then
 
-           call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
+           
+           !call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
+           !call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
+
+           call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3),this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
+           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !all this%getSpeciesDensity(rho,rhom)
+           !call interpolateFV(this%decomp,this%interpMid,rhom,rhom_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
+           !call gradFV_N2Fx(this%decomp,this%derStagg,this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call gradFV_N2Fy(this%decomp,this%derStagg,this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call gradFV_N2Fz(this%decomp,this%derStagg,this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call divergenceFV(this%decomp,this%derStagg,rhom_int(:,:,:,1)*rhodiff_int(:,:,:,1)*dYdx_x,rhom_int(:,:,:,2)*rhodiff_int(:,:,:,2)*dYdy_y,rhom_int(:,:,:,3)*rhodiff_int(:,:,:,3)*dYdz_z,ysLAD2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call divergenceFV(this%decomp,this%derStagg,rhom_int(:,:,:,1)*adiff_int(:,:,:,1)*dYdx_x,rhom_int(:,:,:,2)*adiff_int(:,:,:,2)*dYdy_y,rhom_int(:,:,:,3)*adiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+          
+           !call gradFV_N2Fx(this%decomp,this%derStagg,this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call gradFV_N2Fy(this%decomp,this%derStagg,this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call gradFV_N2Fz(this%decomp,this%derStagg,this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call interpolateFV(this%decomp,this%interpMid,this%Ysdiff,Ysdiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           !call divergenceFV(this%decomp,this%derStagg,rho_int(:,:,:,1)*Ysdiff_int(:,:,:,1)*dYdx_x,rho_int(:,:,:,2)*Ysdiff_int(:,:,:,2)*dYdy_y,rho_int(:,:,:,3)*Ysdiff_int(:,:,:,3)*dYdz_z,diffLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+ 
+           this%YsLAD = this%YsLAD !+ysLAD2
         else
 
            call gradient(this%decomp,this%der,rho*this%Ys,dYdx,dYdy,dYdz,x_bc,y_bc,z_bc)
@@ -4793,7 +4858,7 @@ contains
 
            endif
 
-           rhsYs = tmp + this%intSharp_RFV + this%YsLAD
+           rhsYs = tmp + this%intSharp_RFV + this%YsLAD + this%intSharp_RDiffFV
            this%u_int = u_int
            this%v_int = v_int
            this%w_int = w_int
@@ -4860,19 +4925,16 @@ contains
              call this%getYsLad(rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
            endif
-
            call interpolateFV_x(this%decomp,this%interpMid,u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV_y(this%decomp,this%interpMid,v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV_z(this%decomp,this%interpMid,w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,this%Ys,Ys_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,rhoYs_int,periodicx, periodicy, periodicz, x_bc, y_bc,z_bc)
-
            !call divergenceFV(this%decomp,this%derStagg,-u_int*rho_int(:,:,:,1)*Ys_int(:,:,:,1),-v_int*rho_int(:,:,:,2)*Ys_int(:,:,:,2),-w_int*rho_int(:,:,:,3)*Ys_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
            call divergenceFV(this%decomp,this%derStagg,-u_int*rhoYs_int(:,:,:,1),-v_int*rhoYs_int(:,:,:,2),-w_int*rhoYs_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
      
-
 
            rhsYs = tmp + this%YsLAD
            this%u_int = u_int
@@ -4997,7 +5059,6 @@ contains
            call this%getRHS_VF(other,rho,u,v,w,divu,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         endif
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
-
         
         ! advance sub-step
         if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
@@ -5084,8 +5145,8 @@ contains
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2,tmp3, tmp4, tmp5, tmp6,rhocsq1, rhocsq2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx, dVFdy, dVFdz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx_x,dVFdy_y,dVFdz_z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rhodiff_int,adiff_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx_x,dVFdy_y,dVFdz_z, rhom,dYdx_x,dYdy_y,dYdz_z,ysLAD
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rhodiff_int,adiff_int, rhom_int
 
         if(this%LADInt) then
           call gradient(this%decomp,this%der,this%VF,dVFdx,dVFdy,dVFdz,x_bc,y_bc,z_bc)
@@ -5097,13 +5158,21 @@ contains
           call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         elseif(this%LADN2F) then
+
+          !call this%getSpeciesDensity(rho,rhom)
+        !  call gradFV_N2Fx(this%decomp,this%derStagg,this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !  call gradFV_N2Fy(this%decomp,this%derStagg,this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !  call gradFV_N2Fz(this%decomp,this%derStagg,this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          !call interpolateFV(this%decomp,this%interpMid,rhom,rhom_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !  call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !  call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,ysLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dVFdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dVFdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dVFdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dVFdx_x,rhodiff_int(:,:,:,2)*dVFdy_y,rhodiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          !call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          !call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+          !this%vfLAD = this%vfLAD
 
         else
  
@@ -5178,7 +5247,7 @@ contains
 
          call divergence(this%decomp,this%der,this%intSharp_aDiff(:,:,:,1),this%intSharp_aDiff(:,:,:,2),this%intSharp_aDiff(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc)
 
-          rhsVF = tmp + this%VF*div_u + div_uVF + this%intSharp_aFV + this%vfLAD
+          rhsVF = tmp + this%VF*div_u + div_uVF + this%intSharp_aFV + this%vfLAD + this%intSharp_aDiffFV
           this%VF_int =VF_int
       endif
 
@@ -5358,6 +5427,7 @@ contains
         call this%getSpeciesDensity(rho,rhom)
         call this%hydro%get_e_from_p( rhom, this%p, this%eh )
         call this%hydro%get_T(this%eh, this%T, rhom)
+        call this%hydro%get_entropy(this%T,this%p, this%s)
         ! call this%hydro%get_e_from_p( this%Ys*rho/(this%VF+epssmall), this%p, this%eh )
         ! call this%hydro%get_T(this%eh, this%T, this%Ys*rho/(this%VF+epssmall))
 

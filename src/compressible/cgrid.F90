@@ -194,7 +194,6 @@ contains
         ! Initialize decomp
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%decomp)
-        
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         call alloc_buffs(this%mesh,3,'y',this%decomp)
@@ -222,7 +221,6 @@ contains
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh) 
-
         if (ns .LT. 1) call GracefulExit("Cannot have less than 1 species. Must have ns >= 1.",4568)
 
         ! Allocate mixture
@@ -233,7 +231,6 @@ contains
         do i = 1,ns
             call this%mix%set_material(i,idealgas(gam,Rgas))
         end do
-
         nfields = kap_index + 2*ns   ! Add ns massfractions to fields
         ncnsrv  = ncnsrv   + ns - 1  ! Add ns-1 conserved variables for the massfraction equations
         
@@ -269,12 +266,10 @@ contains
         ! Go to hooks if a different initialization is derired 
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tstop, this%dtfixed, tviz)
-        
         ! Update mix
         call this%mix%update(this%Ys)
         call this%mix%get_e_from_p(this%rho,this%p,this%e)
         call this%mix%get_T(this%e,this%T)
-
         ! Set all the attributes of the abstract grid type         
         this%outputdir = outputdir 
         
@@ -325,7 +320,6 @@ contains
         call this%gfil%init(                          this%decomp, &
                          periodicx,     periodicy,      periodicz, &
                         "gaussian",    "gaussian",     "gaussian"  )      
-
         ! Finally, set the local array dimensions
         this%nxp = this%decomp%ysz(1)
         this%nyp = this%decomp%ysz(2)
@@ -499,7 +493,6 @@ contains
         integer :: i
 
         call this%get_dt(stability)
-
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
         allocate( gradYs(this%nxp, this%nyp, this%nzp,3*this%mix%ns) )
         
@@ -512,6 +505,10 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
 
+        dYsdx => gradYs(:,:,:,              1:  this%mix%ns)
+        dYsdy => gradYs(:,:,:,  this%mix%ns+1:2*this%mix%ns)
+        dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns)
+
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,              1:  this%mix%ns)
             dYsdy => gradYs(:,:,:,  this%mix%ns+1:2*this%mix%ns)
@@ -523,8 +520,7 @@ contains
         end if
         
         call this%getPhysicalProperties()
-
-        call this%getLAD(dudx, dudy, dudz,&
+       call this%getLAD(dudx, dudy, dudz,&
                          dvdx, dvdy, dvdz,&
                          dwdx, dwdy, dwdz,&
                         dYsdx,dYsdy,dYsdz )
@@ -574,17 +570,14 @@ contains
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
             call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
-          
             ! Write out vizualization dump if vizcond is met 
             if (vizcond) then
                 call hook_output(this%decomp, this%der, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%tsim)
                 vizcond = .FALSE.
             end if
-            
             ! Get the new time step
             call this%get_dt(stability)
-            
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
                 this%dt = this%tviz * this%viz%vizcount - this%tsim
@@ -657,7 +650,7 @@ contains
             call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
             
             call this%get_primitive()
-            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
+            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             call this%post_bc()
         end do
 
@@ -788,7 +781,7 @@ contains
         call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
-
+        dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy =>gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz =>gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
         if (this%mix%ns .GT. 1) then
             dYsdx => gradYs(:,:,:,1:this%mix%ns); dYsdy => gradYs(:,:,:,this%mix%ns+1:2*this%mix%ns); dYsdz => gradYs(:,:,:,2*this%mix%ns+1:3*this%mix%ns);
             do i = 1,this%mix%ns
@@ -802,7 +795,6 @@ contains
                          dvdx, dvdy, dvdz,&
                          dwdx, dwdy, dwdz,&
                         dYsdx,dYsdy,dYsdz )
-
         ! Get tau tensor and q (heat conduction) vector. Put in components of duidxj
         call this%get_tau( duidxj )
         ! Now, associate the pointers to understand what's going on better
@@ -818,7 +810,6 @@ contains
 
         call this%get_q  ( duidxj, Jx, Jy, Jz )
         qx => duidxj(:,:,:,qxidx); qy => duidxj(:,:,:,qyidx); qz => duidxj(:,:,:,qzidx);
-
 
         rhs = zero
         call this%getRHS_x(              rhs,&
@@ -1015,7 +1006,6 @@ contains
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         real(rkind), dimension(:,:,:), pointer :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6
         real(rkind), dimension(:,:,:), pointer :: ztmp1,ztmp2
-
         xtmp1 => this%xbuf(:,:,:,1); xtmp2 => this%xbuf(:,:,:,2)
         
         ytmp1 => this%ybuf(:,:,:,1); ytmp2 => this%ybuf(:,:,:,2)
@@ -1037,7 +1027,6 @@ contains
         call this%der%d2dx2(xtmp2,xtmp1,this%x_bc(1),this%x_bc(2))
         xtmp2 = xtmp1*this%dx**6
         call transpose_x_to_y(xtmp2,mustar,this%decomp)
-        
         ! Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
@@ -1045,18 +1034,15 @@ contains
         ztmp2 = ztmp1*this%dz**6
         call transpose_z_to_y(ztmp2,ytmp1,this%decomp)
         mustar = mustar + ytmp1
-        
         ! Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp1,this%y_bc(1),this%y_bc(2))
         call this%der%d2dy2(ytmp1,ytmp2,this%y_bc(1),this%y_bc(2))
         ytmp1 = ytmp2*this%dy**6
         mustar = mustar + ytmp1
-
         mustar = this%Cmu*this%rho*abs(mustar)
         
         ! Filter mustar
         call this%filter(mustar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
-        
         ! -------- Artificial Bulk Viscosity --------
         
         func = dudx + dvdy + dwdz      ! dilatation
@@ -1066,7 +1052,6 @@ contains
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
-
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(func,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
@@ -1074,7 +1059,6 @@ contains
         xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
-
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
@@ -1082,13 +1066,11 @@ contains
         ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
-
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp4,this%y_bc(1),this%y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
         ytmp4 = ytmp5*this%dy**4
         bulkstar = bulkstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
-
         ! Now, all ytmps are free to use
         ytmp1 = dwdy-dvdz; ytmp2 = dudz-dwdx; ytmp3 = dvdx-dudy
         ytmp4 = ytmp1*ytmp1 + ytmp2*ytmp2 + ytmp3*ytmp3 ! |curl(u)|^2
@@ -1112,7 +1094,6 @@ contains
         ytmp1 = ytmp1*ytmp1
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
-
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(this%e,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,this%x_bc(1),this%x_bc(2))
@@ -1120,7 +1101,6 @@ contains
         xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         kapstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
-
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(this%e,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,this%z_bc(1),this%z_bc(2))
@@ -1128,21 +1108,17 @@ contains
         ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         kapstar = kapstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
-
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(this%e,ytmp4,this%y_bc(1),this%y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,this%y_bc(1),this%y_bc(2))
         ytmp4 = ytmp5*this%dy**4
         kapstar = kapstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
-
         ! Now, all ytmps are free to use
         call this%mix%get_sos(this%rho,this%p,ytmp1)  ! Speed of sound
-
         kapstar = this%Ckap*this%rho*ytmp1*abs(kapstar)/this%T
-
+   
         ! Filter kapstar
         call this%filter(kapstar, this%gfil, 2, this%x_bc, this%y_bc, this%z_bc)
-
         ! -------- Artificial Diffusivity ---------
         if (this%mix%ns .GT. 1) then
             do i = 1,this%mix%ns
@@ -1191,7 +1167,6 @@ contains
                 this%diff(:,:,:,i) = this%diff(:,:,:,i) + diffstar
             end do
         end if
-
         ! Now, add to physical fluid properties
         this%mu   = this%mu   + mustar
         this%bulk = this%bulk + bulkstar

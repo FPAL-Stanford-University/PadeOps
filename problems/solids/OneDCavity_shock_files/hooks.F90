@@ -11,7 +11,7 @@ module OneDCavity_shock_data
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
-    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR
+    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, pL
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
     real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e
@@ -234,23 +234,23 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
 
-        if(rhoRatio > 0) then
+        !if(rhoRatio > 0) then
           ! if rhoRatio is positive, only rho_0 is different. Rgas is set such
           ! that Temperature equilibrium condition is satisfied
-          gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
-          rho_0_2 = rho_0*rhoRatio; mu_2 = mu
-        else
+        !  gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
+        !  rho_0_2 = rho_0*rhoRatio; mu_2 = mu
+        !else
           ! if rhoRatio is negative, all quantities except Rgas need to be
           ! specified in input file. Rgas is then set such
           ! that Temperature equilibrium condition is satisfied
-          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+        !  if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
 
-          ! determine p_amb that guarantees T equilibrium
-          if(adjustPamb) then
-            fac = Rgas_2*rho_0_2/Rgas/rho_0
-            p_amb = (fac*p_infty - p_infty_2)/(one - fac)
-          endif
-        endif
+         ! determine p_amb that guarantees T equilibrium
+        !  if(adjustPamb) then
+        !    fac = Rgas_2*rho_0_2/Rgas/rho_0
+        !    p_amb = (fac*p_infty - p_infty_2)/(one - fac)
+        !  endif
+        !endif
 
         ! write material properties
         if (nrank == 0) then
@@ -409,13 +409,13 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
-        rhoL = tmp(1,1,1)
+        rhoL = 1.24
         rhoR = tmp(decomp%ysz(1),1,1)
         YsL  = mix%material(1)%Ys(1,1,1)
         YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
         VFL  = mix%material(1)%VF(1,1,1)
         VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
-
+        
 
         ! !gt should be same as g
         ! mix%material(1)%gt11 = one;  mix%material(1)%gt12 = zero; mix%material(1)%gt13 = zero
@@ -476,7 +476,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
 end subroutine
 
-subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,pthick,rhothick,uthick,Ysthick,VFthick,Ys_wiggle,VF_wiggle,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,eps,half,one,two,pi,four,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
@@ -493,7 +493,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
     type(derivatives),               intent(in) :: der   
-    real(rkind),                     intent(in) :: dx,dy,dz,tsim
+    real(rkind),                     intent(in) :: dx,dy,dz,tsim,uthick,rhothick,pthick,Ysthick,VFthick,Ys_wiggle,VF_wiggle
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
@@ -616,10 +616,12 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 
        if (vizcount == 0) then
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-           write(outputunit,'(22A27)') 'tsim', 'mixwidth', 'vort_pos', 'vort_neg', 'Al_mass', 'xspike', 'xbubbl', 'm1_ep', 'm1_epp', 'm1_pe', 'm1_det_e', 'm1_det_t', 'm1_det_p', 'm1_curl_e', 'm1_curl_t', 'm1_curl_p', 'ek', 'm1_eh', 'm1_eel', 'm2_eh', 'm2_eel', 'm2_pe'
-       else
-           open(unit=outputunit, file=trim(outputfile), form='FORMATTED', action='WRITE', status='OLD', position='APPEND')
+           write(outputunit,'(7A27)') 'tsim', 'Ys_thick', 'VF_thick', 'pthick','uthick', 'Ys_wiggle', 'VF_wiggle', "rhothick"
+           else
+           open(unit=outputunit, file=trim(outputfile), form='FORMATTED',action='WRITE', status='OLD', position='APPEND')
        end if
+       write(outputunit,'(7ES27.16E3)') tsim, Ysthick, VFthick, pthick, uthick,Ys_wiggle, VF_wiggle, rhothick
+       close(outputunit)
        !write(outputunit,'(7ES27.16E3)') tsim, mixwidth, vort_pos, vort_neg, Al_mass, xspike, xbubbl
        !write(outputunit,'(10ES27.16E3)') tsim, mixwidth, vort_pos, vort_neg, Al_mass, xspike, xbubbl, ep, epp, pe
        if (nrank.eq.0) then
@@ -798,15 +800,16 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
     if(decomp%yst(1)==1) then
        if(x_bc(1)==0) then
-          ! rho( 1,:,:) = rhoL
-          ! u  ( 1,:,:) = (u2-u1)
+          rho( 1,:,:) = rhoL
+          u  ( 1,:,:) = zero !(u2-u1)
           v  ( 1,:,:) = zero
           w  ( 1,:,:) = zero
-          do i=1,5
-             mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
-             mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
-          end do
-
+          !do i=1,5
+          !   mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
+          !   mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
+          !end do
+          mix%material(1)%p(1,:,:) = p2
+          mix%material(2)%p(1,:,:) = p2
           ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
           ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
           ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
@@ -815,31 +818,31 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
           ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
 
-          ! mix%material(1)%Ys ( 1,:,:) = YsL
-          ! mix%material(2)%Ys ( 1,:,:) = one - YsL
+           mix%material(1)%Ys ( 1,:,:) = YsL
+           mix%material(2)%Ys ( 1,:,:) = one - YsL
 
-          ! mix%material(1)%VF ( 1,:,:) = VFL
-          ! mix%material(2)%VF ( 1,:,:) = one - VFL
+           mix%material(1)%VF ( 1,:,:) = VFL
+           mix%material(2)%VF ( 1,:,:) = one - VFL
 
-          do i=1,5
-             mix%material(1)%Ys ( i,:,:) = mix%material(1)%Ys ( 6,:,:)
-             mix%material(2)%Ys ( i,:,:) = mix%material(2)%Ys ( 6,:,:)
+          !do i=1,5
+          !   mix%material(1)%Ys ( i,:,:) = mix%material(1)%Ys ( 6,:,:)
+          !   mix%material(2)%Ys ( i,:,:) = mix%material(2)%Ys ( 6,:,:)
 
              !new
-             mix%material(1)%VF ( i,:,:) = mix%material(1)%VF ( 6,:,:)
-             mix%material(2)%VF ( i,:,:) = mix%material(2)%VF ( 6,:,:)
+         !    mix%material(1)%VF ( i,:,:) = mix%material(1)%VF ( 6,:,:)
+         !    mix%material(2)%VF ( i,:,:) = mix%material(2)%VF ( 6,:,:)
 
-             u(i,:,:) = u(6,:,:)
+         !    u(i,:,:) = u(6,:,:)
 
-             e(i,:,:) = e(6,:,:)
-             rho(i,:,:) = rho(6,:,:)
-             T(i,:,:) = T(6,:,:)
-             p(i,:,:) = p(6,:,:)
+         !    e(i,:,:) = e(6,:,:)
+         !    rho(i,:,:) = rho(6,:,:)
+         !    T(i,:,:) = T(6,:,:)
+         !    p(i,:,:) = p(6,:,:)
 
-             mix%material(1)%T(i,:,:) = mix%material(1)%T(6,:,:)
-             mix%material(2)%T(i,:,:) = mix%material(2)%T(6,:,:)
+         !    mix%material(1)%T(i,:,:) = mix%material(1)%T(6,:,:)
+         !    mix%material(2)%T(i,:,:) = mix%material(2)%T(6,:,:)
 
-          end do
+         ! end do
 
        end if
     endif
@@ -921,47 +924,47 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
     if(decomp%yen(1)==decomp%xsz(1)) then
        if(x_bc(2)==0) then
-          rho(nx,:,:) = rhoR ! rho(nx-1,:,:)
-          u  (nx,:,:) = zero ! zero
-          v  (nx,:,:) = zero ! v(nx-1,:,:)
-          w  (nx,:,:) = zero ! w(nx-1,:,:)
+          !rho(nx,:,:) = rhoR ! rho(nx-1,:,:)
+          !u  (nx,:,:) = zero ! zero
+          !v  (nx,:,:) = zero ! v(nx-1,:,:)
+          !w  (nx,:,:) = zero ! w(nx-1,:,:)
           mix%material(1)%p  (nx,:,:) = p1 ! mix%material(1)%p(nx-1,:,:)
           mix%material(2)%p  (nx,:,:) = p1 ! mix%material(2)%p(nx-1,:,:)
 
-          mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
-          mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero
-          mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:) = zero; mix%material(1)%g33(nx,:,:) = one
+          !mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
+          !mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero
+          !mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:) = zero; mix%material(1)%g33(nx,:,:) = one
 
-          mix%material(2)%g11(nx,:,:) = one;  mix%material(2)%g12(nx,:,:) = zero; mix%material(2)%g13(nx,:,:) = zero
-          mix%material(2)%g21(nx,:,:) = zero; mix%material(2)%g22(nx,:,:) = one;  mix%material(2)%g23(nx,:,:) = zero
-          mix%material(2)%g31(nx,:,:) = zero; mix%material(2)%g32(nx,:,:) = zero; mix%material(2)%g33(nx,:,:) = one
+          !mix%material(2)%g11(nx,:,:) = one;  mix%material(2)%g12(nx,:,:) = zero; mix%material(2)%g13(nx,:,:) = zero
+          !mix%material(2)%g21(nx,:,:) = zero; mix%material(2)%g22(nx,:,:) = one;  mix%material(2)%g23(nx,:,:) = zero
+          !mix%material(2)%g31(nx,:,:) = zero; mix%material(2)%g32(nx,:,:) = zero; mix%material(2)%g33(nx,:,:) = one
 
-          mix%material(1)%gt11(nx,:,:) = one;  mix%material(1)%gt12(nx,:,:) = zero; mix%material(1)%gt13(nx,:,:) = zero
-          mix%material(1)%gt21(nx,:,:) = zero; mix%material(1)%gt22(nx,:,:) = one;  mix%material(1)%gt23(nx,:,:) = zero
-          mix%material(1)%gt31(nx,:,:) = zero; mix%material(1)%gt32(nx,:,:) = zero; mix%material(1)%gt33(nx,:,:) = one
+          !mix%material(1)%gt11(nx,:,:) = one;  mix%material(1)%gt12(nx,:,:) = zero; mix%material(1)%gt13(nx,:,:) = zero
+          !mix%material(1)%gt21(nx,:,:) = zero; mix%material(1)%gt22(nx,:,:) = one;  mix%material(1)%gt23(nx,:,:) = zero
+          !mix%material(1)%gt31(nx,:,:) = zero; mix%material(1)%gt32(nx,:,:) = zero; mix%material(1)%gt33(nx,:,:) = one
 
-          mix%material(1)%gp11(nx,:,:) = one;  mix%material(1)%gp12(nx,:,:) = zero; mix%material(1)%gp13(nx,:,:) = zero
-          mix%material(1)%gp21(nx,:,:) = zero; mix%material(1)%gp22(nx,:,:) = one;  mix%material(1)%gp23(nx,:,:) = zero
-          mix%material(1)%gp31(nx,:,:) = zero; mix%material(1)%gp32(nx,:,:) = zero; mix%material(1)%gp33(nx,:,:) = one
+          !mix%material(1)%gp11(nx,:,:) = one;  mix%material(1)%gp12(nx,:,:) = zero; mix%material(1)%gp13(nx,:,:) = zero
+          !mix%material(1)%gp21(nx,:,:) = zero; mix%material(1)%gp22(nx,:,:) = one;  mix%material(1)%gp23(nx,:,:) = zero
+          !mix%material(1)%gp31(nx,:,:) = zero; mix%material(1)%gp32(nx,:,:) = zero; mix%material(1)%gp33(nx,:,:) = one
 
-          mix%material(1)%pe = zero
+          !mix%material(1)%pe = zero
 
 
-          mix%material(2)%gt11(nx,:,:) = one;  mix%material(2)%gt12(nx,:,:) = zero; mix%material(2)%gt13(nx,:,:) = zero
-          mix%material(2)%gt21(nx,:,:) = zero; mix%material(2)%gt22(nx,:,:) = one;  mix%material(2)%gt23(nx,:,:) = zero
-          mix%material(2)%gt31(nx,:,:) = zero; mix%material(2)%gt32(nx,:,:) = zero; mix%material(2)%gt33(nx,:,:) = one
+          !mix%material(2)%gt11(nx,:,:) = one;  mix%material(2)%gt12(nx,:,:) = zero; mix%material(2)%gt13(nx,:,:) = zero
+          !mix%material(2)%gt21(nx,:,:) = zero; mix%material(2)%gt22(nx,:,:) = one;  mix%material(2)%gt23(nx,:,:) = zero
+          !mix%material(2)%gt31(nx,:,:) = zero; mix%material(2)%gt32(nx,:,:) = zero; mix%material(2)%gt33(nx,:,:) = one
 
-          mix%material(2)%gp11(nx,:,:) = one;  mix%material(2)%gp12(nx,:,:) = zero; mix%material(2)%gp13(nx,:,:) = zero
-          mix%material(2)%gp21(nx,:,:) = zero; mix%material(2)%gp22(nx,:,:) = one;  mix%material(2)%gp23(nx,:,:) = zero
-          mix%material(2)%gp31(nx,:,:) = zero; mix%material(2)%gp32(nx,:,:) = zero; mix%material(2)%gp33(nx,:,:) = one
+          !mix%material(2)%gp11(nx,:,:) = one;  mix%material(2)%gp12(nx,:,:) = zero; mix%material(2)%gp13(nx,:,:) = zero
+          !mix%material(2)%gp21(nx,:,:) = zero; mix%material(2)%gp22(nx,:,:) = one;  mix%material(2)%gp23(nx,:,:) = zero
+          !mix%material(2)%gp31(nx,:,:) = zero; mix%material(2)%gp32(nx,:,:) = zero; mix%material(2)%gp33(nx,:,:) = one
 
-          mix%material(2)%pe = zero
+          !mix%material(2)%pe = zero
 
-          mix%material(1)%Ys (nx,:,:) = YsR
-          mix%material(2)%Ys (nx,:,:) = one - YsR
+          !mix%material(1)%Ys (nx,:,:) = YsR
+          !mix%material(2)%Ys (nx,:,:) = one - YsR
 
-          mix%material(1)%VF (nx,:,:) = VFR
-          mix%material(2)%VF (nx,:,:) = one - VFR
+          !mix%material(1)%VF (nx,:,:) = VFR
+          !mix%material(2)%VF (nx,:,:) = one - VFR
        endif
     endif
 

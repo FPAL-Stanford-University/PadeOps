@@ -21,7 +21,7 @@ module ShearLayerY_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 20D-3, Lx = 20D-3, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 1.3585265529, Lx = 0.452842184301, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -288,7 +288,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
         delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-        eta =(y-interface_init-eta0k*sin(2*pi*x/kwave))
+        eta =(y-interface_init) !-epsilonk*sin(alpha*x))
 
 	tmp = (half ) * ( one - erf( (eta)/(delta_rho) ) )
 
@@ -305,7 +305,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
        ! eta0k = etasize*delta
        ! kwave = ksize*delta
-        eta2 = eta-2*delta_rho
+        eta2 = eta !-delta_rho
 
         
 
@@ -314,6 +314,8 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         elsewhere(eta2 .lt. 0 )
            u = v0*erf(eta2/delta)
         endwhere
+           v = 0
+           w = 0
 
         open (unit=8, file="Phi_I.txt", status='old', action='read' )
 
@@ -426,7 +428,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
 end subroutine
 
-subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
+subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,pthick,rhothick,uthick,Ysthick,VFthick,Ys_wiggle,VF_wiggle,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,eps,half,one,two,pi,four,eight
     use SolidGrid,        only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index, &
@@ -443,7 +445,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     character(len=*),                intent(in) :: outputdir
     type(decomp_info),               intent(in) :: decomp
     type(derivatives),               intent(in) :: der   
-    real(rkind),                     intent(in) :: dx,dy,dz,tsim
+    real(rkind),                     intent(in) :: dx,dy,dz,tsim,uthick,rhothick,pthick,Ysthick,VFthick,Ys_wiggle,VF_wiggle
     integer,                         intent(in) :: vizcount
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
@@ -453,8 +455,9 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3),3) :: vort
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)  ) :: tmp
-    real(rkind), dimension(decomp%ysz(1)) :: Ys1_mean, Ys2_mean
+    real(rkind), dimension(decomp%ysz(1)) :: Ys1_mean,Ys2_mean
     real(rkind) :: vort_pos, vort_neg, mixwidth, Al_mass, xspike, xbubbl, xspike_proc, xbubbl_proc
+    real(rkind) :: YsGrowth,VFGrowth, VFmin_proc, VFmax_proc, VFmin, VFmax
     character(len=clen) :: outputfile, str
     integer :: i, j, k
 
@@ -518,77 +521,52 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 
        Al_mass = P_MEAN(rho*mix%material(2)%Ys)*six*one
 
-       xspike_proc = -two
-       xbubbl_proc = four
+       xspike_proc = 0
+       xbubbl_proc = Ly
+       VFmin_proc  = Ly 
+       VFmax_proc  = 0
        do j = 1,decomp%ysz(2)
            do i = 1,decomp%ysz(1)
-               if (mix%material(1)%Ys(i,j,1) .GE. half) xspike_proc = max(xspike_proc,x(i,j,1))
-               if (mix%material(1)%Ys(i,j,1) .LE. half) xbubbl_proc = min(xbubbl_proc,x(i,j,1))
+               if (mix%material(1)%Ys(i,j,1) .GE. half) xspike_proc = max(xspike_proc,y(i,j,1))
+               if (mix%material(1)%Ys(i,j,1) .LE. half) xbubbl_proc = min(xbubbl_proc,y(i,j,1))
+               if (mix%material(1)%VF(i,j,1) .GE. half) VFmax_proc  = max(VFmax_proc,y(i,j,1))
+               if (mix%material(1)%VF(i,j,1) .LE. half) VFmin_proc  = min(VFmin_proc,y(i,j,1))
            end do
        end do
        xspike = P_MAXVAL(xspike_proc)
        xbubbl = P_MINVAL(xbubbl_proc)
-           
+       VFmax  = P_MAXVAL(VFmax_proc)
+       VFmin  = P_MINVAL(VFmin_proc)
+       YsGrowth = xspike - xbubbl
+       VFGrowth  = VFmax - VFmin   
        write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayerY_statistics.dat"
 
        if (vizcount == 0) then
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
-           write(outputunit,'(7A27)') 'tsim', 'mixwidth', 'vort_pos', 'vort_neg', 'Al_mass', 'xspike', 'xbubbl'
+           write(outputunit,'(7A27)') 'tsim', 'YsAmp', 'VFAmp'
        else
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', action='WRITE', status='OLD', position='APPEND')
        end if
-       write(outputunit,'(7ES27.16E3)') tsim, mixwidth, vort_pos, vort_neg, Al_mass, xspike, xbubbl
-       close(outputunit)
+       
+       if(nrank .eq. 0) then
+         write(outputunit,'(7ES27.16E3)') tsim, YsGrowth, VFGrowth
 
-        write(outputfile,'(4A)') trim(outputdir),"/tec_MultSpecShock_"//trim(str),".dat"
-        if(vizcount==0) then
-          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='replace')
-          write(outputunit,'(350a)') 'VARIABLES="x","y","z","rho","u","v","w","e","p", &
-                                     "sig11","sig12","sig13","sig22","sig23","sig33","mustar","betstar","kapstar", &
-                                     "p-1","Ys-1","VF-1","eh-1","T-1","g11-1","g12-1","g13-1","g21-1","g22-1","g23-1","g31-1","g32-1","g33-1","Dstar-1","kap-1","rhom-1",&
-                                     "p-2","Ys-2","VF-2","eh-2","T-2","g11-2","g12-2","g13-2","g21-2","g22-2","g23-2","g31-2","g32-2","g33-2","Dstar-2","kap-2","rhom-2"'
-          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
-          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
-          do k=1,decomp%ysz(3)
-           do j=1,decomp%ysz(2)
-            do i=1,decomp%ysz(1)
-                write(outputunit,'(52ES26.16)') x(i,j,k), y(i,j,k), z(i,j,k), rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                      ! continuum (9)
-                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
-                                                mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
-                                                mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
-                                                mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
-                                                mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k), mix%material(1)%rhom(i,j,k), & ! material 1 
-                                                mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
-                                                mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
-                                                mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
-                                                mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k), mix%material(2)%rhom(i,j,k)    ! material 2
-            end do
-           end do
-          end do
-          close(outputunit)
-        else
-          open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='old', action='write', position='append')
-          write(outputunit,'(6(a,i7),a)') 'ZONE I=', decomp%ysz(1), ' J=', decomp%ysz(2), ' K=', decomp%ysz(3), ' ZONETYPE=ORDERED'
-          write(outputunit,'(a,ES26.16)') 'DATAPACKING=POINT, SOLUTIONTIME=', tsim
-          write(outputunit,'(a)') ' VARSHARELIST=([1, 2, 3]=1)'
-          do k=1,decomp%ysz(3)
-           do j=1,decomp%ysz(2)
-            do i=1,decomp%ysz(1)
-                write(outputunit,'(49ES26.16)') rho(i,j,k), u(i,j,k), v(i,j,k), w(i,j,k), e(i,j,k), p(i,j,k), &                                                    ! continuum (6)
-                                                sxx(i,j,k), sxy(i,j,k), sxz(i,j,k), syy(i,j,k), syz(i,j,k), szz(i,j,k), mu(i,j,k), bulk(i,j,k), kap(i,j,k), &      ! continuum (9)
-                                                mix%material(1)% p(i,j,k),  mix%material(1)% Ys(i,j,k), mix%material(1)% VF(i,j,k), mix%material(1)% eh(i,j,k), &  ! material 1 (14)
-                                                mix%material(1)% T(i,j,k),  mix%material(1)%g11(i,j,k), mix%material(1)%g12(i,j,k), mix%material(1)%g13(i,j,k), &  ! material 1 
-                                                mix%material(1)%g21(i,j,k), mix%material(1)%g22(i,j,k), mix%material(1)%g23(i,j,k), mix%material(1)%g31(i,j,k), &  ! material 1 
-                                                mix%material(1)%g32(i,j,k), mix%material(1)%g33(i,j,k), mix%material(1)%diff(i,j,k), mix%material(1)%kap(i,j,k), mix%material(1)%rhom(i,j,k),&  ! material 1 
-                                                mix%material(2)% p(i,j,k),  mix%material(2)% Ys(i,j,k), mix%material(2)% VF(i,j,k), mix%material(2)% eh(i,j,k), &  ! material 2 (14)
-                                                mix%material(2)% T(i,j,k),  mix%material(2)%g11(i,j,k), mix%material(2)%g12(i,j,k), mix%material(2)%g13(i,j,k), &  ! material 2
-                                                mix%material(2)%g21(i,j,k), mix%material(2)%g22(i,j,k), mix%material(2)%g23(i,j,k), mix%material(2)%g31(i,j,k), &  ! material 2
-                                                mix%material(2)%g32(i,j,k), mix%material(2)%g33(i,j,k), mix%material(2)%diff(i,j,k), mix%material(2)%kap(i,j,k), mix%material(2)%rhom(i,j,k)    ! material 2
-            end do
-           end do
-          end do
-          close(outputunit)
-        endif
+       endif
+       close(outputunit)
+ 
+       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayer_LADstatistics.dat"
+
+       if (vizcount == 0) then
+           open(unit=outputunit, file=trim(outputfile), form='FORMATTED',status='REPLACE')
+           write(outputunit,'(7A27)') 'tsim', 'Ys_thick', 'VF_thick', 'pthick','uthick', 'Ys_wiggle', 'VF_wiggle', "rhothick"
+       else
+           open(unit=outputunit, file=trim(outputfile), form='FORMATTED',action='WRITE', status='OLD', position='APPEND')
+       end if
+
+       if(nrank .eq. 0) then
+         write(outputunit,'(7ES27.16E3)') tsim, Ysthick, VFthick, pthick, uthick,Ys_wiggle, VF_wiggle, rhothick
+       endif
+       close(outputunit)
 
 
     end associate
@@ -619,7 +597,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     nx = decomp%ysz(1)
     ny = decomp%ysz(2)
 
-    print *, "ny", ny
+    !print *, "ny", ny
     
     mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
     mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -641,7 +619,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           if(y_bc(1)==0) then
               rho( :,1,:) = rhoL
               u  ( :,1,:) = vL
-              v  ( :,1,:) = zero
+              v  ( :,1,:) = v(:,2,:)
               w  ( :,1,:) = zero
               mix%material(1)%p(:,1,:) = p_amb
               mix%material(2)%p(:,1,:) = p_amb
@@ -654,22 +632,22 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         endif
 
           
-        print *, "decompyen", decomp%yen(2)
-        print *, "decompyst", decomp%yst(2)
-        print *, "rhoL", rhoL
-        print *, "rhoR", rhoR
-        print *, "vl", vl
-        print *, "vr", vr
-        print *, "Ys", YsR
-        print *, "YsL", YsL
-        print *, "VFL", VFL
-        print *, "VFR", VFR 
+        !print *, "decompyen", decomp%yen(2)
+        !print *, "decompyst", decomp%yst(2)
+        !!print *, "rhoL", rhoL
+        !print *, "rhoR", rhoR
+        !print *, "vl", vl
+        !print *, "vr", vr
+        !print *, "Ys", YsR
+        !print *, "YsL", YsL
+        !print *, "VFL", VFL
+        !print *, "VFR", VFR 
 
         if(decomp%yen(2)==decomp%ysz(2)) then
           if(y_bc(2)==0) then
               rho( :,ny,:) = rhoR
               u  ( :,ny,:) = vR
-              v  ( :,ny,:) = zero
+              v  ( :,ny,:) = v(:,ny-1,:)
               w  ( :,ny,:) = zero
               mix%material(1)%p(:,ny,:) = p_amb
               mix%material(2)%p(:,ny,:) = p_amb
@@ -684,9 +662,9 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         
         
   ! apply sponge at left and right boundaries to damp outgoing waves
-        yspngL = 0.15d0*Ly
-        yspngR = 0.85d0*Ly
-        tspng = 0.03d-3
+        yspngL = 0.05d0*Ly
+        yspngR = 0.95*Ly
+        tspng = 5*Ly/ny
         dy = y(1,2,1) - y(1,1,1)
         dumL = half*(one - tanh( (y-yspngL)/(tspng) ))
         dumR = half*(one + tanh( (y-yspngR)/(tspng) ))
@@ -729,14 +707,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
             ! TODO: delete mix%material(2)%pe = mix%material(2)%pe + dum*(tmp - mix%material(2)%pe)
 
-            do j = 1,9
-                tmp = mix%material(1)%g(:,:,:,j)
-                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-                mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
+       !     do j = 1,9
+       !         tmp = mix%material(1)%g(:,:,:,j)
+       !         call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !         mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
 
-                tmp = mix%material(2)%g(:,:,:,j)
-                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-                mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
+       !         tmp = mix%material(2)%g(:,:,:,j)
+       !         call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+       !         mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
 
                 ! TODO: delete tmp = mix%material(1)%g_t(:,:,:,j)
                 ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
@@ -753,7 +731,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                 ! TODO: delete tmp = mix%material(2)%g_p(:,:,:,j)
                 ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
                 ! TODO: delete mix%material(2)%g_p(:,:,:,j) = mix%material(2)%g_p(:,:,:,j) + dum*(tmp - mix%material(2)%g_p(:,:,:,j))
-            end do
+       !     end do
 
             !mca add for stability
 

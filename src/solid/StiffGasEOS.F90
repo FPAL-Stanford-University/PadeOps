@@ -27,6 +27,7 @@ module StiffGasEOS
         procedure :: get_sos
         procedure :: get_sos2
         procedure :: get_enthalpy_5eqn
+        procedure :: get_entropy
     end type
 
     interface stiffgas
@@ -58,6 +59,15 @@ contains
         real(rkind), dimension(:,:,:), intent(out) :: p
 
         p = (this%gam-one)*rho*e - this%gam*this%PInf
+
+    end subroutine
+
+    pure subroutine get_entropy(this,T,p,s)
+        class(stiffgas), intent(in) :: this
+        real(rkind), dimension(:,:,:), intent(in)  :: T, p
+        real(rkind), dimension(:,:,:), intent(out) :: s
+
+        s = this%Cv*log(T**this%gam /( p + this%PInf)**(this%gam-one) )
 
     end subroutine
 

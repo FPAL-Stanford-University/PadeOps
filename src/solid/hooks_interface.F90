@@ -37,7 +37,7 @@ module sgrid_hooks
 
     interface hook_output
         ! subroutine hook_output(decomp,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
-        subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
+        subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,pthick,rhothick,uthick,Ysthick,VFthick,Ys_wiggle,VF_wiggle,x_bc,y_bc,z_bc)
             import :: rkind
             import :: decomp_info
             import :: derivatives
@@ -51,6 +51,8 @@ module sgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(in) :: fields
             integer, dimension(2),           intent(in) :: x_bc,y_bc,z_bc
+            real(rkind),                      intent(in) :: uthick,rhothick,pthick,Ysthick,VFthick,Ys_wiggle,VF_wiggle
+
         end subroutine
     end interface
 
