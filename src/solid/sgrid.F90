@@ -183,7 +183,7 @@ module SolidGrid
         logical     :: use_normFV
         logical     :: use_normInt
         logical     :: use_CnsrvSurfaceTension
-        logical     :: 1DStretch
+        logical     :: Stretch1D
         real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
         real(rkind) :: R, p_amb, XiLS_eps
         logical :: filt_mask = .FALSE.             ! mask filter in high gradient regions
@@ -199,7 +199,11 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: x 
         real(rkind), dimension(:,:,:), pointer :: y 
         real(rkind), dimension(:,:,:), pointer :: z 
-        
+       
+        real(rkind), dimension(:,:,:), pointer :: eta1
+        real(rkind), dimension(:,:,:), pointer :: eta2
+        real(rkind), dimension(:,:,:), pointer :: eta3
+ 
         real(rkind), dimension(:,:,:), pointer :: rho 
         real(rkind), dimension(:,:,:), pointer :: u 
         real(rkind), dimension(:,:,:), pointer :: v 
@@ -236,8 +240,8 @@ module SolidGrid
         real(rkind) :: phys_bulk1, phys_bulk2
         real(rkind) :: phys_kap1, phys_kap2
         real(rkind) :: st_limit, pthick,uthick,rhothick,Ys_wiggle,VF_wiggle,VF_thick,Ys_thick
-
-       
+        real(rkind), dimension(:,:,:,:), allocatable :: meshstretch
+        real(rkind), dimension(:,:,:), allocatable :: yMetric,xMetric, zMetric,yMetric_half, xMetric_half, zMetric_half  
         contains
             procedure          :: init
             procedure          :: destroy
@@ -271,6 +275,7 @@ module SolidGrid
             procedure, private :: get_tauStagg
             procedure, private :: get_q
             procedure          :: get_qLAD
+            procedure          :: coordinateTransform
     end type
 
 contains
@@ -334,7 +339,7 @@ contains
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., usePhiForm = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .false., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .FALSE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-        logical     :: useAkshayForm = .FALSE.,twoPhaseLAD = .FALSE.,LAD5eqn = .FALSE., use_CnsrvSurfaceTension = .FALSE., use_surfaceTension = .FALSE., use_normFV = .false., use_normInt = .false.,use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_Stagg = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE., use_XiLS = .FALSE., LADN2F = .FALSE., LADInt = .FALSE., 1DStretch = .FALSE.
+        logical     :: useAkshayForm = .FALSE.,twoPhaseLAD = .FALSE.,LAD5eqn = .FALSE., use_CnsrvSurfaceTension = .FALSE., use_surfaceTension = .FALSE., use_normFV = .false., use_normInt = .false.,use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_Stagg = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE., use_XiLS = .FALSE., LADN2F = .FALSE., LADInt = .FALSE., Stretch1D = .FALSE.
         real(rkind) :: surfaceTension_coeff = 0.0d0, R = 1d0, p_amb = 1d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0,Ys_wiggle = 0d0,VF_wiggle = 0d0, uthick = 0, rhothick = 0, pthick = 0,VF_thick = 0, Ys_thick = 0
@@ -361,7 +366,7 @@ contains
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
                            use_CnsrvSurfaceTension, use_surfaceTension, use_normFV, use_normInt, use_gradXi,energy_surfTen,use_gradphi, use_gradVF, use_Stagg, use_FV,use_D04, surface_mask, weightedcurvature, &
-                           surfaceTension_coeff, R, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, 1DStretch
+                           surfaceTension_coeff, R, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, Stretch1D
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -397,7 +402,7 @@ contains
         this%step = 0
         this%nsteps = nsteps
 
-        this%1DStretch     = 1DStretch
+        this%Stretch1D     = Stretch1D
         this%useAkshayForm = useAkshayForm
         this%twoPhaseLAD   = twoPhaseLAD
         this%LAD5eqn       = LAD5eqn
@@ -510,6 +515,7 @@ contains
 
         ! Associate pointers for ease of use
         this%x    => this%mesh  (:,:,:, 1) 
+
         this%y    => this%mesh  (:,:,:, 2) 
         this%z    => this%mesh  (:,:,:, 3)
 
@@ -533,11 +539,30 @@ contains
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh)
 
 
-        if( this%1DStretch ) then
+        if( this%Stretch1D ) then
 
             if ( allocated(this%meshstretch) ) deallocate(this%meshstretch)
             call alloc_buffs(this%meshstretch,3,'y',this%decomp)
-            call coordTransform(this%x,this%y,this%z, this%eta1, this%eta2,this%eta3, this%meshstretch,this%yMetric,this%xMetric, this%zMetric)
+            this%eta1    => this%meshstretch  (:,:,:, 1)
+            this%eta2    => this%meshstretch  (:,:,:, 2)
+            this%eta3  => this%meshstretch  (:,:,:, 3)
+
+            if ( allocated(this%yMetric) ) deallocate(this%yMetric)
+            allocate(this%yMetric(this%nxp,this%nyp,this%nzp) )
+            if ( allocated(this%xMetric) ) deallocate(this%xMetric)
+            allocate(this%xMetric(this%nxp,this%nyp,this%nzp) )
+            if ( allocated(this%zMetric) ) deallocate(this%zMetric)
+            allocate(this%zMetric(this%nxp,this%nyp,this%nzp) )
+
+            if ( allocated(this%yMetric_half) ) deallocate(this%yMetric_half)
+            allocate(this%yMetric_half(this%nxp,this%nyp,this%nzp) )
+            if ( allocated(this%xMetric_half) ) deallocate(this%xMetric_half)
+            allocate(this%xMetric_half(this%nxp,this%nyp,this%nzp) )
+            if ( allocated(this%zMetric_half) ) deallocate(this%zMetric_half)
+            allocate(this%zMetric_half(this%nxp,this%nyp,this%nzp) )
+
+
+            call this%coordinateTransform(this%dx,this%dy,this%dz)
         endif
  
         ! Allocate der
@@ -899,7 +924,7 @@ contains
 
         ! Nullify pointers
         nullify(this%x); nullify(this%y); nullify(this%z)
-
+        nullify(this%eta1); nullify(this%eta2); nullify(this%eta3)
         nullify(this%rho      )
         nullify(this%u        )
         nullify(this%v        )
@@ -986,7 +1011,13 @@ contains
         nullify(this%pError)
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
-        
+        if (allocated(this%mesh)) deallocate(this%meshstretch)
+        if (allocated(this%yMetric)) deallocate(this%yMetric)        
+        if (allocated(this%xMetric)) deallocate(this%xMetric)        
+        if (allocated(this%zMetric)) deallocate(this%zMetric)
+        if (allocated(this%yMetric_half)) deallocate(this%yMetric_half)
+        if (allocated(this%xMetric_half)) deallocate(this%xMetric_half)
+        if (allocated(this%zMetric_half)) deallocate(this%zMetric_half)
         call this%der%destroy()
         if (allocated(this%der)) deallocate(this%der) 
 
@@ -1152,6 +1183,45 @@ contains
         call transpose_z_to_y(zdum,d2fdz2,decomp)
 
     end subroutine
+    
+    subroutine coordinateTransform(this,dx,dy,dz) 
+       use constants,        only: one, half
+       class(sgrid), intent(inout) :: this
+       real(rkind),  intent(inout) :: dx,dy,dz
+       real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
+       integer :: i,j,k
+       integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+       real(rkind) :: L, STRETCH_RATIO = 5
+       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half
+       nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
+
+        ! If base decomposition is in Y
+       ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
+       ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
+
+       L = this%y(1,ny,1) - this%y(1,1,1)
+       print *, "Ly = ", L
+
+       y_half = this%y + 0.5
+
+   
+       this%eta1 = this%x
+       this%eta3 = this%z
+       this%xMetric = 1
+       this%zMetric = 1
+       this%xMetric_half = 1
+       this%zMetric_half = 1
+
+       this%eta2 = atanh( 2*this%y / ( 1 + 1 / STRETCH_RATIO) )
+       this%eta2 = L /( this%eta2(1, ny,1) - this%eta2(1,1,1))*eta2
+
+       eta2_half = atanh( 2*y_half / ( 1 + 1 / STRETCH_RATIO) )
+       eta2_half = L /( eta2_half(1, ny,1) - eta2_half(1,1,1))*eta2_half
+
+       this%yMetric = (1 + 1 /STRETCH_RATIO)/2*1/(cosh(this%eta2)**2)*1/(tanh( L /(this%eta2(1, ny,1) - this%eta2(1,1,1))))
+       this%yMetric_half = (1 + 1 /STRETCH_RATIO)/2*1/(cosh(eta2_half)**2)*1/(tanh(L /(eta2_half(1, ny,1) - eta2_half(1,1,1))))
+
+    end subroutine 
 
     subroutine update_P(this,Qtmpp,isub,dt,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         use decomp_2d,  only: nrank
@@ -1369,8 +1439,12 @@ contains
         ! Write out initial conditions
         ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
         call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
-        call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
 
+        if( this%Stretch1D) then
+           call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
+        else
+           call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix,this%tsim)
+        endif
 
         vizcond = .FALSE.
         
@@ -1419,7 +1493,12 @@ contains
            if (vizcond) then
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
-                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
+
+                if( this%Stretch1D) then               
+                   call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
+                else
+                   call this%viz%WriteViz(this%decomp, this%mesh, this%fields,this%mix, this%tsim)
+                endif
                 vizcond = .FALSE.
            end if
             
@@ -1451,7 +1530,16 @@ contains
             if(check_exit(this%outputdir)) then
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
-                call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
+                if( this%Stretch1D) then
+
+                   call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
+
+                else
+                
+                   call this%viz%WriteViz(this%decomp, this%mesh, this%fields,this%mix, this%tsim) 
+
+                endif
+
                 call GracefulExit("Found exitpdo file in working directory",1234)
             endif
 
