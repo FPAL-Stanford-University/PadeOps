@@ -6,6 +6,8 @@ interface write_binary
 end interface
 
 contains
+
+
     subroutine write_0d_ascii(raw_data,filename)
         real(kind=rkind), intent(in) :: raw_data
         character(len=*), intent(in) :: filename
@@ -52,6 +54,25 @@ contains
         enddo
         CLOSE(10)
     end subroutine   
+
+    subroutine append_2D_ascii(raw_data,filename)
+        real(kind=rkind), intent(in) :: raw_data(:,:)
+        character(len=*), intent(in) :: filename
+        character(len=30) :: rowfmt
+        integer :: n1, n2
+        integer :: i, j
+
+        n1 = size(raw_data,1)
+        n2 = size(raw_data,2)
+        write(rowfmt,'(A,I4,A)') '(',n2,'(es25.17E3,1x))'
+        OPEN(UNIT=10, FILE=trim(filename), status='old', &
+          action='write', form='formatted', position='append')
+
+        do i=1,n1
+            write(10,FMT=rowfmt) ( raw_data(i,j), j=1,n2 )
+        enddo
+        CLOSE(10)
+    end subroutine append_2D_ascii
  
    subroutine read_2d_ascii(data2read,filename)
         implicit none 
@@ -62,7 +83,7 @@ contains
         logical :: fileExists = .true.
 
         inquire(file=filename,exist=fileExists)
-        call assert(fileExists,"The file does not exist -- basic_io.F90")
+        call assert(fileExists,"The file "//trim(filename)//" does not exist -- basic_io.F90")
 
 
         open(unit=10,file=filename,access='sequential',form='formatted')

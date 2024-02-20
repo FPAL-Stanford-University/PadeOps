@@ -638,29 +638,29 @@
 
    end subroutine
 
-   subroutine initialize_hdf5_io(this)
-       class(igrid), intent(inout) :: this
-       character(len=5) :: filename_prefix
+   !subroutine initialize_hdf5_io(this)
+   !    class(igrid), intent(inout) :: this
+   !    character(len=5) :: filename_prefix
 
-       write(filename_prefix,"(A3,I2.2)") "Run", this%runID
-       if (this%ioType == 1) then
-           call this%viz_hdf5%init(MPI_COMM_WORLD,this%gpC, "x",this%outputdir, filename_prefix, &
-              reduce_precision=.false.,write_xdmf=.true., read_only=.false., wider_time_format=.true.) 
-       elseif (this%ioType == 2) then
-           call this%viz_hdf5%init(MPI_COMM_WORLD,this%gpC, "x",this%outputdir, filename_prefix, &
-              reduce_precision=.true.,write_xdmf=.true., read_only=.false., wider_time_format=.true.)  
-       else
-           call GracefulExit("Invalid choice for IOTYPE", 312)
-       end if 
+   !    write(filename_prefix,"(A3,I2.2)") "Run", this%runID
+   !    if (this%ioType == 1) then
+   !        call this%viz_hdf5%init(MPI_COMM_WORLD,this%gpC, "x",this%outputdir, filename_prefix, &
+   !           reduce_precision=.false.,write_xdmf=.true., read_only=.false., wider_time_format=.true.) 
+   !    elseif (this%ioType == 2) then
+   !        call this%viz_hdf5%init(MPI_COMM_WORLD,this%gpC, "x",this%outputdir, filename_prefix, &
+   !           reduce_precision=.true.,write_xdmf=.true., read_only=.false., wider_time_format=.true.)  
+   !    else
+   !        call GracefulExit("Invalid choice for IOTYPE", 312)
+   !    end if 
 
-       call this%viz_hdf5%write_coords(this%mesh)
-   end subroutine 
+   !    call this%viz_hdf5%write_coords(this%mesh)
+   !end subroutine 
 
-   subroutine destroy_hdf5_io(this)
-       class(igrid), intent(inout) :: this
+   !subroutine destroy_hdf5_io(this)
+   !    class(igrid), intent(inout) :: this
 
-       call this%viz_hdf5%destroy()
-   end subroutine 
+   !    call this%viz_hdf5%destroy()
+   !end subroutine 
 
    subroutine append_visualization_info(this)
        class(igrid), intent(in) :: this 
@@ -691,7 +691,7 @@
            if (this%ioType == 0) then
               call this%scalars(idx)%dumpScalarField(this%step)
            else
-              call this%scalars(idx)%dumpScalarField(this%step, this%viz_hdf5)
+              !call this%scalars(idx)%dumpScalarField(this%step, this%viz_hdf5)
            end if 
         end do 
      end if 
@@ -776,43 +776,39 @@
                end if
            end if
        case default
-           call this%viz_hdf5%update_vizcount(this%step)
-           call this%viz_hdf5%start_viz(this%tsim)
-           call this%viz_hdf5%write_variable(this%u, "uVel")
-           call this%viz_hdf5%write_variable(this%v, "vVel")
-           call this%viz_hdf5%write_variable(this%wC, "wVel")
-           call this%dump_scalar_fields()           
-           if (this%isStratified .or. this%initspinup) call this%viz_hdf5%write_variable(this%T,'potT')
-           if (this%fastCalcPressure) call this%viz_hdf5%write_variable(this%pressure,'prss')
-           if (this%computeDNSpressure) call this%viz_hdf5%write_variable(this%pressure_dns,'pdns')
-           if (this%computeturbinepressure) call this%viz_hdf5%write_variable(this%pressure_turbine,'ptrb')
-           if (this%computefringepressure) call this%viz_hdf5%write_variable(this%pressure_fringe,'pfrn')
-           if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%viz_hdf5%write_variable(this%nu_SGS,'nSGS')
-           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%viz_hdf5%write_variable(this%kappaSGS,'kSGS')
-           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
-              call this%viz_hdf5%write_variable(this%kappa_bounding,'kBND')
-           end if 
-           if (this%computeRapidSlowPressure) then
-               call this%viz_hdf5%write_variable(this%prapid,'prap')
-               call this%viz_hdf5%write_variable(this%pslow,'pslo')
-           end if 
-           if (this%computevorticity) then
-               call this%viz_hdf5%write_variable(this%ox,'omgX')
-               call this%viz_hdf5%write_variable(this%oy,'omgY')
-               call this%viz_hdf5%write_variable(this%oz,'omgZ')
-           end if 
-           if (this%WriteTurbineForce) then 
-                call this%viz_hdf5%write_variable(this%WindTurbineArr%fx, "TrbX")
-                call this%viz_hdf5%write_variable(this%WindTurbineArr%fy, "TrbY")
-                call this%viz_hdf5%write_variable(this%WindTurbineArr%fz, "TrbZ")
-           end if
+           !call this%viz_hdf5%update_vizcount(this%step)
+           !call this%viz_hdf5%start_viz(this%tsim)
+           !call this%viz_hdf5%write_variable(this%u, "uVel")
+           !call this%viz_hdf5%write_variable(this%v, "vVel")
+           !call this%viz_hdf5%write_variable(this%wC, "wVel")
+           !call this%dump_scalar_fields()           
+           !if (this%isStratified .or. this%initspinup) call this%viz_hdf5%write_variable(this%T,'potT')
+           !if (this%fastCalcPressure) call this%viz_hdf5%write_variable(this%pressure,'prss')
+           !if (this%computeDNSpressure) call this%viz_hdf5%write_variable(this%pressure_dns,'pdns')
+           !if (this%computeturbinepressure) call this%viz_hdf5%write_variable(this%pressure_turbine,'ptrb')
+           !if (this%computefringepressure) call this%viz_hdf5%write_variable(this%pressure_fringe,'pfrn')
+           !if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%viz_hdf5%write_variable(this%nu_SGS,'nSGS')
+           !if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%viz_hdf5%write_variable(this%kappaSGS,'kSGS')
+           !if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
+           !   call this%viz_hdf5%write_variable(this%kappa_bounding,'kBND')
+           !end if 
+           !if (this%computeRapidSlowPressure) then
+           !    call this%viz_hdf5%write_variable(this%prapid,'prap')
+           !    call this%viz_hdf5%write_variable(this%pslow,'pslo')
+           !end if 
+           !if (this%computevorticity) then
+           !    call this%viz_hdf5%write_variable(this%ox,'omgX')
+           !    call this%viz_hdf5%write_variable(this%oy,'omgY')
+           !    call this%viz_hdf5%write_variable(this%oz,'omgZ')
+           !end if 
+           !if (this%WriteTurbineForce) then 
+           !     call this%viz_hdf5%write_variable(this%WindTurbineArr%fx, "TrbX")
+           !     call this%viz_hdf5%write_variable(this%WindTurbineArr%fy, "TrbY")
+           !     call this%viz_hdf5%write_variable(this%WindTurbineArr%fz, "TrbZ")
+           !end if
 
-           call this%viz_hdf5%end_viz()
+           !call this%viz_hdf5%end_viz()
        end select 
-       if (this%useProbes) then
-            call this%dumpProbes()    
-            call message(0,"Performed a scheduled dump for probes.")
-       end if
        call this%append_visualization_info()
        
        if (this%PreProcessForKS) then
@@ -945,16 +941,27 @@
 
 
    subroutine dumpProbes(this)
-       use basic_io, only: write_2d_ascii
+       use basic_io, only: write_2d_ascii, append_2D_ascii
        class(igrid), intent(in) :: this
        character(len=clen) :: tempname, fname
        integer :: pid, idx
+       logical :: exists
 
        do idx = 1,this%nprobes
            pid = this%probes(4,idx)
-           write(tempname,"(A3,I2.2,A6,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
+           !write(tempname,"(A3,I2.2,A6,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
+           !fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+           !call write_2d_ascii(transpose(this%probe_data(:,idx,this%probeStartStep:this%step)), fname)
+
+           write(tempname,"(A3,I2.2,A6,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE",pid,"_tst",this%probeStartStep,".out"
            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-           call write_2d_ascii(transpose(this%probe_data(:,idx,this%probeStartStep:this%step)), fname)
+           inquire(file=trim(fname),exist=exists) 
+           if (exists) then
+             call append_2D_ascii(transpose(this%probe_data(:,:,idx)),trim(fname))
+           else
+             call write_2D_ascii(transpose(this%probe_data(:,:,idx)),trim(fname))
+           end if
+
        end do 
 
        ! KS - preprocess

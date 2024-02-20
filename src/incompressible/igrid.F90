@@ -25,13 +25,14 @@ module IncompressibleGrid
     use angleControl, only: angCont
     use forcingmod,   only: HIT_shell_forcing
     use scalar_igridMod, only: scalar_igrid 
-    use io_hdf5_stuff, only: io_hdf5 
+    !use io_hdf5_stuff, only: io_hdf5 
     use PoissonPeriodicMod, only: PoissonPeriodic
     use immersedbodyMod, only: immersedBody
     use forcingLayerMod, only: forcingLayer
     use spectralForcingLayerMod, only: spectForcingLayer
     use interpolatorMod, only: interpolator
     use fortran_assert, only: assert
+    use basic_io, only: write_2D_ascii 
 
     implicit none
 
@@ -309,7 +310,7 @@ module IncompressibleGrid
 
         ! HDF5 IO
         integer :: ioType = 0
-        type(io_hdf5) :: viz_hdf5
+        !type(io_hdf5) :: viz_hdf5
 
         logical :: WriteTurbineForce = .false. 
         
@@ -401,8 +402,8 @@ module IncompressibleGrid
             procedure, private :: compute_RapidSlowPressure_Split
             procedure, private :: dump_visualization_files
             procedure, private :: append_visualization_info
-            procedure, private :: initialize_hdf5_io
-            procedure, private :: destroy_hdf5_io
+            !procedure, private :: initialize_hdf5_io
+            !procedure, private :: destroy_hdf5_io
             procedure          :: get_geostrophic_forcing
             procedure          :: instrumentForBudgets
             procedure          :: instrumentForBudgets_timeAvg
@@ -495,6 +496,9 @@ contains
         ! "S" stands for "S"ource
         logical :: restartFromDifferentGrid = .false.
         integer :: nxS = 100, nyS = 100, nzS = 100
+
+        ! For MPI communication for probes
+        integer, dimension(:), allocatable :: displs, probe_counts, send_buff, recv_buff
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                         useRestartFile, restartFromViz, restartFile_TID, restartFile_RID, CviscDT, nstepConstDt, &
@@ -1168,15 +1172,19 @@ contains
            do idx = 1,size(probe_locs,2)
                ! assume x - decomposition
                ! First check if y lies within decomposition
-               if ((probe_locs(2,idx) < maxval(this%mesh(:,:,:,2))+this%dy/2.d0) .and. (probe_locs(2,idx) > minval(this%mesh(:,:,:,2))- this%dy/2.d0)) then
+               if ((probe_locs(2,idx) < maxval(this%mesh(:,:,:,2))+this%dy/2.d0) .and. &
+                   (probe_locs(2,idx) > minval(this%mesh(:,:,:,2))- this%dy/2.d0)) then
                    ! Now check if z lies within my decomposition
-                   if ((probe_locs(3,idx) < maxval(this%mesh(:,:,:,3))+this%dz/2.d0) .and. (probe_locs(3,idx) > minval(this%mesh(:,:,:,3))-this%dz/2.d0)) then
+                   if ((probe_locs(3,idx) < maxval(this%mesh(:,:,:,3))+this%dz/2.d0) .and. &
+                       (probe_locs(3,idx) > minval(this%mesh(:,:,:,3))-this%dz/2.d0)) then
+
                        ! Looks like I have the probe!
                        this%nprobes = this%nprobes + 1
                    end if
                end if
            end do  
               
+           this%ProbeStartStep = this%step
            ! If have 1 or more probes, I need to allocate memory for probes
            if (this%nprobes > 0) then
                allocate(this%probes(4,this%nprobes))
@@ -1185,12 +1193,17 @@ contains
                !else                                     
                !    allocate(this%probe_data(1:4,1:this%nprobes,0:this%probeTimeLimit-1)) ! Store time + 3 fields
                !end if
-               allocate(this%probe_data(1:9,1:this%nprobes,0:this%probeTimeLimit-1))
+               allocate(this%probe_data(1:9,this%t_pointProbe,1:this%nprobes))
+               this%tpro = 0
+               !allocate(this%probe_data(1:9,1:this%nprobes,0:this%probeTimeLimit-1))
                this%probe_data = 0.d0
                ii = 1
                do idx = 1,size(probe_locs,2)
-                   if ((probe_locs(2,idx) < maxval(this%mesh(:,:,:,2)) + this%dy/2.d0) .and. (probe_locs(2,idx) > minval(this%mesh(:,:,:,2)) - this%dy/2.d0)) then
-                       if ((probe_locs(3,idx) < maxval(this%mesh(:,:,:,3)) + this%dz/2.d0) .and. (probe_locs(3,idx) > minval(this%mesh(:,:,:,3)) - this%dz/2.d0)) then
+                   if ((probe_locs(2,idx) < maxval(this%mesh(:,:,:,2)) + this%dy/2.d0) .and. &
+                       (probe_locs(2,idx) > minval(this%mesh(:,:,:,2)) - this%dy/2.d0)) then
+                       if ((probe_locs(3,idx) < maxval(this%mesh(:,:,:,3)) + this%dz/2.d0) .and. &
+                           (probe_locs(3,idx) > minval(this%mesh(:,:,:,3)) - this%dz/2.d0)) then
+
                            allocate(temp(size(this%mesh,1)))
                            temp = abs(probe_locs(1,idx) - this%mesh(:,1,1,1))
                            temploc = minloc(temp)
@@ -1217,10 +1230,44 @@ contains
                this%doIhaveAnyProbes = .true. 
            else
                this%doIhaveAnyProbes = .false.  
+               ! We still need to allocate this%probes for MPI_GatherV below
+               allocate(this%probes(4,0))
            end if
-           this%ProbeStartStep = this%step
            deallocate(probe_locs)
-           !print*, nrank, "Do I have probes?:", this%doIhaveAnyProbes, this%nprobes
+
+           ! Rank 0 gather all the probe info and write it to a file
+!           allocate(probe_counts(nproc),displs(nproc))
+!print*, "A", nproc
+!           call MPI_Gather(this%nprobes,1,MPI_INTEGER,probe_counts,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+!print*, "B"
+!           allocate(probe_locs(4,sum(probe_counts)))
+!           allocate(recv_buff(sum(probe_counts)))
+!           allocate(send_buff(this%nprobes))
+!           displs = 0
+!           do idx = 2,4
+!               displs(idx) = displs(idx-1) + probe_counts(idx-1)
+!           end do
+!print*, "C"
+!           do idx = 1,4
+!               call MPI_GatherV(this%probes(idx,:),this%nprobes,MPI_INTEGER,&
+!                 recv_buff,probe_counts,displs,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+!               probe_locs(idx,:) = recv_buff
+!           end do
+!print*, "D"
+!           deallocate(probe_counts,displs,recv_buff,send_buff)
+!           if (nrank == 0) then
+!               write(tempname,"(A3,I2.2,A15,I6.6,A4,I6.6,A4)") "Run",this%runID,&
+!                 "_PROBE_info_tst",this%probeStartStep,".out"
+!               fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+!               call write_2D_ascii(transpose(real(probe_locs,rkind)),trim(fname))
+!           end if
+!
+!print*, "E"
+!           call MPI_Barrier(MPI_COMM_WORLD,ierr)
+!           deallocate(probe_locs)
+!
+!print*, "F"
+
            call message(0,"Total probes initialized:", p_sum(this%nprobes))
        end if
      
@@ -1406,16 +1453,16 @@ contains
                    else
                        if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
                        call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
-                         this%u,this%v,this%wC,this%TEhat,this%T,this%rbuffxC(:,:,:,2),&
+                         this%u,this%v,this%wC,this%TEhat,this%T, &
                          this%duidxjC, this%nu_SGS, this%dt,this%padepoiss, this%u_rhs, &
-                         this%v_rhs, this%w_rhs, this%T_rhs)
+                         this%v_rhs, this%w_rhs, this%T_rhs, this%scalars)
                    end if
                else
                    if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
                    call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
-                     this%u,this%v,this%wC,this%TEhat,this%T,this%rbuffxC(:,:,:,2),&
+                     this%u,this%v,this%wC,this%TEhat,this%T, &
                      this%duidxjC, this%nu_SGS, this%dt,this%padepoiss, this%u_rhs, &
-                     this%v_rhs, this%w_rhs, this%T_rhs)
+                     this%v_rhs, this%w_rhs, this%T_rhs, this%scalars)
                end if
            end if
        end if
@@ -1556,7 +1603,8 @@ contains
 
        ! STEP 26: HDF5 IO
        if (ioType .ne. 0) then
-           call this%initialize_hdf5_io()
+           call gracefulExit("HDF5 is not supported on this branch",13)
+           !call this%initialize_hdf5_io()
            call message(0, "HDF5 IO successfully initialized.")
        end if 
 
@@ -2158,9 +2206,9 @@ contains
 
                if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
                call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
-                 this%u,this%v,this%wC,this%TEhat,this%T,this%rbuffxC(:,:,:,2),&
+                 this%u,this%v,this%wC,this%TEhat,this%T, &
                  this%duidxjC, this%nu_SGS, this%dt,this%padepoiss, this%u_rhs, &
-                 this%v_rhs, this%w_rhs, this%T_rhs)
+                 this%v_rhs, this%w_rhs, this%T_rhs, this%scalars)
            end if
        end if 
       

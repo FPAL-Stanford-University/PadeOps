@@ -248,8 +248,8 @@
            if (this%isInviscid) Re = huge(1.0_rkind)
            if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
            call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
-             this%u,this%v,this%wC,this%TEhat,this%T,this%rbuffxC(:,:,:,2),this%duidxjC, this%nu_SGS, &
-             this%dt,this%padepoiss, this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
+             this%u,this%v,this%wC,this%TEhat,this%T,this%duidxjC, this%nu_SGS, &
+             this%dt,this%padepoiss, this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs, this%scalars)
        end if 
 
        ! Step 8: Fringe and sponge source terms

@@ -16,6 +16,7 @@ module spectralForcingLayerMod
     use mpi
     use seedGen,         only: initializeLogMap, incrementLogisticMap
     use sgsmod_igrid,    only: sgs_igrid  
+    use scalar_igridMod, only: scalar_igrid
     implicit none
 
     integer, parameter :: zbc_bot = 0, zbc_top = 0
@@ -43,7 +44,6 @@ module spectralForcingLayerMod
       character(len=clen) :: outputdir
       real(rkind) :: lambda ! Sets the temperature forcing time scale
       real(rkind) :: Ttgt ! Target temp for forcing layer
-      integer :: Temp_force_method ! Different ways to force the scalar field
       real(rkind), dimension(:,:), allocatable :: zbuff, covBuff
       real(rkind), dimension(:),   allocatable :: meanT, dTdz
       real(rkind), dimension(:,:,:), pointer :: rbuffxC, rbuffyC, rbuffzC, &
@@ -98,11 +98,10 @@ module spectralForcingLayerMod
           integer :: maskType = gaussian
           real(rkind) :: fringe_delta = 0.5d0, lambdaFact_temp = 0.d0
           real(rkind) :: Temp_in_forcing_layer = 1.d0
-          integer :: Temp_force_method = 1
 
           namelist /spectForceLayer/ zmid, lf, kmin, kmax, tgtKE, tgtMPE,tgtDissipation, &
             gain, dumpForce, maskType, fringe_delta, projectDivergenceFree, lambdaFact_temp, &
-            Temp_in_forcing_layer, Temp_force_method
+            Temp_in_forcing_layer
           
           ioUnit = 123
           open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -136,7 +135,6 @@ module spectralForcingLayerMod
           this%isStratified = isStratified
           this%lambda = lambdaFact_temp
           this%Ttgt = Temp_in_forcing_layer
-          this%Temp_force_method = Temp_force_method
 
           nx      = gpC%xsz(1)
           ny      = gpC%ysz(2)
@@ -262,8 +260,8 @@ module spectralForcingLayerMod
           if (associated(zE))     nullify(zE)
       end subroutine
 
-      subroutine updateRHS(this,uhat,vhat,what,u,v,wC,ThatE,T,q3,duidxjC,nSGS,dt,&
-          poiss,urhs,vrhs,wrhs,Trhs)
+      subroutine updateRHS(this,uhat,vhat,what,u,v,wC,ThatE,T,duidxjC,nSGS,dt,&
+          poiss,urhs,vrhs,wrhs,Trhs,scalars)
           class(spectForcingLayer), intent(inout) :: this
           complex(rkind), dimension(:,:,:), intent(in) :: uhat, vhat, what
           real(rkind), dimension(:,:,:), intent(in) :: u, v, wC
@@ -271,14 +269,16 @@ module spectralForcingLayerMod
           type(PadePoisson), intent(inout) :: poiss
           complex(rkind), dimension(:,:,:), intent(inout) :: urhs, vrhs, wrhs, Trhs
           real(rkind), dimension(:,:,:,:), intent(in), target :: duidxjC
-          real(rkind), dimension(:,:,:), intent(in) :: nSGS, T, q3
+          real(rkind), dimension(:,:,:), intent(in) :: nSGS, T
           real(rkind), intent(in) :: dt
+          type(scalar_igrid), dimension(:), allocatable :: scalars
           real(rkind) :: maxDiv
           real(rkind) :: KE_x, forceWork_x, eps_x
           real(rkind) :: KE_y, forceWork_y, eps_y
           real(rkind) :: KE_z, forceWork_z, eps_z, BV
           real(rkind), dimension(:,:,:), pointer :: dudx, dudy, dudz, dvdx, dvdy, &
             dvdz, dwdx, dwdy, dwdz
+          integer :: sca_id
           
           ! Step 1: Construct the force
           this%fxhat = uhat*this%cmaskC*this%jC
@@ -353,63 +353,26 @@ module spectralForcingLayerMod
           vrhs = vrhs + this%ampFact_y*this%fyhat
           wrhs = wrhs + this%ampFact_z*this%fzhat
 
-          call this%updateScalarRHS(T,wC,q3,dt,this%rbuffxC,this%rbuffyC,this%rbuffzC,&
-            this%rbuffyE,this%rbuffzE,this%cbuffyC,this%cbuffzC,Trhs)
-
+          if (this%isStratified) call this%updateScalarRHS(T,dt,Trhs)
+          if (allocated(scalars)) then
+              do sca_id = 1,size(scalars)
+                  call this%updateScalarRHS(scalars(sca_id)%F,dt,scalars(sca_id)%rhs)
+              end do
+          end if
       end subroutine
 
-      subroutine updateScalarRHS(this,T,wC,q3,dt,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE,cbuffyC,cbuffzC, Trhs)
+      subroutine updateScalarRHS(this,T,dt,Trhs)
           class(spectForcingLayer), intent(inout) :: this
-          real(rkind), dimension(:,:,:), intent(in) :: T, wC, q3
+          real(rkind), dimension(:,:,:), intent(in) :: T
           real(rkind), intent(in) :: dt
-          real(rkind), dimension(:,:,:), intent(inout) :: rbuffxC, rbuffyC, &
-            rbuffzC, rbuffyE, rbuffzE
-          complex(rkind), dimension(:,:,:), intent(inout) :: cbuffyC, cbuffzC, Trhs
-          real(rkind) :: eps, eps_SGS, FT, JT, MPE
+          complex(rkind), dimension(:,:,:), intent(inout) :: Trhs
 
           if (this%isStratified .and. dt > 0.d0) then
-              select case (this%Temp_force_method)
-                  case (1)
-                      ! Penalty term
-                      this%ampFact_T = 1.d0
-                      this%fT = this%rmaskC*this%lambda/dt*(this%Ttgt - T)
-                      call this%spectC%fft(this%fT,this%fThat)
-                      Trhs = Trhs + this%ampFact_T*this%fThat
-                  case (2)
-                      ! Controller ensures <T><T> is a fixed value
-
-                      ! Construct the forcing term
-                      this%fT = T*this%rmaskC
-                      call this%spectC%fft(this%fT,this%fThat)
-
-                      ! Compute destruction terms
-                      call this%mean(T,this%meanT,cbuffyC,cbuffzC)
-                      call this%ddz(this%meanT,this%dTdz,zbc_bot,zbc_top)
-
-                      call this%interpE2C(q3,rbuffxC,rbuffyC,rbuffzC,rbuffyE,rbuffzE)
-                      call this%mean(rbuffxC,this%zbuff(:,1),cbuffyC,cbuffzC)
-
-                      this%zbuff(:,2) = this%dTdz*this%dTdz
-                      eps = this%oneOnRePr*this%dz*sum(this%integralMask_1D*this%zbuff(:,2))
-                      eps_SGS = -1.d0*this%dz*sum(this%integralMask_1D*this%zbuff(:,1)*this%dTdz)
-
-                      ! Compute the force term
-                      call this%mean(this%fT,this%zbuff(:,1),cbuffyC,cbuffzC)
-                      FT = this%dz*sum(this%integralMask_1D*this%zbuff(:,1)*this%meanT)
-
-                      ! Compute the tubulent flux term
-                      call this%covariance(T,wC,this%zbuff(:,1),rbuffxC,cbuffyC,cbuffzC)
-                      JT = this%dz*sum(this%integralMask_1D*this%zbuff(:,1)*this%dTdz)
-
-                      ! Compute square of mean temp
-                      MPE = this%dz*0.5d0*sum(this%integralMask_1D*this%meanT*this%meanT)
-
-                      this%ampFact_T = (eps + eps_SGS - JT - &
-                        this%gain*(MPE - this%tgtMPE)/this%integralTime)/(FT + 1.d-14)
-
-                      ! Update RHS
-                      Trhs = Trhs + this%ampFact_T*this%fThat
-              end select
+              ! Penalty term
+              this%ampFact_T = 1.d0
+              this%fT = this%rmaskC*this%lambda/dt*(this%Ttgt - T)
+              call this%spectC%fft(this%fT,this%fThat)
+              Trhs = Trhs + this%ampFact_T*this%fThat
           end if
       end subroutine
       

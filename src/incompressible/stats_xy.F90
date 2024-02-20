@@ -275,10 +275,10 @@ module stats_xy_mod
                  do n = 1,this%nscalars
                      call this%link_pointers(this%tidx,n)
                      
-                     ! TODO: Mean scalar profile
+                     ! Mean scalar profile
                      call this%mean(this%T, this%meanT)
 
-                     ! TODO: Mean scalar gradient
+                     ! Mean scalar gradient
                      call this%mean(this%dTdzC,this%dTdz)
 
                      ! Scalar variance and fluxes
@@ -368,7 +368,7 @@ module stats_xy_mod
               call this%gradient_production(dudx,dudy,dudz,this%uu,this%uv,this%uw,R11_budget(:,2))
               call this%gradient_production(dvdx,dvdy,dvdz,this%uv,this%vv,this%vw,R22_budget(:,2))
               call this%gradient_production(dwdx,dwdy,dwdz,this%uw,this%vw,this%ww,R33_budget(:,2))
-              tke_budget(:,2) = R11_budget(:,2) + R22_budget(:,2) + R33_budget(:,3)
+              tke_budget(:,2) = R11_budget(:,2) + R22_budget(:,2) + R33_budget(:,2)
               R11_budget(:,2) = 2.d0*R11_budget(:,2)
               R22_budget(:,2) = 2.d0*R22_budget(:,2)
               R33_budget(:,2) = 2.d0*R33_budget(:,2)
@@ -495,7 +495,7 @@ module stats_xy_mod
               ! Buoyancy transfer
               if (this%sim%isStratified) then
                   call this%covariance(this%sim%wC, this%sim%T, tke_budget(:,11))
-                  tke_budget(:,11) = -1.d0/this%sim%buoyancyFact*tke_budget(:,11)
+                  tke_budget(:,11) = -this%sim%buoyancyFact*tke_budget(:,11)
                   R11_budget(:,11) = 0.d0
                   R22_budget(:,11) = 0.d0
                   R33_budget(:,11) = 2.d0*tke_budget(:,11)

@@ -550,6 +550,10 @@
           if (forceDumpProbes) then
               call this%dumpProbes()    
               call message(0,"Performed a forced dump for probes.")
+          else if (mod(this%step,this%t_pointProbe) == 0) then
+            call this%dumpProbes()    
+            call message(1,"Performed a scheduled dump for probes.")
+            this%tpro = 0
           end if
       end if
 

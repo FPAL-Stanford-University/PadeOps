@@ -308,10 +308,30 @@ subroutine set_Reference_Temperature(inputfile, Trefout)
 end subroutine
 
 subroutine hook_probes(inputfile, probe_locs)
-    use kind_parameters,    only: rkind
+    use kind_parameters,    only: rkind, clen
+    use basic_io,           only: read_2d_ascii
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
-    integer, parameter :: nprobes = 9
+    character(len=clen) :: probefile
+    logical :: useProbes = .false.
+    integer :: ioUnit
+
+    ! Unused namelist variables, but still need to declare them:
+    integer :: vizDump_Schedule, t_restartDump, t_dataDump, ioType, runID
+    integer :: t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe, t_stop_pointProbe, t_pointProbe
+    logical :: dumpPlanes, dump_NU_SGS, dump_KAPPA_SGS
+    real(rkind) :: deltaT_dump
+
+    namelist /IO/ vizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
+                & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
+                & t_stop_pointProbe, t_pointProbe
+    namelist /Probes/ probefile
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=IO    )
+    read(unit=ioUnit, NML=Probes)
+    close(ioUnit)    
     
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
     ! Example: If you have at least 3 probes:
@@ -323,52 +343,10 @@ subroutine hook_probes(inputfile, probe_locs)
     ! Add probes here if needed
     ! Example code: The following allocates 2 probes at (0.1,0.1,0.1) and
     ! (0.2,0.2,0.2)  
-    allocate(probe_locs(3,nprobes))
-    
-    ! Probe 1
-    probe_locs(1,1) = 0.1d0; 
-    probe_locs(2,1) = 3.141592653589d0; 
-    probe_locs(3,1) = 3.141592653589d0; 
-    
-    ! Probe 2 
-    probe_locs(1,2) = 5.783185307179d0; 
-    probe_locs(2,2) = 3.141592653589d0; 
-    probe_locs(3,2) = 3.141592653589d0; 
+    if (useProbes) then
+        call read_2d_ascii(probe_locs,trim(probefile))
+    end if
 
-    ! Probe 3
-    probe_locs(1,3) = 6.783185307179d0; 
-    probe_locs(2,3) = 3.141592653589d0; 
-    probe_locs(3,3) = 3.141592653589d0; 
-    
-    ! Probe 4
-    probe_locs(1,4) = 10.28318530718d0; 
-    probe_locs(2,4) = 3.141592653589d0; 
-    probe_locs(3,4) = 3.141592653589d0; 
-
-    ! Probe 5
-    probe_locs(1,5) = 14.28318530718d0; 
-    probe_locs(2,5) = 3.141592653589d0; 
-    probe_locs(3,5) = 3.141592653589d0;
-
-    ! Probe 6
-    probe_locs(1,6) = 18.28318530718d0; 
-    probe_locs(2,6) = 3.141592653589d0; 
-    probe_locs(3,6) = 3.141592653589d0;
-
-    ! Probe 7
-    probe_locs(1,7) = 10.28318530718d0; 
-    probe_locs(2,7) = 3.141592653589d0; 
-    probe_locs(3,7) = 4.25d0; 
-
-    ! Probe 8
-    probe_locs(1,8) = 14.28318530718d0; 
-    probe_locs(2,8) = 3.141592653589d0; 
-    probe_locs(3,8) = 4.250;
-
-    ! Probe 9
-    probe_locs(1,9) = 18.28318530718d0; 
-    probe_locs(2,9) = 3.141592653589d0; 
-    probe_locs(3,9) = 4.25d0;
 end subroutine
 
 subroutine initScalar(decompC, inputfile, mesh, scalar_id, scalarField)

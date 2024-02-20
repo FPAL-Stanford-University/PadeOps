@@ -32,7 +32,7 @@ program shearlessMixing
     call stats%init(inputfile,SM)
 
     ! Get t=0 stats
-    call stats%compute_stats()
+    !call stats%compute_stats()
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
