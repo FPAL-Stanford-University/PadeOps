@@ -784,7 +784,7 @@ contains
         call initfields(this%decomp,this%der, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tstop, this%dtfixed, tviz)
         ! Get hydrodynamic and elastic energies, stresses
-        call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
+        !call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
         call this%post_bc()
         ! Allocate 2 buffers for each of the three decompositions
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
@@ -1356,7 +1356,7 @@ contains
 
         ! Write out initial conditions
         ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-        call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
+       ! call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
         call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
 
 
@@ -1406,7 +1406,7 @@ contains
             ! Write out vizualization dump if vizcond is met 
            if (vizcond) then
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
+                !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 vizcond = .FALSE.
            end if
@@ -1438,7 +1438,7 @@ contains
             ! Check for exitpdo file
             if(check_exit(this%outputdir)) then
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
+                !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
                 call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix, this%tsim)
                 call GracefulExit("Found exitpdo file in working directory",1234)
             endif
