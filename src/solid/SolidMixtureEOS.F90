@@ -59,8 +59,8 @@ module SolidMixtureMod
         real(rkind), allocatable, dimension(:,:,:) :: intSharp_hFV,intSharp_kFV,intSharp_hDiffFV,intSharp_kDiffFV, intSharp_pFV
         
         integer, dimension(2) :: x_bc, y_bc, z_bc
-        real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa,VF_intx, VF_inty,VF_intz, DerX, DerY,DerZ, ddx_exact, ddy_exact, Pmix 
-        real(rkind), allocatable, dimension(:,:,:)   ::  intX_error, intY_error,derX_error, derY_error, intx_exact, inty_exact, lapTest, DivTest, lap_error, div_error
+        real(rkind), allocatable, dimension(:,:,:)   ::  intX_error,intY_error,derX_error, derY_error, intx_exact, inty_exact, lapTest, DivTest,lap_error, div_error
+        real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa,VF_intx, VF_inty,VF_intz, DerX, DerY,DerZ, ddx_exact, ddy_exact, Pmix, DerYstagg , ddystagg_exact
         real(rkind), allocatable, dimension(:,:,:,:) :: norm, normFV,gradp,gradVF,gradxi
         real(rkind), allocatable, dimension(:,:,:,:,:) :: gradVF_FV
 	real(rkind), allocatable, dimension(:,:,:)   :: phi
@@ -71,7 +71,6 @@ module SolidMixtureMod
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_recieve_2, buffer_recieve_k_2
 !        real(rkind), dimension(:,:,:), pointer       :: buffs1, buffs2, buffr1, buffr2
 !        real(rkind), dimension(:,:,:), pointer       :: buffsk1, buffsk2, buffrk1, buffrk2
-
         integer, dimension(8) :: MPI_req, MPI_Stats
       
 
@@ -89,6 +88,7 @@ module SolidMixtureMod
         procedure :: equilibratePressureTemperature_new
         procedure :: equilibrateTemperature
         procedure :: getLAD
+        procedure :: vfLAD_pEqn
         procedure :: calculate_source
         procedure :: update_g
         procedure :: implicit_plastic
@@ -140,6 +140,7 @@ module SolidMixtureMod
         procedure :: rootfind_nr_1d
         procedure :: rootfind_nr_1d_new
         procedure :: thick_calculations
+        procedure :: Test_1DStretch
         final     :: destroy
 
     end type
@@ -458,6 +459,9 @@ contains
         if(allocated(this%ddy_exact)) deallocate(this%ddy_exact)
         allocate(this%ddy_exact(this%nxp, this%nyp, this%nzp))
 
+        if(allocated(this%ddystagg_exact)) deallocate(this%ddystagg_exact)
+        allocate(this%ddystagg_exact(this%nxp, this%nyp, this%nzp))
+
          if(allocated(this%intx_exact)) deallocate(this%intx_exact)
         allocate(this%intx_exact(this%nxp, this%nyp, this%nzp))
 
@@ -466,6 +470,9 @@ contains
 
         if(allocated(this%DerY)) deallocate(this%DerY)
         allocate(this%DerY(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%DerYstagg)) deallocate(this%DerYstagg)
+        allocate(this%DerYstagg(this%nxp, this%nyp, this%nzp))
 
         if(allocated(this%DerX)) deallocate(this%DerX)
         allocate(this%DerX(this%nxp, this%nyp, this%nzp))
@@ -593,7 +600,9 @@ contains
         if(allocated(this%inty_exact)) deallocate(this%inty_exact)
         if(allocated(this%ddx_exact)) deallocate(this%ddx_exact)
         if(allocated(this%ddy_exact)) deallocate(this%ddy_exact)
+        if(allocated(this%ddystagg_exact)) deallocate(this%ddystagg_exact)
         if(allocated(this%DerY)) deallocate(this%DerY)
+        if(allocated(this%DerYstagg)) deallocate(this%DerYstagg)
         if(allocated(this%DerX)) deallocate(this%DerX)
         if(allocated(this%derY_error)) deallocate(this%derY_error)
         if(allocated(this%derX_error)) deallocate(this%derX_error)
@@ -2283,6 +2292,41 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         ! Done
     end subroutine
 
+     subroutine vfLAD_pEqn(this,rho,p,e,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz)
+        use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
+        use operators, only: divergence,gradient,filter3D,interpolateFV,interpolateFV_x, interpolateFV_y,interpolateFV_z,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz
+        use constants,       only: zero,epssmall,eps,one,two,third,half
+        use exits,           only: GracefulExit
+        use reductions, only : P_MAXVAL
+        class(solid_mixture), intent(inout) :: this
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), intent(in) :: dx,dy,dz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,p,e
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradrhoE,gradP,p_int, VF1, VF2, rhoe1, rhoe2, species_e,Beta
+        integer :: i, imat
+        logical :: periodicx,periodicy,periodicz
+
+        
+    
+        call interpolateFV(this%decomp,this%interpMid,p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call interpolateFV(this%decomp,this%interpMid,this%material(1)%VF,VF1,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
+        call interpolateFV(this%decomp,this%interpMid,this%material(2)%VF,VF2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
+        call gradFV_N2Fx(this%decomp,this%derStagg,p,gradP(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_N2Fy(this%decomp,this%derStagg,p,gradP(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_N2Fz(this%decomp,this%derStagg,p,gradP(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+ 
+        call gradFV_N2Fx(this%decomp,this%derStagg,rho*e, gradrhoE(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_N2Fy(this%decomp,this%derStagg,rho*e, gradrhoE(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_N2Fz(this%decomp,this%derStagg,rho*e, gradrhoE(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+        rhoe1 = (p_int + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*1/(this%material(1)%hydro%gam - 1)
+        rhoe2 = (p_int + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*1/(this%material(2)%hydro%gam - 1)
+
+        species_e = rhoe1 - rhoe2
+        Beta = VF1*1/(this%material(1)%hydro%gam - 1) + VF2*1/(this%material(2)%hydro%gam - 1)
+        this%material(1)%vfLAD_grad = 1/species_e*(gradrhoE - Beta*gradp)
+        this%material(2)%vfLAD_grad = 1/species_e*(- gradrhoE + Beta*gradp) 
+    end subroutine
 
     subroutine getLAD_5eqn(this,rho,p,e,Frho,Fenergy,Fp,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
@@ -2371,6 +2415,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
              Frho(:,:,:,imat)    = Frho(:,:,:,imat) + ( rhodiff_int(:,:,:,imat)*gradRYs_int(:,:,:,imat)) !rho_int(:,:,:,imat)*Ysdiff_int(:,:,:,imat)*gradYs_int(:,:,:,imat)
  
              Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + (adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )
+            !Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + (adiff_int(:,:,:,imat)*this%material(i)%vfLAD_grad(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1)
 
             enddo
           !this%material(i)%rhodiff*gradVF(:,:,:,imat)*( (p +
@@ -5565,6 +5610,80 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         
     end subroutine implicit_plastic
 
+    subroutine Test_1DStretch(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z,transpose_z_to_y
+        use operators, only: gradFV_x, gradFV_y,gradFV_z,interpolateFV_x,interpolateFV_y, interpolateFV_z, divergenceFV, laplacian,interpolateFV,gradFV_N2Fy,gradient
+        use constants,       only: zero,epssmall,eps,one,two,third,half, pi
+        use exits,           only: GracefulExit
+        use reductions, only : P_MAXVAL
+        class(solid_mixture), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        logical :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: x_half,y_half,ddx,ddy, yphys, dyphysdy, d2yphysdy2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: yphys_half,dyphysdy_half,testfunc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int
+        integer :: imat
+        real(rkind) :: dx, dy, L, STRETCH_RATIO = 5.0,Lr, Lr_half
+ 
+        
+        dx = x(2,1,1)-x(1,1,1)
+        dy = y(1,2,1) -y(1,1,1)
+        L  = y(this%nxp,this%nyp,this%nzp) - y(this%nxp,1,this%nzp)
+        print *, "L = ", L
+        x_half = x+0.5*dx;
+        y_half = y+0.5*dy;
+        yphys = atanh(2*y/( L + 1 / STRETCH_RATIO)) 
+        print *, "yphs exp"
+        yphys = L/(yphys(this%nxp,this%nyp,this%nzp) - yphys(this%nxp,1,this%nzp))*yphys
+        Lr = L/(yphys(this%nxp,this%nyp,this%nzp) - yphys(this%nxp,1,this%nzp)) 
+        print *, "yphys 2"
+        testfunc = sin(x)*cos(3*yphys)
+        print *, "test func"
+        !dyphysdy = ( 1 + 1/STRETCH_RATIO)/2 * 1/ tanh(L / (yphys(this%nxp,this%nyp,this%nzp) - yphys(this%nxp,1,this%nzp))) &
+        !           *( 1 / cosh(y) )**2
+        !d2yphysdy2 =  ( 1 + 1/STRETCH_RATIO)/2 * 1/tanh( L / (yphys(this%nxp,this%nyp,this%nzp) - yphys(this%nxp,1,this%nzp))) &
+        !              -2*tanh(y)*(1/cosh(y))**2
+
+        yphys_half = atanh(2*y_half / ( L + 1 / STRETCH_RATIO)) 
+        print *, "yphys half"
+        yphys_half = L/(yphys_half(this%nxp,this%nyp,this%nzp) - yphys_half(this%nxp,1,this%nzp))*yphys_half
+        Lr_half = L/(yphys_half(this%nxp,this%nyp,this%nzp) - yphys_half(this%nxp,1,this%nzp)) 
+        !dyphysdy_half = ( 1 + 1/STRETCH_RATIO)/2 * 1/ tanh(L /(yphys_half(this%nxp,this%nyp,this%nzp) - yphys_half(this%nxp,1,this%nzp))) &
+         !          *( 1 / cosh(y+0.5*dy) )**2
+ 
+       !call
+       !interpolateFV_x(this%decomp,this%interpMid,this%material(1)%VF,this%VF_intx,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+       !call
+       !interpolateFV_y(this%decomp,this%interpMid,this%material(1)%VF,this%VF_inty,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+       !call
+       !interpolateFV_z(this%decomp,this%interpMid,this%material(1)%VF,this%VF_intz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+        call interpolateFV(this%decomp,this%interpMid,testfunc,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        print *, "interpolate"
+        this%VF_intx = VF_int(:,:,:,1)
+        this%VF_inty = VF_int(:,:,:,2)
+        this%VF_intz = VF_int(:,:,:,3)
+
+        this%ddx_exact  =   cos(x)*cos(3*yphys)
+        this%ddy_exact  =   sin(x)*-3*sin(3*yphys)              !-2*sin(2.0*x)*cos(2.0*y)!(-4.0) * sin(2.0*x) *sin(4.0*y) + 5*cos(y)
+        this%ddystagg_exact  =   sin(x)*-3*sin(3*yphys_half)
+        call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        print *, "gradFVx"
+        call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        print *, "gradFVy"
+        call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        print *, "gradFVz"
+
+        call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,this%DerYstagg,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradient(this%decomp,this%der,testfunc,this%DerX,this%DerY,this%DerZ, x_bc, y_bc, z_bc)
+
+        !all laplacian(this%decomp,this%derCD06, this%material(1)%VF,this%lapTest, x_bc,y_bc, z_bc)
+        print *, "gradFVN2F"
+        this%derX_error = abs(this%DerX - this%ddx_exact)
+        this%derY_error = abs(this%DerY - this%ddy_exact)
+        !his%lap_error = abs( -20*sin(2*x)*cos(4*y)-3*cos(x) - 5*sin(y) - this%lapTest)
+    end subroutine
 
     subroutine Test_Der(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z,transpose_z_to_y

@@ -35,10 +35,10 @@ module DerivativesMod
         logical                        :: xmetric = .false.
         logical                        :: ymetric = .false.
         logical                        :: zmetric = .false.
-
         integer                        :: nxg, nyg, nzg ! Global sizes
         integer, dimension(3)          :: xsz, ysz, zsz ! Local decomposition sizes
-        
+        real(rkind), allocatable, dimension(:,:,:) :: detady,d2etady2,detady_stag 
+
         logical                        :: initialized = .false. 
         contains
             procedure, private :: init_parallel
@@ -46,6 +46,7 @@ module DerivativesMod
             procedure, private :: init_procedures
             procedure, private :: init_curvilinear
             generic :: init => init_parallel, init_serial
+            procedure :: init_gridStretch1D
             procedure :: destroy
             procedure :: ddx
             procedure :: ddy
@@ -214,6 +215,18 @@ contains
             end if
         end if 
 
+        if( yMetric) then
+
+          if(allocated(this%detady)) deallocate(this%detady)
+          allocate(this%detady(this%ysz(1), this%ysz(2), this%ysz(3)))
+          if(allocated(this%d2etady2)) deallocate(this%d2etady2)
+          allocate(this%d2etady2(this%ysz(1), this%ysz(2), this%ysz(3)))
+          if(allocated(this%detady_stag)) deallocate(this%detady_stag)
+          allocate(this%detady_stag(this%ysz(1), this%ysz(2), this%ysz(3)))
+
+       endif
+
+
     end subroutine
 
     subroutine init_parallel(this,                      gp, &
@@ -268,6 +281,29 @@ contains
             end if
         end if 
 
+        if( yMetric) then
+
+          if(allocated(this%detady)) deallocate(this%detady)
+          allocate(this%detady(this%ysz(1), this%ysz(2), this%ysz(3)))
+          if(allocated(this%d2etady2)) deallocate(this%d2etady2)
+          allocate(this%d2etady2(this%ysz(1), this%ysz(2), this%ysz(3)))
+          if(allocated(this%detady_stag)) deallocate(this%detady_stag)
+          allocate(this%detady_stag(this%ysz(1), this%ysz(2), this%ysz(3)))
+
+       endif
+
+
+    end subroutine
+
+    subroutine init_gridStretch1D(this,detady,detady_stag, d2etady2)
+        class(derivatives), intent(inout) :: this
+        real(rkind), intent(in), dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: detady,detady_stag, d2etady2
+
+         this%detady = detady
+         this%d2etady2 = d2etady2
+         this%detady_stag = detady_stag
+
+
     end subroutine
 
 
@@ -281,20 +317,20 @@ contains
 
         ! Metrics
             if (xMetric) then
-                call GracefulExit("Code INCOMPLETE! Metric terms are not &
-                 &   supported in x direction!",04)
+            !    call GracefulExit("Code INCOMPLETE! Metric terms are not &
+            !     &   supported in x direction!",04)
                  this%xMetric = .true. 
             end if
 
             if (yMetric) then
-                call GracefulExit("Code INCOMPLETE! Metric terms are not &
-                 &   supported in y direction!",05)
+            !    call GracefulExit("Code INCOMPLETE! Metric terms are not &
+            !     &   supported in y direction!",05)
                  this%yMetric = .true. 
             end if
         
             if (zMetric) then
-                call GracefulExit("Code INCOMPLETE! Metric terms are not &
-                 &   supported in z direction!",06)
+            !    call GracefulExit("Code INCOMPLETE! Metric terms are not &
+            !     &   supported in z direction!",06)
                  this%zMetric = .true. 
             end if
         
@@ -564,6 +600,11 @@ contains
         this%ymetric = .false. 
         this%zmetric = .false. 
         this%curvilinear = .false. 
+        
+        if(allocated(this%detady)) deallocate(this%detady)
+        if(allocated(this%d2etady2)) deallocate(this%d2etady2)
+        if(allocated(this%detady_stag)) deallocate(this%detady_stag)
+
 
     end subroutine
 
@@ -647,6 +688,13 @@ contains
             end if
         end select 
 
+        
+       if( this%yMetric) then
+          print *, "der metric "
+          dfdx = this%detady*dfdx
+
+       endif
+
     end subroutine 
     
     subroutine ddz(this,f,dfdx,bc1,bcn)
@@ -687,6 +735,8 @@ contains
                 call this%zd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         end select 
+
+
     end subroutine 
 
     subroutine d2dx2(this,f,d2fdx2,bc1,bcn)
@@ -736,6 +786,12 @@ contains
         case (7)
             call this%yd06 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
         end select 
+
+        if( this%yMetric) then
+
+          d2fdx2 = this%d2etady2*d2fdx2
+
+        endif
 
     end subroutine
 

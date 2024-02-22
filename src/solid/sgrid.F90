@@ -134,7 +134,7 @@ module SolidGrid
         type(derivatives),      allocatable :: derD02, derD06, derD04,derCD06
         type(solid_mixture),    allocatable :: mix
         type(ladobject),        allocatable :: LAD
-        type(derivativesStagg), allocatable :: derStagg
+        type(derivativesStagg), allocatable :: derStagg,derStagg_stretch
         type(derivativesStagg), allocatable :: derStaggd02
         type(interpolators),    allocatable ::interpMid
         type(interpolators),    allocatable ::interpMid02
@@ -183,7 +183,7 @@ module SolidGrid
         logical     :: use_normFV
         logical     :: use_normInt
         logical     :: use_CnsrvSurfaceTension
-        logical     :: Stretch1D
+        logical     :: Stretch1D, Stretch1Dy, Stretch1Dx, Stretch1Dz
         real(rkind) :: surfaceTension_coeff !constant coefficient for surface tension
         real(rkind) :: R, p_amb, XiLS_eps
         logical :: filt_mask = .FALSE.             ! mask filter in high gradient regions
@@ -241,7 +241,7 @@ module SolidGrid
         real(rkind) :: phys_kap1, phys_kap2
         real(rkind) :: st_limit, pthick,uthick,rhothick,Ys_wiggle,VF_wiggle,VF_thick,Ys_thick
         real(rkind), dimension(:,:,:,:), allocatable :: meshstretch
-        real(rkind), dimension(:,:,:), allocatable :: yMetric,xMetric, zMetric,yMetric_half, xMetric_half, zMetric_half  
+        real(rkind), dimension(:,:,:), allocatable :: yMetric,xMetric, zMetric,yMetric_half, xMetric_half, zMetric_half,yLADMetric, yMetric_N2F
         contains
             procedure          :: init
             procedure          :: destroy
@@ -339,7 +339,7 @@ contains
         logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., usePhiForm = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .false., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .FALSE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
-        logical     :: useAkshayForm = .FALSE.,twoPhaseLAD = .FALSE.,LAD5eqn = .FALSE., use_CnsrvSurfaceTension = .FALSE., use_surfaceTension = .FALSE., use_normFV = .false., use_normInt = .false.,use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_Stagg = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE., use_XiLS = .FALSE., LADN2F = .FALSE., LADInt = .FALSE., Stretch1D = .FALSE.
+        logical     :: useAkshayForm = .FALSE.,twoPhaseLAD = .FALSE.,LAD5eqn = .FALSE., use_CnsrvSurfaceTension = .FALSE., use_surfaceTension = .FALSE., use_normFV = .false., use_normInt = .false.,use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_Stagg = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE., use_XiLS = .FALSE., LADN2F = .FALSE., LADInt = .FALSE., Stretch1D = .FALSE., Stretch1Dx = .FALSE., Stretch1Dy = .FALSE., Stretch1Dz = .FALSE.
         real(rkind) :: surfaceTension_coeff = 0.0d0, R = 1d0, p_amb = 1d0 
         integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
         real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0,Ys_wiggle = 0d0,VF_wiggle = 0d0, uthick = 0, rhothick = 0, pthick = 0,VF_thick = 0, Ys_thick = 0
@@ -366,7 +366,7 @@ contains
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
                            use_CnsrvSurfaceTension, use_surfaceTension, use_normFV, use_normInt, use_gradXi,energy_surfTen,use_gradphi, use_gradVF, use_Stagg, use_FV,use_D04, surface_mask, weightedcurvature, &
-                           surfaceTension_coeff, R, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, Stretch1D
+                           surfaceTension_coeff, R, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, Stretch1D, Stretch1Dx, Stretch1Dy, Stretch1Dz
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -401,7 +401,10 @@ contains
 
         this%step = 0
         this%nsteps = nsteps
-
+        
+        this%Stretch1Dy    = Stretch1Dy
+        this%Stretch1Dx    = Stretch1Dx
+        this%Stretch1Dz    = Stretch1Dz
         this%Stretch1D     = Stretch1D
         this%useAkshayForm = useAkshayForm
         this%twoPhaseLAD   = twoPhaseLAD
@@ -515,7 +518,6 @@ contains
 
         ! Associate pointers for ease of use
         this%x    => this%mesh  (:,:,:, 1) 
-
         this%y    => this%mesh  (:,:,:, 2) 
         this%z    => this%mesh  (:,:,:, 3)
 
@@ -537,12 +539,33 @@ contains
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh)
+        if ( allocated(this%derStagg_stretch) ) deallocate(this%derStagg_stretch)
+        allocate(this%derStagg_stretch)
 
+        call this%derStagg_stretch%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+          derivativeStagg_x, derivativeStagg_y, derivativeStagg_z, &
+                           .false.,       .false.,        .false., &
+                           .false.)
 
-        if( this%Stretch1D ) then
+        if ( allocated(this%interpMid) ) deallocate(this%interpMid)
+        allocate(this%interpMid)
 
+        ! Initialize Interpolator
+        call this%interpMid%init(                     this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                   interpolator_x, interpolator_y, interpolator_z, &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        if( this%Stretch1Dy ) then
+
+            print *, "in Stretch 1D"
             if ( allocated(this%meshstretch) ) deallocate(this%meshstretch)
             call alloc_buffs(this%meshstretch,3,'y',this%decomp)
+            print *, "allocation issue?"
             this%eta1    => this%meshstretch  (:,:,:, 1)
             this%eta2    => this%meshstretch  (:,:,:, 2)
             this%eta3  => this%meshstretch  (:,:,:, 3)
@@ -553,6 +576,10 @@ contains
             allocate(this%xMetric(this%nxp,this%nyp,this%nzp) )
             if ( allocated(this%zMetric) ) deallocate(this%zMetric)
             allocate(this%zMetric(this%nxp,this%nyp,this%nzp) )
+            if ( allocated(this%yLADMetric) ) deallocate(this%yLADMetric)
+            allocate(this%yLADMetric(this%nxp,this%nyp,this%nzp) )
+            if ( allocated(this%yMetric_N2F) ) deallocate(this%yMetric_N2F)
+            allocate(this%yMetric_N2F(this%nxp,this%nyp,this%nzp) )
 
             if ( allocated(this%yMetric_half) ) deallocate(this%yMetric_half)
             allocate(this%yMetric_half(this%nxp,this%nyp,this%nzp) )
@@ -561,14 +588,101 @@ contains
             if ( allocated(this%zMetric_half) ) deallocate(this%zMetric_half)
             allocate(this%zMetric_half(this%nxp,this%nyp,this%nzp) )
 
-
+            print *, "metric allocation"
             call this%coordinateTransform(this%dx,this%dy,this%dz)
+            print *, "coordinateTransformation"
         endif
  
         ! Allocate der
         if ( allocated(this%der) ) deallocate(this%der)
         allocate(this%der)
+        ! Allocate derD02
+        if ( allocated(this%derD02) ) deallocate(this%derD02)
+        allocate(this%derD02)
+        if ( allocated(this%derD04) ) deallocate(this%derD04)
+        allocate(this%derD04)
+        ! Allocate derD06
+        if ( allocated(this%derD06) ) deallocate(this%derD06)
+        allocate(this%derD06)
+         ! Allocate derCD06
+        if ( allocated(this%derCD06) ) deallocate(this%derCD06)
+        allocate(this%derCD06)
+        ! Allocate derStagg
+        if ( allocated(this%derStagg) ) deallocate(this%derStagg)
+        allocate(this%derStagg)
+        if ( allocated(this%derStaggd02) ) deallocate(this%derStaggd02)
+        allocate(this%derStaggd02)
 
+        if( this%Stretch1Dy) then
+           call this%der%init(                           this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                      derivative_x,  derivative_y,   derivative_z, &
+                           .false.,       .true.,        .false., &
+                           .false.)
+
+           call this%der%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+           ! Initialize derivatives
+           call this%derD02%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d02",  "d02",   "d02", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+
+          call this%derD02%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+          ! Initialize derivatives
+           call this%derD04%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d04",  "d04",   "d04", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+
+           call this%derD04%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+           ! Initialize derivatives
+           call this%derD06%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d06",  "d06",   "d06", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+
+           call this%derD06%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+           ! Initialize derivatives
+           call this%derCD06%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "cd06",  "cd06",   "cd06", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+           call this%derCD06%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+                ! Initialize Staggered derivatives
+           call this%derStagg%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+           derivativeStagg_x, derivativeStagg_y, derivativeStagg_z, &
+                           .false.,       .true.,        .false., &
+                           .false.)
+
+           call this%derStagg%init_gridStretch1D(this%yMetric_N2F,this%yMetric_half,this%yLADMetric)
+
+           ! Initialize Staggered derivatives
+           call this%derStaggd02%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                              "d02", "d02", "d02", &
+                           .false.,       .true.,        .false., &
+                           .false.)
+
+           call this%derStaggd02%init_gridStretch1D(this%yMetric_N2F,this%yMetric_half,this%yLADMetric)
+
+        else 
         ! Initialize derivatives 
         call this%der%init(                           this%decomp, &
                            this%dx,       this%dy,        this%dz, &
@@ -577,10 +691,6 @@ contains
                            .false.,       .false.,        .false., &
                            .false.)      
 
-
-        ! Allocate derD02
-        if ( allocated(this%derD02) ) deallocate(this%derD02)
-        allocate(this%derD02)
 
         ! Initialize derivatives 
         call this%derD02%init(                           this%decomp, &
@@ -591,10 +701,8 @@ contains
                               .false.)     
 
 
-        if ( allocated(this%derD04) ) deallocate(this%derD04)
-        allocate(this%derD04)
 
-        ! Initialize derivatives
+        
         call this%derD04%init(                           this%decomp, &
                               this%dx,       this%dy,        this%dz, &
                             periodicx,     periodicy,      periodicz, &
@@ -603,9 +711,6 @@ contains
                               .false.)
 
  
-        ! Allocate derD06
-        if ( allocated(this%derD06) ) deallocate(this%derD06)
-        allocate(this%derD06)
 
  ! Initialize derivatives 
         call this%derD06%init(                           this%decomp, &
@@ -614,9 +719,6 @@ contains
                                               "d06",  "d06",   "d06", &
                               .false.,       .false.,        .false., &
                               .false.)      
-         ! Allocate derCD06
-        if ( allocated(this%derCD06) ) deallocate(this%derCD06)
-        allocate(this%derCD06)
 
         ! Initialize derivatives 
         call this%derCD06%init(                           this%decomp, &
@@ -626,9 +728,6 @@ contains
                               .false.,       .false.,        .false., &
                               .false.)
 
-        ! Allocate derStagg
-        if ( allocated(this%derStagg) ) deallocate(this%derStagg)
-        allocate(this%derStagg)
 
         ! Initialize Staggered derivatives 
         call this%derStagg%init(                      this%decomp, &
@@ -639,9 +738,6 @@ contains
                            .false.)      
 
 
-         ! Allocate derStagg
-        if ( allocated(this%derStaggd02) ) deallocate(this%derStaggd02)
-        allocate(this%derStaggd02)
 
         ! Initialize Staggered derivatives
         call this%derStaggd02%init(                      this%decomp, &
@@ -651,7 +747,9 @@ contains
                            .false.,       .false.,        .false., &
                            .false.)
 
+        end if
 
+        print *, "allocated derivatives"
         ! Allocate interpMid
         if ( allocated(this%interpMid02) ) deallocate(this%interpMid02)
         allocate(this%interpMid02)
@@ -665,17 +763,6 @@ contains
                            .false.)      
 
         
-        ! Allocate interpMid
-        if ( allocated(this%interpMid) ) deallocate(this%interpMid)
-        allocate(this%interpMid)
-
-        ! Initialize Interpolator
-        call this%interpMid%init(                     this%decomp, &
-                           this%dx,       this%dy,        this%dz, &
-                         periodicx,     periodicy,      periodicz, &
-                   interpolator_x, interpolator_y, interpolator_z, &
-                           .false.,       .false.,        .false., &
-                           .false.)
 
 
         ! Allocate fil and gfil
@@ -1012,7 +1099,9 @@ contains
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         if (allocated(this%mesh)) deallocate(this%meshstretch)
-        if (allocated(this%yMetric)) deallocate(this%yMetric)        
+        if (allocated(this%yMetric)) deallocate(this%yMetric)      
+        if (allocated(this%yMetric_N2F)) deallocate(this%yMetric_N2F) 
+        if (allocated(this%yLADMetric)) deallocate(this%yLADMetric) 
         if (allocated(this%xMetric)) deallocate(this%xMetric)        
         if (allocated(this%zMetric)) deallocate(this%zMetric)
         if (allocated(this%yMetric_half)) deallocate(this%yMetric_half)
@@ -1050,6 +1139,9 @@ contains
 
         call this%interpMid02%destroy()
         if (allocated(this%interpMid02)) deallocate(this%interpMid02)
+
+        call this%derStagg_stretch%destroy()
+        if (allocated(this%derStagg_stretch)) deallocate(this%derStagg_stretch)
  
         call destroy_buffs(this%xbuf)
         call destroy_buffs(this%ybuf)
@@ -1186,23 +1278,25 @@ contains
     
     subroutine coordinateTransform(this,dx,dy,dz) 
        use constants,        only: one, half
+       use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x, gradFV_y, gradFV_z, gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz
        class(sgrid), intent(inout) :: this
        real(rkind),  intent(inout) :: dx,dy,dz
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 5
+       real(rkind) :: L, STRETCH_RATIO = 5, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half
+       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
 
         ! If base decomposition is in Y
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = this%y(1,ny,1) - this%y(1,1,1)
+       L = this%y(ix1,iyn,iz1) - this%y(ix1,iy1,iz1)
        print *, "Ly = ", L
 
-       y_half = this%y + 0.5
+       y_half = this%y + 0.5*this%dy
 
    
        this%eta1 = this%x
@@ -1211,16 +1305,27 @@ contains
        this%zMetric = 1
        this%xMetric_half = 1
        this%zMetric_half = 1
+       print *, "set metrics"
+       this%eta2 = atanh( 2*this%y / ( L + 1 / STRETCH_RATIO) )
+       print *, "eta exp"
+       Lr =  L /( this%eta2(ix1, iyn,iz1) - this%eta2(ix1,iy1,iz1)) 
+       this%eta2 = Lr*this%eta2
+       print *, "eta 2"
+       eta2_half = atanh( 2*y_half / ( L + 1 / STRETCH_RATIO) )
+       Lr_half = L /( eta2_half(ix1, iyn,iz1) - eta2_half(ix1,iy1,iz1)) 
+       eta2_half = Lr_half*eta2_half
+       print *, "eta2 half"
+       this%yMetric = (L + 1 /STRETCH_RATIO)/2*1/(cosh(this%eta2/Lr)**2)*1/Lr
 
-       this%eta2 = atanh( 2*this%y / ( 1 + 1 / STRETCH_RATIO) )
-       this%eta2 = L /( this%eta2(1, ny,1) - this%eta2(1,1,1))*eta2
-
-       eta2_half = atanh( 2*y_half / ( 1 + 1 / STRETCH_RATIO) )
-       eta2_half = L /( eta2_half(1, ny,1) - eta2_half(1,1,1))*eta2_half
-
-       this%yMetric = (1 + 1 /STRETCH_RATIO)/2*1/(cosh(this%eta2)**2)*1/(tanh( L /(this%eta2(1, ny,1) - this%eta2(1,1,1))))
-       this%yMetric_half = (1 + 1 /STRETCH_RATIO)/2*1/(cosh(eta2_half)**2)*1/(tanh(L /(eta2_half(1, ny,1) - eta2_half(1,1,1))))
-
+       call interpolateFV_y(this%decomp,this%interpMid,this%eta2,eta2_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       call gradFV_y(this%decomp,this%derStagg_stretch,eta2_int,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)     
+       this%yMetric_N2F = 1 / tmp 
+       call gradFV_N2Fy(this%decomp,this%derStagg_stretch,this%eta2,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+ 
+       this%yMetric_half = 1/tmp !(L + 1 /STRETCH_RATIO)/2*1/(cosh(eta2_half/Lr)**2)*1/Lr
+       print *, "yMetric_half"
+       this%yLADMetric = -1*(L + 1/STRETCH_RATIO)*tanh(this%eta2/Lr)/(cosh(this%eta2/Lr)**2)*1/Lr**2
+ 
     end subroutine 
 
     subroutine update_P(this,Qtmpp,isub,dt,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -1417,7 +1522,9 @@ contains
         endif
 
        !call this%mix%Test_Der_NP(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
+        print *, "pre test"
+        call this%mix%Test_1DStretch(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        print *, "post test"
         !call this%mix%Test_Der(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         !print *, "before test"
         !call this%mix%Test_Der_Periodic(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -1438,10 +1545,12 @@ contains
 
         ! Write out initial conditions
         ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-        call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
+        !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
 
-        if( this%Stretch1D) then
+        if( this%Stretch1Dy) then
+           print *, "pre vis"
            call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
+           print *, "post vis"
         else
            call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix,this%tsim)
         endif
@@ -1494,7 +1603,7 @@ contains
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
 
-                if( this%Stretch1D) then               
+                if( this%Stretch1Dy) then               
                    call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
                 else
                    call this%viz%WriteViz(this%decomp, this%mesh, this%fields,this%mix, this%tsim)
@@ -1530,7 +1639,7 @@ contains
             if(check_exit(this%outputdir)) then
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
-                if( this%Stretch1D) then
+                if( this%Stretch1Dy) then
 
                    call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
 
