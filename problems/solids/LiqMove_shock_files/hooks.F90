@@ -400,7 +400,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(1)%p  = p2*dum + p1*(one-dum)
         mix%material(2)%p  = mix%material(1)%p
         pEvolve = mix%material(1)%p
-        mix%material(1)%VF = minVF !+ (one-two*minVF)*tmp
+        mix%material(1)%VF = minVF + (one-two*minVF)*tmp
         mix%material(2)%VF = one - mix%material(1)%VF
 
         if (mix%use_gTg.and.(.not.mix%strainHard)) then

@@ -850,51 +850,51 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
      dx = x(2,1,1) - x(1,1,1)
      dum = half*(one - tanh( (x-xspng)/(tspng) ))
 
-    ! do i=1,4
-    !    tmp = u
-    !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-    !    u = u + dum*(tmp - u)
+     do i=1,4
+        tmp = u
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        u = u + dum*(tmp - u)
 
-    !    tmp = v
-    !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-    !    v = v + dum*(tmp - v)
+        tmp = v
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        v = v + dum*(tmp - v)
 
-    !    tmp = w
-    !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-    !    w = w + dum*(tmp - w)
+        tmp = w
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        w = w + dum*(tmp - w)
 
-    !    tmp = e
-    !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-    !    e = e + dum*(tmp - e)
+        tmp = e
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        e = e + dum*(tmp - e)
 
-    !    tmp = rho
-    !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-    !    rho = rho + dum*(tmp - rho)
+        tmp = rho
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        rho = rho + dum*(tmp - rho)
 
-    !    tmp = mix%material(1)%p
-    !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-    !    mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+        tmp = mix%material(1)%p
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
 
-    !    tmp = mix%material(2)%p
-    !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-    !    mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+        tmp = mix%material(2)%p
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
 
-    !    tmp = mix%material(1)%Ys
-    !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-    !    mix%material(1)%Ys = mix%material(1)%Ys + dum*(tmp - mix%material(1)%Ys)
+        tmp = mix%material(1)%Ys
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        mix%material(1)%Ys = mix%material(1)%Ys + dum*(tmp - mix%material(1)%Ys)
 
-    !    tmp = mix%material(2)%Ys
-    !    call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-    !    mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
+        tmp = mix%material(2)%Ys
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
 
 
-    !    tmp = VFL
-    !    mix%material(1)%VF = mix%material(1)%VF + dum*(tmp - mix%material(1)%VF)
+        tmp = VFL
+        mix%material(1)%VF = mix%material(1)%VF + dum*(tmp - mix%material(1)%VF)
 
-    !    tmp = one-VFL
-    !    mix%material(2)%VF = mix%material(2)%VF + dum*(tmp - mix%material(2)%VF)
+        tmp = one-VFL
+        mix%material(2)%VF = mix%material(2)%VF + dum*(tmp - mix%material(2)%VF)
 
-    ! end do
+     end do
 
     ! !     !mca add for stability
 
@@ -922,47 +922,47 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
     if(decomp%yen(1)==decomp%xsz(1)) then
        if(x_bc(2)==0) then
-        !  rho(nx,:,:) = rhoR ! rho(nx-1,:,:)
-        !  u  (nx,:,:) = zero ! zero
-        !  v  (nx,:,:) = zero ! v(nx-1,:,:)
-        !  w  (nx,:,:) = zero ! w(nx-1,:,:)
+          rho(nx,:,:) = rhoR ! rho(nx-1,:,:)
+          u  (nx,:,:) = zero ! zero
+          v  (nx,:,:) = zero ! v(nx-1,:,:)
+          w  (nx,:,:) = zero ! w(nx-1,:,:)
           mix%material(1)%p  (nx,:,:) = p1 ! mix%material(1)%p(nx-1,:,:)
           mix%material(2)%p  (nx,:,:) = p1 ! mix%material(2)%p(nx-1,:,:)
 
-        !  mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
-        !  mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero
-        !  mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:) = zero; mix%material(1)%g33(nx,:,:) = one
+          mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
+          mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero
+          mix%material(1)%g31(nx,:,:) = zero; mix%material(1)%g32(nx,:,:) = zero; mix%material(1)%g33(nx,:,:) = one
 
-        !  mix%material(2)%g11(nx,:,:) = one;  mix%material(2)%g12(nx,:,:) = zero; mix%material(2)%g13(nx,:,:) = zero
-        !  mix%material(2)%g21(nx,:,:) = zero; mix%material(2)%g22(nx,:,:) = one;  mix%material(2)%g23(nx,:,:) = zero
-        !  mix%material(2)%g31(nx,:,:) = zero; mix%material(2)%g32(nx,:,:) = zero; mix%material(2)%g33(nx,:,:) = one
+          mix%material(2)%g11(nx,:,:) = one;  mix%material(2)%g12(nx,:,:) = zero; mix%material(2)%g13(nx,:,:) = zero
+          mix%material(2)%g21(nx,:,:) = zero; mix%material(2)%g22(nx,:,:) = one;  mix%material(2)%g23(nx,:,:) = zero
+          mix%material(2)%g31(nx,:,:) = zero; mix%material(2)%g32(nx,:,:) = zero; mix%material(2)%g33(nx,:,:) = one
 
-        !  mix%material(1)%gt11(nx,:,:) = one;  mix%material(1)%gt12(nx,:,:) = zero; mix%material(1)%gt13(nx,:,:) = zero
-        !  mix%material(1)%gt21(nx,:,:) = zero; mix%material(1)%gt22(nx,:,:) = one;  mix%material(1)%gt23(nx,:,:) = zero
-        !  mix%material(1)%gt31(nx,:,:) = zero; mix%material(1)%gt32(nx,:,:) = zero; mix%material(1)%gt33(nx,:,:) = one
+          mix%material(1)%gt11(nx,:,:) = one;  mix%material(1)%gt12(nx,:,:) = zero; mix%material(1)%gt13(nx,:,:) = zero
+          mix%material(1)%gt21(nx,:,:) = zero; mix%material(1)%gt22(nx,:,:) = one;  mix%material(1)%gt23(nx,:,:) = zero
+          mix%material(1)%gt31(nx,:,:) = zero; mix%material(1)%gt32(nx,:,:) = zero; mix%material(1)%gt33(nx,:,:) = one
 
-        !  mix%material(1)%gp11(nx,:,:) = one;  mix%material(1)%gp12(nx,:,:) = zero; mix%material(1)%gp13(nx,:,:) = zero
-        !  mix%material(1)%gp21(nx,:,:) = zero; mix%material(1)%gp22(nx,:,:) = one;  mix%material(1)%gp23(nx,:,:) = zero
-        !  mix%material(1)%gp31(nx,:,:) = zero; mix%material(1)%gp32(nx,:,:) = zero; mix%material(1)%gp33(nx,:,:) = one
+          mix%material(1)%gp11(nx,:,:) = one;  mix%material(1)%gp12(nx,:,:) = zero; mix%material(1)%gp13(nx,:,:) = zero
+          mix%material(1)%gp21(nx,:,:) = zero; mix%material(1)%gp22(nx,:,:) = one;  mix%material(1)%gp23(nx,:,:) = zero
+          mix%material(1)%gp31(nx,:,:) = zero; mix%material(1)%gp32(nx,:,:) = zero; mix%material(1)%gp33(nx,:,:) = one
 
-        !  mix%material(1)%pe = zero
+          mix%material(1)%pe = zero
 
 
-        !  mix%material(2)%gt11(nx,:,:) = one;  mix%material(2)%gt12(nx,:,:) = zero; mix%material(2)%gt13(nx,:,:) = zero
-        !  mix%material(2)%gt21(nx,:,:) = zero; mix%material(2)%gt22(nx,:,:) = one;  mix%material(2)%gt23(nx,:,:) = zero
-        !  mix%material(2)%gt31(nx,:,:) = zero; mix%material(2)%gt32(nx,:,:) = zero; mix%material(2)%gt33(nx,:,:) = one
+          mix%material(2)%gt11(nx,:,:) = one;  mix%material(2)%gt12(nx,:,:) = zero; mix%material(2)%gt13(nx,:,:) = zero
+          mix%material(2)%gt21(nx,:,:) = zero; mix%material(2)%gt22(nx,:,:) = one;  mix%material(2)%gt23(nx,:,:) = zero
+          mix%material(2)%gt31(nx,:,:) = zero; mix%material(2)%gt32(nx,:,:) = zero; mix%material(2)%gt33(nx,:,:) = one
 
-        !  mix%material(2)%gp11(nx,:,:) = one;  mix%material(2)%gp12(nx,:,:) = zero; mix%material(2)%gp13(nx,:,:) = zero
-        !  mix%material(2)%gp21(nx,:,:) = zero; mix%material(2)%gp22(nx,:,:) = one;  mix%material(2)%gp23(nx,:,:) = zero
-        !  mix%material(2)%gp31(nx,:,:) = zero; mix%material(2)%gp32(nx,:,:) = zero; mix%material(2)%gp33(nx,:,:) = one
+          mix%material(2)%gp11(nx,:,:) = one;  mix%material(2)%gp12(nx,:,:) = zero; mix%material(2)%gp13(nx,:,:) = zero
+          mix%material(2)%gp21(nx,:,:) = zero; mix%material(2)%gp22(nx,:,:) = one;  mix%material(2)%gp23(nx,:,:) = zero
+          mix%material(2)%gp31(nx,:,:) = zero; mix%material(2)%gp32(nx,:,:) = zero; mix%material(2)%gp33(nx,:,:) = one
 
-        !  mix%material(2)%pe = zero
+          mix%material(2)%pe = zero
 
-        !  mix%material(1)%Ys (nx,:,:) = YsR
-        !  mix%material(2)%Ys (nx,:,:) = one - YsR
+          mix%material(1)%Ys (nx,:,:) = YsR
+          mix%material(2)%Ys (nx,:,:) = one - YsR
 
-        !  mix%material(1)%VF (nx,:,:) = VFR
-        !  mix%material(2)%VF (nx,:,:) = one - VFR
+          mix%material(1)%VF (nx,:,:) = VFR
+          mix%material(2)%VF (nx,:,:) = one - VFR
        endif
     endif
 

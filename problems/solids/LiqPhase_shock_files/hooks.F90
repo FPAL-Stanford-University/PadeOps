@@ -358,8 +358,8 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         u2 = (one-minVF)*rho2*u2 + minVF*rho2_2*u2_2
         
         ! Get mixture density
-        rho1 = 0.997d0  !(one-minVF)*rho1 + minVF*rho1_2
-        rho2 = 1.0022   !1.2516d3 !(one-minVF)*rho2 + minVF*rho2_2
+        rho1 = 0.997d3  !(one-minVF)*rho1 + minVF*rho1_2
+        rho2 = 1002.2   !1.2516d3 !(one-minVF)*rho2 + minVF*rho2_2
 
         ! Get mixture velocity
         u1 = u1 / rho1
@@ -402,7 +402,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(2)%VF = minVF !one - mix%material(1)%VF
         
         rhotmp  = rho2*dum + rho1*(one-dum)
-        rho = rhotmp*mix%material(1)%VF + 1.d-3*mix%material(2)%VF
+        rho = rhotmp*mix%material(1)%VF + 1.d0*mix%material(2)%VF
        ! if (mix%use_gTg.and.(.not.mix%strainHard)) then
        !     tmp = rho_0*mix%material(1)%VF*sqrt(mix%material(1)%g11) + rho_0_2*sqrt(mix%material(2)%g11)*(one-mix%material(1)%VF) ! Mixture density
        ! else
@@ -800,7 +800,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
     if(decomp%yst(1)==1) then
        if(x_bc(1)==0) then
-          ! rho( 1,:,:) = rhoL
+           rho( 1,:,:) = rhoL
           ! u  ( 1,:,:) = (u2-u1)
           v  ( 1,:,:) = zero
           w  ( 1,:,:) = zero

@@ -464,6 +464,10 @@ contains
          E_IO = VTK_VAR_XML(NC_NN=nn,varname='DerY',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
          if( allocated(tmp1) ) deallocate(tmp1)
 
+         !call update_halo(mix%DerYstagg,tmp1,1,gp,.FALSE.)
+         !E_IO = VTK_VAR_XML(NC_NN=nn,varname='DerYstagg',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         !if( allocated(tmp1) ) deallocate(tmp1)
+
           call update_halo(mix%intX_error,tmp1,1,gp,.FALSE.)
           E_IO = VTK_VAR_XML(NC_NN=nn,varname='intX_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
           if( allocated(tmp1) ) deallocate(tmp1)
@@ -495,6 +499,10 @@ contains
           call update_halo(mix%ddy_exact,tmp1,1,gp,.FALSE.)
           E_IO =VTK_VAR_XML(NC_NN=nn,varname='derY_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
           if( allocated(tmp1) ) deallocate(tmp1)
+
+         ! call update_halo(mix%ddystagg_exact,tmp1,1,gp,.FALSE.)
+         ! E_IO = VTK_VAR_XML(NC_NN=nn,varname='derYstagg_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+         ! if( allocated(tmp1) ) deallocate(tmp1)
  
           call update_halo(mix%intx_exact,tmp1,1,gp,.FALSE.)
           E_IO=VTK_VAR_XML(NC_NN=nn,varname='intX_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
@@ -834,6 +842,7 @@ contains
 
             E_IO = PVTK_VAR_XML(varname='DerX', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='DerY', tp='Float64')
+            !E_IO = PVTK_VAR_XML(varname='DerYstagg', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='intX_error', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='intY_error', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='VF_intx', tp='Float64')
@@ -842,6 +851,7 @@ contains
             E_IO = PVTK_VAR_XML(varname='derY_error', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='derX_exact', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='derY_exact', tp='Float64')
+            !E_IO = PVTK_VAR_XML(varname='derYstagg_exact', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='intX_exact', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='intY_exact', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='VF_intz', tp='Float64')

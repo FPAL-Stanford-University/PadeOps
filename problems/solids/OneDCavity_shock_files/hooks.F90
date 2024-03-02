@@ -409,7 +409,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / tmp
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
-        rhoL = 1.24
+        rhoL = tmp(1,1,1)
         rhoR = tmp(decomp%ysz(1),1,1)
         YsL  = mix%material(1)%Ys(1,1,1)
         YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
@@ -824,25 +824,25 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
            mix%material(1)%VF ( 1,:,:) = VFL
            mix%material(2)%VF ( 1,:,:) = one - VFL
 
-          !do i=1,5
-          !   mix%material(1)%Ys ( i,:,:) = mix%material(1)%Ys ( 6,:,:)
-          !   mix%material(2)%Ys ( i,:,:) = mix%material(2)%Ys ( 6,:,:)
+          do i=1,5
+             mix%material(1)%Ys ( i,:,:) = mix%material(1)%Ys ( 6,:,:)
+             mix%material(2)%Ys ( i,:,:) = mix%material(2)%Ys ( 6,:,:)
 
              !new
-         !    mix%material(1)%VF ( i,:,:) = mix%material(1)%VF ( 6,:,:)
-         !    mix%material(2)%VF ( i,:,:) = mix%material(2)%VF ( 6,:,:)
+             mix%material(1)%VF ( i,:,:) = mix%material(1)%VF ( 6,:,:)
+             mix%material(2)%VF ( i,:,:) = mix%material(2)%VF ( 6,:,:)
 
-         !    u(i,:,:) = u(6,:,:)
+             u(i,:,:) = u(6,:,:)
 
-         !    e(i,:,:) = e(6,:,:)
-         !    rho(i,:,:) = rho(6,:,:)
-         !    T(i,:,:) = T(6,:,:)
-         !    p(i,:,:) = p(6,:,:)
+             e(i,:,:) = e(6,:,:)
+             rho(i,:,:) = rho(6,:,:)
+             T(i,:,:) = T(6,:,:)
+             p(i,:,:) = p(6,:,:)
 
          !    mix%material(1)%T(i,:,:) = mix%material(1)%T(6,:,:)
          !    mix%material(2)%T(i,:,:) = mix%material(2)%T(6,:,:)
 
-         ! end do
+          end do
 
        end if
     endif

@@ -39,7 +39,8 @@ module SolidMod
         real(rkind), dimension(:,:,:), allocatable :: eh
         real(rkind), dimension(:,:,:), allocatable :: eel
         real(rkind), dimension(:,:,:), allocatable ::  u_int,v_int,fluxYs, w_int
-        real(rkind), dimension(:,:,:), allocatable ::  YsLAD, vfLAD,YsDiffLAD
+        real(rkind), dimension(:,:,:), allocatable ::  YsLAD,vfLAD,YsDiffLAD
+        real(rkind), dimension(:,:,:,:), allocatable :: vfLAD_grad
         real(rkind), dimension(:,:,:,:), allocatable :: g,g_t,g_p,rg,rg_t,rg_p,VF_int,Ys_int, rho_int
         real(rkind), dimension(:,:,:),   allocatable :: e_p,e_pp,pe,rpe
         real(rkind), dimension(:,:,:),   allocatable :: curl_e,curl_t,curl_p,det_e,det_t,det_p
@@ -568,6 +569,9 @@ contains
         if( allocated( this%vfLAD ) ) deallocate( this%vfLAD )
         allocate( this%vfLAD(this%nxp,this%nyp,this%nzp) )
 
+        if( allocated( this%vfLAD_grad ) ) deallocate( this%vfLAD_grad )
+        allocate( this%vfLAD_grad(this%nxp,this%nyp,this%nzp,3) )
+
         ! Allocate interface sharpening volume fraction flux
         if( allocated( this%intSharp_a ) ) deallocate( this%intSharp_a )
         allocate( this%intSharp_a(this%nxp,this%nyp,this%nzp,3) )
@@ -732,6 +736,7 @@ contains
         if( allocated( this%YsDiffLAD )   ) deallocate( this%YsDiffLAD )
         if( allocated( this%YsLAD )   ) deallocate( this%YsLAD )
         if( allocated( this%vfLAD )   ) deallocate( this%vfLAD )
+        if( allocated( this%vfLAD_grad )   ) deallocate( this%vfLAD_grad )
         if( allocated( this%Ji )   ) deallocate( this%Ji )
         if( allocated( this%rhodiff )   ) deallocate( this%rhodiff )
         if( allocated( this%adiff )   ) deallocate( this%adiff )
@@ -5059,7 +5064,8 @@ contains
            call this%getRHS_VF(other,rho,u,v,w,divu,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         endif
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
-        
+       
+         
         ! advance sub-step
         if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
         this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
@@ -5128,7 +5134,7 @@ contains
            call divergenceFV(this%decomp,this%derStagg,u_int,v_int,w_int,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call divergenceFV(this%decomp,this%derStagg,-u_int*VF_int(:,:,:,1),-v_int*VF_int(:,:,:,2),-w_int*VF_int(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           rhsVF = this%VF*div_u + div_uVF + this%vfLAD
+           rhsVF = this%VF*div_u + div_uVF + this%vfLAD ! + src*div_u
            this%VF_int = VF_int
 
         endif
@@ -5171,6 +5177,8 @@ contains
           call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dVFdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+          !call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*this%vfLAD_grad(:,:,:,1),adiff_int(:,:,:,2)*this%vfLAD_grad(:,:,:,2),adiff_int(:,:,:,3)*this%vfLAD_grad(:,:,:,3),this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
           !this%vfLAD = this%vfLAD
 
@@ -5247,7 +5255,7 @@ contains
 
          call divergence(this%decomp,this%der,this%intSharp_aDiff(:,:,:,1),this%intSharp_aDiff(:,:,:,2),this%intSharp_aDiff(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc)
 
-          rhsVF = tmp + this%VF*div_u + div_uVF + this%intSharp_aFV + this%vfLAD + this%intSharp_aDiffFV
+          rhsVF = tmp + this%VF*div_u + div_uVF + this%intSharp_aFV + this%vfLAD + this%intSharp_aDiffFV !  + src*div_u             
           this%VF_int =VF_int
       endif
 
