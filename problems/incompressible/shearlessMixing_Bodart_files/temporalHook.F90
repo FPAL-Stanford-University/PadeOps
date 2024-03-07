@@ -57,6 +57,7 @@ contains
                 call message_min_max(1,"Bounds for fz:", &
                   gp%spectForceLayer%ampFact_z*p_minval(minval(gp%spectForceLayer%fz)), &
                   gp%spectForceLayer%ampFact_z*p_maxval(maxval(gp%spectForceLayer%fz)))
+                call message(1,"Forcing throttling factor",gp%spectForceLayer%ampFact_time)
 
             end if
             if (gp%useCFL) then

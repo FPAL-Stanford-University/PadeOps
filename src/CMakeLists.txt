@@ -24,10 +24,10 @@ message(STATUS "MPI_INCLUDE_PATH = ${MPI_INCLUDE_PATH} *************************
 message(STATUS "MPI_LIBRARIES = ${MPI_LIBRARIES} ****************************************")
 
 # Include directories
-include_directories(${MPI_INCLUDE_PATH} ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${VTK_IO_INCLUDE_PATH} ${HDF5_INCLUDE_PATH})
+include_directories(${MPI_INCLUDE_PATH} ${FFTW_INCLUDE_PATH} ${DECOMP_INCLUDE_PATH} ${VTK_IO_INCLUDE_PATH}) #${HDF5_INCLUDE_PATH})
 
 # Link directories
-link_directories(${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${VTK_IO_LIBRARY_PATH} ${HDF5_LIBRARY_PATH})
+link_directories(${FFTW_LIBRARY_PATH} ${DECOMP_LIBRARY_PATH} ${VTK_IO_LIBRARY_PATH}) #${HDF5_LIBRARY_PATH})
 
 # Create a library called PadeOps
 add_library(PadeOps STATIC ${utilities_source_files} ${derivatives_source_files} ${filters_source_files} ${io_source_files} )

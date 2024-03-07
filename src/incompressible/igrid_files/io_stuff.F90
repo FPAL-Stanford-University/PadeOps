@@ -11,19 +11,39 @@
        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
        call decomp_2d_write_one(1,this%u,fname, this%gpC)
+       ! Link "LATEST" restart file to the recently dumped file
+       if (nrank == 0) then
+           write(tempname,"(A7,A4,I2.2,A9)") "RESTART", "_Run",this%runID, "_u.LATEST"
+           call execute_command_line('ln -sf '//trim(fname)//' '//trim(this%outputdir)//'/'//trim(tempname))
+       end if
 
        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_v.",this%step
        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
        call decomp_2d_write_one(1,this%v,fname, this%gpC)
+       if (nrank == 0) then
+           ! Link "LATEST" restart file to the recently dumped file
+           write(tempname,"(A7,A4,I2.2,A9)") "RESTART", "_Run",this%runID, "_v.LATEST"
+           call execute_command_line('ln -sf '//trim(fname)//' '//trim(this%outputdir)//'/'//trim(tempname))
+       end if
 
        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_w.",this%step
        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
        call decomp_2d_write_one(1,this%w,fname, this%gpE)
+       if (nrank == 0) then
+           ! Link "LATEST" restart file to the recently dumped file
+           write(tempname,"(A7,A4,I2.2,A9)") "RESTART", "_Run",this%runID, "_w.LATEST"
+           call execute_command_line('ln -sf '//trim(fname)//' '//trim(this%outputdir)//'/'//trim(tempname))
+       end if
 
        if (this%isStratified .or. this%initspinup) then
            write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_T.",this%step
            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
            call decomp_2d_write_one(1,this%T,fname, this%gpC)
+           if (nrank == 0) then
+               ! Link "LATEST" restart file to the recently dumped file
+               write(tempname,"(A7,A4,I2.2,A9)") "RESTART", "_Run",this%runID, "_T.LATEST"
+               call execute_command_line('ln -sf '//trim(fname)//' '//trim(this%outputdir)//'/'//trim(tempname))
+           end if
        end if 
 
        if (this%usescalars) then
@@ -66,10 +86,14 @@
            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
            OPEN(UNIT=10, FILE=trim(fname))
            write(10,"(100g15.5)") this%tsim
+           write(10,"(100g15.5)") this%step
            if (this%useControl) then
               write(10,"(100g15.5)") this%G_alpha
            end if
            close(10)
+           ! Link "LATEST" restart file to the recently dumped file
+           write(tempname,"(A7,A4,I2.2,A12)") "RESTART", "_Run",this%runID, "_info.LATEST"
+           call execute_command_line('ln -sf '//trim(fname)//' '//trim(this%outputdir)//'/'//trim(tempname))
        end if 
 
        call mpi_barrier(mpi_comm_world, ierr)
@@ -531,7 +555,7 @@
        end if 
    end subroutine
 
-   subroutine readRestartFile(this, tid, rid, u, v, w, T, gpC, gpE)
+   subroutine readRestartFile(this, tid, rid, u, v, w, T, gpC, gpE, tid_out)
        use mpi
        use exits, only: message
        use kind_parameters, only: mpirkind
@@ -539,38 +563,72 @@
        integer, intent(in) :: tid, rid
        real(rkind), dimension(:,:,:), intent(inout) :: u, v, w, T
        class(decomp_info), intent(in) :: gpC, gpE
+       integer, intent(out) :: tid_out
        character(len=clen) :: tempname, fname
-       integer :: ierr, fid 
+       integer :: ierr, fid, idx 
+       real(rkind) :: tmp
 
-       write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
+       if (tid < 0) then
+           write(tempname,"(A7,A4,I2.2,A9)") "RESTART", "_Run",rid, "_u.LATEST"
+       else
+           write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
+       end if
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
        call decomp_2d_read_one(1,u,fname, gpC)
 
-       write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
+       if (tid < 0) then
+           write(tempname,"(A7,A4,I2.2,A9)") "RESTART", "_Run",rid, "_v.LATEST"
+       else
+           write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
+       end if
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
        call decomp_2d_read_one(1,v,fname, gpC)
 
-       write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
+       if (tid < 0) then
+           write(tempname,"(A7,A4,I2.2,A9)") "RESTART", "_Run",rid, "_w.LATEST"
+       else
+           write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
+       end if
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
        call decomp_2d_read_one(1,w,fname, gpE)
 
        if (this%isStratified) then
-           write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
+           if (tid < 0) then
+               write(tempname,"(A7,A4,I2.2,A9)") "RESTART", "_Run",rid, "_T.LATEST"
+           else
+               write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
+           end if
            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
            call decomp_2d_read_one(1,T,fname, gpC)
        end if
 
        if (nrank == 0) then
-           write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
+           if (tid < 0) then
+               call assert(.false.,'Not all RESTART files have tid written out. Unsurpress this assert if you are confident yours does -- igrid_files/io.F90')
+               write(tempname,"(A7,A4,I2.2,A12)") "RESTART", "_Run",rid, "_info.LATEST"
+           else
+               write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
+           end if
            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
            fid = 10
            open(unit=fid,file=trim(fname),status="old",action="read")
            read (fid, "(100g15.5)")  this%tsim
+           !read (fid, "(100g15.5)")  tmp
+           !tid_out = int(tmp)
+           tid_out = tid
            if (this%useControl) then
               read(fid,"(100g15.5)") this%restartPhi
            end if
            close(fid)
        end if
+
+       call MPI_BCast(tid_out,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+
+       !if (this%usescalars) then
+       !    do idx = 1,this%n_scalars
+       !       call this%scalars(idx)%readrestart(tid_out)
+       !    end do
+       !end if
 
        call mpi_barrier(mpi_comm_world, ierr)
        call mpi_bcast(this%tsim,1,mpirkind,0,mpi_comm_world,ierr)

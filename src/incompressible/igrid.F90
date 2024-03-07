@@ -845,8 +845,8 @@ contains
        ! STEP 7: INITIALIZE THE FIELDS
        if (useRestartFile) then
            call this%readRestartFile(restartfile_TID, restartfile_RID, &
-             this%u, this%v, this%w, this%T, this%gpC, this%gpE)
-           this%step = restartfile_TID
+             this%u, this%v, this%w, this%T, this%gpC, this%gpE, this%step)
+           !this%step = restartfile_TID
        else if (restartFromViz) then
            call this%readVizForRestart(restartfile_TID,restartfile_RID, &
              this%u, this%v, this%w, this%wC, this%T, this%gpC)
@@ -1402,7 +1402,7 @@ contains
        elseif (this%localizedForceLayer == 2) then ! See Briggs et al. (1996)
            if (allocated(this%spectForceLayer)) deallocate(this%spectForceLayer)
            allocate(this%spectForceLayer)
-           call this%spectForceLayer%init(inputfile,this%spectC,this%spectE,&
+           call this%spectForceLayer%init(inputfile,this%tsim,this%spectC,this%spectE,&
              this%mesh,this%zE,this%gpC,this%gpE, this%Pade6opZ,this%outputdir,&
              this%sgsmodel,this%BuoyancyFact,this%buoyancyDirection,this%isStratified,&
              this%Re,this%PrandtlFluid, this%rbuffxC(:,:,:,1), this%rbuffyC(:,:,:,1), &
@@ -1454,15 +1454,15 @@ contains
                        if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
                        call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
                          this%u,this%v,this%wC,this%TEhat,this%T, &
-                         this%duidxjC, this%nu_SGS, this%dt,this%padepoiss, this%u_rhs, &
-                         this%v_rhs, this%w_rhs, this%T_rhs, this%scalars)
+                         this%duidxjC, this%nu_SGS, this%tsim, this%dt,this%padepoiss, this%u_rhs, &
+                         this%v_rhs, this%w_rhs, this%T_rhs)!, this%scalars)
                    end if
                else
                    if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
                    call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
                      this%u,this%v,this%wC,this%TEhat,this%T, &
-                     this%duidxjC, this%nu_SGS, this%dt,this%padepoiss, this%u_rhs, &
-                     this%v_rhs, this%w_rhs, this%T_rhs, this%scalars)
+                     this%duidxjC, this%nu_SGS, this%tsim, this%dt,this%padepoiss, this%u_rhs, &
+                     this%v_rhs, this%w_rhs, this%T_rhs)!, this%scalars)
                end if
            end if
        end if
@@ -2144,11 +2144,11 @@ contains
        if (restartFromVisualization) then
            call this%readVizForRestart(tid_reinit, this%runID, &
              this%u, this%v, this%w, this%wC, this%T, this%gpC)
+           this%step = tid_reinit
        else
          call this%readRestartFile(tid_reinit, this%runID, this%u, this%v, &
-           this%w, this%T, this%gpC, this%gpE)
+           this%w, this%T, this%gpC, this%gpE,this%step)
        end if
-       this%step = tid_reinit
        this%newTimeStep = .true.
    
        call this%spectC%fft(this%u,this%uhat)   
@@ -2207,8 +2207,8 @@ contains
                if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
                call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
                  this%u,this%v,this%wC,this%TEhat,this%T, &
-                 this%duidxjC, this%nu_SGS, this%dt,this%padepoiss, this%u_rhs, &
-                 this%v_rhs, this%w_rhs, this%T_rhs, this%scalars)
+                 this%duidxjC, this%nu_SGS, this%tsim,this%dt,this%padepoiss, this%u_rhs, &
+                 this%v_rhs, this%w_rhs, this%T_rhs)!, this%scalars)
            end if
        end if 
       
@@ -2295,7 +2295,7 @@ contains
          TID,RunID,inputfile)
        
        ! Read in source fields
-       call this%readRestartFile(TID, RunID, uS, vS, wS, TS, gpC_S, gpE_S)
+       call this%readRestartFile(TID, RunID, uS, vS, wS, TS, gpC_S, gpE_S,this%step)
 
        ! Link pointers for dumprestart below
        this%u => uD

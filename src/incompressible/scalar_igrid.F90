@@ -7,6 +7,7 @@ module scalar_igridMod
    use spectralMod, only: spectral
    use igrid_hooks!, only: setDirichletBC_Temp, set_Reference_Temperature, meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
    use fringeMethod, only: fringe 
+   use spectralForcingLayerMod, only: SpectForcingLayer
    !use io_hdf5_stuff, only: io_hdf5 
    implicit none
    
@@ -136,8 +137,9 @@ subroutine addViscousTerm(this)
 
 end subroutine
 
-subroutine populateRHS(this, dt)
+subroutine populateRHS(this, dt, spect_force_layer)
    class(scalar_igrid), intent(inout) :: this
+   type(spectForcingLayer), allocatable, intent(inout) :: spect_force_layer
    real(rkind), intent(in) :: dt
 
    call this%addAdvectionTerm()
@@ -163,6 +165,11 @@ subroutine populateRHS(this, dt)
          call this%fringe_x%addFringeRHS_scalar(dt, this%rhs, this%F)
       end if
    end if 
+
+   ! Add forcing layer contribution
+   if (allocated(spect_force_layer)) then
+       call spect_force_layer%updateScalarRHS(this%F,dt,this%rhs)
+   end if
 
 end subroutine 
 
@@ -372,7 +379,11 @@ subroutine readRestart(this, tid)
    character(len=clen) :: tempname, fname
 
 
-   write(tempname,"(A7,A4,I2.2,A7,I2.2,A1,I6.6)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".",tid
+   if (tid < 0) then
+       write(tempname,"(A7,A4,I2.2,A7,I2.2,A7)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".LATEST"
+   else
+       write(tempname,"(A7,A4,I2.2,A7,I2.2,A1,I6.6)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".",tid
+   end if
    fname = this%InputDataDir(:len_trim(this%InputDataDir))//"/"//trim(tempname)
    call decomp_2d_read_one(1,this%F,fname, this%gpC)
    
@@ -390,6 +401,11 @@ subroutine dumpRestart(this, tid)
 
    write(tempname,"(A7,A4,I2.2,A7,I2.2,A1,I6.6)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".",tid
    fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
+   if (nrank == 0) then
+       ! Link "LATEST" restart file to the recently dumped file
+       write(tempname,"(A7,A4,I2.2,A7,I2.2,A7)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".LATEST"
+       call execute_command_line('ln -s '//trim(fname)//' '//trim(this%outputdatadir)//'/'//trim(tempname))
+   end if
 
    call message(0,"Dumping restart for scalar number", this%scalar_number)
    call decomp_2d_write_one(1,this%F,fname, this%gpC)

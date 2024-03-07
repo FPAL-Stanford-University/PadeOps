@@ -3,7 +3,7 @@ module spectralForcingLayerMod
     use kind_parameters, only: rkind, clen, mpirkind
     use reductions,      only: p_maxval, p_sum
     use gridtools,       only: onThisRank, getStEndIndices
-    use constants,       only: rmaxInt, im0
+    use constants,       only: im0, pi
     use spectralMod,     only: spectral
     use PadePoissonMod,  only: Padepoisson 
     use random,          only: uniform_random
@@ -16,7 +16,7 @@ module spectralForcingLayerMod
     use mpi
     use seedGen,         only: initializeLogMap, incrementLogisticMap
     use sgsmod_igrid,    only: sgs_igrid  
-    use scalar_igridMod, only: scalar_igrid
+    !use scalar_igridMod, only: scalar_igrid
     implicit none
 
     integer, parameter :: zbc_bot = 0, zbc_top = 0
@@ -28,7 +28,7 @@ module spectralForcingLayerMod
       real(rkind), dimension(:,:,:), allocatable :: integralMask
       real(rkind), dimension(:),     allocatable :: integralMask_1D
       real(rkind) :: seedFact, dV, tgtKE, tgtKEon3, ampFact_x, ampFact_y, &
-        ampFact_z, ampFact_T, tgtDissipation, integralTime, tgtMPE 
+        ampFact_z, ampFact_T, tgtDissipation, integralTime, tgtMPE, ampFact_time 
       integer :: seed
       real(rkind) :: gain, buoyancyFact
       type(spectral), pointer :: spectC, spectE
@@ -50,11 +50,18 @@ module spectralForcingLayerMod
         rbuffyE, rbuffzE
       complex(rkind), dimension(:,:,:), pointer :: cbuffyC, cbuffyE, cbuffzC, cbuffzE
 
+      ! Intrinsic scales of the forcing
+      real(rkind) :: len_f, tau_f, u_f
+      
+      ! Variables needed for "duty-cycle" forcing
+      real(rkind) :: torigin, ton, toff, rampfact
+      logical :: fon, dutyCycleForcing
+
       contains
         procedure          :: init
         procedure          :: destroy
         procedure          :: updateRHS
-        procedure, private :: updateScalarRHS
+        procedure          :: updateScalarRHS
         procedure, private :: interpE2C_real
         procedure, private :: interpE2C_cmplx
         procedure          :: dumpField
@@ -63,15 +70,17 @@ module spectralForcingLayerMod
         procedure, private :: mean
         procedure, private :: ddz
         procedure, private :: covariance
+        procedure, private :: get_time_ampfact
     end type
 
     contains
       
-      subroutine init(this,inputfile,spectC,spectE,mesh,zEin,gpC,gpE,Pade6opZ,&
+      subroutine init(this,inputfile,tsim,spectC,spectE,mesh,zEin,gpC,gpE,Pade6opZ,&
           outputdir,sgsModel,buoyancyFact,buoyancyDirection,isStratified,Re,Pr,&
           rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, cbuffyC, cbuffyE, &
           cbuffzC, cbuffzE)
           class(spectForcingLayer), intent(inout) :: this
+          real(rkind), intent(in) :: tsim
           character(len=*), intent(in) :: inputfile
           type(spectral), intent(inout), target :: spectC, spectE
           real(rkind), dimension(:,:,:,:), intent(in), target :: mesh
@@ -97,11 +106,13 @@ module spectralForcingLayerMod
           logical :: dumpForce = .false., projectDivergenceFree = .true.
           integer :: maskType = gaussian
           real(rkind) :: fringe_delta = 0.5d0, lambdaFact_temp = 0.d0
-          real(rkind) :: Temp_in_forcing_layer = 1.d0
+          real(rkind) :: Temp_in_forcing_layer = 1.d0, onoffratio = 1.d0
+          integer :: nForceTimeScalesOn = 0 ! The number of forcing time scales to have forcing turned "on". Set to 0 for forcing always on
+          real(rkind) :: rampfact = 0.25d0 ! Sets the rate at which the forcing turns on/off
 
           namelist /spectForceLayer/ zmid, lf, kmin, kmax, tgtKE, tgtMPE,tgtDissipation, &
             gain, dumpForce, maskType, fringe_delta, projectDivergenceFree, lambdaFact_temp, &
-            Temp_in_forcing_layer
+            Temp_in_forcing_layer, nForceTimeScalesOn, onoffratio, rampfact
           
           ioUnit = 123
           open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -135,6 +146,26 @@ module spectralForcingLayerMod
           this%isStratified = isStratified
           this%lambda = lambdaFact_temp
           this%Ttgt = Temp_in_forcing_layer
+
+          ! Forcing layer intrinsic scales
+          this%len_f = 2.d0*pi/kmin
+          this%u_f   = sqrt(tgtKE)
+          this%tau_f = this%len_f/this%u_f
+
+          ! If using on/off "duty-cycle" forcing these need to be defined
+          if (nForceTimeScalesOn > 0) then
+              this%ton = real(nForceTimeScalesOn)*this%tau_f
+              this%toff = this%ton/onoffratio
+              this%dutyCycleForcing = .TRUE.
+          else
+              this%ton  = huge(1.d0)
+              this%toff = 0.d0
+              this%dutyCycleForcing = .FALSE.
+              this%ampFact_time = 1.d0
+          end if
+          this%torigin  = tsim
+          this%fon      = .TRUE.
+          this%rampfact = rampfact
 
           nx      = gpC%xsz(1)
           ny      = gpC%ysz(2)
@@ -260,8 +291,8 @@ module spectralForcingLayerMod
           if (associated(zE))     nullify(zE)
       end subroutine
 
-      subroutine updateRHS(this,uhat,vhat,what,u,v,wC,ThatE,T,duidxjC,nSGS,dt,&
-          poiss,urhs,vrhs,wrhs,Trhs,scalars)
+      subroutine updateRHS(this,uhat,vhat,what,u,v,wC,ThatE,T,duidxjC,nSGS,tsim,dt,&
+          poiss,urhs,vrhs,wrhs,Trhs)!,scalars)
           class(spectForcingLayer), intent(inout) :: this
           complex(rkind), dimension(:,:,:), intent(in) :: uhat, vhat, what
           real(rkind), dimension(:,:,:), intent(in) :: u, v, wC
@@ -270,8 +301,8 @@ module spectralForcingLayerMod
           complex(rkind), dimension(:,:,:), intent(inout) :: urhs, vrhs, wrhs, Trhs
           real(rkind), dimension(:,:,:,:), intent(in), target :: duidxjC
           real(rkind), dimension(:,:,:), intent(in) :: nSGS, T
-          real(rkind), intent(in) :: dt
-          type(scalar_igrid), dimension(:), allocatable :: scalars
+          real(rkind), intent(in) :: dt, tsim
+          !type(scalar_igrid), dimension(:), allocatable :: scalars
           real(rkind) :: maxDiv
           real(rkind) :: KE_x, forceWork_x, eps_x
           real(rkind) :: KE_y, forceWork_y, eps_y
@@ -347,6 +378,11 @@ module spectralForcingLayerMod
               this%ampFact_y = (eps_y - this%gain*(KE_y - this%tgtKEon3)/this%integralTime     )/(forceWork_y + 1.d-14)
               this%ampFact_z = (eps_z - this%gain*(KE_z - this%tgtKEon3)/this%integralTime - BV)/(forceWork_z + 1.d-14)
           end associate
+
+          call this%get_time_ampfact(tsim,this%ampFact_time)
+          this%ampFact_x = this%ampFact_x*this%ampFact_time
+          this%ampFact_y = this%ampFact_y*this%ampFact_time
+          this%ampFact_z = this%ampFact_z*this%ampFact_time
           
           ! Step 6: update RHS
           urhs = urhs + this%ampFact_x*this%fxhat
@@ -354,11 +390,11 @@ module spectralForcingLayerMod
           wrhs = wrhs + this%ampFact_z*this%fzhat
 
           if (this%isStratified) call this%updateScalarRHS(T,dt,Trhs)
-          if (allocated(scalars)) then
-              do sca_id = 1,size(scalars)
-                  call this%updateScalarRHS(scalars(sca_id)%F,dt,scalars(sca_id)%rhs)
-              end do
-          end if
+          !if (allocated(scalars)) then
+          !    do sca_id = 1,size(scalars)
+          !        call this%updateScalarRHS(scalars(sca_id)%F,dt,scalars(sca_id)%rhs)
+          !    end do
+          !end if
       end subroutine
 
       subroutine updateScalarRHS(this,T,dt,Trhs)
@@ -373,6 +409,31 @@ module spectralForcingLayerMod
               this%fT = this%rmaskC*this%lambda/dt*(this%Ttgt - T)
               call this%spectC%fft(this%fT,this%fThat)
               Trhs = Trhs + this%ampFact_T*this%fThat
+          end if
+      end subroutine
+
+      subroutine get_time_ampfact(this,tsim,ampFact)
+          class(spectForcingLayer), intent(inout) :: this
+          real(rkind), intent(in) :: tsim
+          real(rkind), intent(out) :: ampFact
+          real(rkind), parameter :: tol = 1.d-10
+
+          if (this%dutyCycleForcing) then
+              if (this%fon) then
+                  ampFact = 1.d0 - 0.5d0*(1.d0 + tanh((tsim - (this%torigin + this%ton))/this%rampFact))
+                  if ((tsim > this%torigin + this%ton) .and. (ampFact < tol)) then
+                      this%fon = .FALSE.
+                      this%torigin = this%torigin + this%ton
+                  end if
+              else
+                  ampFact = 0.5d0*(1.d0 + tanh((tsim - (this%torigin + this%toff))/this%rampFact))
+                  if ((tsim > this%torigin + this%toff) .and. ((1.d0 - ampFact) < tol)) then
+                      this%fon = .TRUE.
+                      this%torigin = this%torigin + this%toff
+                  end if
+              end if
+          else
+              ampFact = 1.d0
           end if
       end subroutine
       
