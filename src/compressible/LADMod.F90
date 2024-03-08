@@ -1247,10 +1247,10 @@ contains
         call this%filter(adiffstar, x_bc, y_bc, z_bc)
         call this%filter(ytmp5, x_bc, y_bc, z_bc)
 
-        adiff = adiffstar + ytmp5 
+        adiff = max(adiffstar, ytmp5 )
         ! Filter each part
         
-        rhodiff =  rhodiff + adiffstar + outb + ytmp5
+        rhodiff =  max(rhodiff, adiffstar) + max(outb, ytmp5)
 
     end subroutine
 

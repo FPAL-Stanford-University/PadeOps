@@ -3106,6 +3106,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
              endwhere
              call gradientFV(this,this%xi,gradXi_FV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
+             !!!!!! UNCOMMENT FOR 2ND ORDER !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
              if(this%intSharp_d02) then       
                call gradient(this%decomp,this%derD02,this%xi(:,:,:,i),gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3)) !low order
              else
@@ -5225,18 +5226,21 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         if(this%decomp%xsz(1).gt.one) then
         call transpose_y_to_x(nodes,xbuf,this%decomp)
         call this%interpMid02 % iN2Fx(xbuf,xint,x_bc(1),x_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
+        !call this%interpMid % iN2Fx(xbuf,xint,x_bc(1),x_bc(2))
         call transpose_x_to_y(xint,faces(:,:,:,1),this%decomp)
         endif
 
         ! j+1/2 faces
         if(this%decomp%ysz(2).gt.one) then
         call this%interpMid02 % iN2Fy(nodes,faces(:,:,:,2),y_bc(1),y_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
+        !call this%interpMid % iN2Fy(nodes,faces(:,:,:,2),y_bc(1),y_bc(2)) 
         endif
 
         ! k+1/2 faces
         if(this%decomp%zsz(3).gt.one) then
         call transpose_y_to_z(nodes,zbuf,this%decomp)
-        call this%interpMid02 % iN2Fz(zbuf,zint,z_bc(1),z_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
+        call this%interpMid02 % iN2Fz(zbuf,zint,z_bc(1),z_bc(2)) !TODO: add BCs (only correct if interface is away from boundary
+        !call this%interpMid % iN2Fz(zbuf,zint,z_bc(1),z_bc(2))
         call transpose_z_to_y(zint,faces(:,:,:,3),this%decomp)
         endif
 
@@ -5301,6 +5305,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         if(this%decomp%xsz(1).gt.one) then
            call transpose_y_to_x(faces(:,:,:,1),xbuf,this%decomp)
            call this%derStaggd02 % ddxF2N(xbuf,xdiv,x_bc(1),x_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
+           !call this%derStagg % ddxF2N(xbuf,xdiv,x_bc(1),x_bc(2))
            call transpose_x_to_y(xdiv,tmp,this%decomp)
            nodes = nodes + tmp
         endif
@@ -5309,6 +5314,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         ! j nodes
         if(this%decomp%ysz(2).gt.one) then
            call this%derStaggd02 % ddyF2N(faces(:,:,:,2),ydiv,y_bc(1),y_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
+           !call this%derStagg % ddyF2N(faces(:,:,:,2),ydiv,y_bc(1),y_bc(2))
            nodes = nodes + ydiv
         endif
 
@@ -5316,6 +5322,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         if(this%decomp%zsz(3).gt.one) then
            call transpose_y_to_z(faces(:,:,:,3),zbuf,this%decomp)
            call this%derStaggd02 % ddzF2N(zbuf,zdiv,z_bc(1),z_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
+           !call this%derStagg % ddzF2N(zbuf,zdiv,z_bc(1),z_bc(2)) 
            call transpose_z_to_y(zdiv,tmp,this%decomp)
            nodes = nodes + tmp
         endif
