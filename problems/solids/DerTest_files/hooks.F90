@@ -151,8 +151,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = Lx/real(nx,rkind)
-        dy = Ly/real(ny,rkind)
+        dx = Lx/real(nx-1,rkind)
+        dy = Ly/real(ny-1,rkind)
         dz = dx
 
         if(abs(dx-dy)>1.0d-13) then
@@ -162,8 +162,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1  + i - 1, rkind ) * dx !- two  ! x \in (-2,4]
-                    y(i,j,k) = real( iy1  + j - 1, rkind ) * dy
+                    x(i,j,k) = real( ix1 - 1  + i - 1, rkind ) * dx     !- two  ! x \in (-2,4]
+                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - pi
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do

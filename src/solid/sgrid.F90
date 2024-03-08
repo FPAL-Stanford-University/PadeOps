@@ -103,7 +103,11 @@ module SolidGrid
     integer, parameter  :: VFError_index      = 81
     integer, parameter  :: pJ_index           = 82
     integer, parameter  :: tauRho_index       = 83
-    integer, parameter  :: nfields = 83
+    integer, parameter  :: metric_exact_index = 84
+    integer, parameter  :: metric_index       = 85
+    integer, parameter  :: metric_N2F_index   = 86
+    integer, parameter  :: metric_half_index  = 87
+    integer, parameter  :: nfields = 87
 
     integer, parameter :: mom_index = 1
     integer, parameter :: TE_index = mom_index+3
@@ -131,7 +135,7 @@ module SolidGrid
     type, extends(grid) :: sgrid
        
         type(filters),          allocatable :: gfil
-        type(derivatives),      allocatable :: derD02, derD06, derD04,derCD06
+        type(derivatives),      allocatable :: derD02, derD06,derD04,derCD06,der_stretch
         type(solid_mixture),    allocatable :: mix
         type(ladobject),        allocatable :: LAD
         type(derivativesStagg), allocatable :: derStagg,derStagg_stretch
@@ -232,8 +236,8 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: tauyx, tauyxe, dvdy
         real(rkind), dimension(:,:,:), pointer :: tauxz, tauxze, dvdz
         real(rkind), dimension(:,:,:), pointer :: tauzx, tauzxe, dwdx
-        real(rkind), dimension(:,:,:), pointer :: tauyz, tauyze, dwdy
-        real(rkind), dimension(:,:,:), pointer :: tauzy, tauzye, dwdz,tauSum,esum, esumJ
+        real(rkind), dimension(:,:,:), pointer :: tauyz, tauyze,dwdy,metric_half, metric_N2F
+        real(rkind), dimension(:,:,:), pointer :: tauzy, tauzye, dwdz,tauSum,esum, esumJ, metric, metric_exact
  
         real(rkind), dimension(:,:,:), pointer :: keJ, uJ, vJ, wJ, eJ, qDiv,pEvolve, VFEvolve, pError, VFerror, pJ, tauRho
         real(rkind) :: phys_mu1, phys_mu2
@@ -539,6 +543,19 @@ contains
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh)
+
+        if ( allocated(this%der_stretch) ) deallocate(this%der_stretch)
+        allocate(this%der_stretch)
+
+         call this%der_stretch%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                            derivative_x,  derivative_y,   derivative_z, &
+                              .false.,       .false.,        .false., &
+                              .false.)
+
+        print *, "dy = ", this%dy
+
         if ( allocated(this%derStagg_stretch) ) deallocate(this%derStagg_stretch)
         allocate(this%derStagg_stretch)
 
@@ -599,6 +616,7 @@ contains
         ! Allocate derD02
         if ( allocated(this%derD02) ) deallocate(this%derD02)
         allocate(this%derD02)
+        
         if ( allocated(this%derD04) ) deallocate(this%derD04)
         allocate(this%derD04)
         ! Allocate derD06
@@ -900,7 +918,11 @@ contains
         this%pEvolve   => this%fields(:,:,:,pEvolve_index)
         this%VFEvolve  => this%fields(:,:,:,VFEvolve_index)
         this%pError    => this%fields(:,:,:,pError_index)
-        this%VFError   => this%fields(:,:,:,VFError_index)        
+        this%VFError   => this%fields(:,:,:,VFError_index)       
+        this%metric    => this%fields(:,:,:,metric_index)
+        this%metric_exact    => this%fields(:,:,:,metric_exact_index)
+        this%metric_half => this%fields(:,:,:,metric_half_index)
+        this%metric_N2F  => this%fields(:,:,:,metric_N2F_index) 
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
@@ -1000,6 +1022,10 @@ contains
         varnames(81) = "VFError"
         varnames(82) = "pJ"
         varnames(83) = 'tauRho'
+        varnames(84) = 'metric_exact'
+        varnames(85) = 'metric'
+        varnames(86) = 'metric_N2F'
+        varnames(87) = 'metric_half'
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
@@ -1096,6 +1122,10 @@ contains
         nullify(this%VFEvolve)
         nullify(this%VFError)
         nullify(this%pError)
+        nullify(this%metric)
+        nullify(this%metric_exact)
+        nullify(this%metric_half)
+        nullify(this%metric_N2F)
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         if (allocated(this%mesh)) deallocate(this%meshstretch)
@@ -1112,7 +1142,10 @@ contains
 
         call this%derD02%destroy()
         if (allocated(this%derD02)) deallocate(this%derD02) 
-     
+    
+        call this%der_stretch%destroy()
+        if (allocated(this%der_stretch)) deallocate(this%der_stretch)
+ 
         call this%derD04%destroy()
         if (allocated(this%derD04)) deallocate(this%derD04)
 
@@ -1277,7 +1310,7 @@ contains
     end subroutine
     
     subroutine coordinateTransform(this,dx,dy,dz) 
-       use constants,        only: one, half
+       use constants,        only: one, half, pi
        use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x, gradFV_y, gradFV_z, gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz
        class(sgrid), intent(inout) :: this
        real(rkind),  intent(inout) :: dx,dy,dz
@@ -1285,47 +1318,46 @@ contains
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
        real(rkind) :: L, STRETCH_RATIO = 5, Lr, Lr_half
-       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half
-       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp
+       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2
+       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
 
         ! If base decomposition is in Y
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = this%y(ix1,iyn,iz1) - this%y(ix1,iy1,iz1)
-       print *, "Ly = ", L
+       L = (this%y(1,ny,1) - this%y(1,1,1)) 
 
        y_half = this%y + 0.5*this%dy
 
-   
+       !print *, "eta1 = ", this%eta1
+       !print *, "y = ", this%y
+        
        this%eta1 = this%x
        this%eta3 = this%z
        this%xMetric = 1
        this%zMetric = 1
        this%xMetric_half = 1
        this%zMetric_half = 1
-       print *, "set metrics"
-       this%eta2 = atanh( 2*this%y / ( L + 1 / STRETCH_RATIO) )
-       print *, "eta exp"
-       Lr =  L /( this%eta2(ix1, iyn,iz1) - this%eta2(ix1,iy1,iz1)) 
-       this%eta2 = Lr*this%eta2
-       print *, "eta 2"
-       eta2_half = atanh( 2*y_half / ( L + 1 / STRETCH_RATIO) )
-       Lr_half = L /( eta2_half(ix1, iyn,iz1) - eta2_half(ix1,iy1,iz1)) 
-       eta2_half = Lr_half*eta2_half
-       print *, "eta2 half"
-       this%yMetric = (L + 1 /STRETCH_RATIO)/2*1/(cosh(this%eta2/Lr)**2)*1/Lr
+       tmpeta = atanh( 2.0*this%y / ( L + 1.0 / STRETCH_RATIO) )
+       Lr =  L /( tmpeta(1, ny,1) - tmpeta(1,1,1))
 
+       this%eta2 = Lr*tmpeta
+       tmpeta2 = Lr*tmpeta
+       !this%yLADMetric = 1/ (( 2.0*(L + 1.0/STRETCH_RATIO) / ( (L + 1.0/STRETCH_RATIO)**2 - 4.0*this%y**2) )*Lr) !(L + 1.0 /STRETCH_RATIO)/2.0*(1.0/(cosh(this%eta2/Lr))**2.0)/L
+       !this%yMetric = tmp2
+       call this%der_stretch%ddy(tmpeta2, tmp2, this%y_bc(1),this%y_bc(2))
+       this%yMetric = 1/tmp2
        call interpolateFV_y(this%decomp,this%interpMid,this%eta2,eta2_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       
        call gradFV_y(this%decomp,this%derStagg_stretch,eta2_int,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)     
        this%yMetric_N2F = 1 / tmp 
        call gradFV_N2Fy(this%decomp,this%derStagg_stretch,this%eta2,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
- 
        this%yMetric_half = 1/tmp !(L + 1 /STRETCH_RATIO)/2*1/(cosh(eta2_half/Lr)**2)*1/Lr
-       print *, "yMetric_half"
-       this%yLADMetric = -1*(L + 1/STRETCH_RATIO)*tanh(this%eta2/Lr)/(cosh(this%eta2/Lr)**2)*1/Lr**2
- 
+       !this%yLADMetric = -1*(L + 1/STRETCH_RATIO)*tanh(this%eta2/Lr)/(cosh(this%eta2/Lr)**2)*1/Lr**2
+        
+       call this%der_stretch%d2dy2(this%eta2,tmpdy2,this%y_bc(1),this%y_bc(2))
+       this%yLADMetric = 1.0 / tmpdy2
     end subroutine 
 
     subroutine update_P(this,Qtmpp,isub,dt,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -1524,6 +1556,10 @@ contains
        !call this%mix%Test_Der_NP(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         print *, "pre test"
         call this%mix%Test_1DStretch(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        this%metric = this%yMetric
+        this%metric_exact = this%yLADMetric
+        this%metric_N2F   = this%yMetric_N2F
+        this%metric_half  = this%yMetric_half
         print *, "post test"
         !call this%mix%Test_Der(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         !print *, "before test"
