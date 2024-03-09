@@ -5624,7 +5624,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: yphys_half,dyphysdy_half,testfunc
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int
         integer :: imat
-        real(rkind) :: dx, dy, L, STRETCH_RATIO = 5.0,Lr, Lr_half
+        real(rkind) :: dx, dy, L, STRETCH_RATIO = 2.5,Lr, Lr_half
  
         
         dx = x(2,1,1)-x(1,1,1)
@@ -5654,19 +5654,29 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         this%ddx_exact  =   -1*sin(x)*EXP(-1.0*yphys**2.0)
         this%ddy_exact  =   cos(x)*-2.0*yphys*EXP(-1.0*yphys**2.0)             !-2*sin(2.0*x)*cos(2.0*y)!(-4.0) * sin(2.0*x) *sin(4.0*y) + 5*cos(y)
-        this%ddystagg_exact  =   cos(x)*-2.0*yphys_half*EXP(-1.0*yphys_half**2.0) 
-        call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        yphys_half(:,1:this%nyp-1,:)  =   yphys(:,1:this%nyp-1,:) + 0.5*(yphys(:,2:this%nyp,:) - yphys(:,1:this%nyp-1,:)) 
+        yphys_half(:,this%nyp,:) = 1.5
+        this%ddystagg_exact = cos(x)*-2.0*yphys_half*EXP(-1.0*yphys_half**2.0)
+        
+        !call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         print *, "gradFVx"
-        call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         print *, "gradFVy"
-        call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         print *, "gradFVz"
 
         call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,this%DerYstagg,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        !call gradient(this%decomp,this%der,testfunc,this%DerX,this%DerY,this%DerZ, x_bc, y_bc, z_bc)
+
+        call gradient(this%decomp,this%der,testfunc,this%DerX,this%DerY,this%DerZ, x_bc, y_bc, z_bc)
         !all laplacian(this%decomp,this%derCD06, this%material(1)%VF,this%lapTest, x_bc,y_bc, z_bc)
         print *, "gradFVN2F"
-        call this%der%d2dy2(testfunc,this%lapTest,this%y_bc(1),this%y_bc(2))
+
+        do imat = 1,this%nxp
+
+           this%DerYstagg(imat,this%nyp,1) = 0.0
+           this%ddystagg_exact(imat,this%nyp,1) = 0.0
+        enddo
+        !call this%der%d2dy2(testfunc,this%lapTest,this%y_bc(1),this%y_bc(2))
         this%derX_error = abs(this%DerX - this%ddx_exact)
         this%derY_error = abs(this%DerY - this%ddy_exact)
         this%lap_error = abs( cos(x)*4.0*(yphys**2.0)*EXP(-1.0*yphys**2.0)  - this%lapTest)

@@ -1317,7 +1317,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 5, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 2.5, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1352,8 +1352,10 @@ contains
        
        call gradFV_y(this%decomp,this%derStagg_stretch,eta2_int,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)     
        this%yMetric_N2F = 1 / tmp 
-       call gradFV_N2Fy(this%decomp,this%derStagg_stretch,this%eta2,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-       this%yMetric_half = 1/tmp !(L + 1 /STRETCH_RATIO)/2*1/(cosh(eta2_half/Lr)**2)*1/Lr
+       !call gradFV_N2Fy(this%decomp,this%derStagg_stretch,this%eta2,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       call interpolateFV_y(this%decomp,this%interpMid,tmp,tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       this%yMetric_half = 1.0 / tmp3
+       !this%yMetric_half = 1/tmp !(L + 1 /STRETCH_RATIO)/2*1/(cosh(eta2_half/Lr)**2)*1/Lr
        !this%yLADMetric = -1*(L + 1/STRETCH_RATIO)*tanh(this%eta2/Lr)/(cosh(this%eta2/Lr)**2)*1/Lr**2
         
        call this%der_stretch%d2dy2(this%eta2,tmpdy2,this%y_bc(1),this%y_bc(2))
