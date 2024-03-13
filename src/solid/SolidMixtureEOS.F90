@@ -5621,10 +5621,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: x_half,y_half,ddx,ddy, yphys, dyphysdy, d2yphysdy2
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: yphys_half,dyphysdy_half,testfunc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: yphys_half,dyphysdy_half,testfunc,tmp
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int
         integer :: imat
-        real(rkind) :: dx, dy, L, STRETCH_RATIO = 2.5,Lr, Lr_half
+        real(rkind) :: dx, dy, L, STRETCH_RATIO = 0.25,Lr,Lr_half,staggerror,dy1
  
         
         dx = x(2,1,1)-x(1,1,1)
@@ -5637,15 +5637,14 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         print *, "yphs exp"
         yphys = L/(yphys(this%nxp,this%nyp,this%nzp) - yphys(this%nxp,1,this%nzp))*yphys
         Lr = L/(yphys(this%nxp,this%nyp,this%nzp) - yphys(this%nxp,1,this%nzp)) 
-        print *, "yphys 2"
-        testfunc = cos(x)*EXP(-1.0*yphys**2.0)
-        print *, "test func"
-
-        yphys_half = atanh(2*y_half / ( L + 1 / STRETCH_RATIO)) 
-        print *, "yphys half"
+        dy1 = yphys(1,2,1)-yphys(1,1,1)
+        yphys_half = atanh(2*y_half/( L + 1 / STRETCH_RATIO))
+        print *, "yphs exp"
         yphys_half = L/(yphys_half(this%nxp,this%nyp,this%nzp) - yphys_half(this%nxp,1,this%nzp))*yphys_half
-        Lr_half = L/(yphys_half(this%nxp,this%nyp,this%nzp) - yphys_half(this%nxp,1,this%nzp)) 
-
+        print *, "yphys 2"
+        testfunc = EXP(-1.0*yphys**2.0) !(yphys-2*pi)**2.0
+        print *, "test func"
+        !call interpolateFV_y(this%decomp,this%interpMid,yphys,yphys_half,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         call interpolateFV(this%decomp,this%interpMid,testfunc,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         print *, "interpolate"
         this%VF_intx = VF_int(:,:,:,1)
@@ -5653,29 +5652,35 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         this%VF_intz = VF_int(:,:,:,3)
 
         this%ddx_exact  =   -1*sin(x)*EXP(-1.0*yphys**2.0)
-        this%ddy_exact  =   cos(x)*-2.0*yphys*EXP(-1.0*yphys**2.0)             !-2*sin(2.0*x)*cos(2.0*y)!(-4.0) * sin(2.0*x) *sin(4.0*y) + 5*cos(y)
-        yphys_half(:,1:this%nyp-1,:)  =   yphys(:,1:this%nyp-1,:) + 0.5*(yphys(:,2:this%nyp,:) - yphys(:,1:this%nyp-1,:)) 
-        yphys_half(:,this%nyp,:) = 1.5
-        this%ddystagg_exact = cos(x)*-2.0*yphys_half*EXP(-1.0*yphys_half**2.0)
+        this%ddy_exact  =   -2.0*yphys*EXP(-1.0*yphys**2.0)             !-2*sin(2.0*x)*cos(2.0*y)!(-4.0) * sin(2.0*x) *sin(4.0*y) + 5*cos(y)
+        this%ddy_exact = -2.0*yphys*EXP(-1.0*yphys**2.0)
         
-        !call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         print *, "gradFVx"
-        !call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         print *, "gradFVy"
-        !call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         print *, "gradFVz"
 
-        call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,this%DerYstagg,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-        call gradient(this%decomp,this%der,testfunc,this%DerX,this%DerY,this%DerZ, x_bc, y_bc, z_bc)
+        call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call interpolateFV_y(this%decomp,this%interpMid,tmp,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !call gradient(this%decomp,this%der,testfunc,this%DerX,this%DerY,this%DerZ, x_bc, y_bc, z_bc)
         !all laplacian(this%decomp,this%derCD06, this%material(1)%VF,this%lapTest, x_bc,y_bc, z_bc)
         print *, "gradFVN2F"
 
-        do imat = 1,this%nxp
+        !do imat = 1,this%nxp
 
-           this%DerYstagg(imat,this%nyp,1) = 0.0
-           this%ddystagg_exact(imat,this%nyp,1) = 0.0
+        this%DerY(:,this%nyp:this%nyp-3,1) = 0.0
+        this%ddy_exact(:,this%nyp:this%nyp-3,1) = 0.0
+
+
+        staggerror = 0
+        do imat = 1, this%nyp-2
+          staggerror = staggerror + abs(this%DerYstagg(1,imat,1)-this%ddystagg_exact(1,imat,1))*(yphys_half(1,imat+1,1)-yphys_half(1,imat,1))
+
         enddo
+        print *, "staggerror = ", staggerror
+        !nddo
         !call this%der%d2dy2(testfunc,this%lapTest,this%y_bc(1),this%y_bc(2))
         this%derX_error = abs(this%DerX - this%ddx_exact)
         this%derY_error = abs(this%DerY - this%ddy_exact)
@@ -5773,7 +5778,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
   
     subroutine Test_Der_NP(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z,transpose_z_to_y
-        use operators, only: gradFV_N2Fx, gradFV_N2Fy,gradFV_N2Fz
+        use operators, only: gradFV_N2Fx, gradFV_N2Fy,gradFV_N2Fz,gradFV_x,gradFV_y, gradFV_z, interpolateFV
         use constants,       only: zero,epssmall,eps,one,two,third,half, pi
         use exits,           only: GracefulExit
         use reductions, only : P_MAXVAL
@@ -5791,16 +5796,25 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         x_half = x+0.5*dx;
         y_half = y+0.5*dy;
 
-        this%ddx_exact = ( 3.0) * cos(3.0*x_half) *cos(5.0*y) -3*sin(x_half)
-        this%ddy_exact =  (-5.0) * sin(3.0*x) *sin(5.0*y_half) + 5*cos(y_half)
+        this%ddx_exact = 1 ! (3.0) * cos(3.0*x_half) *cos(5.0*y) -3*sin(x_half)
+        this%ddy_exact = -2.0*y*EXP(-1.0*y**2.0)   !(-5.0) * sin(3.0*x) *sin(5.0*y_half) + 5*cos(y_half)
         this%ddx_exact(this%nxp,:,:) = 0
         this%ddy_exact(:,this%nyp,:) = 0       
-        testfunc = sin(3.0*x)*cos(5.0*y) + 5*sin(y) + 3*cos(x)
+        testfunc =  EXP(-1.0*y**2.0) !sin(3.0*x)*cos(5.0*y) + 5*sin(y) + 3*cos(x)
         this%lap_error = testfunc
  
-        call gradFV_N2Fx(this%decomp,this%derStagg,testfunc,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        call gradFV_N2Fz(this%decomp,this%derStagg,testfunc,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call interpolateFV(this%decomp,this%interpMid,testfunc,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        this%VF_intx = VF_int(:,:,:,1)
+        this%VF_inty = VF_int(:,:,:,2)
+        this%VF_intz = VF_int(:,:,:,3)
+
+        call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+       ! call gradFV_N2Fx(this%decomp,this%derStagg,testfunc,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+       ! call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+       ! call gradFV_N2Fz(this%decomp,this%derStagg,testfunc,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         this%derX_error = abs(this%DerX - this%ddx_exact)
         this%derY_error = abs(this%DerY - this%ddy_exact)
