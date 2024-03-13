@@ -5624,49 +5624,38 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: yphys_half,dyphysdy_half,testfunc,tmp
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int
         integer :: imat
-        real(rkind) :: dx, dy, L, STRETCH_RATIO = 0.25,Lr,Lr_half,staggerror,dy1
+        real(rkind) :: dx, dy, L, STRETCH_RATIO = 1,Lr,Lr_half,staggerror,dy1
  
         
         dx = x(2,1,1)-x(1,1,1)
         dy = y(1,2,1) -y(1,1,1)
-        L  = y(this%nxp,this%nyp,this%nzp) - y(this%nxp,1,this%nzp)
-        print *, "L = ", L
+        L  = 4*pi
+
         x_half = x+0.5*dx;
-        y_half = y+0.5*dy;
-        yphys = atanh(2*y/( L + 1 / STRETCH_RATIO)) 
-        print *, "yphs exp"
+        y_half = y+0.5;
+        yphys = atanh(2*y/( 1.0 + 1.0 / STRETCH_RATIO)) 
         yphys = L/(yphys(this%nxp,this%nyp,this%nzp) - yphys(this%nxp,1,this%nzp))*yphys
-        Lr = L/(yphys(this%nxp,this%nyp,this%nzp) - yphys(this%nxp,1,this%nzp)) 
-        dy1 = yphys(1,2,1)-yphys(1,1,1)
-        yphys_half = atanh(2*y_half/( L + 1 / STRETCH_RATIO))
-        print *, "yphs exp"
+        Lr = L/(yphys(this%nxp,this%nyp,this%nzp) - yphys(this%nxp,1,this%nzp))
+ 
+        yphys_half = atanh(2*y_half/( 1.0 + 1 / STRETCH_RATIO))
         yphys_half = L/(yphys_half(this%nxp,this%nyp,this%nzp) - yphys_half(this%nxp,1,this%nzp))*yphys_half
-        print *, "yphys 2"
         testfunc = EXP(-1.0*yphys**2.0) !(yphys-2*pi)**2.0
-        print *, "test func"
-        !call interpolateFV_y(this%decomp,this%interpMid,yphys,yphys_half,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+
         call interpolateFV(this%decomp,this%interpMid,testfunc,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        print *, "interpolate"
         this%VF_intx = VF_int(:,:,:,1)
         this%VF_inty = VF_int(:,:,:,2)
         this%VF_intz = VF_int(:,:,:,3)
 
         this%ddx_exact  =   -1*sin(x)*EXP(-1.0*yphys**2.0)
-        this%ddy_exact  =   -2.0*yphys*EXP(-1.0*yphys**2.0)             !-2*sin(2.0*x)*cos(2.0*y)!(-4.0) * sin(2.0*x) *sin(4.0*y) + 5*cos(y)
-        this%ddy_exact = -2.0*yphys*EXP(-1.0*yphys**2.0)
-        
-        call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        print *, "gradFVx"
-        call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        print *, "gradFVy"
-        call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        print *, "gradFVz"
+        !this%ddy_exact  =   -2.0*yphys_half*EXP(-1.0*yphys_half**2.0)             !-2*sin(2.0*x)*cos(2.0*y)!(-4.0) * sin(2.0*x) *sin(4.0*y) + 5*cos(y)
+        this%ddy_exact = -2.0*yphys_half*EXP(-1.0*yphys_half**2.0)
+        !call interpolateFV_y(this%decomp,this%interpMid,tmp,this%ddy_exact,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
+        !call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-        call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        call interpolateFV_y(this%decomp,this%interpMid,tmp,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        !call gradient(this%decomp,this%der,testfunc,this%DerX,this%DerY,this%DerZ, x_bc, y_bc, z_bc)
-        !all laplacian(this%decomp,this%derCD06, this%material(1)%VF,this%lapTest, x_bc,y_bc, z_bc)
-        print *, "gradFVN2F"
+        call gradFV_N2Fy(this%decomp,this%derStagg,testfunc,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         !do imat = 1,this%nxp
 
@@ -5681,10 +5670,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         enddo
         print *, "staggerror = ", staggerror
         !nddo
-        !call this%der%d2dy2(testfunc,this%lapTest,this%y_bc(1),this%y_bc(2))
+        call this%der%ddy(testfunc,this%lapTest,this%y_bc(1),this%y_bc(2))
         this%derX_error = abs(this%DerX - this%ddx_exact)
         this%derY_error = abs(this%DerY - this%ddy_exact)
-        this%lap_error = abs( cos(x)*4.0*(yphys**2.0)*EXP(-1.0*yphys**2.0)  - this%lapTest)
+        this%lap_error = abs( this%laptest - this%ddy_exact)
     end subroutine
 
     subroutine Test_Der(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)

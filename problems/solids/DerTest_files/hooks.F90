@@ -19,7 +19,7 @@ module DerTest_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 4.0*pi, Lx = 4.0*pi, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = 1.0, Lx = 1.0, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
 
     type(filters) :: mygfil
 
@@ -163,7 +163,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1 - 1  + i - 1, rkind ) * dx     !- two  ! x \in (-2,4]
-                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 2.0*pi
+                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do

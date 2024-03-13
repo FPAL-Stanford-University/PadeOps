@@ -1330,7 +1330,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 0.25, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 1, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1339,7 +1339,7 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = (this%y(1,ny,1) - this%y(1,1,1)) 
+       L = 4*pi !(this%y(1,ny,1) - this%y(1,1,1)) 
 
        y_half = this%y + 0.5*this%dy
 
@@ -1352,7 +1352,7 @@ contains
        this%zMetric = 1
        this%xMetric_half = 1
        this%zMetric_half = 1
-       tmpeta = atanh( 2.0*this%y / ( L + 1.0 / STRETCH_RATIO) )
+       tmpeta = atanh( 2.0*this%y / ( 1.0 + 1.0 / STRETCH_RATIO) )
        Lr =  L /( tmpeta(1, ny,1) - tmpeta(1,1,1))
 
        this%eta2 = Lr*tmpeta
@@ -1365,7 +1365,7 @@ contains
        
        call gradFV_y(this%decomp,this%derStagg_stretch,eta2_int,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)     
        this%yMetric_F2N = 1 / tmp 
-       call gradFV_N2Fy(this%decomp,this%derStagg_stretch,tmpeta2,tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       call gradFV_N2Fy(this%decomp,this%derStagg_stretch,this%eta2,tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       ! call interpolateFV_y(this%decomp,this%interpMid,tmp,tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
        this%yMetric_half = 1.0 / tmp3
        this%yMetric_half(:,this%nyp,:) = 1.0
