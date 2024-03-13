@@ -207,7 +207,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, tmp2
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, tmp2, noise
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac
     integer, dimension(2) :: iparams
@@ -217,7 +217,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
     integer :: nx,ny,nz
     nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
-
+    CALL RANDOM_NUMBER(noise)
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF,  &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
                           plastic2, explPlast2, yield2, interface_init, kwave,delta, delta_d, delta_rho, &
@@ -302,8 +302,8 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
-        u = 0
-        v = v0
+        u = v0
+        v = 0
         w = 0
 
         !tmp2 = half*(erf( (y-0.8+0.1_rkind)/(thick*dy) ) - erf((y-0.8-0.1_rkind)/(thick*dy)))
@@ -311,7 +311,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         !set mixture pressure (uniform)
 !	mix%material(1)%p  =p_amb+10*exp(-((y-0.8)**2)/(2*(0.05)**2))
         !mix%material(1)%p  = (p_amb +p_disturb)*tmp2+p_amb
-        mix%material(1)%p = p_amb
+        mix%material(1)%p = p_amb + (noise-0.5)*5d-7
         mix%material(2)%p  = mix%material(1)%p
 !        mix%material(1)%T = 298
 !        mix%material(2)%T = 298

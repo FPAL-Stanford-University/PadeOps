@@ -1849,10 +1849,10 @@ contains
         !print *, "sosmax"
         !print *, P_MAXVAL( this%sos)
         dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)! * this%CFL
-        dtYs1 = 0.75_rkind * delta**4 / (P_MAXVAL( this%mix%material(1)%rhodiff  / this%rho ) + eps) 
-        dtYs2 = 0.75_rkind * delta**4 / (P_MAXVAL( this%mix%material(2)%rhodiff / this%rho ) + eps)
-        dtVF1 = 0.75_rkind * delta**4 / (P_MAXVAL( this%mix%material(1)%adiff / this%rho ) + eps)
-        dtVF2 = 0.75_rkind * delta**4 / (P_MAXVAL( this%mix%material(2)%adiff /this%rho ) + eps)
+        dtYs1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%rhodiff  / this%rho ) + eps) 
+        dtYs2 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff / this%rho ) + eps)
+        dtVF1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff / this%rho ) + eps)
+        dtVF2 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff /this%rho ) + eps)
 
         !dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
@@ -1946,7 +1946,7 @@ contains
               enddo
            endif
 
-           dtSharp_Adiff   = delta**2/max(this%mix%intSharp_gam,eps)! * this%CFL !based on anti-diffusivity in VF sharpening equation
+           dtSharp_Adiff   = delta/max(this%mix%intSharp_gam,eps)! * this%CFL !based on anti-diffusivity in VF sharpening equation
         endif
          a = -1
         ! Use fixed time step if CFL <= 0
@@ -3101,68 +3101,20 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         call interpolateFV_x(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-        tauRho_mid = 0.0
-        do i = 1,2
-
-          call this%mix%material(i)%getSpeciesDensity(this%rho,rhom)
-          call interpolateFV_x(this%decomp,this%interpMid,rhom,rhom_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-          call interpolateFV_x(this%decomp,this%interpMid,this%mix%material(i)%rhodiff,rhodiff_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-          call gradFV_N2Fx(this%decomp,this%derStagg,this%mix%material(i)%Ys*this%rho,gradRYs,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-          tauRho_mid = tauRho_mid + tauxx/rho_int*rhodiff_int*gradRYs
-
-
-        enddo
-
-        call gradFV_x(this%decomp,this%derStagg,tauRho_mid,this%tauRho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !rho_int = 0.0
-        !num = 0.0; den = 0.0;
-!        call interpolateFV_x(this%decomp,this%interpMid,this%mix%material(1)%VF,VF_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        VF_int(:,:,:,2) = 1 - VF_int(:,:,:,1)
-
-        !do i = 1,2
-
-        !  call interpolateFV_x(this%decomp,this%interpMid,this%rho*this%mix%material(i)%Ys,rhoYs_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  call interpolateFV_x(this%decomp,this%interpMid,this%mix%material(i)%VF,VF_int(:,:,:,i),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  rho_int = rho_int + rhoYs_int
-        !  num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf*this%mix%material(i)%hydro%onebygam_m1
-        !  den = den + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
-        !enddo
-
-        !e_int = (1/rho_int)*(p_int*den + num)
 
         flux = 0.0
         buff = rho_int*u_int*u_int + p_int - tauxx !x-momentum
-        !buff = rhou_int*u_int + p_int - tauxx_int
-!print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
-        !if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff - this%mix%surfaceTension_fxx
-
-        !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%xflux_x = flux
 
         flux =0.0
         buff = rho_int*u_int*v_int  - tauxy !y-momentum
-        !buff = rhov_int*u_int - tauxy_int
-        !if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff - this%mix%surfaceTension_fxy_x
-
-        !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%xflux_y = flux
 
         buff = rho_int*u_int*w_int - tauxz !z-momentum
-        !if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff - this%mix%surfaceTension_fxz_x
-
-        !endif
-        !buff = rhow_int*u_int - tauxz_int
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
         this%xflux_z = flux
@@ -3171,13 +3123,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         TE = rhoe_int + rho_int*half*(u_int*u_int + v_int*v_int + w_int*w_int) 
         !TE = rhoe_int + half*rho_int*(u_int*u_int + v_int*v_int + w_int*w_int)
         buff = ( TE + p_int - tauxx )*u_int - v_int*tauxy - w_int*tauxz + qx !+ tauRho_mid
-        !buff = ( TE + p_int )*u_int ! qx_int - v_int*tauxy_int - w_int*tauxz_int
-
-        !if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff + this%mix%surfaceTension_pe_x*u_int -this%mix%surfaceTension_fxx*u_int - this%mix%surfaceTension_fxy_x*v_int - this%mix%surfaceTension_fxz_x*w_int
-
-        !endif       
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
         this%xflux_e = flux
@@ -3212,38 +3157,15 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call interpolateFV_y(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
 
-        !rho_int = 0.0
-        !num = 0.0; den = 0.0;
-        !do i = 1,2
-
-        !  call interpolateFV_y(this%decomp,this%interpMid,this%rho*this%mix%material(i)%Ys,rhoYs_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  call interpolateFV_y(this%decomp,this%interpMid,this%mix%material(i)%VF,VF_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  rho_int = rho_int + rhoYs_int
-        !  num = num + VF_int*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf*this%mix%material(i)%hydro%onebygam_m1
-        !  den = den + VF_int*this%mix%material(i)%hydro%onebygam_m1
-        !enddo
-  
-        !e_int = (1/rho_int)*(p_int*den + num)
 
         flux = 0.0
         buff = rho_int*v_int*u_int   - tauxy !x-momentum
-        !buff = rhou_int*v_int - tauxy_int
-!print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
-        !if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff - this%mix%surfaceTension_fxy_y
-
-        !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%yflux_x = flux
 
         flux = 0.0
         buff = rho_int*v_int*v_int + p_int   - tauyy !y-momentum
-        !buff = rhov_int*v_int + p_int - tauyy_int
-        !if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff - this%mix%surfaceTension_fyy
 
         !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
