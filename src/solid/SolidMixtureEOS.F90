@@ -3320,9 +3320,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                  !call divergenceFV(this,gradFVFV,this%intdiff,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-                ! antiDiffFVint(:,:,:,1,i) = antiDiffFVint(:,:,:,1,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,1))
-                ! antiDiffFVint(:,:,:,2,i) = antiDiffFVint(:,:,:,2,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,2))
-                ! antiDiffFVint(:,:,:,3,i) = antiDiffFVint(:,:,:,3,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,3))
+                 antiDiffFVint(:,:,:,1,i) = antiDiffFVint(:,:,:,1,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,1))
+                 antiDiffFVint(:,:,:,2,i) = antiDiffFVint(:,:,:,2,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,2))
+                 antiDiffFVint(:,:,:,3,i) = antiDiffFVint(:,:,:,3,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,3))
 
                  !antiDiffFVint(:,:,:,1,i) = antiDiffFVint(:,:,:,1,i) + this%intSharp_gam * (this%intSharp_eps * gradVF_FV(:,:,:,1,1))
                  !antiDiffFVint(:,:,:,2,i) = antiDiffFVint(:,:,:,2,i) + this%intSharp_gam * (this%intSharp_eps * gradVF_FV(:,:,:,2,2))
