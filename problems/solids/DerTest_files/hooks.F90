@@ -151,7 +151,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = Lx/real(nx-1,rkind)
+        dx = Lx/real(nx,rkind)
         dy = Ly/real(ny-1,rkind)
         dz = dx
 

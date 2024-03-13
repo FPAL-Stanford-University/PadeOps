@@ -787,11 +787,11 @@ contains
             call this%yd06 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
         end select 
 
-        if( this%yMetric) then
+        !if( this%yMetric) then
 
-          d2fdx2 = this%d2etady2*d2fdx2
+        !  d2fdx2 = (this%detady)**2 * d2fdx2
 
-        endif
+        !endif
 
     end subroutine
 
