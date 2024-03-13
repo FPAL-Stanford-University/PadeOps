@@ -401,7 +401,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
         !mix%material(2)%g11 = mix%material(1)%g11
 
-        mix%material(1)%p  = p_amb ! + (noise-0.5)*1d-6   !66666dum + p1*(one-dum)
+        mix%material(1)%p  = p_amb  + (noise-0.5)*5d-6   !66666dum + p1*(one-dum)
         mix%material(2)%p  = mix%material(1)%p
 
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp !+  (noise-0.5)*1d-7
