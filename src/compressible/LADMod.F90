@@ -37,6 +37,7 @@ module LADMod
         real(rkind) :: dx, dy, dz
 
         logical :: use_gTg
+        logical :: yMetric
 
     contains
 
@@ -61,7 +62,7 @@ module LADMod
 
 contains
 
-    subroutine init(this,decomp,der,derStagg,interpMid,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1, Cvf2)
+    subroutine init(this,decomp,der,derStagg,interpMid,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1, Cvf2,yMetric)
         class(ladobject),        intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
@@ -101,6 +102,7 @@ contains
         this%dx = dx
         this%dy = dy
         this%dz = dz
+        this%yMetric = yMetric
     end subroutine
 
 
@@ -113,9 +115,9 @@ contains
 
     end subroutine
 
-    subroutine get_viscosities(this,rho,p,sos,duidxj,mu,bulk,x_bc,y_bc,z_bc,dt,pfloor)
+    subroutine get_viscosities(this,rho,p,sos,duidxj,mu,bulk,x_bc,y_bc,z_bc,dt,pfloor,detady,dy_stretch)
         class(ladobject),        intent(in) :: this
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(in)  :: rho,p,sos
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(in)  :: rho,p,sos,detady, dy_stretch
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), target, intent(in)  :: duidxj
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(inout) :: mu, bulk
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
@@ -161,7 +163,11 @@ contains
         ! Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp1,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp1,ytmp2,y_bc(1),y_bc(2))
-        ytmp1 = ytmp2*this%dy**6
+        if(this%yMetric)
+          ytmp1 = (detady**4)*ytmp2*dy_stretch**6
+        else 
+          ytmp1 = ytmp2*this%dy**6
+        endif
         mustar = mustar + ytmp1
 
         mustar = this%Cmu*rho*abs(mustar)
@@ -186,7 +192,7 @@ contains
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2)) 
-        xtmp1 = xtmp2*this%dx**6
+        xtmp1 = xtmp2*this%dx**4
         call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
         bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
@@ -195,7 +201,7 @@ contains
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
-        ztmp1 = ztmp2*this%dz**6
+        ztmp1 = ztmp2*this%dz**4
         call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
         bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
@@ -203,8 +209,13 @@ contains
         call this%der%d2dy2(func,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp5,ytmp4,y_bc(1),y_bc(2))
-        ytmp5 = ytmp4*this%dy**6
-        bulkstar = bulkstar + ytmp5 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+        if(this%yMetric) then
+          ytmp5 = (detady**6)*ytmp4*dy_stretch**4
+          bulkstar = bulkstar + ytmp5 * ( dy_stretch * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+        else
+          ytmp5 = ytmp4*this%dy**4
+          bulkstar = bulkstar + ytmp5 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+        endif
 
         ! Now, all ytmps are free to use
         ytmp1 = dwdy-dvdz; ytmp2 = dudz-dwdx; ytmp3 = dvdx-dudy
@@ -732,7 +743,7 @@ contains
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         xtmp2 = xtmp1*this%dx**5
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        diffstar = ytmp4 ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 +real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        diffstar = ytmp4!*( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )  ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 +real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(rhoYs,ztmp1,this%decomp)
@@ -740,13 +751,14 @@ contains
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
         ztmp2 = ztmp1*this%dz**5
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        diffstar = diffstar + ytmp4 !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        diffstar = diffstar + ytmp4 !*( this%dz * tmp3 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )  !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(rhoYs,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
         ytmp4 = ytmp5*this%dy**5
-        diffstar = diffstar + ytmp4 !* ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        diffstar = diffstar + ytmp4 ! * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
         ytmp5 = this%CY*sos*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*(this%dy*this%dx*this%dz)**(1/3)
         diffstar = sos*abs(diffstar)/rho !/rho ! CD part of diff
         call this%filter(diffstar, x_bc, y_bc, z_bc)
@@ -1139,11 +1151,11 @@ contains
 
     end subroutine
 
-     subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,umag,duidxj, minYs,minVF, sos,adiff,rhodiff,fd,x_bc,y_bc,z_bc)
+     subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dphidx,dphidy,dphidz,minYs,minVF,sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch)
         class(ladobject),  intent(in) :: this
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz, umag
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff,fd
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), target,intent(in)  :: duidxj
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz,dy_stretch,detady
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: dphidx, dphidx,dphidz
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: minYs, minVF
         real(rkind), dimension(:,:,:), pointer ::dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -1151,19 +1163,23 @@ contains
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2, ztmp3,ztmp4
+        real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: tmp1,tmp2, tmp3, delphi,dely
         real(rkind) :: nmask = 40d0, e = 1d-15
         
         ! -------- Artificial Diffusivity ---------
 
-        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
-        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
-        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
-        dil = (dudx + dvdy + dwdz)*(dudx + dvdy + dwdz)
-        omega = (dwdy-dvdz)*(dwdy-dvdz) + (dudz - dwdx)*(dudz - dwdx) + (dvdx - dudy)*(dvdx - dudy)
-        drYdmag = drYsdx*drYsdx + drYsdy*drYsdy + drYsdz*drYsdz
-        fd = drYdmag / (drYdmag + (dil + omega)*(rhoYs*rhoYs/(umag + sos*sos)) + e)
-        Ys = rhoYs/rho
+        !dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        !dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        !dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+        !dil = (dudx + dvdy + dwdz)*(dudx + dvdy + dwdz)
+        !omega = (dwdy-dvdz)*(dwdy-dvdz) + (dudz - dwdx)*(dudz - dwdx) + (dvdx - dudy)*(dvdx - dudy)
+        !drYdmag = drYsdx*drYsdx + drYsdy*drYsdy + drYsdz*drYsdz
+        !fd = drYdmag / (drYdmag + (dil + omega)*(rhoYs*rhoYs/(umag + sos*sos)) + e)
+        !s = rhoYs/rho
         ! Step 1: Construct Heaviside Functions
+        tmp1 = drYsdx*drYsdx
+        tmp2 = drYsdy*drYsdy
+        tmp3 = drYsdz*drYsdz
 
         where( abs((Ys)*(1 - (Ys))) .GT. 0)
            H1 = 1
@@ -1191,7 +1207,7 @@ contains
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
-        xtmp2 = xtmp1*this%dx**5
+        xtmp2 = xtmp1*this%dx**4 * ( this%dx * tmp1 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         diffstar = ytmp4 ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
@@ -1199,17 +1215,24 @@ contains
         call transpose_y_to_z(Ys,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
-        ztmp2 = ztmp1*this%dz**5
+        ztmp2 = ztmp1*this%dz**4 * ( this%dz * tmp3 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         diffstar = diffstar + ytmp4 !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
-        ytmp4 = ytmp5*this%dy**5
-        diffstar = diffstar + ytmp4 !* ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
-        !ytmp5 = this%CY*sos*( half*(abs(Ys-minYs)-(one-minYs) + abs((Ys-minYs)-(one-minYs))) )*(this%dy*this%dx*this%dz)**(1/3)
-        outb = this%CY*sos*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*(this%dy*this%dx*this%dz)**(1/3)
+        if(this%yMetric) then
+          ytmp4 = (detady**4)*ytmp5*dy_stretch**4
+          diffstar = diffstar + ytmp4 * ( dy_stretch * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
+          dely = ( (dy_stretch*drYsdy + this%dx*drYsdx + this%dz*drYsdz) / (sqrt(drYsdx + drYsdy + drYsdz) + real(1.0D-32,rkind)) )
+        else
+          ytmp4 = ytmp5*this%dy**4
+          diffstar = diffstar + ytmp4 * ( this%dy * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+          dely = ( (this%dy*drYsdy + this%dx*drYsdx + this%dz*drYsdz) / (sqrt(drYsdx + drYsdy + drYsdz) + real(1.0D-32,rkind)) )
+        endif
+
+        outb = this%CY*sos*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*dely
         diffstar = sos*abs(diffstar) !*fd !/rho ! CD part of diff
         call this%filter(diffstar, x_bc, y_bc, z_bc)
         call this%filter(outb, x_bc, y_bc, z_bc)
