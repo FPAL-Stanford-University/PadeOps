@@ -280,7 +280,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         ! Set up smearing function for VF based on interface location and thickness
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 
-        eta = y - interface_init
+        eta = x - interface_init
         !eta =(x-interface_init)
         !eta = x-interface_init
         !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
@@ -290,7 +290,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
 !        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (y-0.5)*(y-0.5))/(thick*dx) ) )
 
-        tmp = (half)*(erf( (eta+width)/(thick*dy) ) - erf((eta-width)/(thick*dy)))
+        tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf((eta-width)/(thick*dx)))
         !tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
@@ -311,7 +311,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         !set mixture pressure (uniform)
 !	mix%material(1)%p  =p_amb+10*exp(-((y-0.8)**2)/(2*(0.05)**2))
         !mix%material(1)%p  = (p_amb +p_disturb)*tmp2+p_amb
-        mix%material(1)%p = p_amb + (noise-0.5)*5d-7
+        mix%material(1)%p = p_amb !+ (noise-0.5)*5d-8
         mix%material(2)%p  = mix%material(1)%p
 !        mix%material(1)%T = 298
 !        mix%material(2)%T = 298
