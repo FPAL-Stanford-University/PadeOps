@@ -2071,10 +2071,10 @@ contains
         !print *, "sosmax"
         !print *, P_MAXVAL( this%sos)
         dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)! * this%CFL
-        dtYs1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%rhodiff  / this%rho ) + eps) 
-        dtYs2 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff / this%rho ) + eps)
-        dtVF1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff / this%rho ) + eps)
-        dtVF2 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff /this%rho ) + eps)
+        dtYs1 = 0.75_rkind * delta**4 / (P_MAXVAL( this%mix%material(1)%rhodiff  / this%rho ) + eps) 
+        dtYs2 = 0.75_rkind * delta**4 / (P_MAXVAL( this%mix%material(2)%rhodiff / this%rho ) + eps)
+        dtVF1 = 0.75_rkind * delta**4 / (P_MAXVAL( this%mix%material(1)%adiff / this%rho ) + eps)
+        dtVF2 = 0.75_rkind * delta**4 / (P_MAXVAL( this%mix%material(2)%adiff /this%rho ) + eps)
 
         !dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5

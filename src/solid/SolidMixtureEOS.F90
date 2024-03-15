@@ -3360,9 +3360,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  !gradFVFV(:,:,:,2) = gradVF_FV(:,:,:,2,2)
                  !gradFVFV(:,:,:,3) = gradVF_FV(:,:,:,3,3)
  
-                 call gradFV_N2Fx(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-                 call gradFV_N2Fy(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-                 call gradFV_N2Fz(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                 call gradFV_N2Fx(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                 call gradFV_N2Fy(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                 call gradFV_N2Fz(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
                  !call divergenceFV(this,gradFVFV,this%intdiff,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
