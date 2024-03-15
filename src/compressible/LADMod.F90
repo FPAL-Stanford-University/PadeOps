@@ -69,6 +69,7 @@ contains
         type(derivativesStagg), target, intent(in) :: derStagg
         type(interpolators), target, intent(in) :: interpMid 
         type(filters),     target, intent(in) :: fil
+        logical,           intent(in) :: yMetric
         integer,           intent(in) :: nfils
         real(rkind),       intent(in) :: Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1,Cvf2,dx,dy,dz    
 
@@ -163,7 +164,7 @@ contains
         ! Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp1,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp1,ytmp2,y_bc(1),y_bc(2))
-        if(this%yMetric)
+        if(this%yMetric) then
           ytmp1 = (detady**4)*ytmp2*dy_stretch**6
         else 
           ytmp1 = ytmp2*this%dy**6
@@ -192,7 +193,7 @@ contains
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2)) 
-        xtmp1 = xtmp2*this%dx**4
+        xtmp1 = xtmp2*this%dx**6
         call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
         bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
@@ -201,7 +202,7 @@ contains
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
-        ztmp1 = ztmp2*this%dz**4
+        ztmp1 = ztmp2*this%dz**6
         call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
         bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
@@ -210,10 +211,10 @@ contains
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp5,ytmp4,y_bc(1),y_bc(2))
         if(this%yMetric) then
-          ytmp5 = (detady**6)*ytmp4*dy_stretch**4
+          ytmp5 = (detady**6)*ytmp4*dy_stretch**6
           bulkstar = bulkstar + ytmp5 * ( dy_stretch * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
         else
-          ytmp5 = ytmp4*this%dy**4
+          ytmp5 = ytmp4*this%dy**6
           bulkstar = bulkstar + ytmp5 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
         endif
 
@@ -1154,7 +1155,7 @@ contains
      subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dphidx,dphidy,dphidz,minYs,minVF,sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch)
         class(ladobject),  intent(in) :: this
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz,dy_stretch,detady
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: dphidx, dphidx,dphidz
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: dphidx, dphidy,dphidz
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: minYs, minVF
@@ -1163,19 +1164,9 @@ contains
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2, ztmp3,ztmp4
-        real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: tmp1,tmp2, tmp3, delphi,dely
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: tmp1,tmp2, tmp3, delphi,dely,num,den,tot
         real(rkind) :: nmask = 40d0, e = 1d-15
         
-        ! -------- Artificial Diffusivity ---------
-
-        !dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
-        !dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
-        !dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
-        !dil = (dudx + dvdy + dwdz)*(dudx + dvdy + dwdz)
-        !omega = (dwdy-dvdz)*(dwdy-dvdz) + (dudz - dwdx)*(dudz - dwdx) + (dvdx - dudy)*(dvdx - dudy)
-        !drYdmag = drYsdx*drYsdx + drYsdy*drYsdy + drYsdz*drYsdz
-        !fd = drYdmag / (drYdmag + (dil + omega)*(rhoYs*rhoYs/(umag + sos*sos)) + e)
-        !s = rhoYs/rho
         ! Step 1: Construct Heaviside Functions
         tmp1 = drYsdx*drYsdx
         tmp2 = drYsdy*drYsdy
@@ -1207,17 +1198,17 @@ contains
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
-        xtmp2 = xtmp1*this%dx**4 * ( this%dx * tmp1 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
+        xtmp2 = xtmp1*this%dx**4 
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        diffstar = ytmp4 ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        diffstar = ytmp4 * ( this%dx * tmp1 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(Ys,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
-        ztmp2 = ztmp1*this%dz**4 * ( this%dz * tmp3 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
+        ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        diffstar = diffstar + ytmp4 !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        diffstar = diffstar + ytmp4 * ( this%dz * tmp3 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
@@ -1225,11 +1216,11 @@ contains
         if(this%yMetric) then
           ytmp4 = (detady**4)*ytmp5*dy_stretch**4
           diffstar = diffstar + ytmp4 * ( dy_stretch * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
-          dely = ( (dy_stretch*drYsdy + this%dx*drYsdx + this%dz*drYsdz) / (sqrt(drYsdx + drYsdy + drYsdz) + real(1.0D-32,rkind)) )
+          dely = ( (dy_stretch*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(tmp1 + tmp2 + tmp3) + real(1.0D-32,rkind)) )
         else
           ytmp4 = ytmp5*this%dy**4
           diffstar = diffstar + ytmp4 * ( this%dy * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
-          dely = ( (this%dy*drYsdy + this%dx*drYsdx + this%dz*drYsdz) / (sqrt(drYsdx + drYsdy + drYsdz) + real(1.0D-32,rkind)) )
+          dely = ( (this%dy*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(tmp1 + tmp2 + tmp3)+ real(1.0D-32,rkind)) )
         endif
 
         outb = this%CY*sos*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*dely
@@ -1241,39 +1232,53 @@ contains
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         !                              VF                                   !
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       
+      
+        tmp1 = dphidx*dphidx
+        tmp2 = dphidy*dphidy
+        tmp3 = dphidz*dphidz
+ 
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(VF,xtmp3,this%decomp)
         call this%der%d2dx2(xtmp3,xtmp4,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp4,xtmp3,x_bc(1),x_bc(2))
-        xtmp4 = xtmp3*this%dx**5
+        xtmp4 = xtmp3*this%dx**4
         call transpose_x_to_y(xtmp4,ytmp6,this%decomp)
-        adiffstar = ytmp6 ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 +real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        adiffstar = ytmp6 *( this%dx * tmp1 / (tmp1 + tmp2 + tmp3 +real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(VF,ztmp3,this%decomp)
         call this%der%d2dz2(ztmp3,ztmp4,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp4,ztmp3,z_bc(1),z_bc(2))
-        ztmp4 = ztmp3*this%dz**5
+        ztmp4 = ztmp3*this%dz**4
         call transpose_z_to_y(ztmp4,ytmp6,this%decomp)
-        adiffstar = adiffstar + ytmp6 !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 +ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        adiffstar = adiffstar + ytmp6 * ( this%dz * tmp3 / (tmp1 + tmp2 +tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(VF,ytmp6,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp6,ytmp7,y_bc(1),y_bc(2))
-        ytmp6 = ytmp7*this%dy**5
-        adiffstar = adiffstar + ytmp6
+       if(this%yMetric) then
+          ytmp6 = (detady**4)*ytmp7*dy_stretch**4
+          !print *, "ytmp6 = ",ytmp6
+          adiffstar = adiffstar + ytmp6 * ( dy_stretch * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
+          !num = dy_stretch * tmp2 
+          !den = (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind))
+          !tot = ( dy_stretch * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind))  ) 
+          delphi = ( (dy_stretch*abs(dphidy) + this%dx*abs(dphidx) + this%dz*abs(dphidz)) / (sqrt(tmp1 + tmp2 + tmp3) + real(1.0D-32,rkind)) )
+        else
+          ytmp6 = ytmp7*this%dy**4
+          adiffstar = adiffstar + ytmp6 * ( this%dy * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+          delphi = ( (this%dy*abs(dphidy) + this%dx*abs(dphidx) + this%dz*abs(dphidz)) / (sqrt(tmp1 + tmp2 + tmp3)+ real(1.0D-32,rkind)) )
+        endif
 
         adiffstar = this%Cvf1*sos*abs(adiffstar)
-        !ytmp5 = this%Cvf2*sos*( (VF - 1 - minVF)*H2 - (VF - minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one + abs(Ys-one)) )*ytmp4 ! CY partof diff
-        ytmp5 = this%Cvf2*sos*( half*(abs(VF)-(one) + abs((VF)-(one))) )*(this%dy*this%dx*this%dz)**(1/3)
+        ytmp5 = this%Cvf2*sos*( half*(abs(VF)-(one) + abs((VF)-(one))) )*delphi
         call this%filter(adiffstar, x_bc, y_bc, z_bc)
         call this%filter(ytmp5, x_bc, y_bc, z_bc)
 
-        adiff = adiffstar + ytmp5 
+        adiff = max(adiffstar, ytmp5 )
         ! Filter each part
         
-        rhodiff =  rhodiff + adiffstar + outb + ytmp5
+        rhodiff =  max(rhodiff,adiffstar,outb,ytmp5)
 
     end subroutine
 

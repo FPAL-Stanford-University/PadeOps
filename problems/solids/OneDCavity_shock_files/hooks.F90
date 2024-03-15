@@ -19,7 +19,7 @@ module OneDCavity_shock_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = two, Lx = two, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
+    real(rkind) :: Ly = 2.0, Lx = 2.0, interface_init = 0.75_rkind, shock_init = 0.6_rkind, kwave = 4.0_rkind
 
 
     type(filters) :: mygfil
@@ -163,8 +163,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - one ! x \in (-2,4]
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
+                    x(i,j,k) = real( ix1 - 1    + i - 1, rkind ) * dx  ! x \in (-2,4]
+                    y(i,j,k) = real( iy1  + j - 1, rkind ) * dy - 1.0
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -198,9 +198,9 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum,tmpeta,eta
     real(rkind), dimension(8) :: fparams
-    real(rkind) :: fac
+    real(rkind) :: fac,Lr,STRETCH_RATIO = 1.0
     integer, dimension(2) :: iparams
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
@@ -365,10 +365,14 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         u1 = u1 / rho1
         u2 = u2 / rho2
 
-        shock_init = interface_init !- 1.0_rkind  ! (10*thick) grid points away from the interface
+        !tmpeta = atanh( 2.0*y / ( 1.0 + 1.0 / STRETCH_RATIO) )
+        !Lr =  Ly /( tmpeta(1, ny,1) - tmpeta(1,1,1))
+
+        eta = y !tmpeta 
+        shock_init = 0 !- 1.0_rkind  ! (10*thick) grid points away from the interface
         !dum = half * ( one - erf( (x-shock_init)/(two*dx) ) ) !works with f90/f80
         !dum = half * ( one - erf( (x-shock_init)/(5.0*dx) ) )
-        tmp =  ( 1 + exp((x - interface_init)/(thick*dx)))**(-1.0)
+        tmp =  ( 1 + exp((eta)/(thick*dy)))**(-1.0)
         !dum = half * ( one - erf( (x-shock_init)/(5.0*dx) ) )
         dum = tmp
 
@@ -410,11 +414,11 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
         rhoL = 1.24
-        rhoR = tmp(decomp%ysz(1),1,1)
+        rhoR = tmp(1,decomp%ysz(2),1)
         YsL  = mix%material(1)%Ys(1,1,1)
-        YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
+        YsR  = mix%material(1)%Ys(1,decomp%ysz(2),1)
         VFL  = mix%material(1)%VF(1,1,1)
-        VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
+        VFR  = mix%material(1)%VF(1,decomp%ysz(2),1)
         
 
         ! !gt should be same as g
@@ -775,10 +779,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
-    integer :: nx, i, j
+    integer :: nx, i, j,ny
     real(rkind) :: dx, xspng, tspng
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
-    
+    ny = decomp%ysz(2)
     nx = decomp%ysz(1)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
@@ -797,19 +801,19 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
     mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
 
+     if(decomp%yst(2)==1) then
+          if(y_bc(1)==0) then
 
-    if(decomp%yst(1)==1) then
-       if(x_bc(1)==0) then
-          rho( 1,:,:) = rhoL
-          u  ( 1,:,:) = zero !(u2-u1)
-          v  ( 1,:,:) = zero
-          w  ( 1,:,:) = zero
+          rho( :,1,:) = rhoL*(one - minVF)
+          u  ( :,1,:) = zero !(u2-u1)
+          v  ( :,1,:) = zero
+          w  ( :,1,:) = zero
           !do i=1,5
           !   mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
           !   mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
           !end do
-          mix%material(1)%p(1,:,:) = p2
-          mix%material(2)%p(1,:,:) = p2
+          mix%material(1)%p(:,1,:) = p2
+          mix%material(2)%p(:,1,:) = p2
           ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
           ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
           ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
@@ -818,11 +822,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
           ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
 
-           mix%material(1)%Ys ( 1,:,:) = YsL
-           mix%material(2)%Ys ( 1,:,:) = one - YsL
+           mix%material(1)%Ys ( :,1,:) = one - minVF
+           mix%material(2)%Ys ( :,1,:) = minVF !one - YsL
 
-           mix%material(1)%VF ( 1,:,:) = VFL
-           mix%material(2)%VF ( 1,:,:) = one - VFL
+           mix%material(1)%VF ( :,1,:) = VFL
+           mix%material(2)%VF ( :,1,:) = one - VFL
 
           !do i=1,5
           !   mix%material(1)%Ys ( i,:,:) = mix%material(1)%Ys ( 6,:,:)
@@ -922,14 +926,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
     ! ! end do
 
-    if(decomp%yen(1)==decomp%xsz(1)) then
-       if(x_bc(2)==0) then
+     if(decomp%yen(2)==decomp%ysz(2)) then
+          if(y_bc(2)==0) then
           !rho(nx,:,:) = rhoR ! rho(nx-1,:,:)
           !u  (nx,:,:) = zero ! zero
           !v  (nx,:,:) = zero ! v(nx-1,:,:)
           !w  (nx,:,:) = zero ! w(nx-1,:,:)
-          mix%material(1)%p  (nx,:,:) = p1 ! mix%material(1)%p(nx-1,:,:)
-          mix%material(2)%p  (nx,:,:) = p1 ! mix%material(2)%p(nx-1,:,:)
+          mix%material(1)%p  (:,ny,:) = p1 ! mix%material(1)%p(nx-1,:,:)
+          mix%material(2)%p  (:,ny,:) = p1 ! mix%material(2)%p(nx-1,:,:)
 
           !mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
           !mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero

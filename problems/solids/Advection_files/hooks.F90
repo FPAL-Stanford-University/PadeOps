@@ -171,7 +171,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx 
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
+                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy -0.5
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                     print *, " x = ", x(i,j,k)
                     print *, " y = ", y(i,j,k)
@@ -207,9 +207,9 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, tmp2
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, tmp2,tmpeta
     real(rkind), dimension(8) :: fparams
-    real(rkind) :: fac
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 1.0
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
@@ -279,8 +279,10 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
         ! Set up smearing function for VF based on interface location and thickness
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
+        tmpeta = atanh( 2.0*y / ( 1.0 + 1.0 / STRETCH_RATIO) )
+        Lr =  Ly /( tmpeta(1, ny,1) - tmpeta(1,1,1))
 
-        eta = y - interface_init
+        eta = tmpeta ! - interface_init
         !eta =(x-interface_init)
         !eta = x-interface_init
         !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
@@ -543,12 +545,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
-    integer :: nx, i, j
+    integer :: nx, i, j,ny
     real(rkind) :: dx, xspng, tspng, xspngR, xspngL
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR
     
     nx = decomp%ysz(1)
-
+    ny = decomp%ysz(2)
 
     
     mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
@@ -565,6 +567,38 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  e    => fields(:,:,:,   e_index), mu  => fields(:,:,:, mu_index), &
                  bulk => fields(:,:,:,bulk_index), kap => fields(:,:,:,kap_index), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        if(decomp%yst(2)==1) then
+          if(y_bc(1)==0) then
+              rho( :,1,:) = 1.0
+              u  ( :,1,:) = zero
+              v  ( :,1,:) = 0
+              w  ( :,1,:) = zero
+              mix%material(1)%p(:,1,:) = p_amb
+              mix%material(2)%p(:,1,:) = p_amb
+        !
+              mix%material(1)%VF ( :,1,:) = minVF
+              mix%material(2)%VF ( :,1,:) = one - minVF
+              mix%material(1)%Ys ( :,1,:) = minVF
+              mix%material(2)%Ys ( :,1,:) = one - minVF
+          end if
+        endif
+
+      if(decomp%yen(2)==decomp%ysz(2)) then
+          if(y_bc(2)==0) then
+              rho( :,ny,:) = 1.0
+              u  ( :,ny,:) = zero
+              v  ( :,ny,:) = 0
+              w  ( :,ny,:) = zero
+              mix%material(1)%p(:,ny,:) = p_amb
+              mix%material(2)%p(:,ny,:) = p_amb
+        
+              mix%material(1)%VF ( :,ny,:) = minVF
+              mix%material(2)%VF ( :,ny,:) = one - minVF
+              mix%material(1)%Ys ( :,ny,:) = minVF
+              mix%material(2)%Ys ( :,ny,:) = one - minVF
+          end if
+        endif
 
 
        ! if(decomp%yst(1)==1) then

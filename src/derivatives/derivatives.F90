@@ -690,7 +690,6 @@ contains
 
         
        if( this%yMetric) then
-          print *, "der metric "
           dfdx = this%detady*dfdx
 
        endif

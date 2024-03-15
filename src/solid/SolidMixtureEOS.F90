@@ -1836,16 +1836,16 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
     end subroutine
 
     ! Subroutine to get species art. conductivities and diffusivities
-    subroutine getLAD(this,rho,p,e,u,v,w,duidxj,sos,use_gTg,strainHard,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,tfloor)
+    subroutine getLAD(this,rho,p,e,u,v,w,duidxj,sos,detady,dy_stretch,use_gTg,strainHard,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,tfloor)
         use operators, only: divergence,gradient,filter3D
         class(solid_mixture), intent(inout) :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos,p,u,v,w  ! Mixture density and speed of sound
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos,p,u,v,w,detady,dy_stretch  ! Mixture density and speed of sound
         real(rkind),dimension(this%nxp, this%nyp,this%nzp,9), target, intent(in)  :: duidxj
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical, intent(in) :: periodicx, periodicy, periodicz
         real(rkind), intent(in) :: tfloor
         real(rkind), dimension(2) :: minYs
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradrYs
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradrYs,gradphi
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: umag
         integer :: i
 
@@ -1872,8 +1872,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                                           sos, this%material(i)%diff, x_bc, y_bc, z_bc)
             else
                 call gradient(this%decomp,this%der,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3))
-                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1), gradrYs(:,:,:,2),gradrYs(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%fd,x_bc,y_bc, z_bc)
+                call gradient(this%decomp,this%der,rho*this%material(i)%VF,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3))
+                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1), gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2), gradphi(:,:,:,3),minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc, z_bc,detady,dy_stretch)
                !call this%LAD%get_diffusivity_Steve(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
+            
                 !call this%LAD%get_diffusivity_Ys(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%Ysdiff,x_bc,y_bc,z_bc)
                 this%material(i)%Ysdiff = 0.0
                 !call this%LAD%get_diffusivity_N2F(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff_stagg,this%material(i)%rhodiff_stagg, periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)

@@ -245,7 +245,7 @@ module SolidGrid
         real(rkind) :: phys_kap1, phys_kap2
         real(rkind) :: st_limit, pthick,uthick,rhothick,Ys_wiggle,VF_wiggle,VF_thick,Ys_thick
         real(rkind), dimension(:,:,:,:), allocatable :: meshstretch
-        real(rkind), dimension(:,:,:), allocatable :: yMetric,xMetric, zMetric,yMetric_half, xMetric_half, zMetric_half,yLADMetric, yMetric_F2N
+        real(rkind), dimension(:,:,:), allocatable :: yMetric,xMetric, zMetric,yMetric_half, xMetric_half, zMetric_half,yLADMetric, yMetric_F2N, dy_stretch
         contains
             procedure          :: init
             procedure          :: destroy
@@ -586,6 +586,25 @@ contains
                    interpolator_x, interpolator_y, interpolator_z, &
                            .false.,       .false.,        .false., &
                            .false.)
+         if ( allocated(this%dy_stretch) ) deallocate(this%dy_stretch)
+         allocate(this%dy_stretch(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%yMetric) ) deallocate(this%yMetric)
+         allocate(this%yMetric(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%xMetric) ) deallocate(this%xMetric)
+         allocate(this%xMetric(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%zMetric) ) deallocate(this%zMetric)
+         allocate(this%zMetric(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%yLADMetric) ) deallocate(this%yLADMetric)
+         allocate(this%yLADMetric(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%yMetric_F2N) ) deallocate(this%yMetric_F2N)
+         allocate(this%yMetric_F2N(this%nxp,this%nyp,this%nzp) )
+
+         if ( allocated(this%yMetric_half) ) deallocate(this%yMetric_half)
+         allocate(this%yMetric_half(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%xMetric_half) ) deallocate(this%xMetric_half)
+         allocate(this%xMetric_half(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%zMetric_half) ) deallocate(this%zMetric_half)
+         allocate(this%zMetric_half(this%nxp,this%nyp,this%nzp) )
 
         if( this%Stretch1Dy ) then
 
@@ -597,27 +616,7 @@ contains
             this%eta2    => this%meshstretch  (:,:,:, 2)
             this%eta3  => this%meshstretch  (:,:,:, 3)
 
-            if ( allocated(this%yMetric) ) deallocate(this%yMetric)
-            allocate(this%yMetric(this%nxp,this%nyp,this%nzp) )
-            if ( allocated(this%xMetric) ) deallocate(this%xMetric)
-            allocate(this%xMetric(this%nxp,this%nyp,this%nzp) )
-            if ( allocated(this%zMetric) ) deallocate(this%zMetric)
-            allocate(this%zMetric(this%nxp,this%nyp,this%nzp) )
-            if ( allocated(this%yLADMetric) ) deallocate(this%yLADMetric)
-            allocate(this%yLADMetric(this%nxp,this%nyp,this%nzp) )
-            if ( allocated(this%yMetric_F2N) ) deallocate(this%yMetric_F2N)
-            allocate(this%yMetric_F2N(this%nxp,this%nyp,this%nzp) )
-
-            if ( allocated(this%yMetric_half) ) deallocate(this%yMetric_half)
-            allocate(this%yMetric_half(this%nxp,this%nyp,this%nzp) )
-            if ( allocated(this%xMetric_half) ) deallocate(this%xMetric_half)
-            allocate(this%xMetric_half(this%nxp,this%nyp,this%nzp) )
-            if ( allocated(this%zMetric_half) ) deallocate(this%zMetric_half)
-            allocate(this%zMetric_half(this%nxp,this%nyp,this%nzp) )
-
-            print *, "metric allocation"
             call this%coordinateTransform(this%dx,this%dy,this%dz)
-            print *, "coordinateTransformation"
         endif
  
         ! Allocate der
@@ -811,7 +810,7 @@ contains
         allocate(this%LAD)
         !call
         !this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,Cmu,Ckap,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
-        call this%LAD%init(this%decomp,this%der,this%derStagg, this%interpMid,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1, Cvf2)
+        call this%LAD%init(this%decomp,this%der,this%derStagg, this%interpMid,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1, Cvf2,Stretch1Dy)
 
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
@@ -1139,6 +1138,7 @@ contains
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         if (allocated(this%mesh)) deallocate(this%meshstretch)
+        if (allocated(this%dy_stretch)) deallocate(this%dy_stretch)
         if (allocated(this%yMetric)) deallocate(this%yMetric)      
         if (allocated(this%yMetric_F2N)) deallocate(this%yMetric_F2N) 
         if (allocated(this%yLADMetric)) deallocate(this%yLADMetric) 
@@ -1330,7 +1330,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 1, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 1.0, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1339,12 +1339,9 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 4*pi !(this%y(1,ny,1) - this%y(1,1,1)) 
+       L = 2.0 
 
        y_half = this%y + 0.5*this%dy
-
-       !print *, "eta1 = ", this%eta1
-       !print *, "y = ", this%y
         
        this%eta1 = this%x
        this%eta3 = this%z
@@ -1357,25 +1354,21 @@ contains
 
        this%eta2 = Lr*tmpeta
        tmpeta2 = Lr*tmpeta
-       !this%yLADMetric = 1/ (( 2.0*(L + 1.0/STRETCH_RATIO) / ( (L + 1.0/STRETCH_RATIO)**2 - 4.0*this%y**2) )*Lr) !(L + 1.0 /STRETCH_RATIO)/2.0*(1.0/(cosh(this%eta2/Lr))**2.0)/L
-       !this%yMetric = tmp2
        call this%der_nostretch%ddy(tmpeta2, tmp2, this%y_bc(1),this%y_bc(2))
        this%yMetric = 1/tmp2
        call interpolateFV_y(this%decomp,this%interpMid,this%eta2,eta2_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-       
+        
        call gradFV_y(this%decomp,this%derStagg_stretch,eta2_int,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)     
        this%yMetric_F2N = 1 / tmp 
        call gradFV_N2Fy(this%decomp,this%derStagg_stretch,this%eta2,tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      ! call interpolateFV_y(this%decomp,this%interpMid,tmp,tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
        this%yMetric_half = 1.0 / tmp3
        this%yMetric_half(:,this%nyp,:) = 1.0
-      ! print *, "N2F = ", this%yMetric_half
-    
-       !this%yMetric_half = 1/tmp !(L + 1 /STRETCH_RATIO)/2*1/(cosh(eta2_half/Lr)**2)*1/Lr
-       !this%yLADMetric = -1*(L + 1/STRETCH_RATIO)*tanh(this%eta2/Lr)/(cosh(this%eta2/Lr)**2)*1/Lr**2
         
        call this%der_nostretch%d2dy2(this%eta2,tmpdy2,this%y_bc(1),this%y_bc(2))
        this%yLADMetric = 1.0 / tmpdy2
+       this%dy_stretch(:,2:this%nyp-1,:) = abs((this%eta2(:,3:this%nyp,:)-this%eta2(:,1:this%nyp-2,:))/2)
+       this%dy_stretch(:,1,:) = abs((this%eta2(:,2,:)-this%eta2(:,1,:)))
+       this%dy_stretch(:,this%nyp,:) = abs((this%eta2(:,this%nyp,:)-this%eta2(:,this%nyp-1,:)) )
     end subroutine 
 
     subroutine update_P(this,Qtmpp,isub,dt,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -1542,7 +1535,7 @@ contains
         ! compute artificial shear and bulk viscosities
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor)
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch)
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
             ehmix = this%e
@@ -1553,7 +1546,7 @@ contains
         end if
 
         ! compute species artificial conductivities and diffusivities
-        call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w, duidxj,this%sos, this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+        call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w, duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
         nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
         deallocate( duidxj )
 
@@ -1572,13 +1565,11 @@ contains
         endif
 
         !call this%mix%Test_Der_NP(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        print *, "pre test"
-        call this%mix%Test_1DStretch(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        !call this%mix%Test_1DStretch(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         this%metric = this%yMetric
         this%metric_exact = this%yLADMetric
         this%metric_N2F   = this%yMetric_F2N
         this%metric_half  = this%yMetric_half
-        print *, "post test"
         !call this%mix%Test_Der(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         !print *, "before test"
         !call this%mix%Test_Der_Periodic(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -1655,7 +1646,7 @@ contains
             ! Write out vizualization dump if vizcond is met 
            if (vizcond) then
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
+                !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
 
                 if( this%Stretch1Dy) then               
                    call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
@@ -1692,7 +1683,7 @@ contains
             ! Check for exitpdo file
             if(check_exit(this%outputdir)) then
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
+                !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
                 if( this%Stretch1Dy) then
 
                    call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
@@ -1769,7 +1760,7 @@ contains
             call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,this%y_bc,this%z_bc)
             call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc,-this%y_bc,this%z_bc)
             call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,this%y_bc,-this%z_bc)
-            call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,duidxj,this%sos,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+            call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
             if(this%intSharp) then
@@ -2021,7 +2012,7 @@ contains
             else
             call this%post_bc()
             endif
-            !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)       
+            !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)      
         end do
 
           
@@ -2042,15 +2033,19 @@ contains
 	use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
-        real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0,dtYs1, dtYs2,dtVF1,dtVF2
+        real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0,dtYs1, dtYs2,dtVF1,dtVF2,deltay
         integer :: i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk   !Source term for possible use in VF, g eh eqns
         character(len=30) :: str,str2
 
         this%st_limit = 20
 
-        delta = min(this%dx, this%dy, this%dz)
-	
+        if(this%Stretch1Dy) then
+          deltay = P_MINVAL(this%dy_stretch)
+          delta = min(this%dx,deltay,this%dz)
+        else 
+          delta = min(this%dx, this%dy, this%dz)
+	endif
 	phys_mu = min(this%phys_mu1, this%phys_mu2)
 
         ! continuum
@@ -2541,7 +2536,7 @@ contains
 
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor)
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch)
         call this%LAD%get_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         !call this%LAD%get_P_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         if (this%PTeqb) then
@@ -2819,7 +2814,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call this%getPhysicalProperties()
         !call
         !this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor)
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch)
 
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy.

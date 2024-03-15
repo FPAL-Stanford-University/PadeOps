@@ -666,7 +666,6 @@ contains
                 call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
             end if
         case (2)
-             print *, "CD06 IN DER"
              if (present(bc1) .AND. present(bcn)) then
                 call this%ycd06 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
              else
@@ -697,7 +696,6 @@ contains
         end select 
 
         if( this%yMetric) then
-          print *, "add metric"
           dfdx = this%detady_stag*dfdx
 
         endif
