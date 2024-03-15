@@ -1,4 +1,4 @@
-module OneDCavity_shock_data
+module OneDCavity_shocky_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,eight,three,six,sixth,zero,four,five,ten
     use FiltersMod,       only: filters
@@ -130,7 +130,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
 
@@ -164,7 +164,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1     + i - 1, rkind ) * dx - one ! x \in (-2,4]
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
+                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy - one
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -185,7 +185,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
     use SolidMixtureMod,  only: solid_mixture
     use DerivativesMod,   only: derivatives
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -368,7 +368,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         shock_init = interface_init !- 1.0_rkind  ! (10*thick) grid points away from the interface
         !dum = half * ( one - erf( (x-shock_init)/(two*dx) ) ) !works with f90/f80
         !dum = half * ( one - erf( (x-shock_init)/(5.0*dx) ) )
-        tmp =  ( 1 + exp((x - interface_init)/(thick*dx)))**(-1.0)
+        tmp =  ( 1 + exp((y - interface_init)/(thick*dy)))**(-1.0)
         !dum = half * ( one - erf( (x-shock_init)/(5.0*dx) ) )
         dum = tmp
 
@@ -410,11 +410,11 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
         rhoL = tmp(1,1,1)
-        rhoR = tmp(decomp%ysz(1),1,1)
+        rhoR = tmp(1,decomp%ysz(2),1)
         YsL  = mix%material(1)%Ys(1,1,1)
-        YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
+        YsR  = mix%material(1)%Ys(1,decomp%ysz(2),1)
         VFL  = mix%material(1)%VF(1,1,1)
-        VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
+        VFR  = mix%material(1)%VF(1,decomp%ysz(2),1)
         
 
         ! !gt should be same as g
@@ -487,7 +487,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use operators,        only: curl
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -536,7 +536,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        ! if (decomp%ysz(2) == 1) then
-       !     write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/OneDCavity_shock_"//trim(str)//"_", vizcount, ".dat"
+       !     write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/OneDCavity_shocky_"//trim(str)//"_", vizcount, ".dat"
 
        !     open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
        !     write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
@@ -612,7 +612,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        curl_p = P_MEAN(mix%material(1)%curl_p)*six*one
 
           
-       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/OneDCavity_shock_statistics.dat"
+       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/OneDCavity_shocky_statistics.dat"
 
        if (vizcount == 0) then
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
@@ -765,7 +765,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use cfo2stuff,        only: cfo2
     use cfo2Pentastuff,        only: cfo2Penta
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -775,10 +775,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
-    integer :: nx, i, j
+    integer :: nx, i, j,ny
     real(rkind) :: dx, xspng, tspng
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     
+    ny = decomp%ysz(2)
     nx = decomp%ysz(1)
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
@@ -797,19 +798,18 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
     mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
 
-
-    if(decomp%yst(1)==1) then
-       if(x_bc(1)==0) then
-          rho( 1,:,:) = rhoL
-          u  ( 1,:,:) = zero !(u2-u1)
-          v  ( 1,:,:) = zero
-          w  ( 1,:,:) = zero
+     if(decomp%yst(2)==1) then
+          if(y_bc(1)==0) then
+          rho( :,1,:) = rhoL
+          u  ( :,1,:) = zero !(u2-u1)
+          v  ( :,1,:) = zero
+          w  ( :,1,:) = zero
           !do i=1,5
           !   mix%material(1)%p( i,:,:) = mix%material(1)%p(6,:,:)
           !   mix%material(2)%p( i,:,:) = mix%material(2)%p(6,:,:)
           !end do
-          mix%material(1)%p(1,:,:) = p2
-          mix%material(2)%p(1,:,:) = p2
+          mix%material(1)%p(:,1,:) = p2
+          mix%material(2)%p(:,1,:) = p2
           ! mix%material(1)%g11( 1,:,:) = rho2/rho_0; mix%material(1)%g12( 1,:,:) = zero; mix%material(1)%g13( 1,:,:) = zero
           ! mix%material(1)%g21( 1,:,:) = zero; mix%material(1)%g22( 1,:,:) = one;  mix%material(1)%g23( 1,:,:) = zero
           ! mix%material(1)%g31( 1,:,:) = zero; mix%material(1)%g32( 1,:,:) = zero; mix%material(1)%g33( 1,:,:) = one
@@ -818,26 +818,26 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           ! mix%material(2)%g21( 1,:,:) = zero; mix%material(2)%g22( 1,:,:) = one;  mix%material(2)%g23( 1,:,:) = zero
           ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) = zero; mix%material(2)%g33( 1,:,:) = one
 
-           mix%material(1)%Ys ( 1,:,:) = YsL
-           mix%material(2)%Ys ( 1,:,:) = one - YsL
+           mix%material(1)%Ys ( :,1,:) = YsL
+           mix%material(2)%Ys ( :,1,:) = one - YsL
 
-           mix%material(1)%VF ( 1,:,:) = VFL
-           mix%material(2)%VF ( 1,:,:) = one - VFL
+           mix%material(1)%VF ( :,1,:) = VFL
+           mix%material(2)%VF ( :,1,:) = one - VFL
 
           do i=1,5
-             mix%material(1)%Ys ( i,:,:) = mix%material(1)%Ys ( 6,:,:)
-             mix%material(2)%Ys ( i,:,:) = mix%material(2)%Ys ( 6,:,:)
+             mix%material(1)%Ys ( :,i,:) = mix%material(1)%Ys ( :,6,:)
+             mix%material(2)%Ys ( :,i,:) = mix%material(2)%Ys ( :,6,:)
 
              !new
-             mix%material(1)%VF ( i,:,:) = mix%material(1)%VF ( 6,:,:)
-             mix%material(2)%VF ( i,:,:) = mix%material(2)%VF ( 6,:,:)
+             mix%material(1)%VF ( :,i,:) = mix%material(1)%VF ( :,6,:)
+             mix%material(2)%VF ( :,i,:) = mix%material(2)%VF ( :,6,:)
 
-             u(i,:,:) = u(6,:,:)
+             u(:,i,:) = u(:,6,:)
 
-             e(i,:,:) = e(6,:,:)
-             rho(i,:,:) = rho(6,:,:)
-             T(i,:,:) = T(6,:,:)
-             p(i,:,:) = p(6,:,:)
+             e(:,i,:) = e(:,6,:)
+             rho(:,i,:) = rho(:,6,:)
+             T(:,i,:) = T(:,6,:)
+             p(:,i,:) = p(:,6,:)
 
          !    mix%material(1)%T(i,:,:) = mix%material(1)%T(6,:,:)
          !    mix%material(2)%T(i,:,:) = mix%material(2)%T(6,:,:)
@@ -922,14 +922,15 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
     ! ! end do
 
-    if(decomp%yen(1)==decomp%xsz(1)) then
-       if(x_bc(2)==0) then
+    if(decomp%yen(2)==decomp%ysz(2)) then
+          if(y_bc(2)==0) then
+        !      rho( nx,:,:) = r
           !rho(nx,:,:) = rhoR ! rho(nx-1,:,:)
           !u  (nx,:,:) = zero ! zero
           !v  (nx,:,:) = zero ! v(nx-1,:,:)
           !w  (nx,:,:) = zero ! w(nx-1,:,:)
-          mix%material(1)%p  (nx,:,:) = p1 ! mix%material(1)%p(nx-1,:,:)
-          mix%material(2)%p  (nx,:,:) = p1 ! mix%material(2)%p(nx-1,:,:)
+          mix%material(1)%p  (:,ny,:) = p1 ! mix%material(1)%p(nx-1,:,:)
+          mix%material(2)%p  (:,ny,:) = p1 ! mix%material(2)%p(nx-1,:,:)
 
           !mix%material(1)%g11(nx,:,:) = one;  mix%material(1)%g12(nx,:,:) = zero; mix%material(1)%g13(nx,:,:) = zero
           !mix%material(1)%g21(nx,:,:) = zero; mix%material(1)%g22(nx,:,:) = one;  mix%material(1)%g23(nx,:,:) = zero
@@ -979,7 +980,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -1017,7 +1018,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1043,7 +1044,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1063,7 +1064,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1083,7 +1084,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1103,7 +1104,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use OneDCavity_shock_data
+    use OneDCavity_shocky_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
