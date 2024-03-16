@@ -294,7 +294,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         !tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
-        mix%material(1)%VF = minVF + (one-two*minVF)*tmp
+        mix%material(1)%VF = minVF ! (one-two*minVF)*tmp
         mix%material(2)%VF = 1 - mix%material(1)%VF
 
         !Set density profile and mass fraction based on volume fraction
@@ -311,7 +311,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         !set mixture pressure (uniform)
 !	mix%material(1)%p  =p_amb+10*exp(-((y-0.8)**2)/(2*(0.05)**2))
         !mix%material(1)%p  = (p_amb +p_disturb)*tmp2+p_amb
-        mix%material(1)%p = p_amb !+ (noise-0.5)*5d-8
+        mix%material(1)%p = p_amb + (noise-0.5)*1d-8
         mix%material(2)%p  = mix%material(1)%p
 !        mix%material(1)%T = 298
 !        mix%material(2)%T = 298
