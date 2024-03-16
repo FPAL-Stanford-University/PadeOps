@@ -1198,28 +1198,28 @@ contains
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
-        xtmp2 = xtmp1*this%dx**5 
+        xtmp2 = xtmp1*this%dx**4 
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        diffstar = ytmp4 !* ( this%dx * tmp1 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        diffstar = ytmp4 * ( this%dx * tmp1 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(Ys,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
-        ztmp2 = ztmp1*this%dz**5
+        ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        diffstar = diffstar + ytmp4 !* ( this%dz * tmp3 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        diffstar = diffstar + ytmp4 * ( this%dz * tmp3 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
         if(this%yMetric) then
-          ytmp4 = (detady**4)*ytmp5*dy_stretch**5
-          diffstar = diffstar + ytmp4 !* ( dy_stretch * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
+          ytmp4 = (detady**4)*ytmp5*dy_stretch**4
+          diffstar = diffstar + ytmp4 * ( dy_stretch * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
           dely = ( (dy_stretch*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(tmp1 + tmp2 + tmp3) + real(1.0D-32,rkind)) )
         else
-          ytmp4 = ytmp5*this%dy**5
-          diffstar = diffstar + ytmp4 !* ( this%dy * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+          ytmp4 = ytmp5*this%dy**4
+          diffstar = diffstar + ytmp4 * ( this%dy * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
           dely = ( (this%dy*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(tmp1 + tmp2 + tmp3)+ real(1.0D-32,rkind)) )
         endif
 
@@ -1241,32 +1241,32 @@ contains
         call transpose_y_to_x(VF,xtmp3,this%decomp)
         call this%der%d2dx2(xtmp3,xtmp4,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp4,xtmp3,x_bc(1),x_bc(2))
-        xtmp4 = xtmp3*this%dx**5
+        xtmp4 = xtmp3*this%dx**4
         call transpose_x_to_y(xtmp4,ytmp6,this%decomp)
-        adiffstar = ytmp6 !*( this%dx * tmp1 / (tmp1 + tmp2 + tmp3 +real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        adiffstar = ytmp6 *( this%dx * tmp1 / (tmp1 + tmp2 + tmp3 +real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(VF,ztmp3,this%decomp)
         call this%der%d2dz2(ztmp3,ztmp4,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp4,ztmp3,z_bc(1),z_bc(2))
-        ztmp4 = ztmp3*this%dz**5
+        ztmp4 = ztmp3*this%dz**4
         call transpose_z_to_y(ztmp4,ytmp6,this%decomp)
-        adiffstar = adiffstar + ytmp6 ! ( this%dz * tmp3 / (tmp1 + tmp2 +tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        adiffstar = adiffstar + ytmp6*( this%dz * tmp3 / (tmp1 + tmp2 +tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(VF,ytmp6,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp6,ytmp7,y_bc(1),y_bc(2))
        if(this%yMetric) then
-          ytmp6 = (detady**4)*ytmp7*dy_stretch**5
+          ytmp6 = (detady**4)*ytmp7*dy_stretch**4
           !print *, "ytmp6 = ",ytmp6
-          adiffstar = adiffstar + ytmp6 !* ( dy_stretch * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
+          adiffstar = adiffstar + ytmp6 * ( dy_stretch * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
           !num = dy_stretch * tmp2 
           !den = (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind))
           !tot = ( dy_stretch * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind))  ) 
           delphi = ( (dy_stretch*abs(dphidy) + this%dx*abs(dphidx) + this%dz*abs(dphidz)) / (sqrt(tmp1 + tmp2 + tmp3) + real(1.0D-32,rkind)) )
         else
-          ytmp6 = ytmp7*this%dy**5
-          adiffstar = adiffstar + ytmp6 !* ( this%dy * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+          ytmp6 = ytmp7*this%dy**4
+          adiffstar = adiffstar + ytmp6 * ( this%dy * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
           delphi = ( (this%dy*abs(dphidy) + this%dx*abs(dphidx) + this%dz*abs(dphidz)) / (sqrt(tmp1 + tmp2 + tmp3)+ real(1.0D-32,rkind)) )
         endif
 
