@@ -69,6 +69,8 @@ module sgsmod_igrid
         real(rkind), pointer :: Tsurf, wTh_surf
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
         integer :: WM_matchingIndex
+        real(rkind) :: walldist_fact  !! this is to filter the velocity at a distance away from the wall
+        real(rkind) :: fact_goit      !! this factor determines the strength of the extra corrections of goit model 
 
         ! for varying z0
         real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, alpfac, nlptype, Uxspan, Uyspan,ustarsqspan 

@@ -251,6 +251,7 @@ contains
       use exits, only: message_min_max
        use decomp_2d_io
       use mpi
+      use constants, only: zero, one      !! zero & one is required for giving conditions for bounds of Fringe_func 
       class(fringe), intent(inout) :: this
       character(len=clen), intent(in) :: inputfile 
       type(decomp_info), intent(in), target :: gpC, gpE
@@ -398,10 +399,29 @@ contains
             end do 
          end do
          deallocate(x1, x2, S1, S2, Fringe_func)
-      end if 
-       
-      call message_min_max(1,"Bounds for Fringe_funcC:", p_minval(minval(this%Fringe_kernel_cells)), p_maxval(maxval(this%Fringe_kernel_cells)))
-      call message_min_max(1,"Bounds for Fringe_funcE:", p_minval(minval(this%Fringe_kernel_edges)), p_maxval(maxval(this%Fringe_kernel_edges)))
+         call message_min_max(1,"Bounds for Fringe_funcC:", p_minval(minval(this%Fringe_kernel_cells)), p_maxval(maxval(this%Fringe_kernel_cells)))
+         call message_min_max(1,"Bounds for Fringe_funcE:", p_minval(minval(this%Fringe_kernel_edges)), p_maxval(maxval(this%Fringe_kernel_edges)))
+         
+         !! Terminating process if Fringe_func is out of bounds of [0,1]
+         if ((p_minval(minval(this%Fringe_kernel_cells)) .ne. zero) .or. (p_maxval(maxval(this%Fringe_kernel_cells)) .ne. one)) then
+            call GracefulExit("Fringe_funcC is out of bounds, change Fringe_delta_st_x or Fringe_delta_en_x", 11)
+         endif
+         if ((p_minval(minval(this%Fringe_kernel_edges)) .ne. zero) .or. (p_maxval(maxval(this%Fringe_kernel_edges)) .ne. one)) then
+            call GracefulExit("Fringe_funcE is out of bounds, change Fringe_delta_st_x or Fringe_delta_en_x", 11)
+         endif
+      end if
+      
+      !! putting the following lines within the "if Apply_x_fringe is true" condition which was previously written here 
+      !call message_min_max(1,"Bounds for Fringe_funcC:", p_minval(minval(this%Fringe_kernel_cells)), p_maxval(maxval(this%Fringe_kernel_cells)))
+      !call message_min_max(1,"Bounds for Fringe_funcE:", p_minval(minval(this%Fringe_kernel_edges)), p_maxval(maxval(this%Fringe_kernel_edges)))
+      !
+      !!! Terminating process if Fringe_func is out of bounds of [0,1]
+      !if ((p_minval(minval(this%Fringe_kernel_cells)) .ne. zero) .or. (p_maxval(maxval(this%Fringe_kernel_cells)) .ne. one)) then
+      !   call GracefulExit("Fringe_funcC is out of bounds, change Fringe_delta_st_x or Fringe_delta_en_x", 11)
+      !endif
+      !if ((p_minval(minval(this%Fringe_kernel_edges)) .ne. zero) .or. (p_maxval(maxval(this%Fringe_kernel_edges)) .ne. one)) then
+      !   call GracefulExit("Fringe_funcE is out of bounds, change Fringe_delta_st_x or Fringe_delta_en_x", 11)
+      !endif
 
       if (Apply_y_fringe) then
          Fringe_yst        = Fringe_yst*Ly

@@ -878,7 +878,7 @@ contains
                sgsmod_stratified = .false. 
             end if 
             call this%sgsModel%init(this%gpC, this%gpE, this%spectC, this%spectE, this%dx, this%dy, this%dz, inputfile, &
-                                    Lx, Ly, this%mesh(:,1,1,1), &
+                                    Lx, Ly, this%mesh(:,1,1,1), this%mesh(1,:,1,2), &
                                     this%rbuffxE(1,1,:,1), this%mesh(1,1,:,3), this%fBody_x, this%fBody_y, this%fBody_z, &
                                     this%storeFbody,this%Pade6opZ, this%cbuffyC, this%cbuffzC, this%cbuffyE, this%cbuffzE, &
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &

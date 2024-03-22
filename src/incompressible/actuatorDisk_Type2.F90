@@ -278,11 +278,12 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(inout) :: rhsxvals, rhsyvals, rhszvals
     real(rkind), dimension(this%nxLoc, this%nyLoc, this%nzLoc), intent(in)    :: u, v, w
     real(rkind), dimension(8),                                  intent(out)   :: inst_val
-    real(rkind) :: usp_sq, force
+    real(rkind) :: usp_sq, force, force_without_factors
 
     call this%getMeanU(u,v,w)
     usp_sq = this%uface**2 + this%vface**2 + this%wface**2
     force = -this%pfactor*this%normfactor*0.5d0*this%cT*(pi*(this%diam**2)/4.d0)*usp_sq
+    force_without_factors = force/(this%pfactor*this%normfactor)
    
     !do j = 1,size(this%xs)
     !        call this%smear_this_source(rhsxvals,this%xs(j),this%ys(j),this%zs(j), force, this%startEnds(1,j), &
@@ -295,8 +296,8 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
 
     !if (present(inst_val)) then
       if((this%Am_I_Split .and. this%myComm_nrank==0) .or. (.not. this%Am_I_Split)) then
-        inst_val(1) = force
-        inst_val(2) = force*sqrt(usp_sq)
+        inst_val(1) = force_without_factors
+        inst_val(2) = force_without_factors*sqrt(usp_sq)
         inst_val(3) = sqrt(usp_sq)
         inst_val(4) = usp_sq
         inst_val(5) = usp_sq*inst_val(3)
@@ -306,7 +307,7 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
         if (usp_sq /= 0.d0) then ! this was added since this function is called
                                  ! somewhere besides turbineMod which corrupts
                                  ! the power measurements!
-            this%powerTime(this%tInd,1) = -force*sqrt(usp_sq)
+            this%powerTime(this%tInd,1) = -force_without_factors*sqrt(usp_sq)
             this%tInd = this%tInd + 1
         end if
       end if
