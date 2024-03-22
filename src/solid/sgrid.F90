@@ -1636,7 +1636,7 @@ contains
             call this%advance_RK45()
             call toc(cputime)
 
-            call this%mix%thick_calculations(this%rho, this%p,this%u,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle, this%dx)          
+            !call this%mix%thick_calculations(this%rho, this%p,this%u,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle, this%dx)          
             call message(1,"Time",this%tsim)
             call message(1,"Step",this%step)
             call message(2,"Time step",this%dt)
@@ -1756,7 +1756,6 @@ contains
             call this%mix%checkNaN()
             ! Pre-compute stress, LAD, J, etc.
             ! call this%mix%getSOS(this%rho,this%p,this%sos)
-            
             call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,this%y_bc,this%z_bc)
             call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc,-this%y_bc,this%z_bc)
             call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,this%y_bc,-this%z_bc)
@@ -1772,6 +1771,22 @@ contains
                !    if ((isub.eq.one).and.(nrank.eq.0)) print *, "int clean"
 
                !endif
+               do imat=1,this%mix%ns
+                   this%mix%material(imat)%intSharp_a = zero
+                   this%mix%material(imat)%intSharp_aDiff = zero
+                   this%mix%material(imat)%intSharp_aFV = zero !-- problem?
+                   this%mix%material(imat)%intSharp_R = zero
+                   this%mix%material(imat)%intSharp_RDiff = zero
+                   this%mix%material(imat)%intSharp_RFV = zero
+               enddo
+               this%mix%intSharp_f = zero
+               this%mix%intSharp_fDiff = zero
+               this%mix%intSharp_fFV = zero
+               this%mix%intSharp_h = zero
+               this%mix%intSharp_hDiff = zero
+               this%mix%intSharp_hFV = zero
+               this%mix%intSharp_kFV = zero
+
                call this%mix%get_intSharp(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
 
             else      
@@ -1853,7 +1868,6 @@ contains
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
             end if
-
 
             ! Integrate simulation time to keep it in sync with RK substep
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
@@ -1991,6 +2005,7 @@ contains
                 call this%mix%relaxPressure(this%rho, this%e, this%p)
                 !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
             end if
+            
             !this%pError = abs(this%pEvolve - this%p)
             !this%VFError = abs(this%VFEvolve - this%mix%material(1)%VF)
 

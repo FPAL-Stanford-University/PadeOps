@@ -780,8 +780,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx, i, j,ny
-    real(rkind) :: dx, xspng, tspng
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
+    real(rkind) :: dx, xspng, tspng, Lr, STRETCH_RATIO = 1.5
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, tmpeta, yphys
     ny = decomp%ysz(2)
     nx = decomp%ysz(1)
 
@@ -803,7 +803,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
      if(decomp%yst(2)==1) then
           if(y_bc(1)==0) then
-          rho( :,1,:) = rhoL
+          rho( :,1,:) = rhoL 
           u  ( :,1,:) = zero !(u2-u1)
           v  ( :,1,:) = zero
           w  ( :,1,:) = zero
@@ -833,24 +833,24 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
            mix%material(1)%VF ( :,1,:) = VFL
            mix%material(2)%VF ( :,1,:) = one - VFL
 
-          do i=1,5
-             mix%material(1)%Ys ( :,i,:) = mix%material(1)%Ys ( :,6,:)
-             mix%material(2)%Ys ( :,i,:) = mix%material(2)%Ys ( :,6,:)
+         ! do i=1,5
+         !    mix%material(1)%Ys ( :,i,:) = mix%material(1)%Ys ( :,6,:)
+         !    mix%material(2)%Ys ( :,i,:) = mix%material(2)%Ys ( :,6,:)
 
              !new
-             mix%material(1)%VF ( :,i,:) = mix%material(1)%VF ( :,6,:)
-             mix%material(2)%VF ( :,i,:) = mix%material(2)%VF ( :,6,:)
+         !    mix%material(1)%VF ( :,i,:) = mix%material(1)%VF ( :,6,:)
+         !    mix%material(2)%VF ( :,i,:) = mix%material(2)%VF ( :,6,:)
 
-             u(:,i,:) = u(:,6,:)
-             e(:,i,:) = e(:,6,:)
-             rho(:,i,:) = rho(:,6,:)
-             T(:,i,:) = T(:,6,:)
-             p(:,i,:) = p(:,6,:)
+         !    u(:,i,:) = u(:,6,:)
+         !    e(:,i,:) = e(:,6,:)
+         !    rho(:,i,:) = rho(:,6,:)
+         !    T(:,i,:) = T(:,6,:)
+         !    p(:,i,:) = p(:,6,:)
 
          !    mix%material(1)%T(i,:,:) = mix%material(1)%T(6,:,:)
          !    mix%material(2)%T(i,:,:) = mix%material(2)%T(6,:,:)
 
-          end do
+         ! end do
 
        end if
     endif
@@ -866,6 +866,58 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           mix%material(2)%p  (:,ny,:) = p1 
       endif
     endif
+    
+     tspng = 0.001
+     yphys = atanh( 2.0*y / ( 1.0 + 1.0 / STRETCH_RATIO) )
+     Lr =  Ly /( yphys(1, ny,1) - yphys(1,1,1))
+     xspng = -1.0+0.075
+     !dy = y(2,1,1) - y(1,1,1)
+     dum = half*(one - tanh( (yphys-xspng)/(tspng) )) + half*(one + tanh((yphys + xspng)/tspng) )
+
+     do i=1,4
+        tmp = u
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        u = u + dum*(tmp - u)
+
+        tmp = v
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        v = v + dum*(tmp - v)
+
+        tmp = w
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        w = w + dum*(tmp - w)
+
+        tmp = e
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        e = e + dum*(tmp - e)
+
+        tmp = rho
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        rho = rho + dum*(tmp - rho)
+
+        tmp = mix%material(1)%p
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+
+        tmp = mix%material(2)%p
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+
+        tmp = mix%material(1)%Ys
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        mix%material(1)%Ys = mix%material(1)%Ys + dum*(tmp - mix%material(1)%Ys)
+
+        tmp = mix%material(2)%Ys
+        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+        mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
+
+
+        tmp = VFL
+        mix%material(1)%VF = mix%material(1)%VF + dum*(tmp - mix%material(1)%VF)
+        tmp = one-VFL
+        mix%material(2)%VF = mix%material(2)%VF + dum*(tmp - mix%material(2)%VF)
+
+     end do
 
   end associate
 end subroutine

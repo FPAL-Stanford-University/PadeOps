@@ -170,7 +170,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx 
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - 0.5 
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy -0.5
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                     print *, " x = ", x(i,j,k)
@@ -209,7 +209,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, tmp2,tmpeta
     real(rkind), dimension(8) :: fparams
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 1.0
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 1.5
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
@@ -282,7 +282,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         tmpeta = atanh( 2.0*y / ( 1.0 + 1.0 / STRETCH_RATIO) )
         Lr =  Ly /( tmpeta(1, ny,1) - tmpeta(1,1,1))
 
-        eta = tmpeta ! - interface_init
+        eta = x !tmpeta ! - interface_init
         !eta =(x-interface_init)
         !eta = x-interface_init
         !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
@@ -292,7 +292,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
 !        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (y-0.5)*(y-0.5))/(thick*dx) ) )
 
-        tmp = (half)*(erf( (eta+width)/(thick*dy) ) - erf((eta-width)/(thick*dy)))
+        tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf((eta-width)/(thick*dx)))
         !tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
@@ -304,8 +304,8 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
-        u = 0
-        v = v0
+        u = v0
+        v = 0
         w = 0
 
         !tmp2 = half*(erf( (y-0.8+0.1_rkind)/(thick*dy) ) - erf((y-0.8-0.1_rkind)/(thick*dy)))

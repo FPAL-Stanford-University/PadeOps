@@ -15,13 +15,13 @@ module ShearLayerY_data
     real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, vL, vR
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
-    real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3, alpha4,alpha
+    real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3, alpha4,alpha2, alpha
     real(rkind) :: kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2, v_disturb
     real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, Nrho = 1, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, epsilonk = 0
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.3585265529, Lx = 0.452842184301, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 1.0, Lx = 1.0, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -156,7 +156,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = Lx/real(nx,rkind)
-        dy = Ly/real(ny,rkind)
+        dy = Ly/real(ny-1,rkind)
         dz = dx
 
         if(abs(dx-dy)>1.0d-13) then
@@ -166,8 +166,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1     + i - 1, rkind ) * dx 
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx - 0.5
+                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -201,11 +201,11 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
 
     integer :: ioUnit,i,iy
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, eta2
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, eta2, yphys
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2)) :: v_perturb, u_perturb
-    real(rkind), dimension(decomp%ysz(2)) :: Dphi_i, Dphi_r, phi_i, phi_r
+    real(rkind), dimension(decomp%ysz(2),3) :: Dphi_i, Dphi_r, phi_i,phi_r, p_perturbr, p_perturbi
     real(rkind), dimension(8) :: fparams
-    real(rkind) :: fac
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
@@ -233,7 +233,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
                           diff_c_ge,diff_c_ge_2,diff_c_gp,diff_c_gp_2,diff_c_gt,diff_c_gt_2,alpha, &
-                          v0, alpha4, v_disturb, alpha3, v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho,pointy, pointx, epsilonk        
+                          v0, alpha4, v_disturb, alpha3, alpha2,v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho,pointy, pointx, epsilonk        
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -288,9 +288,13 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
         delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-        eta =(y-interface_init) !-epsilonk*sin(alpha*x))
+        !eta =(y-interface_init) !-epsilonk*sin(alpha*x))
+        yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
+        Lr    = Lx/(yphys(1,ny,1) - yphys(1,1,1))
+        yphys = Lr*yphys
 
-	tmp = (half ) * ( one - erf( (eta)/(delta_rho) ) )
+
+	tmp = (half ) * ( one - erf( (yphys)/(delta_rho) ) )
 
 	!set mixture Volume fraction
 	mix%material(1)%VF = minVF + (one-two*minVF)*tmp
@@ -305,7 +309,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
        ! eta0k = etasize*delta
        ! kwave = ksize*delta
-        eta2 = eta !-delta_rho
+        eta2 = yphys !eta !-delta_rho
 
         
 
@@ -318,72 +322,75 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
            w = 0
 
         open (unit=8, file="Phi_I.txt", status='old', action='read' )
-
-        do i = 1,pointy
-          k = pointy - i + 1
-          read(8,*) phi_i(i)
-        end do
-
         open (unit=12, file="Phi_R.txt", status='old', action='read' )
-
-        do i = 1,pointy
-          k = pointy - i + 1
-          read(12,*) phi_r(i)
-        end do
-
         open (unit=16, file="DPhi_I.txt", status='old', action='read' )
+        open (unit=18, file="DPhi_R.txt", status='old', action='read' ) 
+
+        open (unit=20, file="Phi_I_2.txt", status='old', action='read' )
+        open (unit=22, file="Phi_R_2.txt", status='old', action='read' )
+        open (unit=24, file="DPhi_I_2.txt", status='old', action='read' )
+        open (unit=26, file="DPhi_R_2.txt", status='old', action='read' )
+
+        open (unit=28, file="Phi_I_3.txt", status='old', action='read' )
+        open (unit=30, file="Phi_R_3.txt", status='old', action='read' )
+        open (unit=32, file="DPhi_I_3.txt", status='old', action='read' )
+        open (unit=34, file="DPhi_R_3.txt", status='old', action='read' )
+
+        open (unit=36, file="P_I.txt", status='old', action='read' )
+        open (unit=38, file="P_R.txt", status='old', action='read' )
+        open (unit=40, file="P_I_2.txt", status='old', action='read' )
+        open (unit=42, file="P_R_2.txt", status='old', action='read' )
+        open (unit=44, file="P_I_3.txt", status='old', action='read' )
+        open (unit=46, file="P_R_3.txt", status='old', action='read' )
 
         do i = 1,pointy
           k = pointy - i + 1
-          read(16,*) Dphi_i(i)
+          read(8,*) phi_i(i,1)
+          read(12,*) phi_r(i,1)
+          read(16,*) Dphi_i(i,1)
+          read(18,*) Dphi_r(i,1)
+
+          read(20,*) phi_i(i,2)
+          read(22,*) phi_r(i,2)
+          read(24,*) Dphi_i(i,2)
+          read(26,*) Dphi_r(i,2)
+
+          read(28,*) phi_i(i,3)
+          read(30,*) phi_r(i,3)
+          read(32,*) Dphi_i(i,3)
+          read(34,*) Dphi_r(i,3)
+ 
+          read(36, *) p_perturbi(i,1)
+          read(38, *) p_perturbr(i,1)
+          read(40, *) p_perturbi(i,2)
+          read(42, *) p_perturbr(i,2)
+          read(44, *) p_perturbi(i,3)
+          read(46, *) p_perturbr(i,3)
+
+              
         end do
 
-        open (unit=18, file="DPhi_R.txt", status='old', action='read' )
-
-        do i = 1,pointy
-          k = pointy - i + 1
-          read(18,*) Dphi_r(i)
-        end do
+        !set mixture pressure (uniform)
+        mix%material(1)%p  = p_amb
 
         do i = 1,pointy
           k = pointy+1 - i
-          v(:,i,:) = epsilonk*alpha*(phi_i(i)*cos(alpha*x(:,i,:)) + phi_r(i)*sin(alpha*x(:,i,:)) )
-          u(:,i,:) = u(:,i,:) + epsilonk*(-Dphi_i(i)*sin(alpha*x(:,i,:)) + Dphi_r(i)*cos(alpha*x(:,i,:)) )
+          v(:,i,:) = epsilonk*(alpha*(phi_i(i,1)*cos(alpha*x(:,i,:)) + phi_r(i,1)*sin(alpha*x(:,i,:)) ) + &
+                               alpha2*(phi_i(i,2)*cos(alpha2*x(:,i,:)) + phi_r(i,2)*sin(alpha2*x(:,i,:)) ) + &
+                               alpha3*(phi_i(i,3)*cos(alpha3*x(:,i,:)) + phi_r(i,3)*sin(alpha3*x(:,i,:)) ) )
+          u(:,i,:) = u(:,i,:) + epsilonk*(-Dphi_i(i,1)*sin(alpha*x(:,i,:)) + Dphi_r(i,1)*cos(alpha*x(:,i,:)) + &
+                                          -Dphi_i(i,2)*sin(alpha2*x(:,i,:)) + Dphi_r(i,2)*cos(alpha2*x(:,i,:)) + &
+                                          -Dphi_i(i,3)*sin(alpha3*x(:,i,:)) + Dphi_r(i,3)*cos(alpha3*x(:,i,:)) )
 
+
+          mix%material(1)%p(:,i,:) = mix%material(1)%p(:,i,:) + epsilonk*(-p_perturbi(i,1)*sin(alpha*x(:,i,:))  + p_perturbr(i,1)*cos(alpha*x(:,i,:)) + &
+                                     -p_perturbi(i,2)*sin(alpha2*x(:,i,:)) + p_perturbr(i,2)*cos(alpha2*x(:,i,:)) + &
+                                     -p_perturbi(i,3)*sin(alpha3*x(:,i,:)) + p_perturbr(i,3)*cos(alpha3*x(:,i,:)))
+                                     
         enddo
  
-        !open (unit=8, file="u.txt", status='old', action='read' )
+         mix%material(2)%p  = mix%material(1)%p 
 
-        !do ix = 1,pointx
-        !  read(8,*) u_perturb(ix,:)
-        !end do
-
-        !open (unit=12, file="v.txt", status='old', action='read' )
-
-        !do ix = 1,pointx
-        !  read(12,*) v_perturb(ix,:)
-        !end do
-
-        !offset = rank * nx
-        !offset2 = rank *(nx+1) 
-        !u(:,:,1) = epsilonk*u_perturb(offset:offset2,:)
-        !v(:,:,1) = epsilonk*v_perturb(offset:offset2,:)
-
-        
-        !set velocities based on mass fraction
-        !u   = v_disturb*exp(-abs((eta2/(1.5*delta))))*(alpha4*sin(alpha4*y)+alpha4*sin(alpha4*(2/3)*y)+alpha4*sin(alpha4/3*y)+alpha4*sin(alpha4*(3/4)*y)+ alpha4*sin(alpha4/2*y))
-        !where(eta2 .ge. 0)
-        !   v = v0_2*erf(eta2/delta) + v_disturb*-eta2/delta*3/2*exp(-abs((eta2/(1.5*delta))))*(3/2*cos(alpha4*(2/3)*y)+3*cos(alpha4/3*y)+cos(alpha4*y)+ 4/3*cos(alpha4*(3/4)*y)+2*cos(alpha4/2*y) )   ! + U0*(1 - erf(eta/delta_d))
-        !lsewhere(eta2 .lt. 0 )
-        !   v = v0*erf(eta2/delta) + v_disturb*-eta2/delta*3/2*exp(-abs((eta2/(1.5*delta))))*(3/2*cos(alpha4*(2/3)*y)+3*cos(alpha4/3*y)+cos(alpha4*y)+ 4/3*cos(alpha4*(3/4)*y)+2*cos(alpha4/2*y))  !!+ !U0*(1 + erf(eta/delta_d))
-        !endwhere
-        !w   = zero
-
-        
-
-        !set mixture pressure (uniform)
-	mix%material(1)%p  = p_amb
-        mix%material(2)%p  = mix%material(1)%p
 
         ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
@@ -591,8 +598,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx,ny, i, j
-    real(rkind) :: dy, yspng, tspng, yspngR, yspngL
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR
+    real(rkind) :: dy, yspng, tspng, yspngR, yspngL, Lr, STRETCH_RATIO = 5.0
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR, yphys
     
     nx = decomp%ysz(1)
     ny = decomp%ysz(2)
@@ -621,9 +628,9 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               u  ( :,1,:) = vL
               v  ( :,1,:) = v(:,2,:)
               w  ( :,1,:) = zero
-              mix%material(1)%p(:,1,:) = p_amb
-              mix%material(2)%p(:,1,:) = p_amb
-              
+              mix%material(1)%p(:,1,:) =  mix%material(1)%p(:,2,:)
+              mix%material(2)%p(:,1,:) =  mix%material(2)%p(:,2,:)
+ 
               mix%material(1)%VF ( :,1,:) = VFL
               mix%material(2)%VF ( :,1,:) = one - VFL
               mix%material(1)%Ys ( :,1,:) = YsL
@@ -649,8 +656,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               u  ( :,ny,:) = vR
               v  ( :,ny,:) = v(:,ny-1,:)
               w  ( :,ny,:) = zero
-              mix%material(1)%p(:,ny,:) = p_amb
-              mix%material(2)%p(:,ny,:) = p_amb
+              mix%material(1)%p(:,ny,:) =  mix%material(1)%p(:,ny-1,:)
+              mix%material(2)%p(:,ny,:) =  mix%material(2)%p(:,ny-1,:)
               
               mix%material(1)%VF ( :,ny,:) = VFR
               mix%material(2)%VF ( :,ny,:) = one - VFR
@@ -662,10 +669,13 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         
         
   ! apply sponge at left and right boundaries to damp outgoing waves
-        yspngL = 0.05d0*Ly
-        yspngR = 0.95*Ly
-        tspng = 5*Ly/ny
-        dy = y(1,2,1) - y(1,1,1)
+        yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
+        Lr    = Lx/(yphys(1,ny,1) - yphys(1,1,1))
+        yphys = Lr*yphys
+
+        yspngL = -0.9250
+        yspngR = 0.9250
+        tspng = 0.006
         dumL = half*(one - tanh( (y-yspngL)/(tspng) ))
         dumR = half*(one + tanh( (y-yspngR)/(tspng) ))
         dum  = dumL+dumR
