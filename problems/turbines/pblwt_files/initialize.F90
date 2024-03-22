@@ -2,7 +2,8 @@ module pblwt_parameters
 
     use exits, only: message
     use kind_parameters,  only: rkind
-    use constants, only: kappa 
+    use constants, only: kappa
+    use reductions, only: p_minval, p_maxval
     implicit none
     integer :: seedu = 321341
     integer :: seedv = 423424
@@ -25,13 +26,13 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     type(decomp_info),                                          intent(in)    :: decomp
     real(rkind),                                                intent(inout) :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
-    real(rkind) :: z0init = 1.0d-4, ustarinit  = 1.0d0
+    real(rkind) :: z0init = 1.0d-4, ustarinit  = 1.0d0, epsnd = 0.1d0
     integer :: i,j,k, ioUnit
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one, zpeak
     character(len=clen) :: read_u_file
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, read_u_file
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, epsnd, ustarinit, zpeak, read_u_file
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -96,7 +97,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind) :: zpeak = 0.2d0
     real(rkind) :: Lx = one, Ly = one, Lz = one
     character(len=clen) :: read_u_file
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, ustarinit, zpeak, read_u_file 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, epsnd, ustarinit, zpeak, read_u_file 
 
 
     read_u_file = "null"
@@ -117,7 +118,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     x => mesh(:,:,:,1)
  
     !epsnd = 5.0d0
-    epsnd = 0.1d0
+    !epsnd = 1.0d0
 
     u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
     v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
@@ -211,6 +212,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
 
     deallocate(ybuffC,ybuffE,zbuffC, zbuffE) 
   
+    !print*, "============================================================"
+    !!print*, "minimum u = ", minval(u), "; location of min u = ", minloc(u)
+    !print*, "global minimum u = ", p_minval(u), "; global maximum u = ", p_maxval(u)
+    !print*, "============================================================"
       
     nullify(u,v,w,x,y,z)
    
@@ -254,9 +259,9 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, zpeak
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, epsnd = 0.1d0, zpeak
     integer :: iounit
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, epsnd, zpeak
     
     wTh_surf = zero;
     
@@ -276,9 +281,9 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
-    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, zpeak
+    real(rkind) :: ThetaRef, Lx, Ly, Lz, z0init, epsnd = 0.1d0, zpeak
     integer :: iounit
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, zpeak 
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, epsnd, zpeak 
     
     Tsurf = zero; dTsurf_dt = zero; ThetaRef = one
     
@@ -296,10 +301,10 @@ subroutine set_Reference_Temperature(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, z0init, zpeak
+    real(rkind) :: Lx, Ly, Lz, z0init, epsnd = 0.1, zpeak
     integer :: iounit
     
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, epsnd , zpeak
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -318,10 +323,10 @@ subroutine set_Reference_Temperatur(inputfile, Tref)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Tref
-    real(rkind) :: Lx, Ly, Lz, z0init, zpeak
+    real(rkind) :: Lx, Ly, Lz, z0init, epsnd = 0.1, zpeak
     integer :: iounit
     
-    namelist /PBLINPUT/ Lx, Ly, Lz, z0init , zpeak
+    namelist /PBLINPUT/ Lx, Ly, Lz, z0init, epsnd , zpeak
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

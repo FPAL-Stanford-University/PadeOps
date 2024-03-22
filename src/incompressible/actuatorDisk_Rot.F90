@@ -42,6 +42,7 @@ module actuatorDisk_Rotmod
         real(rkind), dimension(:,:,:),   pointer     :: xG, yG, zG
         real(rkind), dimension(:,:,:,:), allocatable :: smearing_base
         real(rkind), dimension(:,:,:),   allocatable :: force_local
+        logical :: isFan = .false.
 
         ! MPI communicator stuff
         logical :: Am_I_Active, Am_I_Split
@@ -82,8 +83,9 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
     integer :: xLc(1), yLc(1), zLc(1), xst, xen, yst, yen, zst, zen, ierr, xlen
     integer  :: ntry = 100, xsize, ysize, zsize
     real(rkind) :: time2initialize = 0, correction_factor = one, sampleUpsDist = zero
+    logical :: isFan = .false.
 
-    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, RPMController, TSR, Omega, yaw, tilt, blade_pitch, num_blades, reference_length, NacelleRad, bladeTypeID, sampleUpsDist, diagnostics_write_freq
+    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, RPMController, TSR, Omega, yaw, tilt, blade_pitch, num_blades, reference_length, NacelleRad, bladeTypeID, sampleUpsDist, diagnostics_write_freq, isFan
     
     ! Read input file for this turbine    
     write(tempname,"(A17,I4.4,A10)") "ActuatorDisk_Rot_", ActuatorDisk_RotID, "_input.inp"
@@ -100,7 +102,7 @@ subroutine init(this, inputDir, ActuatorDisk_RotID, xG, yG, zG, ntryparam)
     this%blade_pitch   = blade_pitch;     this%num_blades = num_blades
     this%NacelleRad    = NacelleRad;      this%Omega      = Omega*rpm_to_radpersec
     this%sampleUpsDist = sampleUpsDist;   this%diagnostics_write_freq = diagnostics_write_freq
-    this%Lref = reference_length
+    this%Lref = reference_length;         this%isFan      = isFan
 
     dx=xG(2,1,1)-xG(1,1,1); dy=yG(1,2,1)-yG(1,1,1); dz=zG(1,1,2)-zG(1,1,1)
     this%nxLoc = size(xG,1); this%nyLoc = size(xG,2); this%nzLoc = size(xG,3)
@@ -787,6 +789,16 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
           total_thrust = total_thrust - dthrust
           total_torque = total_torque - dtangen*this%radius_elem(i)
         enddo
+
+        if(this%isFan) then
+            !fan_mult_fac = -one
+            this%force_x = -this%force_x
+            !this%force_y = -this%force_y
+            !this%force_z = -this%force_z
+            total_thrust = -total_thrust
+            !total_torque = zero
+        endif
+
 
         ist = this%startEnds_global(1);   ien = this%startEnds_global(4)
         jst = this%startEnds_global(2);   jen = this%startEnds_global(5)

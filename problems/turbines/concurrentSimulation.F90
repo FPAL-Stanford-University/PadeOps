@@ -12,9 +12,9 @@ program concurrentSimulation
     use exits, only: message, GracefulExit
     use budgets_time_avg_mod, only: budgets_time_avg  
     use budgets_xy_avg_mod, only: budgets_xy_avg  
-    use decomp_2d, only: nrank
+    use decomp_2d, only: nrank, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y, transpose_y_to_x
     use interpolatorMod, only: interpolator 
-    use constants, only: zero, half, eps
+    use constants, only: zero, half, eps, one
 
     implicit none
 
@@ -26,11 +26,14 @@ program concurrentSimulation
     type(budgets_time_avg) :: budg_tavg1, budg_tavg2
     type(budgets_xy_avg) :: budg_xyavg1, budg_xyavg2
     logical :: useInterpolator = .false., restrict_igp_dt = .false.
-    real(rkind) :: srcxst, srcyst, srczst, tsub, dtfull, dtpart
+    real(rkind) :: srcxst = 0, srcyst = 0, srczst = 0, tsub, dtfull, dtpart
+    integer :: extrap_method = -1   ! -1 : no extrap; 0 : 0th-order; 1 : 1st-order
     real(rkind), allocatable, dimension(:,:,:), target :: utarget,  vtarget,  wtarget,  Ttarget
     real(rkind), allocatable, dimension(:,:,:), target :: utarget0, vtarget0, wtarget0, Ttarget0
     real(rkind), allocatable, dimension(:,:,:), target :: utarget1, vtarget1, wtarget1, Ttarget1
-    namelist /concurrent/ precInputFile, mainInputFile, useInterpolator, srcxst, srcyst, srczst, restrict_igp_dt
+    real(rkind), allocatable, dimension(:,:,:), target :: rbuffyC, rbuffzC, rbuffyE, rbuffzE
+    integer :: i,j,k
+    namelist /concurrent/ precInputFile, mainInputFile, useInterpolator, srcxst, srcyst, srczst, restrict_igp_dt, extrap_method
 
     call MPI_Init(ierr)                                                 !<-- Begin MPI
     call GETARG(1,inputfile)                                            !<-- Get the location of the input file
@@ -67,14 +70,17 @@ program concurrentSimulation
         if( srcyst + igp%Ly > prec%Ly) then
             call GracefulExit("Precursor is not wide enough. Check details.", 11)
         endif
-        if( srczst + igp%Lz > prec%Lz) then
-            call GracefulExit("Precursor is not tall enough. Check details.", 11)
+        if( (srczst + igp%Lz > prec%Lz) .and. (extrap_method == -1)) then
+            call GracefulExit("Precursor is not tall enough and extrap_method is -1. Check details.", 11)
         endif
         if( abs(srczst) > zero) then
             call GracefulExit("srczst must be zero. Check details.", 11)
         endif
         if(.not. igp%useFringe) then
             call GracefulExit("If interpolator is being used, igp%useFringe must be true.", 11)
+        endif
+        if( .not. ((extrap_method==-1) .or. (extrap_method==0) .or. (extrap_method==1))) then
+            call GracefulExit("extrap_method must be -1, 0 or 1.", 11)
         endif
         !if( abs(srcyst+igp%Ly-prec%Ly) > 1.0d-12 ) then
         !  !if(.not. igp%fringe_x%Apply_y_fringe) then
@@ -85,8 +91,8 @@ program concurrentSimulation
         !! Create the interpolator 
         !write(*,*) "srcyst = ", srcyst
         !write(*,*) "igp%yline(1) = ", igp%yline(1:3)
-        call interpC%init(prec%gpC,igp%gpC,prec%xline,prec%yline,prec%zline, igp%xline+srcxst,igp%yline+srcyst,igp%zline +srczst, 'interpC_debug', igp%sgsmodel%get_z0())
-        call interpE%init(prec%gpE,igp%gpE,prec%xline,prec%yline,prec%zEline,igp%xline+srcxst,igp%yline+srcyst,igp%zEline+srczst,' interpE_debug', igp%sgsmodel%get_z0())
+        call interpC%init(prec%gpC,igp%gpC,prec%xline,prec%yline,prec%zline, igp%xline+srcxst,igp%yline+srcyst,igp%zline +srczst, 'interpC_debug', igp%sgsmodel%get_z0(), extrap_method)
+        call interpE%init(prec%gpE,igp%gpE,prec%xline,prec%yline,prec%zEline,igp%xline+srcxst,igp%yline+srcyst,igp%zEline+srczst,' interpE_debug', igp%sgsmodel%get_z0(), extrap_method)
 
         ! allocate memory
         allocate(utarget(igp%gpC%xsz(1),igp%gpC%xsz(2),igp%gpC%xsz(3)))
@@ -183,7 +189,8 @@ program concurrentSimulation
              call budg_tavg2%doBudgets()       
              call doTemporalStuff_gp(igp)                    !<-- Go to the temporal hook (see temporalHook.F90)
        
-           end do 
+           end do
+       
        else
            call igp%timeAdvance(prec%get_dt())              !<-- Time stepping scheme + Pressure Proj. (see igrid.F90)
            call budg_xyavg2%doBudgets()       
@@ -215,6 +222,10 @@ program concurrentSimulation
     if(allocated(vtarget)) deallocate(vtarget) !!
     if(allocated(wtarget)) deallocate(wtarget) !!
     if(allocated(Ttarget)) deallocate(Ttarget)
+    if(allocated(rbuffyC)) deallocate(rbuffyC)
+    if(allocated(rbuffzC)) deallocate(rbuffzC)
+    if(allocated(rbuffyE)) deallocate(rbuffyE)
+    if(allocated(rbuffzE)) deallocate(rbuffzE)
     if(useInterpolator) call interpE%destroy()
     if(useInterpolator) call interpC%destroy()
 

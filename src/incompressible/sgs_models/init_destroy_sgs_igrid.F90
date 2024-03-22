@@ -47,14 +47,14 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
    end if
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, xMesh, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, useShiftedPeriodicBC, Lxeff, initSpinUp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, xMesh, yMesh, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, useShiftedPeriodicBC, Lxeff, initSpinUp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
   real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re, Lx, Ly, Lxeff
   real(rkind), intent(in), target :: Tsurf, wTh_surf
   character(len=*), intent(in) :: inputfile
-  real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC, xMesh
+  real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC, xMesh, yMesh
   real(rkind), dimension(:,:,:), intent(in), target :: fBody_x, fBody_y, fBody_z
   logical, intent(out) :: computeFbody
   real(rkind), dimension(:,:,:,:), intent(in), target :: rbuffxC, rbuffyE, rbuffzE, rbuffyC, rbuffzC
@@ -72,13 +72,18 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   character(len=clen) :: SGSDynamicRestartFile, fname, tempname
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
   logical :: usePrSGS = .false. 
-  integer :: ierr, WM_matchingIndex = 1, i, j
+  integer :: ierr, WM_matchingIndex = 1, i, j, k, idx
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0, xpos = 0.0_rkind, epssmall = 1.0d-6
   real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2, deli
+  real(rkind), dimension(gpC%xsz(1), gpC%xsz(2)) :: sp_map_2d
   logical :: is_z0_varying = .false., filter_for_heterog = .true., use_const_alpfac = .true.
   real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
   real(rkind) :: Mfactor, dele, excludedist = 3.0_rkind, const_alpfac = 0.027_rkind, blht_for_alpfac = 3.0_rkind, betfac = 0.15_rkind
+  real(rkind) :: ylmod, yl, totpy
   integer :: spnumx, spnumy
+  real(rkind), allocatable, dimension(:) :: Mfactor_arr  !! making Mfactor into array for gradual roughness transition in APA model
+  real(rkind) :: walldist_fact = 0.0  !! this is to filter the velocity at a distance away from the wall
+  real(rkind) :: fact_goit = 0.0      !! this factor determines the strength of the extra corrections of goit model 
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
@@ -87,7 +92,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
                  explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
                  useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, &
-                 is_z0_varying
+                 is_z0_varying, fact_goit
 
   namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, rpstart, spx_delta, spy_delta, &
                        filter_for_heterog, excludedist, use_const_alpfac, const_alpfac, blht_for_alpfac, betfac
@@ -119,8 +124,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   if(this%useShiftedPeriodicBC) then
     this%nxeff = minloc(abs(xMesh-Lxeff*Lx), 1)
     this%nxeff = this%nxeff-4   ! 4 is arbitrary here
-    print *, 'Lxeff = ', Lxeff*Lx
-    print *, 'nxeff = ', this%nxeff
+    !print *, 'Lxeff = ', Lxeff*Lx
+    !print *, 'nxeff = ', this%nxeff
   endif
 
   if(this%useShiftedPeriodicBC) then
@@ -128,7 +133,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   else 
       this%meanFact = one/(real(gpC%xsz(1),rkind) * real(gpC%ysz(2),rkind))
   endif
-  print *, "meanFact = ", this%meanFact
+  !print *, "meanFact = ", this%meanFact
 
   this%dx = dx
   this%dy = dy
@@ -197,10 +202,13 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     read(unit=123, NML=Z0VARYING)
     close(123)
 
-    if((abs(spy-Ly)>1.0d-9) .or. (abs(rpy-Ly)>1.0d-9)) then
-        call GracefulExit("Only stripe heterogeneity allowed. Change spy.", 11)
-    endif
+    !if((abs(spy-Ly)>1.0d-9) .or. (abs(rpy-Ly)>1.0d-9)) then
 
+    !! this part is to check the spy and rpy initialisation in case of heterogemneity in y-direction
+    !if((abs(spnumy*(spy+rpy)-Ly)>1.0d-9)) then
+    !    call GracefulExit("Something is wrong with the y-lengths of heterogeneity. Check details.", 11)
+    !endif
+    
     if((abs(spnumx*(spx+rpx)-Lx)>1.0d-9)) then
         call GracefulExit("Inconsistent spx, rpx, spnumx and Lx. Check details.", 11)
     endif
@@ -217,17 +225,20 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     allocate(this%Uxspan(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%Uyspan(this%gpC%xsz(1), this%gpC%xsz(2)))
     allocate(this%ustarsqspan(this%gpC%xsz(1), this%gpC%xsz(2))) !!!!!
+    allocate(Mfactor_arr(this%gpC%xsz(1))) !!!!!
 
     ! set all arrays to zero :: this is important
     this%z0var         = 0.0_rkind;   this%ustarsqvar     = 0.0_rkind;   this%Uxvar   = 0.0_rkind
     this%Uyvar         = 0.0_rkind;   this%WallMFactorvar = 0.0_rkind;   this%lamfact = 0.0_rkind
     this%mask_upstream = 0.0_rkind;   this%deli           = 0.0_rkind;   sp_map       = 0.0_rkind
     this%Uxspan        = 0.0_rkind;   this%Uyspan         = 0.0_rkind;   this%ustarsqspan = 0.0_rkind
+    sp_map_2d          = 0.0_rkind;   Mfactor_arr          = 0.0_rkind
 
     this%z0s = z0s; this%z0r = z0r
     this%filter_for_heterog = filter_for_heterog
     this%betfac = betfac
     totpx = spx + rpx
+    totpy = spy + rpy
     if(rpstart < zero) then
         ! overwrite rough patch start with length of smooth patch
         rpstart = spx
@@ -235,7 +246,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
         !call message(1, "!!!!!WARNING!!!!! rpstart is larger than totpx. Ensure this is a developing case.")
         call GracefulExit("rpstart is larger than totpx. Check details.", 11)
     endif
-
+    
     if(spx_delta < epssmall) then
         do i = 1, this%gpC%xsz(1)
           xl = xMesh(i)
@@ -246,7 +257,27 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
               sp_map(i) = 1.0_rkind !this%z0var(i,j) = z0r
           endif
         enddo
+        
+        ! copying 1d sp_map into 2d sp_map
+        do j = 1, this%gpC%xsz(2)
+          do i = 1, this%gpC%xsz(1)
+            sp_map_2d(i,j) = sp_map(i)
+          enddo
+        enddo
+        
+        ! inverting the sp_map for heterogeneity in y-direction
+        do j = 1, this%gpC%xsz(2)
+          yl = yMesh(j)
+          ylmod = mod(yl, totpy)
+          if(ylmod > spy) then
+              sp_map_2d(:,j) = abs(one - sp_map_2d(:,j))
+          endif
+          !print '(2(i4,1x), 100(e19.12,1x))', nrank, j, yMesh(j), yl, totpy, ylmod, sp_map_2d(:,j) 
+        enddo
+
     else
+        ! this part is for gradual change in roughness
+        ! spx_delta determines how much gradual it will be
         ! handle xpos = (rpstart-spx) separately
         xpos = rpstart-spx; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
         call S_fringe(x1, S1)
@@ -264,9 +295,17 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
         enddo
     endif
 
+    !! heterogeneity in x-direction only
     do j = 1, this%gpC%xsz(2)
       this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
     enddo
+    
+    !! heterogeneity in both x & y-direction
+    !do j = 1, this%gpC%xsz(2)
+    !  do i = 1, this%gpC%xsz(1)
+    !    this%z0var(i,j) = z0s + sp_map_2d(i,j) * (z0r - z0s)
+    !  enddo
+    !enddo
 
     ! NOTE :: rpstart must be figured out before this block for setting alpfac
     this%alpfac = const_alpfac
@@ -285,17 +324,40 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     !!! only for Abkar-PA model. Think where to put this later
     !!! determine lamfact
     !!! smooth patch before rpstart and after fringe. Rough between these.
-    Mfactor = 0.75_rkind-0.03_rkind*log(this%z0r/this%z0s)
+
+    !! this change is for gradual roughness transition for APA
+    do i=1,this%gpC%xsz(1)
+      if (sp_map(i)>1.0e-6_rkind) then
+        idx = i
+        exit
+      endif
+    enddo
+    !!
+
+    !Mfactor = 0.75_rkind-0.03_rkind*log(this%z0r/this%z0s)  !! this is for abrupt jump im roughness
     deli = 0.0_rkind
+
     do j = 1, this%gpC%xsz(2)
       do i = 1, this%gpC%xsz(1)
-        if((xMesh(i) < rpstart) .or. (xMesh(i) > rpstart+rpx)) then !! this was wrongly written as spx earlier
+        !if((xMesh(i) < rpstart) .or. (xMesh(i) > rpstart+rpx)) then !! this was wrongly written as spx earlier
+        !if((sp_map(i) < 1.0e-5_rkind) .or. (xMesh(i) > rpstart+rpx)) then !! only for gradual roughness transition
+        if((xMesh(i) < xMesh(idx)) .or. (xMesh(i) > rpstart+rpx)) then !! only for gradual roughness transition
             ! upstream smooth patch
             this%lamfact(i,j) = 1.1d0 ! set some number above 1.0
         else
             ! downstream rough or smooth region
-            xl = xMesh(i) - rpstart
-            deli(i) = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind
+            !! for abrupt roughness transition
+            !xl = xMesh(i) - rpstart
+            !deli(i) = this%z0r*Mfactor*(xl/this%z0r)**0.8_rkind                   
+
+            !! for gradual roughness transition
+            xl = xMesh(i) - xMesh(idx)
+            ! Elliot IBL
+            !Mfactor_arr(i) = 0.75_rkind-0.03_rkind*log(this%z0var(i,j))
+            !deli(i) = this%z0var(i,j)*Mfactor_arr(i)*(xl/this%z0var(i,j))**0.8_rkind  
+            ! Wood IBL
+            deli(i) = 0.28_rkind*max(this%z0s,this%z0r)*(xl/max(this%z0s,this%z0r))**0.8_rkind
+            
             this%lamfact(i,j) = -log(half*this%dz/(deli(i)*this%alpfac(i,j)+1.0d-18)) / log(this%alpfac(i,j))
             this%lamfact(i,j) = min(this%lamfact(i,j), one)     ! note :: must be here, not outside the loop
             this%lamfact(i,j) = max(this%lamfact(i,j), zero)    ! note :: must be here, not outside the loop
@@ -328,7 +390,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
       enddo
       close(10)
     endif
-
+    
     ! write all data as 2D arrays
     this%rbuffxC(:,:,1,1) = this%z0var(:,:)
     this%rbuffxC(:,:,2,1) = this%mask_upstream(:,:)
@@ -343,6 +405,9 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
 
   this%WallModel  = WallModelType
   this%WM_matchingIndex = WM_matchingIndex
+
+  this%walldist_fact = half+(WM_matchingIndex-one)  !! this is to filter the velocity at a distance away from the wall
+  
   if (this%WallModel .ne. 0) then
       if (this%PadeDer%isPeriodic) then
          call GracefulExit("You cannot use a wall model if the problem is periodic in Z",12)

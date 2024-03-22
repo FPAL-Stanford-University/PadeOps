@@ -15,6 +15,7 @@ module interpolatorMod
         integer, dimension(:), allocatable  :: xInd, yInd, zInd  
         real(rkind), dimension(:), allocatable :: wx, wy, wz
         real(rkind) :: dzDest, dzSource, z0
+        integer     :: extrap_method
         contains
             procedure :: init 
             procedure :: destroy 
@@ -23,13 +24,14 @@ module interpolatorMod
 
 contains 
 
-subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest, filenameIn, z0)
-    use constants, only: eps
+subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest, zDest, filenameIn, z0, extrap_method)
+    use constants, only: eps, zero, half
     class(interpolator), intent(inout) :: this
     type(decomp_info), intent(in), target :: gpSource, gpDest 
     real(rkind), dimension(:), intent(in) :: xSource, ySource, zSource, xDest, yDest, zDest
     character(len=*), intent(in) :: filenameIn
     real(rkind), intent(in) :: z0
+    integer    , intent(in) :: extrap_method
     character(len=clen)             :: fname
     integer :: nxS, nyS, nzS, nxD, nyD, nzD, idx 
     real(rkind) :: delta, start
@@ -104,12 +106,21 @@ subroutine init(this, gpSource, gpDest, xSource, ySource, zSource, xDest, yDest,
         this%zInd(idx) = max(this%zInd(idx), 1)
         this%zInd(idx) = min(this%zInd(idx), size(zSource)-1)
         this%wz(idx) = (zSource(this%zInd(idx) + 1) - zDest(idx))/delta 
+
+        if(this%extrap_method==0) then
+           if(zDest(idx) > (zSource(nzS) + half*delta)) then
+               this%wz(idx) = zero
+           endif
+        endif
     end do 
 
     ! for loglaw correction
     this%dzSource = zSource(2)-zSource(1)
     this%dzDest   = zDest(2)-zDest(1)
     this%z0 = z0
+    
+    ! extrapolation
+    this%extrap_method = extrap_method
 
     if(nrank==0) then
       fname = filenameIn(:len_trim(filenameIn))//"_x.dat"
