@@ -352,7 +352,7 @@ subroutine hook_probes(inputfile, probe_locs)
     real(rkind) :: upstreamdisplacement = 0.05d0 ! Place the probes this far upstream of the turbine centers
     character(len=clen) :: turbInfoDir, fname, tempname
 
-    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt
+    namelist /ACTUATOR_DISK/ xLoc, yLoc, zLoc, diam, cT, yaw, tilt, upstreamdisplacement
     namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type
     
     

@@ -355,7 +355,7 @@ program upsampleFields
     logical :: periodicInZ = .false., apply_logcorr = .false., is_z0_varying = .false.
     real(rkind) :: Lz = one, z0 = 1.0d-4
     integer :: nxf, nyf, nzf
-    namelist /INPUT/ nx, ny, nz, inputdir, outputdir, inputFile_TID, inputFile_RID, &
+    namelist /INPUT/ nx, ny, nz,nxf,nyf,nzf, inputdir, outputdir, inputFile_TID, inputFile_RID, &
     outputFile_TID, outputFile_RID, UpsampleInZ, isStratified, PeriodicInZ, &
     apply_logcorr, Lz, z0, is_z0_varying
     !nxf, nyf, nzf

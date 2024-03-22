@@ -29,8 +29,8 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: i,j,k, ioUnit
     integer :: ix1, ixn, iy1, iyn, iz1, izn
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, z0init = 2.0d-4
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init
+    real(rkind)  :: Lx = one, Ly = one, Lz = one, z0init = 2.0d-4, ustarinit = 1.0d0
+    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init, ustarinit
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -91,8 +91,8 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind) ::  z0init = 2.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0
-    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init, zpeak
+    real(rkind) ::  z0init = 2.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0, ustarinit = 1.0d
+    namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init, zpeak, ustarinit
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -112,12 +112,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     if(isPrecursor) then
        epsnd = 5.0_rkind 
        !epsnd = 0.0_rkind 
-       u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+       u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
        v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
        wC= zero  
     else
        epsnd = zero
-       u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+       u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
        v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
        wC= zero  
     endif
