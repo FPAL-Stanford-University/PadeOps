@@ -46,7 +46,7 @@ module ci06stuff
     real(rkind), parameter                   :: alpha_hat   = alpha06d1
 
     ! Step 2: Assign the scheme at node 2 to be Standard Pade (4th Order)
-    real(rkind), parameter                   :: alpha_p     = 1._rkind/6._rkind
+    real(rkind), parameter                   :: alpha_p     = 1._rkind /6._rkind !1._rkind/6._rkind
     real(rkind), parameter                   :: p_p         = 1._rkind/8._rkind*(9._rkind + 10._rkind*alpha_p)
     real(rkind), parameter                   :: q_p         = 1._rkind/8._rkind*(6._rkind*alpha_p - 1._rkind)    
 
@@ -258,7 +258,7 @@ contains
         select case (bc1) 
         case(0)
             a (1) = w1*zero
-            a (2) = w2*alpha_p
+            a (2) = w3*alpha_pp
             a (3) = w3*alpha_pp 
 
             b (1) = w1*one
@@ -266,7 +266,7 @@ contains
             b (3) = w3*one
 
             c (1) = w1*alpha
-            c (2) = w2*alpha_p
+            c (2) = w3*alpha_pp
             c (3) = w3*alpha_pp
             
         case(1)
@@ -514,7 +514,7 @@ contains
             d_np_3 = 0
 
             a_np_2 = (1._rkind / 8._rkind*(9._rkind + 10._rkind*alpha_np_2) ) / 2._rkind
-            b_np_2 = 1._rkind / 8._rkind*(6._rkind*alpha_np_2 - 1._rkind)
+            b_np_2 = 1._rkind / 8._rkind*(6._rkind*alpha_np_2 - 1._rkind) / 2._rkind
 
             a06 = a06d1
             b06 = b06d1        
@@ -538,7 +538,7 @@ contains
                               do j = 1,n2
                                  RHS(1,j,k) = a_np_1*f(1,j,k) + b_np_1*f(2,j,k) + c_np_1*f(3,j,k) + d_np_1*f(4,j,k)
  
-                                 RHS(2,j,k) = a_np_2*(f(3,j,k) + f(2,j,k) )
+                               !  RHS(2,j,k) = a_np_2*(f(3,j,k) + f(2,j,k) ) + b_np_2*(f(4,j,k) + f(1,j,k))
                               end do
                            end do
                     end select
@@ -551,7 +551,7 @@ contains
                           do k = 1, n3
                             do j = 1, n2
                                 
-                                RHS(this%n,j,k) =  a_np_3*f(this%n,j,k) + b_np_3*f(this%n-1,j,k) + c_np_3*f(this%n-2,j,k) + d_np_3*f(this%n-3,j,k)                       
+                                RHS(this%n,j,k) =  a_np_1*f(this%n,j,k) + b_np_1*f(this%n-1,j,k) + c_np_1*f(this%n-2,j,k) + d_np_1*f(this%n-3,j,k)                       
                                 RHS(this%n-1,j,k) = a_np_2*(f(this%n,j,k) + f(this%n-1,j,k))
                             end do
                           end do
@@ -620,8 +620,7 @@ contains
             d_np_1 = 1._rkind / 16._rkind
 
             a_np_2 = (1._rkind / 8._rkind*(9._rkind + 10._rkind*alpha_np_2)) / 2._rkind
-            b_np_2 = 1._rkind / 8._rkind*(6._rkind*alpha_np_2 - 1._rkind)
-
+            b_np_2 = 1._rkind / 8._rkind*(6._rkind*alpha_np_2 - 1._rkind)/2._rkind
             a_np_3 = 15._rkind / 8._rkind
             b_np_3 = -5._rkind / 4._rkind
             c_np_3 = 3._rkind / 8._rkind
@@ -650,7 +649,7 @@ contains
                           do k = 1,n3
                              RHS(:,1,k) = a_np_1*f(:,1,k) + b_np_1*f(:,2,k) + c_np_1*f(:,3,k) + d_np_1*f(:,4,k)
 
-                             RHS(:,2,k) = a_np_2*(f(:,2,k) + f(:,3,k) )
+                           !  RHS(:,2,k) = a_np_2*(f(:,2,k) + f(:,3,k) ) + b_np_2*(f(:,4,k) + f(:,1,k))
                           end do
 
                     end select
@@ -662,8 +661,8 @@ contains
                         case(0)
                           do k = 1, n3
 
-                             RHS(:,this%n,k) = a_np_3*f(:,this%n,k) + b_np_3*f(:,this%n-1,k) + c_np_3*f(:,this%n-2,k) + d_np_3*f(:,this%n-3,k)              
-                             RHS(:,this%n-1,k) = a_np_2*(f(:,this%n,k) + f(:,this%n-1,k))
+                             RHS(:,this%n,k) = a_np_1*f(:,this%n,k) + b_np_1*f(:,this%n-1,k) + c_np_1*f(:,this%n-2,k) + d_np_1*f(:,this%n-3,k)              
+                             RHS(:,this%n-1,k) = a_np_2*(f(:,this%n,k) + f(:,this%n-1,k)) !+  b_np_2*(f(:,this%n,k) + f(:,this%n-3,k))
 
                           end do
 
@@ -726,7 +725,7 @@ contains
             d_np_1 = 1._rkind / 16._rkind
 
             a_np_2 = (1._rkind / 8._rkind*(9._rkind + 10._rkind*alpha_np_2)) /2._rkind
-            b_np_2 = 1._rkind / 8._rkind*(6._rkind*alpha_np_2 - 1._rkind)
+            b_np_2 = 1._rkind / 8._rkind*(6._rkind*alpha_np_2 - 1._rkind) /2._rkind
 
             a_np_3 = 15._rkind / 8._rkind
             b_np_3 = -5._rkind / 4._rkind
@@ -750,7 +749,7 @@ contains
                         case(0)
 
                             RHS(:,:,1) = a_np_1*f(:,:,1) + b_np_1*f(:,:,2) + c_np_1*f(:,:,3) + d_np_1*f(:,:,4)
-                            RHS(:,:,2) = a_np_2*(f(:,:,2) + f(:,:,3) )
+                        !    RHS(:,:,2) = a_np_2*(f(:,:,2) + f(:,:,3) ) + b_np_2*(f(:,:,4) + f(:,:,1))
 
                     end select
 
@@ -760,8 +759,8 @@ contains
                         case(-1)
                         case(0)
 
-                          RHS(:,:,this%n) = a_np_3*f(:,:,this%n) + b_np_3*f(:,:,this%n-1) + c_np_3*f(:,:,this%n-2) + d_np_3*f(:,:,this%n-3)
-                          RHS(:,:,this%n-1) = a_np_2*(f(:,:,this%n) + f(:,:,this%n-1))
+                          RHS(:,:,this%n) = a_np_1*f(:,:,this%n) + b_np_1*f(:,:,this%n-1) + c_np_1*f(:,:,this%n-2) + d_np_1*f(:,:,this%n-3)
+                          RHS(:,:,this%n-1) = a_np_2*(f(:,:,this%n-1) + f(:,:,this%n)) !+ + b_np_2*(f(:,:,this%n) + f(:,:,this%n-3))
 
                     end select
 

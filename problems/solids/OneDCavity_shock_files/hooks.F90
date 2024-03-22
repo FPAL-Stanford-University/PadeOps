@@ -803,7 +803,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
      if(decomp%yst(2)==1) then
           if(y_bc(1)==0) then
-          rho( :,1,:) = rhoL 
+          rho( :,1,:) = rhoL*(one - minVF)
           u  ( :,1,:) = zero !(u2-u1)
           v  ( :,1,:) = zero
           w  ( :,1,:) = zero
@@ -826,12 +826,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
           ! one;  mix%material(2)%g23( 1,:,:) = zero
           ! mix%material(2)%g31( 1,:,:) = zero; mix%material(2)%g32( 1,:,:) =
           ! zero; mix%material(2)%g33( 1,:,:) = one
+           e(:,1,:) = 5.55016
+           mix%material(1)%Ys ( :,1,:) = one - minVF
+           mix%material(2)%Ys ( :,1,:) = minVF
 
-           mix%material(1)%Ys ( :,1,:) = YsL
-           mix%material(2)%Ys ( :,1,:) = one - YsL
-
-           mix%material(1)%VF ( :,1,:) = VFL
-           mix%material(2)%VF ( :,1,:) = one - VFL
+           mix%material(1)%VF ( :,1,:) = one - minVF
+           mix%material(2)%VF ( :,1,:) = minVF
 
          ! do i=1,5
          !    mix%material(1)%Ys ( :,i,:) = mix%material(1)%Ys ( :,6,:)

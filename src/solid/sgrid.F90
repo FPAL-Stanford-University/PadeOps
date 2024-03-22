@@ -2027,7 +2027,13 @@ contains
             else
             call this%post_bc()
             endif
-            !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)      
+            !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)     
+             if( this%Stretch1Dy) then
+                   call this%viz%WriteViz(this%decomp, this%meshstretch,this%fields, this%mix, this%tsim)
+                else
+                   call this%viz%WriteViz(this%decomp, this%mesh,this%fields,this%mix, this%tsim)
+                endif
+ 
         end do
 
           
