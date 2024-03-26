@@ -1330,7 +1330,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 1.5, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 5.0, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -2028,11 +2028,11 @@ contains
             call this%post_bc()
             endif
             !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)     
-             if( this%Stretch1Dy) then
-                   call this%viz%WriteViz(this%decomp, this%meshstretch,this%fields, this%mix, this%tsim)
-                else
-                   call this%viz%WriteViz(this%decomp, this%mesh,this%fields,this%mix, this%tsim)
-                endif
+            ! if( this%Stretch1Dy) then
+            !       call this%viz%WriteViz(this%decomp, this%meshstretch,this%fields, this%mix, this%tsim)
+            !    else
+            !       call this%viz%WriteViz(this%decomp, this%mesh,this%fields,this%mix, this%tsim)
+            !    endif
  
         end do
 

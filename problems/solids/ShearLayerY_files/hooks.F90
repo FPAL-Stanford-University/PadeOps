@@ -336,12 +336,12 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         open (unit=32, file="DPhi_I_3.txt", status='old', action='read' )
         open (unit=34, file="DPhi_R_3.txt", status='old', action='read' )
 
-        open (unit=36, file="P_I.txt", status='old', action='read' )
-        open (unit=38, file="P_R.txt", status='old', action='read' )
-        open (unit=40, file="P_I_2.txt", status='old', action='read' )
-        open (unit=42, file="P_R_2.txt", status='old', action='read' )
-        open (unit=44, file="P_I_3.txt", status='old', action='read' )
-        open (unit=46, file="P_R_3.txt", status='old', action='read' )
+        !open (unit=36, file="P_I.txt", status='old', action='read' )
+        !open (unit=38, file="P_R.txt", status='old', action='read' )
+        !open (unit=40, file="P_I_2.txt", status='old', action='read' )
+        !open (unit=42, file="P_R_2.txt", status='old', action='read' )
+        !open (unit=44, file="P_I_3.txt", status='old', action='read' )
+        !open (unit=46, file="P_R_3.txt", status='old', action='read' )
 
         do i = 1,pointy
           k = pointy - i + 1
@@ -360,12 +360,12 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
           read(32,*) Dphi_i(i,3)
           read(34,*) Dphi_r(i,3)
  
-          read(36, *) p_perturbi(i,1)
-          read(38, *) p_perturbr(i,1)
-          read(40, *) p_perturbi(i,2)
-          read(42, *) p_perturbr(i,2)
-          read(44, *) p_perturbi(i,3)
-          read(46, *) p_perturbr(i,3)
+          !read(36, *) p_perturbi(i,1)
+          !read(38, *) p_perturbr(i,1)
+          !read(40, *) p_perturbi(i,2)
+          !read(42, *) p_perturbr(i,2)
+          !read(44, *) p_perturbi(i,3)
+          !read(46, *) p_perturbr(i,3)
 
               
         end do
@@ -383,9 +383,9 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
                                           -Dphi_i(i,3)*sin(alpha3*x(:,i,:)) + Dphi_r(i,3)*cos(alpha3*x(:,i,:)) )
 
 
-          mix%material(1)%p(:,i,:) = mix%material(1)%p(:,i,:) + epsilonk*(-p_perturbi(i,1)*sin(alpha*x(:,i,:))  + p_perturbr(i,1)*cos(alpha*x(:,i,:)) + &
-                                     -p_perturbi(i,2)*sin(alpha2*x(:,i,:)) + p_perturbr(i,2)*cos(alpha2*x(:,i,:)) + &
-                                     -p_perturbi(i,3)*sin(alpha3*x(:,i,:)) + p_perturbr(i,3)*cos(alpha3*x(:,i,:)))
+          !mix%material(1)%p(:,i,:) = mix%material(1)%p(:,i,:) + epsilonk*(-p_perturbi(i,1)*sin(alpha*x(:,i,:))  + p_perturbr(i,1)*cos(alpha*x(:,i,:)) + &
+          !                           -p_perturbi(i,2)*sin(alpha2*x(:,i,:)) + p_perturbr(i,2)*cos(alpha2*x(:,i,:)) + &
+          !                           -p_perturbi(i,3)*sin(alpha3*x(:,i,:)) + p_perturbr(i,3)*cos(alpha3*x(:,i,:)))
                                      
         enddo
  
@@ -628,8 +628,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
               u  ( :,1,:) = vL
               v  ( :,1,:) = v(:,2,:)
               w  ( :,1,:) = zero
-              mix%material(1)%p(:,1,:) =  mix%material(1)%p(:,2,:)
-              mix%material(2)%p(:,1,:) =  mix%material(2)%p(:,2,:)
+              mix%material(1)%p(:,1,:) =  1.0 !mix%material(1)%p(:,2,:)
+              mix%material(2)%p(:,1,:) =  1.0 !mix%material(2)%p(:,2,:)
  
               mix%material(1)%VF ( :,1,:) = VFL
               mix%material(2)%VF ( :,1,:) = one - VFL
@@ -673,7 +673,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         Lr    = Lx/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
 
-        yspngL = -0.9250
+        yspngL = -0.875 !250
         yspngR = 0.9250
         tspng = 0.006
         dumL = half*(one - tanh( (y-yspngL)/(tspng) ))
