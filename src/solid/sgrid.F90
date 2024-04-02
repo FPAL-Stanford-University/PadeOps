@@ -948,7 +948,7 @@ contains
                         this%mix, this%tstop, this%dtfixed, tviz)
         print *, "initfield"
         ! Get hydrodynamic and elastic energies, stresses
-        call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
+        !call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
         call this%post_bc()
         ! Allocate 2 buffers for each of the three decompositions
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
