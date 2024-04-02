@@ -18,7 +18,7 @@ module SolidMod
     type :: solid
         integer :: nxp, nyp, nzp, ns
 
-        logical :: plast = .FALSE., use_Stagg = .FALSE.
+        logical :: plast = .FALSE., use_Stagg = .FALSE.,SpongeLayer = .FALSE.
         logical :: LADN2F,LADInt
         logical :: explPlast = .FALSE.
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .TRUE., includeSources = .FALSE.
@@ -95,7 +95,7 @@ module SolidMod
         real(rkind) :: intSharp_cut
         real(rkind), dimension(:,:,:,:,:),allocatable :: intSharp_rg,intSharp_rgDiff,intSharp_rgt,intSharp_rgtDiff,intSharp_rgp,intSharp_rgpDiff
         real(rkind), dimension(:,:,:,:), allocatable ::  intSharp_rgFV,intSharp_rgtFV,intSharp_rgpFV,intSharp_gFV,intSharp_gtFV,intSharp_gpFV
-
+         
         ! species-specific conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: consrv
 
@@ -106,7 +106,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: QtmpVF
         real(rkind), dimension(:,:,:),   allocatable :: Qtmppe
         real(rkind), dimension(:,:,:), allocatable :: modDevSigma
-
+        real(rkind), dimension(2) :: Ys_ref, VF_ref
         ! BC
         integer, dimension(2) :: x_bc, y_bc, z_bc
 
@@ -239,14 +239,14 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,derD02,derD04,derD06,derStagg,derStaggd02,interpMid,interpMid02,use_Stagg,LADN2F, LADInt,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,useAkshayForm,twoPhaseLAD,LAD5eqn, updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns, x_bc, y_bc, z_bc)
+    subroutine init(this,decomp,der,derD02,derD04,derD06,derStagg,derStaggd02,interpMid,interpMid02,use_Stagg,LADN2F, LADInt,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,useAkshayForm,twoPhaseLAD,LAD5eqn, updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns, x_bc, y_bc, z_bc,SpongeLayer)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der,derD02,derD04, derD06
         type(derivativesStagg), target, intent(in) :: derStagg, derStaggd02
         type(interpolators), target, intent(in)    :: interpMid, interpMid02
         type(filters),     target, intent(in) :: fil, gfil
-        logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot
+        logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot, SpongeLayer
         logical, intent(in) :: use_gTg,useOneG,use_Stagg,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cpg_west,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe, useAkshayForm, twoPhaseLAD, LAD5eqn, LADInt, LADN2F
         integer, intent(in) :: ns
         real(rkind), intent(in) :: intSharp_cut
@@ -267,6 +267,7 @@ contains
         this%pEqb   = pEqb
         this%pRelax = pRelax
 
+        this%SpongeLayer = SpongeLayer
         this%LADN2F    = LADN2F
         this%LADInt    = LADInt
         this%use_Stagg = use_Stagg
@@ -4738,7 +4739,7 @@ contains
 
     end subroutine
 
-    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge)
         use decomp_2d,  only: nrank
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
@@ -4746,11 +4747,12 @@ contains
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2),   intent(in)  :: sponge
         logical :: periodicx,periodicy,periodicz
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS formass fraction equation
         real(rkind)  :: dx,dy
-
+        integer :: i
         dy = y(1,2,1) - y(1,1,1)
 
 
@@ -4761,6 +4763,14 @@ contains
         endif
 
         call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
+
+        if (this%SpongeLayer) then
+
+            !do i = 1,2
+              rhsYs = rhsYs - sponge(:,:,:,1)*(this%Ys_ref(1) - rho*this%Ys) - sponge(:,:,:,2)*(this%Ys_ref(2) - rho*this%Ys)
+            !enddo
+
+        endif
 
         ! advance sub-step
         if(isub==1) this%QtmpYs = zero                   ! not really needed, since RK45_A(1) = 0
@@ -5035,7 +5045,7 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         class(solid), intent(in)    :: other
@@ -5043,10 +5053,11 @@ contains
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,src
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2),   intent(in)  :: sponge
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
-
+        integer :: i
         rhsVF = 0
 
         if(this%PTeqb) then
@@ -5060,6 +5071,12 @@ contains
         endif
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
         
+        if(this%SpongeLayer) then
+            
+        !  do i = 1,2
+             rhsVF = rhsVF - sponge(:,:,:,1)*(this%VF_ref(1) - this%VF) - sponge(:,:,:,2)*(this%VF_ref(2) - this%VF)
+        !  enddo
+        endif
         ! advance sub-step
         if(isub==1) this%QtmpVF = zero                   ! not really needed, since RK45_A(1) = 0
         this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF

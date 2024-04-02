@@ -4,7 +4,7 @@ module SolidGrid
     use FiltersMod,              only: filters
     use GridMod,                 only: grid
     use gridtools,               only: alloc_buffs, destroy_buffs
-    use sgrid_hooks,             only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_mixture_source
+    use sgrid_hooks,             only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_mixture_source, get_sponge
     use decomp_2d,               only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
                                        transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,          only: derivatives
@@ -107,7 +107,8 @@ module SolidGrid
     integer, parameter  :: metric_index       = 85
     integer, parameter  :: metric_N2F_index   = 86
     integer, parameter  :: metric_half_index  = 87
-    integer, parameter  :: nfields = 87
+    integer, parameter  :: uref_index         = 88
+    integer, parameter  :: nfields = 88
 
     integer, parameter :: mom_index = 1
     integer, parameter :: TE_index = mom_index+3
@@ -175,7 +176,7 @@ module SolidGrid
         logical :: intSharp_flt                    ! Use dealliasing filter for interface sharpening derivatives
         logical :: intSharp_flp                    ! Filter pressure
 
-        logical     :: useAkshayForm	
+        logical     :: useAkshayForm, SpongeLayer	
         logical     :: weightedcurvature
 	logical     :: surface_mask
         logical     :: LADInt,LADN2F
@@ -239,12 +240,13 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: tauyz, tauyze,dwdy,metric_half, metric_N2F
         real(rkind), dimension(:,:,:), pointer :: tauzy, tauzye, dwdz,tauSum,esum, esumJ, metric, metric_exact
  
-        real(rkind), dimension(:,:,:), pointer :: keJ, uJ, vJ, wJ, eJ, qDiv,pEvolve, VFEvolve, pError, VFerror, pJ, tauRho
+        real(rkind), dimension(:,:,:), pointer :: keJ, uJ, vJ, wJ, eJ, qDiv,pEvolve, VFEvolve, pError, VFerror, pJ, tauRho,uref
         real(rkind) :: phys_mu1, phys_mu2
         real(rkind) :: phys_bulk1, phys_bulk2
         real(rkind) :: phys_kap1, phys_kap2
         real(rkind) :: st_limit, pthick,uthick,rhothick,Ys_wiggle,VF_wiggle,VF_thick,Ys_thick
-        real(rkind), dimension(:,:,:,:), allocatable :: meshstretch
+        real(rkind), dimension(2) :: rhou_ref,rhov_ref,rhow_ref, rhoe_ref
+        real(rkind), dimension(:,:,:,:), allocatable :: meshstretch, sponge
         real(rkind), dimension(:,:,:), allocatable :: yMetric,xMetric, zMetric,yMetric_half, xMetric_half, zMetric_half,yLADMetric, yMetric_F2N, dy_stretch
         contains
             procedure          :: init
@@ -340,7 +342,7 @@ contains
         real(rkind) :: Cdiff_pe = 0.003_rkind
         real(rkind) :: Cdiff_pe_2 = 100._rkind
         logical     :: useNC = .FALSE.
-        logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false.
+        logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false., SpongeLayer = .false.
         logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., usePhiForm = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .false., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .FALSE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.
         logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
         logical     :: useAkshayForm = .FALSE.,twoPhaseLAD = .FALSE.,LAD5eqn = .FALSE., use_CnsrvSurfaceTension = .FALSE., use_surfaceTension = .FALSE., use_normFV = .false., use_normInt = .false.,use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_Stagg = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE., use_XiLS = .FALSE., LADN2F = .FALSE., LADInt = .FALSE., Stretch1D = .FALSE., Stretch1Dx = .FALSE., Stretch1Dy = .FALSE., Stretch1Dz = .FALSE.
@@ -370,7 +372,7 @@ contains
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
                            use_CnsrvSurfaceTension, use_surfaceTension, use_normFV, use_normInt, use_gradXi,energy_surfTen,use_gradphi, use_gradVF, use_Stagg, use_FV,use_D04, surface_mask, weightedcurvature, &
-                           surfaceTension_coeff, R, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, Stretch1D, Stretch1Dx, Stretch1Dy, Stretch1Dz
+                           surfaceTension_coeff, R, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, Stretch1D, Stretch1Dx, Stretch1Dy, Stretch1Dz, SpongeLayer
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -396,7 +398,6 @@ contains
         this%phys_kap2 = phys_kap2
         this%Ys_thick  = Ys_thick
         this%VF_thick  = VF_thick
-
         this%tsim = zero
         this%tstop = tstop
         this%dtfixed = dt
@@ -406,6 +407,7 @@ contains
         this%step = 0
         this%nsteps = nsteps
         
+        this%SpongeLayer   = SpongeLayer
         this%Stretch1Dy    = Stretch1Dy
         this%Stretch1Dx    = Stretch1Dx
         this%Stretch1Dz    = Stretch1Dz
@@ -541,9 +543,14 @@ contains
             end do 
         end do  
 
+        ! Allocate sponge
+        if ( allocated(this%sponge) ) deallocate(this%sponge)
+        allocate(this%sponge(this%nxp,this%nyp,this%nzp,2) )
+
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh)
 
+      
         if ( allocated(this%der_nostretch) ) deallocate(this%der_nostretch)
         allocate(this%der_nostretch)
 
@@ -819,7 +826,7 @@ contains
 
 
   ! Initialize derivatives
-        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derStaggd02,this%derD06,this%derCD06,this%derD04,this%interpMid,this%interpMid02,this%use_Stagg,this%LADN2F,this%LADInt,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%twoPhaseLAD,this%LAD5eqn,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension,this%use_normFV,this%use_normInt, this%use_gradXi,this%energy_surfTen, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV,this%use_XiLS, this%XiLS_eps, this%use_D04, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc)
+        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derStaggd02,this%derD06,this%derCD06,this%derD04,this%interpMid,this%interpMid02,this%use_Stagg,this%LADN2F,this%LADInt,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%twoPhaseLAD,this%LAD5eqn,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension,this%use_normFV,this%use_normInt, this%use_gradXi,this%energy_surfTen, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV,this%use_XiLS, this%XiLS_eps, this%use_D04, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc,this%SpongeLayer)
 
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
@@ -891,7 +898,8 @@ contains
         this%keJ       => this%fields(:,:,:, keJ_index)
         this%eJ        => this%fields(:,:,:,eJ_index)
         this%pJ        => this%fields(:,:,:,pJ_index)
-        this%tauRho     => this%fields(:,:,:,tauRho_index) 
+        this%uref      => this%fields(:,:,:,uref_index)
+        this%tauRho    => this%fields(:,:,:,tauRho_index) 
         this%tauxx     => this%fields(:,:,:,tauxx_index)
         this%tauyy     => this%fields(:,:,:,tauyy_index)
         this%tauzz     => this%fields(:,:,:,tauzz_index)
@@ -938,6 +946,7 @@ contains
         ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
         call initfields(this%decomp,this%der, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
                         this%mix, this%tstop, this%dtfixed, tviz)
+        print *, "initfield"
         ! Get hydrodynamic and elastic energies, stresses
         call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
         call this%post_bc()
@@ -1035,9 +1044,18 @@ contains
         varnames(85) = 'metric'
         varnames(86) = 'metric_N2F'
         varnames(87) = 'metric_half'
+        varnames(88) = 'uref'
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
+
+        
+        if(this%SpongeLayer) then
+          print *, "before get sponge"
+          call get_sponge(this%decomp,this%dx,this%dy,this%dz,this%mesh,this%fields,this%mix,this%rhou_ref,this%rhov_ref,this%rhow_ref,this%rhoe_ref,this%sponge)
+          print *, "get sponge"
+        endif
+
     end subroutine
 
 
@@ -1135,9 +1153,11 @@ contains
         nullify(this%metric_exact)
         nullify(this%metric_half)
         nullify(this%metric_N2F)
+        nullify(this%uref)
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         if (allocated(this%mesh)) deallocate(this%meshstretch)
+        if (allocated(this%sponge)) deallocate(this%sponge)
         if (allocated(this%dy_stretch)) deallocate(this%dy_stretch)
         if (allocated(this%yMetric)) deallocate(this%yMetric)      
         if (allocated(this%yMetric_F2N)) deallocate(this%yMetric_F2N) 
@@ -1147,6 +1167,8 @@ contains
         if (allocated(this%yMetric_half)) deallocate(this%yMetric_half)
         if (allocated(this%xMetric_half)) deallocate(this%xMetric_half)
         if (allocated(this%zMetric_half)) deallocate(this%zMetric_half)
+ 
+
         call this%der%destroy()
         if (allocated(this%der)) deallocate(this%der) 
 
@@ -1858,14 +1880,14 @@ contains
             !call this%get_primitive_g()
 
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)               ! Volume Fraction
+            call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)               ! Volume Fraction
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
-                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)   
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)   
              !  call this%update_P(Qtmpp,isub,this%dt,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
             elseif(this%pRelax) then
-                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)                        ! Volume Fraction
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)                        ! Volume Fraction
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
             end if
 
@@ -2058,7 +2080,7 @@ contains
         integer :: i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk   !Source term for possible use in VF, g eh eqns
         character(len=30) :: str,str2
-
+        real(rkind) :: dtSponge, sigma_max
         this%st_limit = 20
 
         if(this%Stretch1Dy) then
@@ -2069,6 +2091,8 @@ contains
 	endif
 	phys_mu = min(this%phys_mu1, this%phys_mu2)
 
+        sigma_max = P_MAXVAL(this%sponge(:,:,:,1))
+        dtSponge  = this%CFL / sigma_max
         ! continuum
         !dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz   &
         !       + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) + one/(this%dz**2) ))
@@ -2232,8 +2256,16 @@ contains
              else if ( this%dt > dtplast ) then
                  this%dt = dtplast
                  stability = 'plastic'
+              else if ( this%dt > dtSponge ) then
+                 this%dt = dtplast
+                 stability = 'sponge'
              endif
-            
+           
+            if ( this%dt > dtSponge ) then
+               this%dt = dtSponge
+               write(str,'(ES10.3E3)') 1.0D0-dtmu/dtCFL
+               stability = 'Sponge: '//trim(str)//' CFL loss fraction'
+            endif 
             if ( this%dt > dtmu ) then
                this%dt = dtmu
                write(str,'(ES10.3E3)') 1.0D0-dtmu/dtCFL
@@ -2761,6 +2793,25 @@ contains
           rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%keJ + this%eJ
 
         endif
+
+
+
+       if(this%SpongeLayer) then
+
+          !do i = 1,2
+          rhs(:,:,:, mom_index   ) = rhs(:,:,:,mom_index   ) - this%sponge(:,:,:,1)*(-this%rho*this%u + this%rhou_ref(1))  &
+                                     - this%sponge(:,:,:,2)*(-this%rho*this%u + this%rhou_ref(2))
+          rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) - this%sponge(:,:,:,1)*(-this%rho*this%v + this%rhov_ref(1))  &
+                                     - this%sponge(:,:,:,2)*(-this%rho*this%v + this%rhov_ref(2))
+          rhs(:,:,:, mom_index+2 ) = rhs(:,:,:,mom_index+2 ) - this%sponge(:,:,:,1)*(-this%rho*this%w + this%rhow_ref(1))  &
+                                     - this%sponge(:,:,:,2)*(-this%rho*this%w + this%rhow_ref(2))
+          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) - this%sponge(:,:,:,1)*(-this%rho*(this%e + 0.5*(this%u**2 + this%v**2 + this%w**2)) + this%rhoe_ref(1))  &
+                                     - this%sponge(:,:,:,2)*(-this%rho*(this%e + 0.5*(this%u**2 + this%v**2 + this%w**2)) + this%rhoe_ref(2)) 
+         ! enddo
+        endif
+
+
+
         !rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + this%rho*g
         !rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%v*this%rho*g
         ! Call problem source hook
@@ -3452,28 +3503,11 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call interpolateFV_y(this%decomp,this%interpMid,qy,qy_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_y(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-        !rho_int = 0.0
-        !num = 0.0; den = 0.0;
-        !do i = 1,2
-
-        !  call interpolateFV_y(this%decomp,this%interpMid,this%rho*this%mix%material(i)%Ys,rhoYs_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  call interpolateFV_y(this%decomp,this%interpMid,this%mix%material(i)%VF,VF_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  rho_int = rho_int + rhoYs_int
-        !  num = num + VF_int*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf*this%mix%material(i)%hydro%onebygam_m1
-        !  den = den + VF_int*this%mix%material(i)%hydro%onebygam_m1
-        !enddo
-  
-        !e_int = (1/rho_int)*(p_int*den + num)
 
         flux = 0.0
         buff = rho_int*v_int*u_int   - tauxy !x-momentum
-        !buff = rhou_int*v_int - tauxy_int
-!print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
-        !if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff - this%mix%surfaceTension_fxy_y
-
-        !endif
+        
+        
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%yflux_x = flux

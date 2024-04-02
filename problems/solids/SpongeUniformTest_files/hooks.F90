@@ -1,4 +1,4 @@
-module ShearLayerY_data
+module SpongeUniformTest_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,eight,three,six,sixth,zero
     use FiltersMod,       only: filters
@@ -12,7 +12,7 @@ module ShearLayerY_data
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
-    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, vL, vR, uL, uR
+    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, vL, vR
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
     real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3, alpha4,alpha2, alpha
@@ -133,7 +133,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
 
@@ -189,7 +189,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
     use operators,        only: grady 
     use DerivativesMod,   only: derivatives  
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -296,10 +296,10 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         yphys = Lr*yphys
         
 
-	tmp = (half ) * ( one - erf( (yphys)/(delta_rho) ) )
+	!tmp = (half ) * ( one - erf( (yphys)/(delta_rho) ) )
 
 	!set mixture Volume fraction
-	mix%material(1)%VF = minVF + (one-two*minVF)*tmp
+	mix%material(1)%VF = one - minVF !+ (one-two*minVF)*tmp
 	mix%material(2)%VF = 1 - mix%material(1)%VF
 
         !Set density profile and mass fraction based on volume fraction
@@ -315,89 +315,18 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
         
 
-        where(eta2 .ge. 0)
-           u = v0_2*erf(eta2/delta)
-        elsewhere(eta2 .lt. 0 )
-           u = v0*erf(eta2/delta)
-        endwhere
-           uref = u
+        !where(eta2 .ge. 0)
+        !   u = v0_2*erf(eta2/delta)
+        !elsewhere(eta2 .lt. 0 )
+        !   u = v0*erf(eta2/delta)
+        !endwhere
+           u = 10
            v = 0
            w = 0
 
-        open (unit=8, file="Phi_I.txt", status='old', action='read' )
-        open (unit=12, file="Phi_R.txt", status='old', action='read' )
-        open (unit=16, file="DPhi_I.txt", status='old', action='read' )
-        open (unit=18, file="DPhi_R.txt", status='old', action='read' ) 
-
-        open (unit=20, file="Phi_I_2.txt", status='old', action='read' )
-        open (unit=22, file="Phi_R_2.txt", status='old', action='read' )
-        open (unit=24, file="DPhi_I_2.txt", status='old', action='read' )
-        open (unit=26, file="DPhi_R_2.txt", status='old', action='read' )
-
-        open (unit=28, file="Phi_I_3.txt", status='old', action='read' )
-        open (unit=30, file="Phi_R_3.txt", status='old', action='read' )
-        open (unit=32, file="DPhi_I_3.txt", status='old', action='read' )
-        open (unit=34, file="DPhi_R_3.txt", status='old', action='read' )
-
-        !open (unit=36, file="P_I.txt", status='old', action='read' )
-        !open (unit=38, file="P_R.txt", status='old', action='read' )
-        !open (unit=40, file="P_I_2.txt", status='old', action='read' )
-        !open (unit=42, file="P_R_2.txt", status='old', action='read' )
-        !open (unit=44, file="P_I_3.txt", status='old', action='read' )
-        !open (unit=46, file="P_R_3.txt", status='old', action='read' )
-
-        do i = 1,pointy
-          k = pointy - i + 1
-          read(8,*) phi_i(i,1)
-          read(12,*) phi_r(i,1)
-          read(16,*) Dphi_i(i,1)
-          read(18,*) Dphi_r(i,1)
-
-          read(20,*) phi_i(i,2)
-          read(22,*) phi_r(i,2)
-          read(24,*) Dphi_i(i,2)
-          read(26,*) Dphi_r(i,2)
-
-          read(28,*) phi_i(i,3)
-          read(30,*) phi_r(i,3)
-          read(32,*) Dphi_i(i,3)
-          read(34,*) Dphi_r(i,3)
- 
-          !read(36, *) p_perturbi(i,1)
-          !read(38, *) p_perturbr(i,1)
-          !read(40, *) p_perturbi(i,2)
-          !read(42, *) p_perturbr(i,2)
-          !read(44, *) p_perturbi(i,3)
-          !read(46, *) p_perturbr(i,3)
-
-              
-        end do
-
-        !set mixture pressure (uniform)
-        mix%material(1)%p  = p_amb
-
-        do i = 1,pointy
-          k = pointy+1 - i
-          v(:,i,:) = (alpha*(phi_i(i,1)*cos(alpha*x(:,i,:)) + phi_r(i,1)*sin(alpha*x(:,i,:)) ) + &
-                               alpha2*(phi_i(i,2)*cos(alpha2*x(:,i,:)) + phi_r(i,2)*sin(alpha2*x(:,i,:)) ) + &
-                               alpha3*(phi_i(i,3)*cos(alpha3*x(:,i,:)) + phi_r(i,3)*sin(alpha3*x(:,i,:)) ) )
-          u_perturb(:,i,:) = (-Dphi_i(i,1)*sin(alpha*x(:,i,:)) + Dphi_r(i,1)*cos(alpha*x(:,i,:)) + &
-                                          -Dphi_i(i,2)*sin(alpha2*x(:,i,:)) + Dphi_r(i,2)*cos(alpha2*x(:,i,:)) + &
-                                          -Dphi_i(i,3)*sin(alpha3*x(:,i,:)) + Dphi_r(i,3)*cos(alpha3*x(:,i,:)) )
-
-
-          !mix%material(1)%p(:,i,:) = mix%material(1)%p(:,i,:) + epsilonk*(-p_perturbi(i,1)*sin(alpha*x(:,i,:))  + p_perturbr(i,1)*cos(alpha*x(:,i,:)) + &
-          !                           -p_perturbi(i,2)*sin(alpha2*x(:,i,:)) + p_perturbr(i,2)*cos(alpha2*x(:,i,:)) + &
-          !                           -p_perturbi(i,3)*sin(alpha3*x(:,i,:)) + p_perturbr(i,3)*cos(alpha3*x(:,i,:)))
-                                     
-        enddo
-
-        
-        KE = 0.5*(v**2 + u_perturb**2)
-        int_KE = P_SUM(KE/(nx*ny*nz))
-        v = epsilonk*v /sqrt(int_KE)
-        u = u + epsilonk*u_perturb /sqrt(int_KE)
- 
+        mix%material(1)%p  = p_amb !+  0.005*half * ( one - erf((0.1 - x*x -yphys*yphys)/(5.0*dx) ) )
+        ! tmp = half * ( one - erf((0.25_rkind**2 -
+        ! (x-0.5)*(x-0.5)-(y-0.5)*(y-0.5))/(thick*d
         mix%material(2)%p  = mix%material(1)%p 
 
 
@@ -411,12 +340,10 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         !Stuff for boundary conditions
-        rhoL = 1.0 !rho(1,1,1)
-        rhoR = 1d-3 !rho(1,decomp%ysz(2),1)
-        uL = v0 !u(1,1,1)
-        uR = v0_2 !u(1,decomp%ysz(2),1)
-        vL = 0 !v(1,1,1)
-        vR = 0 !v(1,decomp%ysz(2),1)
+        rhoL = rho(1,1,1)
+        rhoR = rho(1,decomp%ysz(2),1)
+        vL = u(1,1,1)
+        vR = u(1,decomp%ysz(2),1)
         YsL  = mix%material(1)%Ys(1,1,1)
         YsR  = mix%material(1)%Ys(1,decomp%ysz(2),1)
         VFL  = mix%material(1)%VF(1,1,1)
@@ -434,7 +361,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use SolidMixtureMod,  only: solid_mixture
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -458,34 +385,37 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
 
 
         
-        nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
+        !nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
+
+        nx = decomp%ysz(1)
+        ny = decomp%ysz(2)
         yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
         Lr    = 2.0/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
 
 
-        sigma1 = -80000 !43028
+        sigma1 = -8000 !3.143028
 
-        where(yphys .LE. -0.75)
-           sponge(:,:,:,1) = sigma1*( (yphys + 0.75)/0.25)**2.0
+        where(yphys .LE. -0.8)
+           sponge(:,:,:,1) = sigma1*( (yphys + 0.8)/0.2)**2.0
         elsewhere
            sponge(:,:,:,1) = 0
         endwhere
 
-        where(yphys .GE. 0.75)
-           sponge(:,:,:,2) = sigma1*( (yphys- 0.75 )/0.25)**2.0
+        where(yphys .GE. 0.8)
+           sponge(:,:,:,2) = sigma1*( (yphys - 0.8 )/0.2)**2.0
         elsewhere
            sponge(:,:,:,2) = 0
         endwhere
 
-        rhou(1) = -v0 !rho(1,1,1)*u(1,1,1)
-        rhou(2) = 1d-3*v0_2 !rho(1,ny,1)*u(1,ny,1)
-        rhov(1) = 0 !-1.060981230880199d-5 !rho(1,1,1)*v(1,1,1)
-        rhov(2) = 0 !2.175685479370164d-08
+        rhou(1) = rho(1,1,1)*u(1,1,1)
+        rhou(2) = rho(1,ny,1)*u(1,ny,1)
+        rhov(1) = rho(1,1,1)*v(1,1,1)
+        rhov(2) = rho(1,ny,1)*v(1,ny,1)
         rhow(1) = rho(1,1,1)*w(1,1,1)
         rhow(2) = rho(1,ny,1)*w(1,ny,1)
-        rhoe(1) = 1.0*(7765 + 0.5*(v0**2))
-        rhoe(2) = 1d-3*(2500.05 + 0.5*(v0_2**2))
+        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5*(u(1,1,1)**2 + v(1,1,1)**2 + w(1,1,1)**2))
+        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5*(u(1,ny,1)**2 + v(1,ny,1)**2 + w(1,ny,1)**2))
 
         do i = 1,2
           mix%material(i)%VF_ref(1) = mix%material(i)%VF(1,1,1)
@@ -494,12 +424,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
           mix%material(i)%Ys_ref(2) = mix%material(i)%Ys(1,ny,1)*rho(1,ny,1)
         enddo
 
-        print *, "rhou ", rhou
-        print *, "rhov ", rhov
-        print *, "rhow ", rhow
-        print *, "rhoe ", rhoe
-        print *, "VF ", mix%material(1)%VF_ref
-        print *, "Ys ", mix%material(1)%Ys_ref
+        print *, "calculate sponge"
         end associate
 
 end subroutine
@@ -515,7 +440,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use operators,        only: curl
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -557,7 +482,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        if (decomp%ysz(2) == 1) then
-           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayerY_"//trim(str)//"_", vizcount, ".dat"
+           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/SpongeUniformTest_"//trim(str)//"_", vizcount, ".dat"
 
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
            write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rho_0_2/rho_0
@@ -615,7 +540,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        VFmin  = P_MINVAL(VFmin_proc)
        YsGrowth = xspike - xbubbl
        VFGrowth  = VFmax - VFmin   
-       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayerY_statistics.dat"
+       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/SpongeUniformTest_statistics.dat"
 
        if (vizcount == 0) then
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
@@ -656,7 +581,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -692,21 +617,21 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
 
-        if(decomp%yst(2)==1) then
-          if(y_bc(1)==0) then
-              rho( :,1,:) = rhoL
-              u  ( :,1,:) = uL
-              v  ( :,1,:) = vL !v(:,2,:)
-              w  ( :,1,:) = zero
-              mix%material(1)%p(:,1,:) =  1.0 !mix%material(1)%p(:,2,:)
-              mix%material(2)%p(:,1,:) =  1.0 !mix%material(2)%p(:,2,:)
+   !     if(decomp%yst(2)==1) then
+   !       if(y_bc(1)==0) then
+   !           rho( :,1,:) = rhoL
+   !           u  ( :,1,:) = vL
+   !           v  ( :,1,:) = 0 !v(:,2,:)
+   !           w  ( :,1,:) = zero
+   !           mix%material(1)%p(:,1,:) =  1.0 !mix%material(1)%p(:,2,:)
+   !           mix%material(2)%p(:,1,:) =  1.0 !mix%material(2)%p(:,2,:)
  
-              mix%material(1)%VF ( :,1,:) = VFL
-              mix%material(2)%VF ( :,1,:) = one - VFL
-              mix%material(1)%Ys ( :,1,:) = YsL
-              mix%material(2)%Ys ( :,1,:) = one - YsL
-          end if
-        endif
+   !           mix%material(1)%VF ( :,1,:) = VFL
+   !           mix%material(2)%VF ( :,1,:) = one - VFL
+   !           mix%material(1)%Ys ( :,1,:) = YsL
+   !           mix%material(2)%Ys ( :,1,:) = one - YsL
+   !       end if
+   !     endif
 
           
         !print *, "decompyen", decomp%yen(2)
@@ -720,27 +645,27 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         !print *, "VFL", VFL
         !print *, "VFR", VFR 
 
-        if(decomp%yen(2)==decomp%ysz(2)) then
-          if(y_bc(2)==0) then
-              rho( :,ny,:) = rhoR
-              u  ( :,ny,:) = uR
-              v  ( :,ny,:) = vR !v(:,ny-1,:)
-              w  ( :,ny,:) = zero
-              mix%material(1)%p(:,ny,:) =  1.0 !mix%material(1)%p(:,ny-1,:)
-              mix%material(2)%p(:,ny,:) =  1.0 !mix%material(2)%p(:,ny-1,:)
+    !    if(decomp%yen(2)==decomp%ysz(2)) then
+    !      if(y_bc(2)==0) then
+    !          rho( :,ny,:) = rhoR
+    !          u  ( :,ny,:) = vR
+    !          v  ( :,ny,:) = 0 ! v(:,ny-1,:)
+    !          w  ( :,ny,:) = zero
+    !          mix%material(1)%p(:,ny,:) =  1.0 !mix%material(1)%p(:,ny-1,:)
+    !          mix%material(2)%p(:,ny,:) =  1.0 !mix%material(2)%p(:,ny-1,:)
               
-              mix%material(1)%VF ( :,ny,:) = VFR
-              mix%material(2)%VF ( :,ny,:) = one - VFR
-              mix%material(1)%Ys ( :,ny,:) = YsR
-              mix%material(2)%Ys ( :,ny,:) = one - YsR
-          end if
-        endif
+    !          mix%material(1)%VF ( :,ny,:) = VFR
+    !          mix%material(2)%VF ( :,ny,:) = one - VFR
+    !          mix%material(1)%Ys ( :,ny,:) = YsR
+    !          mix%material(2)%Ys ( :,ny,:) = one - YsR
+    !      end if
+    !    endif
      
         
         
   ! apply sponge at left and right boundaries to damp outgoing waves
         yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
-        Lr    = 2.0/(yphys(1,ny,1) - yphys(1,1,1))
+        Lr    = Lx/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
 
         yspngL = -0.85 !250
@@ -848,7 +773,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -886,7 +811,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -912,7 +837,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -932,7 +857,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -952,7 +877,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -972,7 +897,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use ShearLayerY_data
+    use SpongeUniformTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
