@@ -673,24 +673,36 @@ module stats_xy_mod
             this%meanq3       => this%stats_sca(:,id      ,tidx,sca); id = id + 1
             this%sca_var_flux => this%stats_sca(:,id:id+2 ,tidx,sca); id = id + 3 
 
-            if (sca == 1) then
-                this%T    => this%sim%T
-                this%dTdxC => this%sim%dTdxC
-                this%dTdyC => this%sim%dTdyC
-                this%dTdzC => this%sim%dTdzC
-                this%q1 => this%sim%q1_T
-                this%q2 => this%sim%q2_T
-                call this%sim%spectForceLayer%interpE2C(this%sim%q3_T, this%q3, &
-                  this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
-                  this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
+            if (this%sim%isStratified) then
+                if (sca == 1) then
+                    this%T    => this%sim%T
+                    this%dTdxC => this%sim%dTdxC
+                    this%dTdyC => this%sim%dTdyC
+                    this%dTdzC => this%sim%dTdzC
+                    this%q1 => this%sim%q1_T
+                    this%q2 => this%sim%q2_T
+                    call this%sim%spectForceLayer%interpE2C(this%sim%q3_T, this%q3, &
+                      this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
+                      this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
+                else
+                    this%T    => this%sim%scalars(sca-1)%F
+                    this%dTdxC => this%sim%scalars(sca-1)%dFdxC
+                    this%dTdyC => this%sim%scalars(sca-1)%dFdyC
+                    this%dTdzC => this%sim%scalars(sca-1)%dFdzC
+                    this%q1 => this%sim%scalars(sca-1)%q1
+                    this%q2 => this%sim%scalars(sca-1)%q2
+                    call this%sim%spectForceLayer%interpE2C(this%sim%scalars(sca-1)%q3, this%q3, &
+                      this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
+                      this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
+                end if
             else
-                this%T    => this%sim%scalars(sca-1)%F
-                this%dTdxC => this%sim%scalars(sca-1)%dFdxC
-                this%dTdyC => this%sim%scalars(sca-1)%dFdyC
-                this%dTdzC => this%sim%scalars(sca-1)%dFdzC
-                this%q1 => this%sim%scalars(sca-1)%q1
-                this%q2 => this%sim%scalars(sca-1)%q2
-                call this%sim%spectForceLayer%interpE2C(this%sim%scalars(sca-1)%q3, this%q3, &
+                this%T    => this%sim%scalars(sca)%F
+                this%dTdxC => this%sim%scalars(sca)%dFdxC
+                this%dTdyC => this%sim%scalars(sca)%dFdyC
+                this%dTdzC => this%sim%scalars(sca)%dFdzC
+                this%q1 => this%sim%scalars(sca)%q1
+                this%q2 => this%sim%scalars(sca)%q2
+                call this%sim%spectForceLayer%interpE2C(this%sim%scalars(sca)%q3, this%q3, &
                   this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
                   this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
             end if

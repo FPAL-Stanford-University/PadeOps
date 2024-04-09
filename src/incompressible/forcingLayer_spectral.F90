@@ -118,6 +118,8 @@ module spectralForcingLayerMod
           open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
           read(unit=ioUnit, NML=spectForceLayer)
           close(ioUnit)
+
+          call message(0,'Initializing the spectral forcing layer')
   
           ! Nullify all pointers to be safe
           this%spectC   => null()
@@ -289,6 +291,10 @@ module spectralForcingLayerMod
 
           if (associated(zC))     nullify(zC)
           if (associated(zE))     nullify(zE)
+
+          call message(1,'Forcing layer initialized successfully!')
+          call message(2,'Target KE',this%tgtKE)
+          call message(2,'Gain divided by time scale',this%gain/this%integralTime)
       end subroutine
 
       subroutine updateRHS(this,uhat,vhat,what,u,v,wC,ThatE,T,duidxjC,nSGS,tsim,dt,&
