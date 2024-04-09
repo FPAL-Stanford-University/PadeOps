@@ -16,7 +16,6 @@ module spectralForcingLayerMod
     use mpi
     use seedGen,         only: initializeLogMap, incrementLogisticMap
     use sgsmod_igrid,    only: sgs_igrid  
-    !use scalar_igridMod, only: scalar_igrid
     implicit none
 
     integer, parameter :: zbc_bot = 0, zbc_top = 0
@@ -298,7 +297,7 @@ module spectralForcingLayerMod
       end subroutine
 
       subroutine updateRHS(this,uhat,vhat,what,u,v,wC,ThatE,T,duidxjC,nSGS,tsim,dt,&
-          poiss,urhs,vrhs,wrhs,Trhs)!,scalars)
+          poiss,urhs,vrhs,wrhs,Trhs)
           class(spectForcingLayer), intent(inout) :: this
           complex(rkind), dimension(:,:,:), intent(in) :: uhat, vhat, what
           real(rkind), dimension(:,:,:), intent(in) :: u, v, wC
@@ -308,7 +307,6 @@ module spectralForcingLayerMod
           real(rkind), dimension(:,:,:,:), intent(in), target :: duidxjC
           real(rkind), dimension(:,:,:), intent(in) :: nSGS, T
           real(rkind), intent(in) :: dt, tsim
-          !type(scalar_igrid), dimension(:), allocatable :: scalars
           real(rkind) :: maxDiv
           real(rkind) :: KE_x, forceWork_x, eps_x
           real(rkind) :: KE_y, forceWork_y, eps_y
@@ -396,11 +394,6 @@ module spectralForcingLayerMod
           wrhs = wrhs + this%ampFact_z*this%fzhat
 
           if (this%isStratified) call this%updateScalarRHS(T,dt,Trhs)
-          !if (allocated(scalars)) then
-          !    do sca_id = 1,size(scalars)
-          !        call this%updateScalarRHS(scalars(sca_id)%F,dt,scalars(sca_id)%rhs)
-          !    end do
-          !end if
       end subroutine
 
       subroutine updateScalarRHS(this,T,dt,Trhs)
@@ -409,7 +402,7 @@ module spectralForcingLayerMod
           real(rkind), intent(in) :: dt
           complex(rkind), dimension(:,:,:), intent(inout) :: Trhs
 
-          if (this%isStratified .and. dt > 0.d0) then
+          if (dt > 0.d0) then
               ! Penalty term
               this%ampFact_T = 1.d0
               this%fT = this%rmaskC*this%lambda/dt*(this%Ttgt - T)
