@@ -1,6 +1,6 @@
-module ShearLayerY_data
+module ShearLayerLinear_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight,three,six,sixth,zero,pi
+    use constants,        only: one,two,eight,three,six,sixth,zero, pi
     use FiltersMod,       only: filters
     use DerivativesMod,   only: derivatives
     use DerivativesStaggeredMod, only: derivativesStagg
@@ -23,7 +23,7 @@ module ShearLayerY_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 10.471975512, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 1.0, Lx = 4.18879020479, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -135,7 +135,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
 
@@ -168,7 +168,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx - 5.23598775598
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -2.09439510239
                     y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -193,7 +193,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     use DerivativesStaggeredMod, only: derivativesStagg
     use InterpolatorsMod,        only: interpolators
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -212,10 +212,10 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     integer :: ioUnit,i,iy
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, eta2, yphys, u_perturb, KE
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2)) :: v_perturb
-    real(rkind), dimension(decomp%ysz(2),7) :: phi_i,phi_r, p_perturbr, p_perturbi, Dphi_i, Dphi_r
-    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3),3) :: phi_i3, phi_r3,phi_i_int, phi_r_int
+    real(rkind), dimension(decomp%ysz(2),4) :: phi_i,phi_r, p_perturbr, p_perturbi, Dphi_i, Dphi_r
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3),4) :: phi_i3, phi_r3,phi_i_int, phi_r_int
     real(rkind), dimension(8) :: fparams
-    real(rkind), dimension(7) :: alphai
+    real(rkind), dimension(4) :: alphai
     real(rkind) :: fac, Lr, STRETCH_RATIO = 10.0, int_KE
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2
@@ -334,10 +334,11 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
            v = 0
            w = 0
 
-        open (unit=8, file="Phi_I.txt", status='old', action='read' )
-        open (unit=12, file="Phi_R.txt", status='old', action='read' )
-        open (unit=16, file="DPhi_I.txt", status='old', action='read' )
-        open (unit=18, file="DPhi_R.txt", status='old', action='read' ) 
+        
+!        open (unit=8, file="Phi_I.txt", status='old', action='read' )
+!        open (unit=12, file="Phi_R.txt", status='old', action='read' )
+!        open (unit=16, file="DPhi_I.txt", status='old', action='read' )
+!        open (unit=18, file="DPhi_R.txt", status='old', action='read' )
 
 !        open (unit=20, file="Phi_I_2.txt", status='old', action='read' )
 !        open (unit=22, file="Phi_R_2.txt", status='old', action='read' )
@@ -369,78 +370,54 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 !        open (unit=64, file="DPhi_I_7.txt", status='old', action='read' )
 !        open (unit=66, file="DPhi_R_7.txt", status='old', action='read' )
 
-        do i = 1,7
+!        do i = 1,4
 
-           alphai(i) = i*0.5
+!           alphai(i) = i*0.5
 
-        enddo
-        !open (unit=36, file="P_I.txt", status='old', action='read' )
-        !open (unit=38, file="P_R.txt", status='old', action='read' )
-        !open (unit=40, file="P_I_2.txt", status='old', action='read' )
-        !open (unit=42, file="P_R_2.txt", status='old', action='read' )
-        !open (unit=44, file="P_I_3.txt", status='old', action='read' )
-        !open (unit=46, file="P_R_3.txt", status='old', action='read' )
-
+!        enddo
+ 
+        alphai(1) = 1.5                      
         do i = 1,pointy
           k = pointy - i + 1
-          read(8,*) phi_i(i,1)
-          read(12,*) phi_r(i,1)
-          read(16,*) Dphi_i(i,1)
-          read(18,*) Dphi_r(i,1)
+        !  read(8,*) phi_i(i,1)
+        !  read(12,*) phi_r(i,1)
+        !  read(16,*) Dphi_i(i,1)
+        !  read(18,*) Dphi_r(i,1)
 
-!          read(20,*) phi_i(i,2)
-!          read(22,*) phi_r(i,2)
-!          read(24,*) Dphi_i(i,2)
-!          read(26,*) Dphi_r(i,2)
+         ! read(20,*) phi_i(i,2)
+         ! read(22,*) phi_r(i,2)
+         ! read(24,*) Dphi_i(i,2)
+         ! read(26,*) Dphi_r(i,2)
 
-!          read(28,*) phi_i(i,3)
-!          read(30,*) phi_r(i,3)
-!          read(32,*) Dphi_i(i,3)
-!          read(34,*) Dphi_r(i,3)
+         ! read(28,*) phi_i(i,3)
+         ! read(30,*) phi_r(i,3)
+         ! read(32,*) Dphi_i(i,3)
+         ! read(34,*) Dphi_r(i,3)
 
-!          read(28,*) phi_i(i,3)
-!          read(30,*) phi_r(i,3)
-!          read(32,*) Dphi_i(i,3)
-!          read(34,*) Dphi_r(i,3)
 
-!          read(36,*) phi_i(i,4)
-!          read(38,*) phi_r(i,4)
-!          read(40,*) Dphi_i(i,4)
-!          read(42,*) Dphi_r(i,4)
+         ! read(36,*) phi_i(i,4)
+         ! read(38,*) phi_r(i,4)
+         ! read(40,*) Dphi_i(i,4)
+         ! read(42,*) Dphi_r(i,4)
 
-!          read(44,*) phi_i(i,5)
-!          read(46,*) phi_r(i,5)
-!          read(48,*) Dphi_i(i,5)
-!          read(50,*) Dphi_r(i,5)
+          !read(44,*) phi_i(i,5)
+          !read(46,*) phi_r(i,5)
+          !read(48,*) Dphi_i(i,5)
+          !read(50,*) Dphi_r(i,5)
+           
+          !read(52,*) phi_i(i,6)
+          !read(54,*) phi_r(i,6)
+          !read(56,*) Dphi_i(i,6)
+          !read(58,*) Dphi_r(i,6)
 
-!          read(52,*) phi_i(i,6)
-!          read(54,*) phi_r(i,6)
-!          read(56,*) Dphi_i(i,6)
-!          read(58,*) Dphi_r(i,6)
+          !read(60,*) phi_i(i,7)
+          !read(62,*) phi_r(i,7)
+          !read(64,*) Dphi_i(i,7)
+          !read(66,*) Dphi_r(i,7)
 
-!          read(60,*) phi_i(i,7)
-!          read(62,*) phi_r(i,7!)
-!          read(64,*) Dphi_i(i,7)
-!          read(66,*) Dphi_r(i,7)
-          !read(36, *) p_perturbi(i,1)
-          !read(38, *) p_perturbr(i,1)
-          !read(40, *) p_perturbi(i,2)
-          !read(42, *) p_perturbr(i,2)
-          !read(44, *) p_perturbi(i,3)
-          !read(46, *) p_perturbr(i,3)
 
-              
         end do
 
-   !     do i = 1,pointy
-
-   !       phi_i3(:,i,:,1) = phi_i(i,1)
-   !       phi_i3(:,i,:,2) = phi_i(i,2)
-   !       phi_r3(:,i,:,1) = phi_r(i,1)
-   !       phi_r3(:,i,:,2) = phi_r(i,2)
-
-   !     enddo
-        !set mixture pressure (uniform)
         mix%material(1)%p  = p_amb
 
     !    do i = 1,2
@@ -454,26 +431,21 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         v = 0
         u_perturb = 0
         j = 1
-        alphai = 0.6
         do i = 1,pointy
           k = pointy+1 - i
-       
-    !      do j = 1,7
-            v(:,i,:) = v(:,i,:) +   alphai(j)*(phi_i(i,j)*cos(alphai(j)*x(:,i,:)) + phi_r(i,j)*sin(alphai(j)*x(:,i,:)) )
-            u_perturb(:,i,:)  = u_perturb(:,i,:) -Dphi_i(i,j)*sin(alphai(j)*x(:,i,:)) + Dphi_r(i,j)*cos(alphai(j)*x(:,i,:))
-     !     enddo
+          !o j = 1,4
+        !    v(:,i,:) = v(:,i,:) + alphai(j)*(phi_i(i,j)*cos(alphai(j)*x(:,i,:)) + phi_r(i,j)*sin(alphai(j)*x(:,i,:)) )
+        !    u_perturb(:,i,:)  = u_perturb(:,i,:) - Dphi_i(i,j)*sin(alphai(j)*x(:,i,:)) + Dphi_r(i,j)*cos(alphai(j)*x(:,i,:))
+          !nddo
 
-          !mix%material(1)%p(:,i,:) = mix%material(1)%p(:,i,:) + epsilonk*(-p_perturbi(i,1)*sin(alpha*x(:,i,:))  + p_perturbr(i,1)*cos(alpha*x(:,i,:)) + &
-          !                           -p_perturbi(i,2)*sin(alpha2*x(:,i,:)) + p_perturbr(i,2)*cos(alpha2*x(:,i,:)) + &
-          !                           -p_perturbi(i,3)*sin(alpha3*x(:,i,:)) + p_perturbr(i,3)*cos(alpha3*x(:,i,:)))
-                                     
+ 
         enddo
-
+       
         
         KE = 0.5*(v**2 + u_perturb**2)
         int_KE = P_SUM(KE/(nx*ny*nz))
-        v = epsilonk*v /sqrt(int_KE)
-        u = u + epsilonk*u_perturb /sqrt(int_KE)
+      !  v = epsilonk*v /sqrt(int_KE)
+      !  u = u + epsilonk*u_perturb /sqrt(int_KE)
         mix%material(2)%p  = mix%material(1)%p 
 
 
@@ -488,7 +460,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         !Stuff for boundary conditions
         rhoL = 1.0 !rho(1,1,1)
-        rhoR = 1d-3 !rho(1,decomp%ysz(2),1)
+        rhoR = 1d-1 !rho(1,decomp%ysz(2),1)
         uL = -1*v0 !u(1,1,1)
         uR = v0_2 !u(1,decomp%ysz(2),1)
         vL = 0 !v(1,1,1)
@@ -510,7 +482,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use SolidMixtureMod,  only: solid_mixture
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -540,28 +512,28 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         yphys = Lr*yphys
 
 
-        sigma1 = -10400 !43028
+        sigma1 = -4000 !43028
 
         where(yphys .LE. -4.5)
-           sponge(:,:,:,1) = sigma1*( (yphys + 4.5)/1.5)**2.0
+           sponge(:,:,:,1) = sigma1*( (yphys + 4.5)/1.50)**2.0
         elsewhere
            sponge(:,:,:,1) = 0
         endwhere
 
         where(yphys .GE. 4.5)
-           sponge(:,:,:,2) = sigma1*( (yphys- 4.5 )/1.5)**2.0
+           sponge(:,:,:,2) = sigma1*( (yphys- 4.5 )/1.50)**2.0
         elsewhere
            sponge(:,:,:,2) = 0
         endwhere
 
         rhou(1) = -v0 !rho(1,1,1)*u(1,1,1)
-        rhou(2) = 1d-3*v0_2 !rho(1,ny,1)*u(1,ny,1)
+        rhou(2) = 1d-1*v0_2 !rho(1,ny,1)*u(1,ny,1)
         rhov(1) = 0 !-1.060981230880199d-5 !rho(1,1,1)*v(1,1,1)
         rhov(2) = 0 !2.175685479370164d-08
         rhow(1) = rho(1,1,1)*w(1,1,1)
         rhow(2) = rho(1,ny,1)*w(1,ny,1)
-        rhoe(1) = 1.0*(7765 + 0.5*(v0**2))
-        rhoe(2) = 1d-3*(2500.05 + 0.5*(v0_2**2))
+        rhoe(1) = 1.0*(103.176 + 0.5*(v0**2))
+        rhoe(2) = 1d-1*(25 + 0.5*(v0_2**2))
 
         do i = 1,2
           mix%material(i)%VF_ref(1) = mix%material(i)%VF(1,1,1)
@@ -591,7 +563,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use operators,        only: curl
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -633,7 +605,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        if (decomp%ysz(2) == 1) then
-           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayerY_"//trim(str)//"_", vizcount, ".dat"
+           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayerLinear_"//trim(str)//"_", vizcount, ".dat"
 
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
            write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rho_0_2/rho_0
@@ -691,7 +663,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        VFmin  = P_MINVAL(VFmin_proc)
        YsGrowth = xspike - xbubbl
        VFGrowth  = VFmax - VFmin   
-       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayerY_statistics.dat"
+       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/ShearLayerLinear_statistics.dat"
 
        if (vizcount == 0) then
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
@@ -732,7 +704,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -924,7 +896,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -962,7 +934,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -988,7 +960,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1008,7 +980,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1028,7 +1000,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -1048,7 +1020,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use ShearLayerY_data
+    use ShearLayerLinear_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

@@ -1,10 +1,8 @@
 module ShearLayerY_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight,three,six,sixth,zero,pi
+    use constants,        only: one,two,eight,three,six,sixth,zero
     use FiltersMod,       only: filters
     use DerivativesMod,   only: derivatives
-    use DerivativesStaggeredMod, only: derivativesStagg
-    use InterpolatorsMod,        only: interpolators
     use mpi 
     implicit none
 
@@ -14,7 +12,7 @@ module ShearLayerY_data
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
-    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, vL, vR, uL, uR
+    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, vL, vR
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
     real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3, alpha4,alpha2, alpha
@@ -23,7 +21,7 @@ module ShearLayerY_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 10.471975512, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 1.0, Lx = 1.0, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -131,7 +129,7 @@ end module
 
 subroutine meshgen(decomp, dx, dy, dz, mesh)
     use kind_parameters,  only: rkind
-    use constants,        only: one, half, pi
+    use constants,        only: one, half
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
@@ -168,7 +166,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx - 5.23598775598
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx - 0.5
                     y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -179,7 +177,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz, x_bc,y_bc,z_bc)
+subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index,rho_index, uref_index
@@ -188,10 +186,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
-    use operators,        only: grady, divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x, gradFV_y, gradFV_z
+    use operators,        only: grady 
     use DerivativesMod,   only: derivatives  
-    use DerivativesStaggeredMod, only: derivativesStagg
-    use InterpolatorsMod,        only: interpolators
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL 
     use ShearLayerY_data
 
@@ -199,24 +195,18 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     character(len=*),                intent(in)    :: inputfile
     type(decomp_info),               intent(in)    :: decomp
     type(derivatives),               intent(in)    :: der
-    type(derivativesStagg),          intent(in)    :: derStagg
-    type(interpolators),             intent(in)    :: interpMid
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
-    integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
-    logical :: periodicx,periodicy,periodicz
     integer :: ioUnit,i,iy
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, eta2, yphys, u_perturb, KE
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2)) :: v_perturb
-    real(rkind), dimension(decomp%ysz(2),7) :: phi_i,phi_r, p_perturbr, p_perturbi, Dphi_i, Dphi_r
-    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3),3) :: phi_i3, phi_r3,phi_i_int, phi_r_int
+    real(rkind), dimension(decomp%ysz(2),3) :: Dphi_i, Dphi_r, phi_i,phi_r, p_perturbr, p_perturbi
     real(rkind), dimension(8) :: fparams
-    real(rkind), dimension(7) :: alphai
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 10.0, int_KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
@@ -302,7 +292,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 	!delta_rho = Nrho*0.275d0
         !eta =(y-interface_init) !-epsilonk*sin(alpha*x))
         yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
-        Lr    = 12.0/(yphys(1,ny,1) - yphys(1,1,1))
+        Lr    = Lx/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
         
 
@@ -339,41 +329,16 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         open (unit=16, file="DPhi_I.txt", status='old', action='read' )
         open (unit=18, file="DPhi_R.txt", status='old', action='read' ) 
 
-!        open (unit=20, file="Phi_I_2.txt", status='old', action='read' )
-!        open (unit=22, file="Phi_R_2.txt", status='old', action='read' )
-!        open (unit=24, file="DPhi_I_2.txt", status='old', action='read' )
-!        open (unit=26, file="DPhi_R_2.txt", status='old', action='read' )
+        open (unit=20, file="Phi_I_2.txt", status='old', action='read' )
+        open (unit=22, file="Phi_R_2.txt", status='old', action='read' )
+        open (unit=24, file="DPhi_I_2.txt", status='old', action='read' )
+        open (unit=26, file="DPhi_R_2.txt", status='old', action='read' )
 
-!        open (unit=28, file="Phi_I_3.txt", status='old', action='read' )
-!        open (unit=30, file="Phi_R_3.txt", status='old', action='read' )
-!        open (unit=32, file="DPhi_I_3.txt", status='old', action='read' )
-!        open (unit=34, file="DPhi_R_3.txt", status='old', action='read' )
+        open (unit=28, file="Phi_I_3.txt", status='old', action='read' )
+        open (unit=30, file="Phi_R_3.txt", status='old', action='read' )
+        open (unit=32, file="DPhi_I_3.txt", status='old', action='read' )
+        open (unit=34, file="DPhi_R_3.txt", status='old', action='read' )
 
-!        open (unit=36, file="Phi_I_4.txt", status='old', action='read' )
-!        open (unit=38, file="Phi_R_4.txt", status='old', action='read' )
-!        open (unit=40, file="DPhi_I_4.txt", status='old', action='read' )
-!        open (unit=42, file="DPhi_R_4.txt", status='old', action='read' )
-
-!        open (unit=44, file="Phi_I_5.txt", status='old', action='read' )
-!        open (unit=46, file="Phi_R_5.txt", status='old', action='read' )
-!        open (unit=48, file="DPhi_I_5.txt", status='old', action='read' )
-!        open (unit=50, file="DPhi_R_5.txt", status='old', action='read' )
-
-!        open (unit=52, file="Phi_I_6.txt", status='old', action='read' )
-!        open (unit=54, file="Phi_R_6.txt", status='old', action='read' )
-!        open (unit=56, file="DPhi_I_6.txt", status='old', action='read' )
-!        open (unit=58, file="DPhi_R_6.txt", status='old', action='read' )
-
-!        open (unit=60, file="Phi_I_7.txt", status='old', action='read' )
-!        open (unit=62, file="Phi_R_7.txt", status='old', action='read' )
-!        open (unit=64, file="DPhi_I_7.txt", status='old', action='read' )
-!        open (unit=66, file="DPhi_R_7.txt", status='old', action='read' )
-
-        do i = 1,7
-
-           alphai(i) = i*0.5
-
-        enddo
         !open (unit=36, file="P_I.txt", status='old', action='read' )
         !open (unit=38, file="P_R.txt", status='old', action='read' )
         !open (unit=40, file="P_I_2.txt", status='old', action='read' )
@@ -388,40 +353,16 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
           read(16,*) Dphi_i(i,1)
           read(18,*) Dphi_r(i,1)
 
-!          read(20,*) phi_i(i,2)
-!          read(22,*) phi_r(i,2)
-!          read(24,*) Dphi_i(i,2)
-!          read(26,*) Dphi_r(i,2)
+          read(20,*) phi_i(i,2)
+          read(22,*) phi_r(i,2)
+          read(24,*) Dphi_i(i,2)
+          read(26,*) Dphi_r(i,2)
 
-!          read(28,*) phi_i(i,3)
-!          read(30,*) phi_r(i,3)
-!          read(32,*) Dphi_i(i,3)
-!          read(34,*) Dphi_r(i,3)
-
-!          read(28,*) phi_i(i,3)
-!          read(30,*) phi_r(i,3)
-!          read(32,*) Dphi_i(i,3)
-!          read(34,*) Dphi_r(i,3)
-
-!          read(36,*) phi_i(i,4)
-!          read(38,*) phi_r(i,4)
-!          read(40,*) Dphi_i(i,4)
-!          read(42,*) Dphi_r(i,4)
-
-!          read(44,*) phi_i(i,5)
-!          read(46,*) phi_r(i,5)
-!          read(48,*) Dphi_i(i,5)
-!          read(50,*) Dphi_r(i,5)
-
-!          read(52,*) phi_i(i,6)
-!          read(54,*) phi_r(i,6)
-!          read(56,*) Dphi_i(i,6)
-!          read(58,*) Dphi_r(i,6)
-
-!          read(60,*) phi_i(i,7)
-!          read(62,*) phi_r(i,7!)
-!          read(64,*) Dphi_i(i,7)
-!          read(66,*) Dphi_r(i,7)
+          read(28,*) phi_i(i,3)
+          read(30,*) phi_r(i,3)
+          read(32,*) Dphi_i(i,3)
+          read(34,*) Dphi_r(i,3)
+ 
           !read(36, *) p_perturbi(i,1)
           !read(38, *) p_perturbr(i,1)
           !read(40, *) p_perturbi(i,2)
@@ -432,36 +373,18 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
               
         end do
 
-   !     do i = 1,pointy
-
-   !       phi_i3(:,i,:,1) = phi_i(i,1)
-   !       phi_i3(:,i,:,2) = phi_i(i,2)
-   !       phi_r3(:,i,:,1) = phi_r(i,1)
-   !       phi_r3(:,i,:,2) = phi_r(i,2)
-
-   !     enddo
         !set mixture pressure (uniform)
         mix%material(1)%p  = p_amb
 
-    !    do i = 1,2
-    !       call interpolateFV_y(decomp,interpMid,phi_i3(:,:,:,i),phi_i_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
- 
-    !       call interpolateFV_y(decomp,interpMid,phi_r3(:,:,:,i),phi_r_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-    !       call gradFV_y(decomp,derStagg,phi_i_int,Dphi_i(:,:,:,i),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-    !       call gradFV_y(decomp,derStagg,phi_r_int,Dphi_r(:,:,:,i),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-    !    enddo
-        v = 0
-        u_perturb = 0
-        j = 1
-        alphai = 0.6
         do i = 1,pointy
           k = pointy+1 - i
-       
-    !      do j = 1,7
-            v(:,i,:) = v(:,i,:) +   alphai(j)*(phi_i(i,j)*cos(alphai(j)*x(:,i,:)) + phi_r(i,j)*sin(alphai(j)*x(:,i,:)) )
-            u_perturb(:,i,:)  = u_perturb(:,i,:) -Dphi_i(i,j)*sin(alphai(j)*x(:,i,:)) + Dphi_r(i,j)*cos(alphai(j)*x(:,i,:))
-     !     enddo
+          v(:,i,:) = (alpha*(phi_i(i,1)*cos(alpha*x(:,i,:)) + phi_r(i,1)*sin(alpha*x(:,i,:)) ) + &
+                               alpha2*(phi_i(i,2)*cos(alpha2*x(:,i,:)) + phi_r(i,2)*sin(alpha2*x(:,i,:)) ) + &
+                               alpha3*(phi_i(i,3)*cos(alpha3*x(:,i,:)) + phi_r(i,3)*sin(alpha3*x(:,i,:)) ) )
+          u_perturb(:,i,:) = (-Dphi_i(i,1)*sin(alpha*x(:,i,:)) + Dphi_r(i,1)*cos(alpha*x(:,i,:)) + &
+                                          -Dphi_i(i,2)*sin(alpha2*x(:,i,:)) + Dphi_r(i,2)*cos(alpha2*x(:,i,:)) + &
+                                          -Dphi_i(i,3)*sin(alpha3*x(:,i,:)) + Dphi_r(i,3)*cos(alpha3*x(:,i,:)) )
+
 
           !mix%material(1)%p(:,i,:) = mix%material(1)%p(:,i,:) + epsilonk*(-p_perturbi(i,1)*sin(alpha*x(:,i,:))  + p_perturbr(i,1)*cos(alpha*x(:,i,:)) + &
           !                           -p_perturbi(i,2)*sin(alpha2*x(:,i,:)) + p_perturbr(i,2)*cos(alpha2*x(:,i,:)) + &
@@ -474,6 +397,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         int_KE = P_SUM(KE/(nx*ny*nz))
         v = epsilonk*v /sqrt(int_KE)
         u = u + epsilonk*u_perturb /sqrt(int_KE)
+ 
         mix%material(2)%p  = mix%material(1)%p 
 
 
@@ -487,12 +411,10 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         !Stuff for boundary conditions
-        rhoL = 1.0 !rho(1,1,1)
-        rhoR = 1d-3 !rho(1,decomp%ysz(2),1)
-        uL = -1*v0 !u(1,1,1)
-        uR = v0_2 !u(1,decomp%ysz(2),1)
-        vL = 0 !v(1,1,1)
-        vR = 0 !v(1,decomp%ysz(2),1)
+        rhoL = rho(1,1,1)
+        rhoR = rho(1,decomp%ysz(2),1)
+        vL = u(1,1,1)
+        vR = u(1,decomp%ysz(2),1)
         YsL  = mix%material(1)%Ys(1,1,1)
         YsR  = mix%material(1)%Ys(1,decomp%ysz(2),1)
         VFL  = mix%material(1)%VF(1,1,1)
@@ -522,7 +444,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     real(rkind), dimension(2), intent(inout) :: rhou, rhov,rhow,rhoe
     integer :: ioUnit,i,iy
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 10.0, int_KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2, sigma1, sigma2
     integer :: nx,ny,nz,k,ix,j
@@ -536,32 +458,32 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         
         nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
         yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
-        Lr    = 12.0/(yphys(1,ny,1) - yphys(1,1,1))
+        Lr    = Lx/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
 
 
-        sigma1 = -10400 !43028
+        sigma1 = -3.143028
 
-        where(yphys .LE. -4.5)
-           sponge(:,:,:,1) = sigma1*( (yphys + 4.5)/1.5)**2.0
+        where(yphys .LE. -0.8)
+           sponge(:,:,:,1) = sigma1*( (yphys + 0.8)/0.2)**2.0
         elsewhere
            sponge(:,:,:,1) = 0
         endwhere
 
-        where(yphys .GE. 4.5)
-           sponge(:,:,:,2) = sigma1*( (yphys- 4.5 )/1.5)**2.0
+        where(yphys .GE. 0.8)
+           sponge(:,:,:,2) = sigma1*( (yphys- 0.8 )/0.2)**2.0
         elsewhere
            sponge(:,:,:,2) = 0
         endwhere
 
-        rhou(1) = -v0 !rho(1,1,1)*u(1,1,1)
-        rhou(2) = 1d-3*v0_2 !rho(1,ny,1)*u(1,ny,1)
-        rhov(1) = 0 !-1.060981230880199d-5 !rho(1,1,1)*v(1,1,1)
-        rhov(2) = 0 !2.175685479370164d-08
+        rhou(1) = rho(1,1,1)*u(1,1,1)
+        rhou(2) = rho(1,ny,1)*u(1,ny,1)
+        rhov(1) = rho(1,1,1)*v(1,1,1)
+        rhov(2) = rho(1,ny,1)*v(1,ny,1)
         rhow(1) = rho(1,1,1)*w(1,1,1)
         rhow(2) = rho(1,ny,1)*w(1,ny,1)
-        rhoe(1) = 1.0*(7765 + 0.5*(v0**2))
-        rhoe(2) = 1d-3*(2500.05 + 0.5*(v0_2**2))
+        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5*(u(1,1,1)**2 + v(1,1,1)**2 + w(1,1,1)**2))
+        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5*(u(1,ny,1)**2 + v(1,ny,1)**2 + w(1,ny,1)**2))
 
         do i = 1,2
           mix%material(i)%VF_ref(1) = mix%material(i)%VF(1,1,1)
@@ -570,12 +492,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
           mix%material(i)%Ys_ref(2) = mix%material(i)%Ys(1,ny,1)*rho(1,ny,1)
         enddo
 
-        print *, "rhou ", rhou
-        print *, "rhov ", rhov
-        print *, "rhow ", rhow
-        print *, "rhoe ", rhoe
-        print *, "VF ", mix%material(1)%VF_ref
-        print *, "Ys ", mix%material(1)%Ys_ref
+        print *, "calculate sponge"
         end associate
 
 end subroutine
@@ -743,7 +660,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx,ny, i, j
-    real(rkind) :: dy, yspng, tspng, yspngR, yspngL, Lr, STRETCH_RATIO = 10.0
+    real(rkind) :: dy, yspng, tspng, yspngR, yspngL, Lr, STRETCH_RATIO = 5.0
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR, yphys
     
     nx = decomp%ysz(1)
@@ -771,8 +688,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         if(decomp%yst(2)==1) then
           if(y_bc(1)==0) then
               rho( :,1,:) = rhoL
-              u  ( :,1,:) = uL
-              v  ( :,1,:) = vL !v(:,2,:)
+              u  ( :,1,:) = vL
+              v  ( :,1,:) = v(:,2,:)
               w  ( :,1,:) = zero
               mix%material(1)%p(:,1,:) =  1.0 !mix%material(1)%p(:,2,:)
               mix%material(2)%p(:,1,:) =  1.0 !mix%material(2)%p(:,2,:)
@@ -799,8 +716,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         if(decomp%yen(2)==decomp%ysz(2)) then
           if(y_bc(2)==0) then
               rho( :,ny,:) = rhoR
-              u  ( :,ny,:) = uR
-              v  ( :,ny,:) = vR !v(:,ny-1,:)
+              u  ( :,ny,:) = vR
+              v  ( :,ny,:) = v(:,ny-1,:)
               w  ( :,ny,:) = zero
               mix%material(1)%p(:,ny,:) =  1.0 !mix%material(1)%p(:,ny-1,:)
               mix%material(2)%p(:,ny,:) =  1.0 !mix%material(2)%p(:,ny-1,:)
@@ -816,7 +733,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         
   ! apply sponge at left and right boundaries to damp outgoing waves
         yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
-        Lr    = 12.0/(yphys(1,ny,1) - yphys(1,1,1))
+        Lr    = Lx/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
 
         yspngL = -0.85 !250

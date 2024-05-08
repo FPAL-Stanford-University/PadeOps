@@ -944,8 +944,8 @@ contains
         this%fields = zero  
 
         ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
-        call initfields(this%decomp,this%der, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-                        this%mix, this%tstop, this%dtfixed, tviz)
+        call initfields(this%decomp,this%der,this%derStagg, this%interpMid, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+                        this%mix, this%tstop, this%dtfixed,tviz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         print *, "initfield"
         ! Get hydrodynamic and elastic energies, stresses
         !call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
@@ -1352,7 +1352,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 5.0, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 10.0, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1361,7 +1361,7 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 2.0 
+       L = 12.0 
 
        y_half = this%y + 0.5*this%dy
         
@@ -1809,7 +1809,7 @@ contains
                this%mix%intSharp_hFV = zero
                this%mix%intSharp_kFV = zero
 
-               call this%mix%get_intSharp(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
+               call this%mix%get_intSharp_clean2(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
 
             else      
                   ! !debug
@@ -2042,7 +2042,6 @@ contains
             endif
             !#####################################################################
 
-            
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             if(this%pEqb) then
             call this%post_bc_2()
@@ -2057,7 +2056,7 @@ contains
             !    endif
  
         end do
-
+        
           
       !  if(this%pEqb) then
       !    call this%mix%MLong_relax(this%rho, this%e, this%p)
@@ -2115,7 +2114,7 @@ contains
         !print *, this%dz
         !print *, "sosmax"
         !print *, P_MAXVAL( this%sos)
-        dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)! * this%CFL
+        dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu/this%rho   ) + eps)! * this%CFL
         dtYs1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%rhodiff  / this%rho ) + eps) 
         dtYs2 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff / this%rho ) + eps)
         dtVF1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff / this%rho ) + eps)
@@ -2555,7 +2554,8 @@ contains
               dwdy_z = yMetric_F2N_int(:,:,:,3)*dwdy_z
               dvdy_z = yMetric_F2N_int(:,:,:,3)*dvdy_z 
            endif
-         
+        
+           this%dudy = dudy 
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! GET STAGGERED DERIVATIVES !!!!!!!!!!!!!!!!!!!!
            dudx_s => duidxj_s(:,:,:,1); dudy_s => duidxj_s(:,:,:,2); dudz_s => duidxj_s(:,:,:,3);
            dvdx_s => duidxj_s(:,:,:,4); dvdy_s => duidxj_s(:,:,:,5); dvdz_s => duidxj_s(:,:,:,6);
