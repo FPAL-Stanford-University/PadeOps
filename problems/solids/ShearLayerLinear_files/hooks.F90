@@ -23,7 +23,7 @@ module ShearLayerLinear_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 4.18879020479, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 1.0, Lx = pi, interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -168,7 +168,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -2.09439510239
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi/2
                     y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -335,10 +335,10 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
            w = 0
 
         
-!        open (unit=8, file="Phi_I.txt", status='old', action='read' )
-!        open (unit=12, file="Phi_R.txt", status='old', action='read' )
-!        open (unit=16, file="DPhi_I.txt", status='old', action='read' )
-!        open (unit=18, file="DPhi_R.txt", status='old', action='read' )
+        open (unit=8, file="Phi_I.txt", status='old', action='read' )
+        open (unit=12, file="Phi_R.txt", status='old', action='read' )
+        open (unit=16, file="DPhi_I.txt", status='old', action='read' )
+        open (unit=18, file="DPhi_R.txt", status='old', action='read' )
 
 !        open (unit=20, file="Phi_I_2.txt", status='old', action='read' )
 !        open (unit=22, file="Phi_R_2.txt", status='old', action='read' )
@@ -376,13 +376,13 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
 !        enddo
  
-        alphai(1) = 1.5                      
+        alphai(1) = 2.0                     
         do i = 1,pointy
           k = pointy - i + 1
-        !  read(8,*) phi_i(i,1)
-        !  read(12,*) phi_r(i,1)
-        !  read(16,*) Dphi_i(i,1)
-        !  read(18,*) Dphi_r(i,1)
+          read(8,*) phi_i(i,1)
+          read(12,*) phi_r(i,1)
+          read(16,*) Dphi_i(i,1)
+          read(18,*) Dphi_r(i,1)
 
          ! read(20,*) phi_i(i,2)
          ! read(22,*) phi_r(i,2)
@@ -433,10 +433,10 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         j = 1
         do i = 1,pointy
           k = pointy+1 - i
-          !o j = 1,4
-        !    v(:,i,:) = v(:,i,:) + alphai(j)*(phi_i(i,j)*cos(alphai(j)*x(:,i,:)) + phi_r(i,j)*sin(alphai(j)*x(:,i,:)) )
-        !    u_perturb(:,i,:)  = u_perturb(:,i,:) - Dphi_i(i,j)*sin(alphai(j)*x(:,i,:)) + Dphi_r(i,j)*cos(alphai(j)*x(:,i,:))
-          !nddo
+        ! do j = 1,4
+            v(:,i,:) = v(:,i,:) + alphai(j)*(phi_i(i,j)*cos(alphai(j)*x(:,i,:)) + phi_r(i,j)*sin(alphai(j)*x(:,i,:)) )
+            u_perturb(:,i,:)  = u_perturb(:,i,:) - Dphi_i(i,j)*sin(alphai(j)*x(:,i,:)) + Dphi_r(i,j)*cos(alphai(j)*x(:,i,:))
+        !  enddo
 
  
         enddo
@@ -444,8 +444,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         
         KE = 0.5*(v**2 + u_perturb**2)
         int_KE = P_SUM(KE/(nx*ny*nz))
-      !  v = epsilonk*v /sqrt(int_KE)
-      !  u = u + epsilonk*u_perturb /sqrt(int_KE)
+        v = epsilonk*v /sqrt(int_KE)
+        u = u + epsilonk*u_perturb /sqrt(int_KE)
         mix%material(2)%p  = mix%material(1)%p 
 
 
@@ -526,13 +526,13 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
            sponge(:,:,:,2) = 0
         endwhere
 
-        rhou(1) = -v0 !rho(1,1,1)*u(1,1,1)
+        rhou(1) = -1d-1*v0 !rho(1,1,1)*u(1,1,1)
         rhou(2) = 1d-1*v0_2 !rho(1,ny,1)*u(1,ny,1)
         rhov(1) = 0 !-1.060981230880199d-5 !rho(1,1,1)*v(1,1,1)
         rhov(2) = 0 !2.175685479370164d-08
         rhow(1) = rho(1,1,1)*w(1,1,1)
         rhow(2) = rho(1,ny,1)*w(1,ny,1)
-        rhoe(1) = 1.0*(103.176 + 0.5*(v0**2))
+        rhoe(1) = 0.99*1d-1*(28.957 + 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
         rhoe(2) = 1d-1*(25 + 0.5*(v0_2**2))
 
         do i = 1,2
