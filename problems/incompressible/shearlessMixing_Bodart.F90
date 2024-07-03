@@ -12,34 +12,53 @@ program shearlessMixing
     use budgets_xy_avg_mod, only: budgets_xy_avg
     use stats_xy_mod,       only: stats_xy
     use timer,              only: tic, toc 
+    use fortran_assert,     only: assert
 
     implicit none
 
     type(igrid), allocatable, target :: SM
-    type(stats_xy) :: stats
-    character(len=clen) :: inputfile
-    integer :: ierr
+    type(stats_xy), dimension(:), allocatable :: stats
+    character(len=clen) :: inputfile, tempname, stats_info_dir
+    integer :: ierr, n, ioUnit, stid
+    integer :: num_stats_instances = 1
+
+    ! Required for reading the namelist, but not used directly in the main program
+    real(rkind) :: Lx, Ly, Lz, zmin, Tref
+    logical :: symmetricDomain 
     
     call MPI_Init(ierr)
 
     call GETARG(1,inputfile)                                            
 
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=SMinput)
+    close(ioUnit)    
+
     allocate(SM)                                                     
     
-    call SM%init(inputfile, .true.)                              
-    call SM%start_io(.true.)                                          
+    call SM%init(inputfile, .true.)                     
+    call SM%start_io(.true.)                                   
     call SM%printDivergence()
-    call stats%init(inputfile,SM)
 
-    ! Get t=0 stats
-    !call stats%compute_stats()
+    ! Initialize stats class instances
+    allocate(stats(num_stats_instances))
+    do stid = 1,size(stats)
+        write(tempname,'(A,I2.2,A4)')trim(stats_info_dir)//"/STATS_",stid,".inp"
+        call stats(stid)%init(trim(tempname),SM)
+    end do
 
     call message("==========================================================")
     call message(0, "All memory allocated! Now running the simulation.")
+
     do while (SM%tsim < SM%tstop .and. SM%step < SM%nsteps)
        call tic() 
        call SM%timeAdvance()
-       call stats%compute_stats()
+       do n = 1,size(stats)
+           call stats(n)%compute_stats()
+       end do
        call doTemporalStuff(SM) 
        call toc()
     end do
@@ -47,7 +66,10 @@ program shearlessMixing
     call message("==========================================================")
     call message(0,"Finalizing simulation")
     call MPI_Barrier(MPI_COMM_WORLD,ierr)
-    call stats%destroy()
+    do stid = 1,size(stats)
+        call stats(stid)%destroy()
+    end do
+    deallocate(stats)
     call SM%finalize_io()
     call SM%destroy()
     call MPI_Barrier(MPI_COMM_WORLD,ierr)

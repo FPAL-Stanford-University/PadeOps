@@ -175,6 +175,7 @@ module sgsmod_igrid
             procedure          :: get_tauijC
             procedure          :: getSGSheatFlux
             procedure          :: IamEddyViscosityModel
+            procedure          :: set_tauij
     end type 
 
 contains

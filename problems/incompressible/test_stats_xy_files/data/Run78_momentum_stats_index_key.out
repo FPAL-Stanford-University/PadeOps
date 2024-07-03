@@ -1,0 +1,118 @@
+ TKE budget terms
+  >   1. Unsteady term
+  >   2. Shear production
+  >   3. Force production
+  >   4. Convective transport
+  >   5. Turbulent transport
+  >   6. Pressure transport
+  >   7. Viscous transport
+  >   8. Viscous dissipation
+  >   9. SGS transport
+  >  10. SGS dissipation
+  >  11. Buoyancy transfer
+  >  12. Pseudo dissipation
+  >  13. Pseudo viscous transport
+  >  14. Interscale transfer (direct)
+  >  15. Interscale transfer (indirect)
+  >  16. Turbulent transport (mixed scale)
+  
+ Misc terms:
+  >  17. Turbulence kinetic energy (TKE)
+  >  18. Force variance
+  >  19. Mean u-velocity
+  >  20. Mean v-velocity
+  >  21. Mean w-velocity
+  >  22. Mean pressure
+  >  23. <u'u'>
+  >  24. <v'v'>
+  >  25. <w'w'>
+  >  26. <u'v'>
+  >  27. <u'w'>
+  >  28. <v'w'>
+  >  29. <p'p'>
+  >  30. <u'p'>
+  >  31. <v'p'>
+  >  32. <w'p'>
+  >  33. Mean x-force
+  >  34. Mean y-force
+  >  35. Mean z-force
+  >  36. Mean kinetic energy (MKE)
+  
+ Rij budgets:
+   > R11 budget
+    >  37. Unsteady term
+    >  38. Shear production
+    >  39. Force production
+    >  40. Convective transport
+    >  41. Turbulent transport
+    >  42. Pressure transport
+    >  43. Viscous transport
+    >  44. Viscous dissipation
+    >  45. SGS transport
+    >  46. SGS dissipation
+    >  47. Buoyancy transfer
+    >  48. Pressure-strain correlation
+    >  49. Interscale transfer (direct)
+    >  50. Interscale transfer (indirect)
+    >  51. Turbulent transport (mixed scale)
+  
+   > R22 budget
+    >  52. Unsteady term
+    >  53. Shear production
+    >  54. Force production
+    >  55. Convective transport
+    >  56. Turbulent transport
+    >  57. Pressure transport
+    >  58. Viscous transport
+    >  59. Viscous dissipation
+    >  60. SGS transport
+    >  61. SGS dissipation
+    >  62. Buoyancy transfer
+    >  63. Pressure-strain correlation
+    >  64. Interscale transfer (direct)
+    >  65. Interscale transfer (indirect)
+    >  66. Turbulent transport (mixed scale)
+  
+   > R33 budget
+    >  67. Unsteady term
+    >  68. Shear production
+    >  69. Force production
+    >  70. Convective transport
+    >  71. Turbulent transport
+    >  72. Pressure transport
+    >  73. Viscous transport
+    >  74. Viscous dissipation
+    >  75. SGS transport
+    >  76. SGS dissipation
+    >  77. Buoyancy transfer
+    >  78. Pressure-strain correlation
+    >  79. Interscale transfer (direct)
+    >  80. Interscale transfer (indirect)
+    >  81. Turbulent transport (mixed scale)
+  
+ Velocity gradient variances
+  >  82. Var(dudx)
+  >  83. Var(dudy)
+  >  84. Var(dudz)
+  >  85. Var(dvdx)
+  >  86. Var(dvdy)
+  >  87. Var(dvdz)
+  >  88. Var(dwdx)
+  >  89. Var(dwdy)
+  >  90. Var(dwdz)
+  >  91. Var(S12)
+  >  92. Var(S13)
+  >  93. Var(S23)
+  
+ SGS stress tensor variances
+  >  94. Var(tau11)
+  >  95. Var(tau12)
+  >  96. Var(tau13)
+  >  97. Var(tau22)
+  >  98. Var(tau23)
+  >  99. Var(tau33)
+  
+ TKE fluxes
+  > 100. <u'ui'ui'>/2
+  > 101. <v'ui'ui'>/2
+  > 102. <w'ui'ui'>/2

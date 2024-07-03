@@ -1,0 +1,4 @@
+
+RESUME:
+- implement sgsmodel%set_tauij
+- use this routine to set the sgs stress tensor in test_stats_xy.F90

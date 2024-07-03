@@ -1,0 +1,19 @@
+ TKE budget terms
+  >  15. Interscale transfer (indirect)
+  
+ Rij budgets:
+   > R11 budget
+    >  50. Interscale transfer (indirect)
+  
+   > R22 budget
+    >  65. Interscale transfer (indirect)
+  
+   > R33 budget
+    >  80. Interscale transfer (indirect)
+
+ Scalar variance budget terms
+  > 10. Interscale transfer (indirect)
+  
+ Scalar flux budgets:
+   > <w'T'> budget
+    > 36. Interscale transfer (indirect)

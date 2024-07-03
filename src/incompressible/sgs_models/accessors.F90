@@ -132,6 +132,26 @@ pure function get_dynamicProcedureType(this) result(val)
 
 end function
 
+subroutine set_tauij(this,tau11,tau12,tau13,tau22,tau23,tau33)
+    use fortran_assert, only: assert
+    use arrayTools,     only: verify_array_size_compatibility
+    class(sgs_igrid), intent(inout) :: this
+    real(rkind), dimension(:,:,:), intent(in) :: tau11, tau12, tau13, tau22, tau23, tau33
+    call message("WARNING: you are overriding the numerical values of tauij!")
+    call assert(verify_array_size_compatibility(this%tau_11,tau11),'incompatible array dimensions: tau11')
+    call assert(verify_array_size_compatibility(this%tau_12,tau12),'incompatible array dimensions: tau12')
+    call assert(verify_array_size_compatibility(this%tau_13,tau13),'incompatible array dimensions: tau13')
+    call assert(verify_array_size_compatibility(this%tau_22,tau22),'incompatible array dimensions: tau22')
+    call assert(verify_array_size_compatibility(this%tau_23,tau23),'incompatible array dimensions: tau23')
+    call assert(verify_array_size_compatibility(this%tau_33,tau33),'incompatible array dimensions: tau33')
+    this%tau_11 = tau11
+    this%tau_12 = tau12
+    this%tau_13 = tau13
+    this%tau_22 = tau22
+    this%tau_23 = tau23
+    this%tau_33 = tau33
+end subroutine
+
 subroutine populate_tauij_E_to_C(this)
     use mpi
     use kind_parameters, only: mpirkind

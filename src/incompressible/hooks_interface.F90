@@ -120,13 +120,13 @@ module igrid_hooks
     end interface
 
     interface initfields_wallM
-        subroutine initfields_wallM(decompC, decompE, inpDirectory, mesh, fieldsC, fieldsE)
+        subroutine initfields_wallM(decompC, decompE, inpDirectory, meshC, meshE, fieldsC, fieldsE)
             import :: rkind
             import :: decomp_info
             type(decomp_info), intent(in) :: decompC
             type(decomp_info), intent(in) :: decompE
             character(len=*), intent(in) :: inpDirectory
-            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+            real(rkind), dimension(:,:,:,:), intent(in) :: meshC, meshE
             real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsC
             real(rkind), dimension(:,:,:,:), intent(inout) :: fieldsE
 

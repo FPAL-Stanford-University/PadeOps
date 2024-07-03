@@ -1,0 +1,41 @@
+Do I need copies of all of these arrays?
+
+nscales*(u,v,w,p,duidxj,tauij)
+nscales*nscalars*(T,dTdxj,qj)
+
+
+thats nscales*19 + nscales*nscalars*7 arrays
+
+For 2 scales and 1 scalars: 52 copies
+For 3 scales and 1 scalars: 78 copies
+For 3 scales and 2 scalars: 99 copies
+
+That's a huge memory increase. Is there a smarter way to do this?
+
+Yes, I think so. I do need simultaneous access to all scales for the following
+fields:
+u,v,w,duidxj,T,dTdxj --> 16 fields X nscales
+
+I do not need all scales simultaneously for:
+fi,p,tauij,qj --> 13 fields X 1
+
+I also need memory for the FFT'd variables, but can do split them one at
+a time:
+fhat --> 1 fields X 1
+
+So my overall memory requirement is:
+(16*nscales) + 10 + 1
+  > For 2 scales this is 32 + 10 + 1 = 43 fields
+  > For 3 scales this is 48 + 10 + 1 = 59 fields
+
+If memory becomes an issue, I could always write each scale to disk, compute
+all the budget terms except cross turbulent transport and interscale transfer, 
+and at the end of the calculation, compute these terms by accessing data from
+disk instead of holding it all in RAM. 
+
+Another option which would be a significant undertaking, would be to 
+write a new stats class which uses its own set of MPI ranks, but I would
+need to implement derivative operators / spectral operators / etc.. I 
+wouldn't be able to use the PadeOps stuff. I guess I could just initialize
+my own spectC instances. This may be the best option if memory becomes
+a concern

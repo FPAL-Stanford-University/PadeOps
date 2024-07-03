@@ -1,0 +1,59 @@
+ Scalar variance budget terms
+  >  1. Unsteady term
+  >  2. Mean gradient production
+  >  3. Convective transport
+  >  4. Turbulent transport
+  >  5. Molecular transport
+  >  6. SGS transport
+  >  7. Molecular destruction
+  >  8. SGS destruction
+  >  9. Interscale transfer (direct)
+  > 10. Interscale transfer (indirect)
+  > 11. Turbulent transport (mixed scale)
+  
+ Misc terms:
+  > 12. Mean scalar gradient, dTdz
+  > 13. Mean scalar 
+  > 14. <u'T'>
+  > 15. <v'T'>
+  > 16. <w'T'>
+  > 17. <T'T'>
+  
+ Scalar flux budgets:
+   > <w'T'> budget
+    > 18. Unsteady term
+    > 19. Mean scalar gradient production
+    > 20. Mean shear production
+    > 21. Force production
+    > 22. Buoyancy production
+    > 23. Convective transport
+    > 24. Turbulent transport
+    > 25. Pressure transport
+    > 26. Molecular transport (w*dTdz)
+    > 27. Molecular transport (T*dwdz)
+    > 28. SGS transport (w*q)
+    > 29. SGS transport (T*tau)
+    > 30. Pressure scrambling
+    > 31. Molecular destruction
+    > 32. Molecular destruction
+    > 33. SGS destruction (qi*dwdxi)
+    > 34. SGS destruction (tau_i3*dTdxi)
+    > 35. Interscale transfer (direct)
+    > 36. Interscale transfer (indirect)
+    > 37. Turbulent transport (mixed scale)
+  
+ Temperature gradient variances
+  > 38. Var(dTdx)
+  > 39. Var(dTdy)
+  > 40. Var(dTdz)
+  
+ SGS heat flux moments
+  > 41. Var(q1)
+  > 42. Var(q2)
+  > 43. Var(q3)
+  > 44. Mean(q3)
+  
+ Scalar variance fluxes
+  > 45. <u'T'T'>
+  > 46. <v'T'T'>
+  > 47. <w'T'T'>

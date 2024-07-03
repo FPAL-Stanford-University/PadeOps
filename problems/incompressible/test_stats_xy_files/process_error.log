@@ -1,0 +1,347 @@
+Processing error for SGS tensor variance
+Reading test64.log
+    > readError is True
+    > Reading Var(tau13s) error
+    > Reading Var(tau23s) error
+Reading test128.log
+    > readError is True
+    > Reading Var(tau13s) error
+    > Reading Var(tau23s) error
+Reading test256.log
+    > readError is True
+    > Reading Var(tau13s) error
+    > Reading Var(tau23s) error
+Finished plotting Scale 1
+Error for R11s: [1.1269216448629151e-07, 7.3401796469858664e-09, 4.6346630689069607e-10]
+Error for R22s: [1.1887936479746875e-09, 7.743181594830356e-11, 4.8891225430623404e-12]
+Finished plotting Scale 2
+Processing error for SGS heat flux moments
+Reading test64.log
+    > readError is True
+    > Reading Var(q3s) error
+Reading test128.log
+    > readError is True
+    > Reading Var(q3s) error
+Reading test256.log
+    > readError is True
+    > Reading Var(q3s) error
+Finished plotting Scale 1
+Error for R11s: [4.6095788795719184e-07, 3.0024391870723394e-08, 1.8957702250469582e-09]
+Finished plotting Scale 2
+Processing error for Convective transport
+Reading test64.log
+    > readError is True
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > readError is True
+Reading test128.log
+    > readError is True
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > readError is True
+Reading test256.log
+    > readError is True
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > readError is True
+Error for R11r: [8.053182455046188e-08, 2.5667080277180137e-09, 8.06064704052126e-11]
+Error for R22r: [2.013295600025383e-08, 6.416770146087041e-10, 2.0151726542445663e-11]
+Error for R33r: [2.0132956133065208e-08, 6.416770038005637e-10, 2.0151582970361103e-11]
+Error for TKEr: [4.0265912208823555e-08, 1.283354019263077e-09, 4.030330699034265e-11]
+Error for TTr: [4.633729285964498e-07, 1.476860866803445e-08, 4.6380169575256126e-10]
+Error for wT1r: [9.658709460792152e-08, 3.0784211146336156e-09, 9.667646251685508e-11]
+Finished plotting Scale 1
+Error for R11s: [0.00029517716172756687, 1.1095826217888839e-05, 3.625070705282063e-07]
+Error for R22s: [7.379429043194636e-05, 2.7739565544176743e-06, 9.062676782319642e-08]
+Error for R33s: [7.379429043183686e-05, 2.7739565543540316e-06, 9.062676797785786e-08]
+Error for TKEs: [0.00014758858086383808, 5.547913108976078e-06, 1.8125353518669111e-07]
+Error for TTs: [0.0001269249588467412, 4.771159387201773e-06, 1.5587654178387308e-07]
+Error for wT1s: [9.677983920312709e-05, 3.6379924208303216e-06, 1.1885532039590443e-07]
+Finished plotting Scale 2
+Processing error for Pressure transport
+Reading test64.log
+    > readError is True
+    > Reading TKE error
+    > Reading R33 error
+    > Reading wT1 error
+    > Reading TKE error
+    > Reading R33 error
+    > Reading wT1 error
+    > readError is True
+Reading test128.log
+    > readError is True
+    > Reading TKE error
+    > Reading R33 error
+    > Reading wT1 error
+    > Reading TKE error
+    > Reading R33 error
+    > Reading wT1 error
+    > readError is True
+Reading test256.log
+    > readError is True
+    > Reading TKE error
+    > Reading R33 error
+    > Reading wT1 error
+    > Reading TKE error
+    > Reading R33 error
+    > Reading wT1 error
+    > readError is True
+Error for R33r: [1.3559950426685172e-08, 4.3213670465150366e-10, 1.357034539366329e-11]
+Error for TKEr: [6.779975213342586e-09, 2.1606835232575183e-10, 6.785172696831645e-12]
+Error for wT1r: [3.2526674327897564e-08, 1.036579734384652e-09, 3.255161147141389e-11]
+Finished plotting Scale 1
+Error for R33s: [2.1458241704794875e-05, 8.065385968450531e-07, 2.6348691885616764e-08]
+Error for TKEs: [1.0729120852397437e-05, 4.0326929842252654e-07, 1.3174345942808382e-08]
+Error for wT1s: [1.407104241818246e-05, 5.288801833950739e-07, 1.7277909639348984e-08]
+Finished plotting Scale 2
+Processing error for Molecular transport
+Reading test64.log
+    > readError is True
+    > Reading TKE error
+    > Reading TKE_b error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading wT2 error
+    > Reading TKE error
+    > Reading TKE_b error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading wT2 error
+Reading test128.log
+    > readError is True
+    > Reading TKE error
+    > Reading TKE_b error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading wT2 error
+    > Reading TKE error
+    > Reading TKE_b error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading wT2 error
+Reading test256.log
+    > readError is True
+    > Reading TKE error
+    > Reading TKE_b error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading wT2 error
+    > Reading TKE error
+    > Reading TKE_b error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading wT2 error
+Error for R11r: [1.640958130806055e-12, 1.0846924600535117e-13, 6.872867837869988e-15]
+Error for R22r: [4.1023953283055394e-13, 2.7117311490584444e-14, 1.7182169346520787e-15]
+Error for R33r: [4.1023953316225337e-13, 2.7117311655193385e-14, 1.7182167427461766e-15]
+Error for TKEr: [2.0511976594709275e-13, 1.355865559515894e-14, 8.591086910783951e-16]
+Error for TKEbr: [8.204790652326283e-13, 5.423462291913034e-14, 3.4364340148879452e-15]
+Error for TTr: [1.311378693449005e-12, 8.668366098873242e-14, 5.492481670311783e-15]
+Error for wT1r: [9.840543117237961e-13, 6.504713763088232e-14, 4.1215403833366066e-15]
+Error for wT2r: [1.3667421010572862e-13, 9.034324711074138e-15, 5.72436104140451e-16]
+Finished plotting Scale 1
+Error for R11s: [3.411374170088408e-09, 4.2364776637523507e-10, 3.0182891901770785e-11]
+Error for R22s: [8.528435425209903e-10, 1.0591194159478815e-10, 7.545722974807422e-12]
+Error for R33s: [8.528435425183168e-10, 1.059119415931735e-10, 7.5457229737751e-12]
+Error for TKEs: [4.2642177126432663e-10, 5.2955970798558745e-11, 3.7728614892301256e-12]
+Error for TKEbs: [1.7056870850455804e-09, 2.1182388318857045e-10, 1.509144595120303e-11]
+Error for TTs: [2.0373288687533923e-10, 2.53009427168511e-11, 1.802572041055967e-12]
+Error for wT1s: [5.592442208444753e-10, 6.945077063092283e-11, 4.948037659325391e-12]
+Error for wT2s: [7.767280845029915e-11, 9.64594036525191e-12, 6.872274524708533e-13]
+Finished plotting Scale 2
+Processing error for SGS transport
+Reading test64.log
+    > readError is True
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TKE error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading wT2 error
+Reading test128.log
+    > readError is True
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TKE error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading wT2 error
+Reading test256.log
+    > readError is True
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TKE error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading wT2 error
+Finished plotting Scale 1
+Error for R22s: [3.5853287386478896e-06, 6.864800309269953e-08, 6.430490298152966e-09]
+Error for R33s: [4.8059051766400664e-05, 5.968301605071072e-06, 4.25213152109756e-07]
+Error for TKEs: [2.5822190252513394e-05, 3.0184748040867036e-06, 2.1582182118968368e-07]
+Error for TTs: [5.8898369340885937e-05, 6.97312175887508e-06, 4.937417072432143e-07]
+Error for wT1s: [2.2454900777254313e-05, 2.6584905312787913e-06, 1.8823816632339285e-07]
+Error for wT2s: [3.1514276206241754e-05, 3.913658267397542e-06, 2.788295697412832e-07]
+Finished plotting Scale 2
+Processing error for SGS dissipation
+Reading test64.log
+    > readError is True
+    > Reading R22 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading TKE error
+Reading test128.log
+    > readError is True
+    > Reading R22 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading TKE error
+Reading test256.log
+    > readError is True
+    > Reading R22 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading TKE error
+Finished plotting Scale 1
+Error for R22s: [7.339170683619452e-09, 2.377360811162165e-10, 7.495303783896742e-12]
+Error for TKEs: [3.6695853434902392e-09, 1.1886804041072452e-10, 3.747651494689919e-12]
+Error for TTs: [1.2777326232277578e-06, 8.323148080555814e-08, 5.255346121821325e-09]
+Error for wT1s: [4.871333382501335e-07, 3.1731857161841626e-08, 2.0035915604572907e-09]
+Finished plotting Scale 2
+Processing error for Force production
+Reading test64.log
+    > readError is True
+    > Reading R33 error
+    > Reading TKE error
+    > Reading wT1 error
+    > Reading R33 error
+    > Reading TKE error
+    > Reading wT1 error
+Reading test128.log
+    > readError is True
+    > Reading R33 error
+    > Reading TKE error
+    > Reading wT1 error
+    > Reading R33 error
+    > Reading TKE error
+    > Reading wT1 error
+Reading test256.log
+    > readError is True
+    > Reading R33 error
+    > Reading TKE error
+    > Reading wT1 error
+    > Reading R33 error
+    > Reading TKE error
+    > Reading wT1 error
+Error for R33r: [3.3337065182748047e-13, 5.2163769270890744e-15, 8.153471486895788e-17]
+Error for TKEr: [1.6668497094737833e-13, 2.608427796674251e-15, 4.082021179407924e-17]
+Error for wT1r: [7.996665396625975e-13, 1.251268699085443e-14, 1.9558047662127938e-16]
+Finished plotting Scale 1
+Error for R33s: [5.205056472863863e-09, 8.238755528215103e-11, 1.2914605658250324e-12]
+Error for TKEs: [2.602528236753804e-09, 4.119377798941781e-11, 6.457308646123927e-13]
+Error for wT1s: [3.4131673707487058e-09, 5.4024873096034635e-11, 8.468632593440319e-13]
+Finished plotting Scale 2
+Processing error for Unsteady terms
+Reading test64.log
+    > readError is True
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+Reading test128.log
+    > readError is True
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+Reading test256.log
+    > readError is True
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+    > Reading TKE error
+    > Reading R11 error
+    > Reading R22 error
+    > Reading R33 error
+    > Reading TT error
+    > Reading wT1 error
+Error for R11r: [0.00011041768562034286, 1.5468178085141938e-05, 8.853546008674978e-06]
+Error for R22r: [2.760442140508566e-05, 3.8670445212854844e-06, 2.213386502168636e-06]
+Error for R33r: [2.760442140508566e-05, 3.8670445212854844e-06, 2.213386502168636e-06]
+Error for TKEr: [8.281326421525704e-05, 1.1601133563856345e-05, 6.640159506506342e-06]
+Error for TTr: [0.0006353335057312712, 8.900251580981448e-05, 5.0942513350501e-05]
+Error for wT1r: [0.00013243116636568828, 1.8551999653488574e-05, 1.0618637927554096e-05]
+Finished plotting Scale 1
+Error for R11s: [0.0006901105351271343, 9.667611303213093e-05, 5.533466255423433e-05]
+Error for R22s: [0.00017252763378178358, 2.4169028258032516e-05, 1.383366563855815e-05]
+Error for R33s: [0.00017252763378178358, 2.4169028258032516e-05, 1.383366563855815e-05]
+Error for TKEs: [0.0005175829013453499, 7.250708477409776e-05, 4.150099691567488e-05]
+Error for TTs: [0.00029674467617350764, 4.157032880268592e-05, 2.3793676063499705e-05]
+Error for wT1s: [0.00022626678239979613, 3.1697230975712316e-05, 1.814259515545147e-05]
+Finished plotting Scale 2

@@ -1,0 +1,12 @@
+TACC: job 606664 execution at: Wed Jun 12 02:41:01 PM CDT 2024
+TACC: running on node c454-034
+TACC: using default VNC server /usr/bin/vncserver
+TACC: got VNC display :1
+TACC: local (compute node) VNC port is 5901
+TACC: got login node VNC port 60216
+TACC: created reverse ports on Stampede3 logins
+TACC: Your VNC server is now running!
+TACC: To connect via VNC client, create a local ssh tunnel to Stampede3 using:
+TACC:     ssh -f -N -L 60216:localhost:60216 ryanhass@stampede3.tacc.utexas.edu
+TACC: Then connect your vncviewer to localhost:60216
+slurmstepd: error: *** JOB 606664 ON c454-034 CANCELLED AT 2024-06-12T14:51:35 ***

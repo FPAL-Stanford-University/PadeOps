@@ -1,0 +1,12 @@
+&STATS_XY
+tid_start      = 1 
+compute_freq   = 4 
+dump_freq      = 4
+outputdir      = "/home1/06632/ryanhass/codes/PadeOps/problems/incompressible/test_stats_xy_files/data"
+do_stats       = .true.
+nscales        = 2 ! set to <= 1 if you don't want to do scale splitting
+/
+/
+&SCALE_SPLITTING
+kc_for_scale_splitting = 1.5 
+/

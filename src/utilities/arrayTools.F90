@@ -17,6 +17,17 @@ module arrayTools
  
 contains
   
+  pure function verify_array_size_compatibility(arr1,arr2) result(compatible)
+      real(rkind), dimension(:,:,:), intent(in) :: arr1, arr2
+      logical :: compatible
+
+      compatible = .true.
+      if (size(arr1,1) .ne. size(arr2,1)) compatible = .false.
+      if (size(arr1,2) .ne. size(arr2,2)) compatible = .false.
+      if (size(arr1,3) .ne. size(arr2,3)) compatible = .false.
+
+  end function
+
   pure subroutine findGE1first(xin,xcompare,idx)
     ! Returns array with the index of every item (or the first N)
     ! in xin that is greater than or equal to xcompare

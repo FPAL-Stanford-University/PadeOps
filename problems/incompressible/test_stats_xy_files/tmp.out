@@ -1,0 +1,176 @@
+TACC:  Starting up job 616314 
+TACC:  Starting parallel tasks... 
+ In auto-tuning mode......
+ factors:            1           2           3           4           6
+           8          12          16          24          48
+ processor grid           1  by           48  time=  3.163545838712404E-003
+ processor grid           2  by           24  time=  1.449225489826252E-003
+ processor grid           3  by           16  time=  1.125065881448488E-003
+ processor grid           4  by           12  time=  8.195590150232116E-004
+ processor grid           6  by            8  time=  7.393070651839176E-004
+ processor grid           8  by            6  time=  5.397457668247322E-004
+ processor grid          12  by            4  time=  3.725191151412825E-004
+ processor grid          16  by            3  time=  6.071534977915386E-004
+ processor grid          24  by            2  time=  5.673486351345977E-004
+ processor grid          48  by            1  time=  7.797410944476724E-004
+ the best processor grid is probably           12  by            4
+> Bottom Wall Boundary Condition is:
+    > Slip Wall
+> Top Wall Boundary Condition is:
+    > Slip Wall
+> Mesh generated:
+    > dx: =     9.3750000000000000E-02
+    > dy: =     9.3750000000000000E-02
+    > dz: =     9.3750000000000000E-02
+    > Lx: =     6.0000000000000000E+00
+    > Ly: =     6.0000000000000000E+00
+    > Lz: =     6.0000000000000000E+00
+===========================================================
+Now Generating the SPECTRAL - Derived Type for the problem.
+ ***** Using the FFTW (version 3.x) engine  (found in: src/utilities/fft_3d.F90)  ***** 
+ WARNING: FFT plans are being created using FFTW_EXHAUSTIVE mode. Intialization 
+ could take a while!
+            > Successfully initialized!
+    > Dealiasing Summary:
+        > Dealias type: = 0
+        > Total non zero: =     6.0544000000000000E+04
+SPECTRAL - Derived Type for the problem generated successfully.
+===============================================================
+===========================================================
+Now Generating the SPECTRAL - Derived Type for the problem.
+ ***** Using the FFTW (version 3.x) engine  (found in: src/utilities/fft_3d.F90)  ***** 
+ WARNING: FFT plans are being created using FFTW_EXHAUSTIVE mode. Intialization 
+ could take a while!
+            > Successfully initialized!
+    > Dealiasing Summary:
+        > Dealias type: = 0
+        > Total non zero: =     6.1490000000000000E+04
+SPECTRAL - Derived Type for the problem generated successfully.
+===============================================================
+> 6th order stagerred Compact Finite difference schemes initialized in the Z direction
+=========================================
+> Initializing PADEPOISSON derived type
+    > Generating Plans for FFT in PadePoisson. This could take a while ...
+    > STOKES PRESSURE calculation enabled with the CD06 Poisson solver
+> PADEPOISSON derived type initialized successfully.
+=========================================
+> Edge-based mesh generated
+    > Bounds for u: = (    0.0000000000000000E+00,    0.0000000000000000E+00)
+    > Bounds for v: = (    0.0000000000000000E+00,    0.0000000000000000E+00)
+    > Bounds for w: = (    0.0000000000000000E+00,    0.0000000000000000E+00)
+    > Bounds for T: = (    0.0000000000000000E+00,    0.0000000000000000E+00)
+> Velocity Field Initialized
+    > Reference Temperature set to: =     5.0000000000000000E+01
+> Maximum Divergence: =     0.0000000000000000E+00
+    > Max KE: =     0.0000000000000000E+00
+    > Sigma model initialized
+> SGS model initialized successfully
+> Sponge Layer initialized successfully
+    > Sponge Layer active above z =  =     1.4000000000000004E+00
+> Total probes initialized: = 150
+> Initializing the spectral forcing layer
+    > Forcing layer initialized successfully!
+        > Target KE =     2.0000000000000000E+01
+        > Gain divided by time scale =     1.0000000000000000E+01
+    > Done allocating storage for pressure
+    > Buoyancy term type 1 selected. Buoyancy term  calculation term uses
+        > Froude number: =     5.0000000000000000E-01
+        > Reference temperature: =     5.0000000000000000E+01
+IGRID initialized successfully!
+===========================================================
+> Initializing stats class
+    > tid_start     = 1
+    > compute_freq  = 4
+    > dump_freq     = 12
+    > outputdir    /home1/06632/ryanhass/codes/PadeOps/problems/incompressible/test_stats_xy_files
+    > do_stats      = T
+    > scale_split   = T
+==========================================
+stats_xy instance initialized successfully
+ 
+ 
+==========================================================
+> stats and igrid initialized! Now running the test.
+    > memory allocated
+    > Finished setting up the mesh
+WARNING: you are overriding the numerical values of tauij!
+    > Finished defining the analytical fields
+    > Computing stats
+    > Stats computed
+    > Stats copied
+ 
+Mean fields test PASSED!
+  > Velocity variance test for ur PASSED!
+  > Velocity variance test for us PASSED!
+Velocity variance test PASSED!
+Velocity covariance test PASSED!
+Force energy (fluctuations)
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference for <fifi>,r:  =     5.3060854321440587E-14
+        > max absolute difference for <fifi>,s:  =     2.8833029006893052E-09
+*** *** ***
+SGS tensor variance
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference Var(tau13s):  =     3.3752422673414835E-06
+        > max absolute difference Var(tau23s):  =     3.5605550626181961E-08
+*** *** ***
+SGS heat flux moments
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference Var(q3s):  =     6.9030733147680524E-04
+*** *** ***
+Shear production
+    R11, R22, R33, and TKE shear production for 'r' fields test PASSED!
+    R11, R22, R33, and TKE shear production for 's' fields test PASSED!
+Gradient production
+Convective transport
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference TKE:  =     4.0265912208823555E-08
+        > max absolute difference R11:  =     8.0531824550461877E-08
+        > max absolute difference R22:  =     2.0132956000253830E-08
+        > max absolute difference R33:  =     2.0132956133065208E-08
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference TKE:  =     1.4758858086383808E-04
+        > max absolute difference R11:  =     2.9517716172756687E-04
+        > max absolute difference R22:  =     7.3794290431946361E-05
+        > max absolute difference R33:  =     7.3794290431836856E-05
+    Convective transport test finished. Verify pass/fail separately.
+*** *** ***
+Turbulent transport
+ >>> Beware, the analtyical result is trivial. Need new fields to test this better <<<
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference TKE:  =     4.0265912207778317E-08
+        > max absolute difference R11:  =     8.0531824548645838E-08
+        > max absolute difference R22:  =     2.0132956000016661E-08
+        > max absolute difference R33:  =     2.0132956133105866E-08
+        > max absolute difference TKE:  =     1.4758858086384035E-04
+        > max absolute difference R11:  =     2.9517716172756860E-04
+        > max absolute difference R22:  =     7.3794290431942458E-05
+        > max absolute difference R33:  =     7.3794290431830351E-05
+    Turbulent transport test finished. Verify pass/fail separately.
+*** *** ***
+Pressure transport
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference TKE:  =     6.7799752133425859E-09
+        > max absolute difference R33:  =     1.3559950426685172E-08
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference TKE:  =     1.0729120852397437E-05
+        > max absolute difference R33:  =     2.1458241704794875E-05
+    Turbulent transport test finished. Verify pass/fail separately
+*** *** ***
+Viscous transport
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference TKE:  =     7.6393951820913710E-09
+        > max absolute difference TKE_b:  =     4.3661891716255981E-09
+        > max absolute difference R11:  =     1.6409581308060551E-12
+        > max absolute difference R22:  =     4.1023953283055394E-13
+        > max absolute difference R33:  =     4.1023953316225337E-13
+    > Make sure this scales as 6th order to confirm this is a numerical method error and not a bug:
+        > max absolute difference TKE:  =     2.4556349484417099E-07
+        > max absolute difference R11:  =     3.4113741700884080E-09
+        > max absolute difference R22:  =     8.5284354252099026E-10
+        > max absolute difference R33:  =     8.5284354251831681E-10
+*** *** ***
+==========================================================
+> Finalizing simulation
+> Simulation finalized
+TACC:  Shutdown complete. Exiting. 

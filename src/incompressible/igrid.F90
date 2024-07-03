@@ -7,7 +7,7 @@ module IncompressibleGrid
     use decomp_2d
     use decomp_2d_io
     use StaggOpsMod, only: staggOps  
-    use exits, only: GracefulExit, message, check_exit, message_min_max
+    use exits, only: GracefulExit, message, check_exit, message_min_max, warning
     use spectralMod, only: spectral  
     !use PoissonMod, only: poisson
     use mpi 
@@ -82,7 +82,7 @@ module IncompressibleGrid
         real(rkind) :: dt, tstop, CFL, CviscDT, dx, dy, dz, tsim
         integer :: nstepConstDt ! Number of steps using constant dt before switching to CFL condition
         character(len=clen) ::  outputdir
-        real(rkind), dimension(:,:,:,:), allocatable :: mesh
+        real(rkind), dimension(:,:,:,:), allocatable :: mesh, meshE
         real(rkind) :: zTop, zBot, zMid
         character(len=clen) :: filter_x          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
         character(len=clen) :: filter_y          ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral" 
@@ -108,7 +108,8 @@ module IncompressibleGrid
         type(immersedBody), dimension(:), allocatable :: immersedBodies 
 
         type(padepoisson), allocatable :: padepoiss
-        real(rkind), dimension(:,:,:), allocatable :: divergence, xE, yE, zE
+        real(rkind), dimension(:,:,:), allocatable :: divergence
+        real(rkind), dimension(:,:,:), pointer :: xE, yE, zE
 
         real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat, uEhat, vEhat
@@ -344,7 +345,7 @@ module IncompressibleGrid
             procedure          :: getPressureGradient
             procedure          :: getSpongeTerms
             procedure, private :: ifft_CCE
-            procedure, private :: generateEdgeMesh
+            procedure          :: generateEdgeMesh
             procedure, private :: readAndInterpolateRestartData
             procedure, private :: allocateMemoryAndGenerateMesh
             !procedure, private :: init_stats
@@ -524,7 +525,8 @@ contains
                             clearRoundOffFreq
         namelist /KSPREPROCESS/ PreprocessForKS, KSoutputDir, KSRunID, t_dumpKSprep, KSinitType, KSFilFact, &
                                  KSdoZfilter, nKSvertFilt
-        namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure, computeTurbinePressure, computeFringePressure, ComputeRapidSlowPressure            
+        namelist /PRESSURE_CALC/ fastCalcPressure, storePressure, P_dumpFreq, P_compFreq, computeDNSPressure,&
+          computeTurbinePressure, computeFringePressure, ComputeRapidSlowPressure
         namelist /OS_INTERACTIONS/ useSystemInteractions, tSystemInteractions, controlDir, deleteInstructions
         namelist /SCALARS/ num_scalars, scalar_info_dir
         namelist /TURB_PRESSURE/ MeanTIDX, MeanRID, MeanFilesDir
@@ -701,8 +703,6 @@ contains
        call message(1,"Ly:", Ly)
        call message(1,"Lz:", Lz)
 
-
-
        ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
        allocate(this%spectC)
        call this%spectC%init("x", nx, ny, nz  , this%dx, this%dy, this%dz, &
@@ -816,32 +816,29 @@ contains
            allocate(this%q3_T(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
        end if
 
-       ! Generate mesh (edge-based) -- zE is needed for all cases, but xE
-       ! and yE depending on the problems
-       allocate(this%zE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
-       call this%generateEdgeMesh(this%zE,3,this%mesh,this%gpC,this%gpE, &
-         this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
-         this%rbuffzE(:,:,:,1), this%dz, this%nz)
-
-       if (this%localizedForceLayer == 1) this%needEdgeFields = .true.
-       
-       if (this%needEdgeFields .or. restartFromDifferentGrid) then
-           allocate(this%xE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
-           allocate(this%yE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
-           call this%generateEdgeMesh(this%xE,1,this%mesh,this%gpC,this%gpE, &
-             this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
-             this%rbuffzE(:,:,:,1), this%dz, this%nz)
-           call this%generateEdgeMesh(this%yE,2,this%mesh,this%gpC,this%gpE, &
-             this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
-             this%rbuffzE(:,:,:,1), this%dz, this%nz)
-       end if
-
 
        ! STEP 6: ALLOCATE/INITIALIZE THE POISSON DERIVED TYPE
        allocate(this%padepoiss)
        call this%padepoiss%init(this%dx , this%dy, this%dz, this%spectC, this%spectE, computeStokesPressure, Lz, .true., &
                                 this%gpC, this%Pade6opz, PeriodicInZ) 
           
+       ! Generate mesh (edges)
+       if (allocated(this%meshE)) deallocate(this%meshE)
+       allocate(this%meshE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),3))
+       this%zE => this%meshE(:,:,:,3)
+       this%yE => this%meshE(:,:,:,2)
+       this%xE => this%meshE(:,:,:,1)
+       call this%generateEdgeMesh(this%zE,3,this%mesh,this%gpC,this%gpE, &
+         this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+         this%rbuffzE(:,:,:,1), this%dz, this%nz)
+       call this%generateEdgeMesh(this%yE,2,this%mesh,this%gpC,this%gpE, &
+         this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+         this%rbuffzE(:,:,:,1), this%dz, this%nz)
+       call this%generateEdgeMesh(this%xE,1,this%mesh,this%gpC,this%gpE, &
+         this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+         this%rbuffzE(:,:,:,1), this%dz, this%nz)
+       call message(0,"Edge-based mesh generated")
+
        ! STEP 7: INITIALIZE THE FIELDS
        if (useRestartFile) then
            call this%readRestartFile(restartfile_TID, restartfile_RID, &
@@ -852,7 +849,7 @@ contains
              this%u, this%v, this%w, this%wC, this%T, this%gpC)
            this%step = restartfile_TID
        else 
-           call initfields_wallM(this%gpC, this%gpE, inputfile, this%mesh, this%PfieldsC, this%PfieldsE)! <-- this procedure is part of user defined HOOKS
+           call initfields_wallM(this%gpC, this%gpE, inputfile, this%mesh, this%meshE, this%PfieldsC, this%PfieldsE)! <-- this procedure is part of user defined HOOKS
            this%step = 0
            this%tsim = zero
            !call this%dumpRestartfile()
@@ -909,7 +906,6 @@ contains
 
        ! Dealias and filter before projection
        call this%dealiasFields()
-
 
        ! Pressure projection
        call this%padepoiss%DivergenceCheck(this%uhat, this%vhat, this%what, this%divergence)
@@ -1768,7 +1764,10 @@ contains
        call this%spectC%destroy()
        call this%spectE%destroy()
        deallocate(this%spectC, this%spectE)
-       deallocate(this%zE)
+       nullify(this%zE)
+       nullify(this%xE)
+       nullify(this%yE)
+       deallocate(this%meshE)
 
        if (allocated(this%q1_T)) deallocate(this%q1_T)
        if (allocated(this%q2_T)) deallocate(this%q2_T)
@@ -1781,6 +1780,7 @@ contains
            end do 
            deallocate(this%scalars)
        end if
+       call decomp_2d_finalize()
 
    end subroutine
    

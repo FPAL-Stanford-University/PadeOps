@@ -1,7 +1,7 @@
 module shearlessMixing_interact_parameters
 
     use exits, only: message
-    use kind_parameters,  only: rkind
+    use kind_parameters,  only: rkind, clen
     use constants, only: kappa, zero
     use fortran_assert,     only: assert
     implicit none
@@ -43,8 +43,10 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     logical :: symmetricDomain = .true.
     real(rkind) :: zmin = -one, Tref
+    character(len=clen) :: stats_info_dir
+    integer :: num_stats_instances = 1
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -149,9 +151,10 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
       HITForceTimeScale, immersed_taufact
     integer :: BuoyancyTermType,buoyancyDirection,numberOfImmersedBodies, localizedForceLayer
     logical :: isStratified = .false., removeMean = .false.
+    character(len=clen) :: stats_info_dir
+    integer :: num_stats_instances = 1
 
-    ! Read input file
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
     namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                     useRestartFile, restartFile_TID, restartFile_RID, CviscDT, &
                     nstepConstDt, restartFromDifferentGrid, nxS, nyS, nzS
@@ -248,8 +251,10 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     real(rkind) :: Lx, Ly, Lz, zmin, Tref
     logical :: symmetricDomain
     integer :: iounit
+    character(len=clen) :: stats_info_dir
+    integer :: num_stats_instances = 1
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
     
     wTh_surf = zero
     
@@ -272,10 +277,7 @@ subroutine setDirichletBC_Temp(inputfile, Tfield, Tsurf, dTsurf_dt, whichSide)
     real(rkind), dimension(:,:,:), intent(in) :: Tfield
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=3), intent(in) :: whichSide
-    real(rkind) :: Lx, Ly, Lz, zmin, Tref
-    logical :: symmetricDomain
     integer :: iounit
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
     
     dTsurf_dt = zero
     if (whichSide == 'top') then
@@ -295,8 +297,10 @@ subroutine set_Reference_Temperature(inputfile, Trefout)
     real(rkind) :: Tref = 1.d0, Lx, Ly, Lz, zmin
     logical :: symmetricDomain
     integer :: iounit
-    
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref
+    character(len=clen) :: stats_info_dir
+    integer :: num_stats_instances = 1
+
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

@@ -153,6 +153,7 @@ contains
         end do 
         rewind(10)
        
+        if (allocated(data2read)) deallocate(data2read)
         allocate(data2read(nr))
 
         do i=1, nr

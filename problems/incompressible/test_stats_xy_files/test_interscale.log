@@ -1,0 +1,134 @@
+TACC:  Starting up job 678008 
+TACC:  Starting parallel tasks... 
+ In auto-tuning mode......
+ factors:            1           2           3           4           6
+           8          12          16          24          48
+ processor grid           1  by           48  time=  3.719262351902823E-003
+ processor grid           2  by           24  time=  2.782123357368012E-003
+ processor grid           3  by           16  time=  2.344198330926398E-003
+ processor grid           4  by           12  time=  1.957325070785979E-003
+ processor grid           6  by            8  time=  1.697417465038598E-003
+ processor grid           8  by            6  time=  1.622287052062650E-003
+ processor grid          12  by            4  time=  1.637241143422822E-003
+ processor grid          16  by            3  time=  1.564469498892625E-003
+ processor grid          24  by            2  time=  1.772575778886676E-003
+ processor grid          48  by            1  time=  1.781475963070989E-003
+ the best processor grid is probably           16  by            3
+> Bottom Wall Boundary Condition is:
+    > Slip Wall
+> Top Wall Boundary Condition is:
+    > Slip Wall
+> Mesh generated:
+    > dx: =     4.6875000000000000E-02
+    > dy: =     4.6875000000000000E-02
+    > dz: =     4.6875000000000000E-02
+    > Lx: =     6.0000000000000000E+00
+    > Ly: =     6.0000000000000000E+00
+    > Lz: =     6.0000000000000000E+00
+===========================================================
+Now Generating the SPECTRAL - Derived Type for the problem.
+ ***** Using the FFTW (version 3.x) engine  (found in: src/utilities/fft_3d.F90)  ***** 
+ WARNING: FFT plans are being created using FFTW_EXHAUSTIVE mode. Intialization 
+ could take a while!
+            > Successfully initialized!
+    > Dealiasing Summary:
+        > Dealias type: = 0
+        > Total non zero: =     4.6784000000000000E+05
+SPECTRAL - Derived Type for the problem generated successfully.
+===============================================================
+===========================================================
+Now Generating the SPECTRAL - Derived Type for the problem.
+ ***** Using the FFTW (version 3.x) engine  (found in: src/utilities/fft_3d.F90)  ***** 
+ WARNING: FFT plans are being created using FFTW_EXHAUSTIVE mode. Intialization 
+ could take a while!
+            > Successfully initialized!
+    > Dealiasing Summary:
+        > Dealias type: = 0
+        > Total non zero: =     4.7149500000000000E+05
+SPECTRAL - Derived Type for the problem generated successfully.
+===============================================================
+> 6th order stagerred Compact Finite difference schemes initialized in the Z direction
+=========================================
+> Initializing PADEPOISSON derived type
+    > Generating Plans for FFT in PadePoisson. This could take a while ...
+    > STOKES PRESSURE calculation enabled with the CD06 Poisson solver
+> PADEPOISSON derived type initialized successfully.
+=========================================
+> Edge-based mesh generated
+================= RESTART FILE USED ======================
+> Simulation Time at restart: =     9.0552999999999997E+01
+> u bounds: = (   -2.9499658600706775E+00,    2.5250400052234987E+00)
+> v bounds: = (   -2.7278834899214193E+00,    2.7720416769606193E+00)
+> w bounds: = (   -2.7639920138710181E+00,    2.5741812153240851E+00)
+=================================== ======================
+    > Reference Temperature set to: =     5.0000000000000000E+01
+> Maximum Divergence: =     6.1477184234842092E-15
+    > Max KE: =     4.9835762040698315E+00
+    > Sigma model initialized
+> SGS model initialized successfully
+> Sponge Layer initialized successfully
+    > Sponge Layer active above z =  =     1.4000000000000004E+00
+> Total probes initialized: = 175
+> Initializing the spectral forcing layer
+    > Forcing layer initialized successfully!
+        > Target KE =     2.0000000000000000E+01
+        > Gain divided by time scale =     1.0000000000000000E+01
+    > Done allocating storage for pressure
+    > Buoyancy term type 1 selected. Buoyancy term  calculation term uses
+        > Froude number: =     5.0000000000000000E-01
+        > Reference temperature: =     5.0000000000000000E+01
+IGRID initialized successfully!
+===========================================================
+> Initializing stats class
+    > tid_start     = 1
+    > compute_freq  = 4
+    > dump_freq     = 4
+    > outputdir    /home1/06632/ryanhass/codes/PadeOps/problems/incompressible/test_stats_xy_files/data
+    > do_stats      = T
+    > scale_split   = T
+==========================================
+stats_xy instance initialized successfully
+ 
+    > Computing stats
+    > Stats copied
+ 
+Turbulent transport
+        > max absolute difference R11:  =     2.2003537383784153E-04
+        > max absolute difference R22:  =     4.1272172895810352E-04
+        > max absolute difference R33:  =     8.7904367741680847E-06
+        > max absolute difference TT:   =     5.7421993803166704E-05
+        > max absolute difference wT1:  =     1.2170213613892187E-06
+    > Scale2:
+        > max absolute difference R11:  =     1.7485135340639968E-01
+        > max absolute difference R22:  =     1.3762982622892395E-01
+        > max absolute difference R33:  =     1.0806141610967696E-01
+        > max absolute difference TT:   =     3.9184632366268634E-04
+        > max absolute difference wT1:  =     7.0480352774570656E-04
+*** *** ***
+Turbulent-transport mixed-scale
+        > max absolute difference R11:  =     5.2258544713801314E-17
+        > max absolute difference R22:  =     5.2041704279304213E-17
+        > max absolute difference R33:  =     8.3700407715880942E-17
+        > max absolute difference TT:   =     5.0849081889570158E-17
+        > max absolute difference wT1:  =     2.5857296430284405E-15
+    > Scale2:
+        > max absolute difference R11:  =     4.9669164994044918E-17
+        > max absolute difference R22:  =     4.9924351970776328E-17
+        > max absolute difference R33:  =     4.9990527970744219E-17
+        > max absolute difference TT:   =     4.9879864439674425E-17
+        > max absolute difference wT1:  =     4.9991176799220971E-17
+*** *** ***
+Interscale transfer
+        > max absolute difference R11:  =     1.6515971525181708E-02
+        > max absolute difference R22:  =     3.0306151553989660E-02
+        > max absolute difference R33:  =     4.1647405837351558E-03
+        > max absolute difference TT:   =     6.7029705443365651E-04
+        > max absolute difference wT1:  =     3.3912948595411985E-04
+    > Scale2:
+        > max absolute difference R11:  =     1.6515971525181708E-02
+        > max absolute difference R22:  =     3.0306151553989660E-02
+        > max absolute difference R33:  =     4.1647405837351558E-03
+        > max absolute difference TT:   =     6.7029705443365640E-04
+        > max absolute difference wT1:  =     3.3912948595411985E-04
+*** *** ***
+TACC:  Shutdown complete. Exiting. 
