@@ -3,18 +3,28 @@ module shocktube_data
     use constants,        only: one,eight
     implicit none
     
-    real(rkind) :: rhoL = one
-    real(rkind) :: rhoR = one/eight
-
-    real(rkind) :: pL = one
-    real(rkind) :: pR = 0.1_rkind
+    integer     :: ns     = 1
+    real(rkind) :: Lx     = 3.0_rkind
+    real(rkind) :: Ly     = 4.0_rkind
+    real(rkind) :: Lz     = 0.01_rkind
+    real(rkind) :: Pr     = 0.7_rkind 
+    real(rkind) :: Sc     = 1.0_rkind  
+    real(rkind) :: gam    = 1.4_rkind
+    real(rkind) :: Rgas   = 287.053_rkind
+    real(rkind) :: mu_ref = 0.00001849_rkind 
+    real(rkind) :: pLef   = 1013250.0_rkind
+    real(rkind) :: pRig   = 101325.0_rkind
+    real(rkind) :: rhoLef = 11.851_rkind
+    real(rkind) :: rhoRig = 1.1851_rkind
+    real(rkind) :: x1, y1, z1
 
 end module
 
-subroutine meshgen(decomp, dx, dy, dz, mesh)
+!subroutine meshgen(decomp, dx, dy, dz, mesh)
+subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetric, xi, eta, zeta, dxs, dys, dzs, xbuf, zbuf)
     use kind_parameters,  only: rkind
     use constants,        only: half,one
-    use decomp_2d,        only: decomp_info
+    use decomp_2d,        only: decomp_info, nrank, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
 
     use shocktube_data
 
@@ -25,7 +35,23 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
 
     integer :: i,j,k
-    integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+    integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn, iounit
+    character(len=*),                intent(in)    :: inputfile
+    logical,                         intent(in   ) :: xmetric, ymetric, zmetric
+    real(rkind), dimension(:,:,:  ), intent(inout) :: xi, eta, zeta
+    real(rkind), dimension(:      ), intent(inout) :: dxs, dys, dzs
+    real(rkind), dimension(:,:,:,:), target,intent(in):: xbuf, zbuf
+    real(rkind), dimension(:,:,:), pointer :: xtmp1, xtmp2, ztmp1, ztmp2
+
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, Rgas, mu_ref, pLef, pRig, rhoLef, rhoRig
+
+    ioUnit = 15
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PROBINPUT)
+    close(ioUnit)
+
+    xtmp1 => xbuf(:,:,:,1); xtmp2 => xbuf(:,:,:,2) 
+    ztmp1 => zbuf(:,:,:,1); ztmp2 => zbuf(:,:,:,2) 
 
     nx = decomp%xsz(1); ny = decomp%ysz(2); nz = decomp%zsz(3)
 
@@ -38,22 +64,27 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        dx = 21.0_rkind/real(nx-1,rkind)
-        dy = 1.0_rkind/real(ny-1,rkind)
+        dx = Lx/real(nx-1,rkind)
+        dy = Ly/real(ny-1,rkind)
         dz = dx
         
-        print*, nx, ny,nz,ix1,ixn,iy1,iyn,iz1,izn
+        x1 = -0.285_rkind   ! location of diaphragm
+        !print*, nx, ny,nz,ix1,ixn,iy1,iyn,iz1,izn
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - (21.0_rkind * half)
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx + x1
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
         end do
-
+    !For now let's consider it as a uniform mesh..
+    dxs = dx
+    dys = dy
+    dzs = dz
+   
     end associate
 
 end subroutine
@@ -61,9 +92,16 @@ end subroutine
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
     use kind_parameters,  only: rkind
     use constants,        only: zero,half,one,two,pi,eight
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index
+    use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,&
+                                           p_index,T_index,e_index,Ys_index
     use decomp_2d,        only: decomp_info
     use MixtureEOSMod,    only: mixture
+    use IdealGasEOS,                 only: idealgas
+    use SutherLandViscosityMod,      only: sutherlandViscosity
+    use ConstRatioBulkViscosityMod,  only: constRatioBulkViscosity
+    use SutherLandConductivityMod,   only: SutherLandConductivity
+    use ConstSchmidtDiffusivityMod,  only: constSchmidtDiffusivity
+    use exits,                       only: GracefulExit, message, nancheck
  
     use shocktube_data
 
@@ -75,22 +113,51 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim,tstop,dt,tviz
-
+    type(sutherlandViscosity) :: shearvisc
+    type(constRatioBulkViscosity) :: bulkvisc
+    type(sutherlandConductivity) :: thermcond
+    real(rkind) :: S, Sk, T0
+    integer :: i,j, k, iounit, nx, ny, nz, nxl, nyl, nzl
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp
 
-    associate( rho => fields(:,:,:,rho_index), u => fields(:,:,:,u_index), &
-                 v => fields(:,:,:,  v_index), w => fields(:,:,:,w_index), &
-                 p => fields(:,:,:,  p_index), T => fields(:,:,:,T_index), &
-                 e => fields(:,:,:,  e_index),                             &
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, Rgas, mu_ref, pLef, pRig, rhoLef, rhoRig
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=PROBINPUT)
+    close(ioUnit)
+
+    associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
+                 v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
+                 p => fields(:,:,:,  p_index), T  => fields(:,:,:,T_index),&
+                 e => fields(:,:,:,  e_index), &
+                Ys => fields(:,:,:,Ys_index:Ys_index+mix%ns-1), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
+        if (mix%ns /= ns) call GracefulExit("Wrong number of species. Check your input file and make ns consistent with the problem file.",4562)
+        T0     =  pRig/(Rgas*rhoRig)        
+        S      = 110.4_rkind
+        Sk     = 194.0_rkind
+        
+        !print*, T0, mu_ref, Pr, S, Sk, Rgas
+        !!!! Set each material's transport coefficient object
+        shearvisc = sutherlandViscosity(mu_ref, T0, 1.5_rkind, S)
+        bulkvisc  = constRatioBulkViscosity( zero )
+        thermcond = sutherlandConductivity(Pr, T0, 1.5_rkind, Sk)
+        call mix%set_material( 1, idealgas( gam, Rgas ), shearvisc = shearvisc, bulkvisc  = bulkvisc, thermcond = thermcond  )
+
+        Ys(:,:,:,1)  = one 
+        call mix%update(Ys)     
+     
+        ! Initialise the flow field
         tmp = half * ( one+tanh(x/(dx)) )
 
-        rho = (one-tmp)*rhoL + tmp*rhoR
+        rho = (one-tmp)*rhoLef + tmp*rhoRig
         u   = zero
         v   = zero
         w   = zero
-        p   = (one-tmp)*pL + tmp*pR
+        p   = (one-tmp)*pLef + tmp*pRig
+        T   = p/(rho*Rgas) 
            
     end associate
 
