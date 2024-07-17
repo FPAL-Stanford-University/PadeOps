@@ -28,7 +28,7 @@ module sgsmod_cgrid
         real(rkind), dimension(:,:,:),   allocatable :: nusgs, kapsgs
         real(rkind), dimension(:),       allocatable :: cmodel_local, cmodel_local_Qjsgs, cmodel_local_tke
         real(rkind), dimension(:,:,:),   allocatable :: deltaLES
-        real(rkind), dimension(:),       allocatable :: camd_x, camd_y, camd_z, cmgm_x, cmgm_y, cmgm_z 
+        real(rkind), dimension(:,:,:),   allocatable :: camd_x, camd_y, camd_z, cmgm_x, cmgm_y, cmgm_z 
         real(rkind), dimension(:,:,:),   allocatable :: c1_mgm , c2_mgm
         real(rkind), dimension(:,:,:,:), pointer     :: xbuf, ybuf, zbuf, duiFildxj, SFil_ij, tausgsFil, gradTFil, QjsgsFil
         real(rkind), dimension(:,:,:  ), pointer     :: uFil, vFil, wFil, rhoFil, TFil, numer, denom
@@ -52,7 +52,7 @@ module sgsmod_cgrid
         
         !! Metric terms
         logical :: xmetric, ymetric, zmetric
-        real(rkind), dimension(:), allocatable :: dxs, dys, dzs
+        real(rkind), dimension(:,:,:), allocatable :: dxs, dys, dzs
         !! model constant values/properties
         !real(rkind) :: camd_x, camd_y, camd_z, cmgm_x, cmgm_y, cmgm_z, c1_mgm , c2_mgm, PrCpfac
         real(rkind)                   :: PrCpfac
@@ -137,7 +137,7 @@ subroutine init(this, der, decomp, Cp, Pr, dx, dy, dz, inputfile, xbuf, ybuf, zb
   integer, intent(in) :: y_bc1, y_bcn
   integer, intent(in) :: z_bc1, z_bcn
   logical, intent(in) :: xmetric, ymetric, zmetric
-  real(rkind), dimension(:), intent(in) :: dxs, dys, dzs
+  real(rkind), dimension(:,:,:), intent(in) :: dxs, dys, dzs
 
   integer :: SGSmodelID = 0, DynProcFreq = 1, DynamicProcedureType = 0, ierr, i, j, k
   real(rkind) :: Csgs = 1.0_rkind, Ctke = 0.003_rkind, ncWall = 1.0_rkind, PrSGS = 1.0_rkind, deltaRatio = 2.0_rkind
@@ -184,9 +184,9 @@ subroutine init(this, der, decomp, Cp, Pr, dx, dy, dz, inputfile, xbuf, ybuf, zb
    this%xmetric = xmetric
    this%ymetric = ymetric
    this%zmetric = zmetric
-   allocate( this%dxs(this%nxL))
-   allocate( this%dys(this%nyL))
-   allocate( this%dzs(this%nzL))
+   allocate( this%dxs(this%nxL,this%nyL,this%nzL))
+   allocate( this%dys(this%nxL,this%nyL,this%nzL))
+   allocate( this%dzs(this%nxL,this%nyL,this%nzL))
    this%dxs = dxs
    this%dys = dys
    this%dzs = dzs
@@ -195,17 +195,11 @@ subroutine init(this, der, decomp, Cp, Pr, dx, dy, dz, inputfile, xbuf, ybuf, zb
    allocate( this%deltaLES(this%nxL, this%nyL, this%nzL))
 
 
-   do k = 1,this%nzL
-      do j = 1,this%nyL
-         do i = 1,this%nxL
-            if (.not. this%isPeriodic) then
-               this%deltaLES(i,j,k) = (1.5d0*this%dxs(i)*1.5d0*this%dys(j)*this%dzs(k))**(1.d0/3.d0)
-            else
-               this%deltaLES(i,j,k) =  (1.5d0*this%dxs(i)*1.5d0*this%dys(j)*1.5d0*this%dzs(k))**(1.d0/3.d0)
-            end if 
-         end do
-      end do
-   end do
+   if (.not. this%isPeriodic) then
+      this%deltaLES = (1.5d0*this%dxs*1.5d0*this%dys*this%dzs)**(1.d0/3.d0)
+   else
+      this%deltaLES =  (1.5d0*this%dxs*1.5d0*this%dys*1.5d0*this%dzs)**(1.d0/3.d0)
+   end if 
 
    allocate(  this%S_ij(this%nxL, this%nyL, this%nzL, 6))
    allocate( this%nusgs(this%nxL, this%nyL, this%nzL)   )
@@ -228,17 +222,17 @@ subroutine init(this, der, decomp, Cp, Pr, dx, dy, dz, inputfile, xbuf, ybuf, zb
    case (1)
       call this%init_sigma()
    case (2)
+      allocate( this%camd_x(this%nxL,this%nyL,this%nzL))
+      allocate( this%camd_y(this%nxL,this%nyL,this%nzL))
+      allocate( this%camd_z(this%nxL,this%nyL,this%nzL))
       call this%init_AMD()
-      allocate( this%camd_x(this%nxL))
-      allocate( this%camd_y(this%nyL))
-      allocate( this%camd_z(this%nzL))
    case (3)
-      call this%init_mgm()
       allocate( this%c1_mgm(this%nxL, this%nyL, this%nzL)  )
       allocate( this%c2_mgm(this%nxL, this%nyL, this%nzL)  )
-      allocate( this%cmgm_x(this%nxL))
-      allocate( this%cmgm_y(this%nyL))
-      allocate( this%cmgm_z(this%nzL))
+      allocate( this%cmgm_x(this%nxL,this%nyL,this%nzL))
+      allocate( this%cmgm_y(this%nxL,this%nyL,this%nzL))
+      allocate( this%cmgm_z(this%nxL,this%nyL,this%nzL))
+      call this%init_mgm()
    case default
       call GracefulExit("Incorrect choice for SGS model ID.", 213)
    end select

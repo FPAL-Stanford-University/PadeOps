@@ -68,7 +68,8 @@ module CompressibleGrid
         logical                  :: compute_scale_decomposition
         type(scaleDecomposition) :: scaledecomp
         
-        logical                  :: forcing 
+        logical                  :: forcing_mat 
+        logical                  :: forcing_cha 
         real(rkind)              :: tsim_0, dtheta_0
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -103,7 +104,7 @@ module CompressibleGrid
         ! stretched and curvilinear meshes
         logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
         real(rkind), dimension(:,:,:), allocatable :: xi, eta, zeta
-        real(rkind), dimension(:),     allocatable :: dxs, dys, dzs
+        real(rkind), dimension(:,:,:),     allocatable :: dxs, dys, dzs
 
         contains
             procedure          :: init
@@ -183,7 +184,8 @@ contains
         integer     :: vizramp = 5
         logical     :: compute_tke_budget = .false.
         logical     :: compute_scale_decomposition = .false.
-        logical     :: forcing = .false. ! KVM 2021
+        logical     :: forcing_mat = .false. ! KVM 2021
+        logical     :: forcing_cha = .false. ! Vishwaja 2024
         logical     :: useSGS = .false.
         logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
 
@@ -199,7 +201,7 @@ contains
                              inviscid, nrestart, rewrite_viz, vizramp, &
                       compute_tke_budget, compute_scale_decomposition, &
                              x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
-                                                      forcing, useSGS
+                                                      forcing_mat, forcing_cha, useSGS
 
 
         ioUnit = 11
@@ -229,7 +231,8 @@ contains
 
         this%compute_tke_budget = compute_tke_budget
         this%compute_scale_decomposition = compute_scale_decomposition
-        this%forcing = forcing 
+        this%forcing_mat = forcing_mat 
+        this%forcing_cha = forcing_cha
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -265,9 +268,9 @@ contains
         end do  
 
         ! setup metrics for stretched grids
-        allocate(this%dxs(this%decomp%ysz(1)))
-        allocate(this%dys(this%decomp%ysz(2)))
-        allocate(this%dzs(this%decomp%ysz(3)))
+        allocate(this%dxs(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)))
+        allocate(this%dys(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)))
+        allocate(this%dzs(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)))
 
         this%xmetric = xmetric;   this%ymetric = ymetric;   this%zmetric = zmetric  
         if(this%xmetric) then
@@ -427,7 +430,7 @@ contains
            
             allocate(this%sgsmodel)
             
-            call this%sgsmodel%init(this%der, this%decomp, Cp, Pr, this%dx, this%dy, this%dz, inputfile, this%xbuf, this%ybuf, this%zbuf, periodicx, periodicy, periodicz, x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, this%xmetric, this%ymetric, this%zmetric, this%dxs, this%dys, this%dzs)
+            call this%sgsmodel%init(this%der, this%decomp, Cp, Pr, this%dx, this%dy, this%dz, inputfile, this%xbuf, this%ybuf, this%zbuf, periodicx, periodicy, periodicz, x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, this%xmetric, this%ymetric, this%zmetric, this%dxs, this%dys,this%dzs)
          
         endif
 
@@ -527,7 +530,7 @@ contains
         end if
         
         ! KVM 2021 Initialize for ddt(dtheta)
-        if (this%forcing) then
+        if (this%forcing_mat) then
             !call this%budget%get_dtheta(this%decomp,this%mesh(:,:,:,2), &
             !    this%rho,this%u,this%dtheta_0)
             !this%tsim_0 = 0.d0
@@ -1082,9 +1085,14 @@ contains
             end if
 
             call this%get_primitive()
-            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
+            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
+                          this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step)
             call this%post_bc()
-
+            !!!============Vishwaja channel flow isothermal walls=========!!!
+            if (this%forcing_cha) then
+            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
+                          this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step)
+            end if
             ! Compute TKE budgets
             if ((vizcond) .and. ((this%compute_tke_budget) .or. (this%compute_scale_decomposition))) then
                 if (this%compute_tke_budget) then
@@ -1172,7 +1180,7 @@ contains
         end do
         
         ! KVM 2021 Update tsim_0,dthet_0
-        if (this%forcing) then
+        if (this%forcing_mat) then
         !if (.true.) then
             call this%budget%get_dtheta(this%decomp,this%mesh(:,:,:,2), &
                 this%rho,this%u,this%dtheta_0)
@@ -1203,7 +1211,8 @@ contains
     end subroutine
 
     subroutine get_dt(this,stability)
-        use reductions, only : P_MAXVAL
+        use reductions, only : P_MAXVAL,P_MINVAL
+        use decomp_2d,        only: decomp_info, nrank
         class(cgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
@@ -1211,12 +1220,14 @@ contains
 
         call this%mix%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
 
-        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz &
-               + cs*sqrt( one/(this%dx**two) + one/(this%dy**two) + one/(this%dz**two) ))
-        dtmu   = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
-        dtbulk = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
-        dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(this%dx,this%dy,this%dz)**4))))**(third) + eps)
-        dtdiff = 0.2_rkind * min(this%dx,this%dy,this%dz)**2 / (P_MAXVAL( this%diff ) + eps)
+        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dxs + ABS(this%v)/this%dys + ABS(this%w)/this%dzs &
+               + cs*sqrt( one/(this%dxs**two) + one/(this%dys**two) + one/(this%dzs**two) ))
+        dtmu   = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
+        dtbulk = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
+        dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**4))))**(third) + eps)
+        dtdiff = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%diff ) + eps)
+
+        !print*, nrank, P_MINVAL(this%dxs), P_MINVAL(this%dys), P_MINVAL(this%dzs)
 
         ! Use fixed time step if CFL <= 0
         if ( this%CFL .LE. zero ) then
@@ -1285,6 +1296,16 @@ contains
     pure subroutine get_conserved(this)
         class(cgrid), intent(inout) :: this
         integer :: i
+
+        !! this is needed if the equations are to be solved in
+        !! (xi, eta, zeta) coordinates. Not if they are to be solved in (x, y, z) coordinates
+        !!if(curvilinear) then
+        !!    ! multiply all three components
+        !!elseif(stretched) then
+        !!    ! multiply by only \xi_x
+        !!else
+        !!     ! probably do nothing
+        !!endif
 
         do i = 1,this%mix%ns
             this%Wcnsrv(:,:,:,i) = this%rho*this%Ys(:,:,:,i)
@@ -1398,10 +1419,12 @@ contains
                                qz, Jz )
 
         ! KVM 2021 Call problem source hook
-        if (this%forcing) then
-            call hook_source(this%decomp, this%mesh, this%fields, &
-                this%mix, this%tsim, rhs, &
-                this%Wcnsrv,this%budget,this%tsim_0,this%dtheta_0)
+        if (this%forcing_mat) then
+            !call hook_source(this%decomp, this%mesh, this%fields, &
+            !    this%mix, this%tsim, rhs, &
+            !    this%Wcnsrv,this%budget,this%tsim_0,this%dtheta_0)
+        elseif (this%forcing_cha) then
+            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs, this%der, this%dt, this%step, this%dys)
         else
             call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
         endif
@@ -1610,7 +1633,7 @@ contains
         do k = 1, this%nzp
            do j = 1, this%nyp
               do i = 1, this%nxp
-                 mustar(i,j,k) = ytmp1(i,j,k)*this%dxs(i)**6
+                 mustar(i,j,k) = ytmp1(i,j,k)*this%dxs(i,j,k)**6
               end do
            end do
         end do
@@ -1624,7 +1647,7 @@ contains
         !!! To include dzs
         call transpose_z_to_y(ztmp1,ytmp1,this%decomp)
         do k = 1, this%nzp
-           ytmp2(:,:,k) = ytmp1(:,:,k)*this%dzs(k)**6
+           ytmp2(:,:,k) = ytmp1(:,:,k)*this%dzs(:,:,k)**6
         end do
         mustar = mustar + ytmp2
         
@@ -1635,7 +1658,7 @@ contains
         !!! To include dys
         do k = 1, this%nzp
            do j = 1, this%nyp
-              ytmp1(:,j,k) = ytmp2(:,j,k)*this%dys(j)**6
+              ytmp1(:,j,k) = ytmp2(:,j,k)*this%dys(:,j,k)**6
            end do
         end do
         mustar = mustar + ytmp1
@@ -1667,8 +1690,8 @@ contains
         do k = 1, this%nzp
            do j = 1, this%nyp
               do i = 1, this%nxp
-                 ytmp5(i,j,k)    = ytmp4(i,j,k) * this%dxs(i)**4
-                 bulkstar(i,j,k) = ytmp5(i,j,k) * ( this%dxs(i) * ytmp1(i,j,k) / (ytmp1(i,j,k) + &
+                 ytmp5(i,j,k)    = ytmp4(i,j,k) * this%dxs(i,j,k)**4
+                 bulkstar(i,j,k) = ytmp5(i,j,k) * ( this%dxs(i,j,k) * ytmp1(i,j,k) / (ytmp1(i,j,k) + &
                                       ytmp2(i,j,k) + ytmp3(i,j,k) + real(1.0D-32,rkind)) )**2
               end do
            end do
@@ -1684,8 +1707,8 @@ contains
         !!! To include dzs
         call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
         do k = 1, this%nzp
-           ytmp5(:,:,k) = ytmp4(:,:,k)*this%dzs(k)**4
-           bulkstar(:,:,k) = bulkstar(:,:,k) + ytmp5(:,:,k) * ( this%dzs(k) * ytmp3(:,:,k) / (ytmp1(:,:,k) + &
+           ytmp5(:,:,k) = ytmp4(:,:,k)*this%dzs(:,:,k)**4
+           bulkstar(:,:,k) = bulkstar(:,:,k) + ytmp5(:,:,k) * ( this%dzs(:,:,k) * ytmp3(:,:,k) / (ytmp1(:,:,k) + &
                                ytmp2(:,:,k) + ytmp3(:,:,k) + real(1.0D-32,rkind)) )**2
         end do
 
@@ -1697,8 +1720,8 @@ contains
         !!! To include dys
         do k = 1, this%nzp
            do j = 1, this%nyp
-              ytmp4(:,j,k)    = ytmp5(:,j,k)*this%dys(j)**4
-              bulkstar(:,j,k) = bulkstar(:,j,k) + ytmp4(:,j,k) * ( this%dys(j) * ytmp2(:,j,k) / (ytmp1(:,j,k) &
+              ytmp4(:,j,k)    = ytmp5(:,j,k)*this%dys(:,j,k)**4
+              bulkstar(:,j,k) = bulkstar(:,j,k) + ytmp4(:,j,k) * ( this%dys(:,j,k) * ytmp2(:,j,k) / (ytmp1(:,j,k) &
                                   + ytmp2(:,j,k) + ytmp3(:,j,k) + real(1.0D-32,rkind)) )**2
            end do
         end do
@@ -1739,8 +1762,8 @@ contains
         do k = 1, this%nzp
            do j = 1, this%nyp
               do i = 1, this%nxp
-                 ytmp5(i,j,k) = ytmp4(i,j,k)*this%dxs(i)**4
-                 kapstar(i,j,k) = ytmp5(i,j,k) * ( this%dxs(i) * ytmp1(i,j,k) / (ytmp1(i,j,k) &
+                 ytmp5(i,j,k) = ytmp4(i,j,k)*this%dxs(i,j,k)**4
+                 kapstar(i,j,k) = ytmp5(i,j,k) * ( this%dxs(i,j,k) * ytmp1(i,j,k) / (ytmp1(i,j,k) &
                                     + ytmp2(i,j,k) + ytmp3(i,j,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
               end do
            end do
@@ -1756,8 +1779,8 @@ contains
         !!! To include dzs 
         call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
         do k = 1, this%nzp
-           ytmp5(:,:,k) = ytmp4(:,:,k)*this%dzs(k)**4
-           kapstar(:,:,k) = kapstar(:,:,k) + ytmp5(:,:,k) * ( this%dzs(k) * ytmp3(:,:,k) / (ytmp1(:,:,k) &
+           ytmp5(:,:,k) = ytmp4(:,:,k)*this%dzs(:,:,k)**4
+           kapstar(:,:,k) = kapstar(:,:,k) + ytmp5(:,:,k) * ( this%dzs(:,:,k) * ytmp3(:,:,k) / (ytmp1(:,:,k) &
                               + ytmp2(:,:,k) + ytmp3(:,:,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
         end do
 
@@ -1769,8 +1792,8 @@ contains
         !!! To include dys
         do k = 1, this%nzp
            do j = 1, this%nyp
-              ytmp4(:,j,k) = ytmp5(:,j,k)*this%dys(j)**4
-              kapstar(:,j,k) = kapstar(:,j,k) + ytmp4(:,j,k) * ( this%dys(j) * ytmp2(:,j,k) / &
+              ytmp4(:,j,k) = ytmp5(:,j,k)*this%dys(:,j,k)**4
+              kapstar(:,j,k) = kapstar(:,j,k) + ytmp4(:,j,k) * ( this%dys(:,j,k) * ytmp2(:,j,k) / &
                           (ytmp1(:,j,k) + ytmp2(:,j,k) + ytmp3(:,j,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
            end do
         end do
@@ -1806,8 +1829,8 @@ contains
                     do k = 1, this%nzp
                        do j = 1, this%nyp
                           do i = 1, this%nxp
-                             ytmp5(i,j,k) = ytmp4(i,j,k)*this%dxs(i)**4
-                             diffstar(i,j,k) = ytmp5(i,j,k) * ( this%dxs(i) * ytmp1(i,j,k) / (ytmp1(i,j,k) + &
+                             ytmp5(i,j,k) = ytmp4(i,j,k)*this%dxs(i,j,k)**4
+                             diffstar(i,j,k) = ytmp5(i,j,k) * ( this%dxs(i,j,k) * ytmp1(i,j,k) / (ytmp1(i,j,k) + &
                                            ytmp2(i,j,k) + ytmp3(i,j,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
                           end do
                        end do
@@ -1823,8 +1846,8 @@ contains
                     !!! To include dzs
                     call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
                     do k = 1, this%nzp
-                       ytmp5(:,:,k) = ytmp4(:,:,k)*this%dzs(k)**4
-                       diffstar(:,:,k) = diffstar(:,:,k) + ytmp5(:,:,k) * ( this%dzs(k) * ytmp3(:,:,k) / (ytmp1(:,:,k) &
+                       ytmp5(:,:,k) = ytmp4(:,:,k)*this%dzs(:,:,k)**4
+                       diffstar(:,:,k) = diffstar(:,:,k) + ytmp5(:,:,k) * ( this%dzs(:,:,k) * ytmp3(:,:,k) / (ytmp1(:,:,k) &
                                   + ytmp2(:,:,k) + ytmp3(:,:,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
                     end do
 
@@ -1836,8 +1859,8 @@ contains
                     !!! To include dys
                     do k = 1, this%nzp
                        do j = 1, this%nyp
-                          ytmp4(:,j,k)    = ytmp5(:,j,k)*this%dys(j)**4
-                          diffstar(:,j,k) = diffstar(:,j,k) + ytmp4(:,j,k) * ( this%dys(j) * ytmp2(:,j,k) / (ytmp1(:,j,k) + &
+                          ytmp4(:,j,k)    = ytmp5(:,j,k)*this%dys(:,j,k)**4
+                          diffstar(:,j,k) = diffstar(:,j,k) + ytmp4(:,j,k) * ( this%dys(:,j,k) * ytmp2(:,j,k) / (ytmp1(:,j,k) + &
                                            ytmp2(:,j,k) + ytmp3(:,j,k) + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
                        end do
                     end do
@@ -1849,8 +1872,8 @@ contains
                     do k = 1, this%nzp
                        do j = 1, this%nyp
                           do i = 1, this%nxp
-                              ytmp4(i,j,k) = (sqrt(ytmp1(i,j,k))*this%dxs(i) + sqrt(ytmp2(i,j,k))*this%dys(j) + &
-                                  sqrt(ytmp3(i,j,k))*this%dzs(k)) / ( sqrt(ytmp1(i,j,k)+ytmp2(i,j,k)+ytmp3(i,j,k)) + real(1.0D-32,rkind) )
+                              ytmp4(i,j,k) = (sqrt(ytmp1(i,j,k))*this%dxs(i,j,k) + sqrt(ytmp2(i,j,k))*this%dys(i,j,k) + &
+                                  sqrt(ytmp3(i,j,k))*this%dzs(i,j,k)) / ( sqrt(ytmp1(i,j,k)+ytmp2(i,j,k)+ytmp3(i,j,k)) + real(1.0D-32,rkind) )
                           end do
                        end do
                     end do

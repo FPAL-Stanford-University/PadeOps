@@ -6,17 +6,11 @@ subroutine init_mgm(this)
    this%isEddyViscosityModel = .false. 
    this%isEddyDiffModel = .false. 
    
-   do k = 1,this%nzL
-      do j = 1,this%nyL
-         do i = 1,this%nxL
-            this%cmgm_x(i) = this%dxs(i)**2 / 12.0d0
-            this%cmgm_y(j) = this%dys(j)**2 / 12.0d0 
-            this%cmgm_z(k) = this%dzs(k)**2 / 12.0d0
-            this%c1_mgm(i,j,k) = eight * (this%deltaLES(i,j,k)**2) !* ceps_2 
-            this%c2_mgm(i,j,k) = two * (this%deltaLES(i,j,k)**2) !* cepsT_2
-         end do
-      end do
-   end do
+   this%cmgm_x = this%dxs**2 / 12.0d0
+   this%cmgm_y = this%dys**2 / 12.0d0 
+   this%cmgm_z = this%dzs**2 / 12.0d0
+   this%c1_mgm = eight * (this%deltaLES**2) !* ceps_2 
+   this%c2_mgm = two * (this%deltaLES**2) !* cepsT_2
 
    this%PrCpfac= this%Cp / this%Pr
    this%cmodel_global =  this%Csgs
@@ -51,23 +45,23 @@ subroutine get_mgm_kernel(this, rho, duidxj, Sij, gradT, tausgs, Qjsgs)
       do j = 1, this%nyL 
          do i = 1, this%nxL
             !! For tausgs
-            G11 = this%cmgm_x(i)*duidxj(i,j,k,1)*duidxj(i,j,k,1) + this%cmgm_y(j)*duidxj(i,j,k,2)*duidxj(i,j,k,2) + &
-                  this%cmgm_z(k)*duidxj(i,j,k,3)*duidxj(i,j,k,3)
+            G11 = this%cmgm_x(i,j,k)*duidxj(i,j,k,1)*duidxj(i,j,k,1) + this%cmgm_y(i,j,k)*duidxj(i,j,k,2)*duidxj(i,j,k,2) + &
+                  this%cmgm_z(i,j,k)*duidxj(i,j,k,3)*duidxj(i,j,k,3)
 
-            G12 = this%cmgm_x(i)*duidxj(i,j,k,1)*duidxj(i,j,k,4) + this%cmgm_y(j)*duidxj(i,j,k,2)*duidxj(i,j,k,5) + &
-                  this%cmgm_z(k)*duidxj(i,j,k,3)*duidxj(i,j,k,6)
+            G12 = this%cmgm_x(i,j,k)*duidxj(i,j,k,1)*duidxj(i,j,k,4) + this%cmgm_y(i,j,k)*duidxj(i,j,k,2)*duidxj(i,j,k,5) + &
+                  this%cmgm_z(i,j,k)*duidxj(i,j,k,3)*duidxj(i,j,k,6)
 
-            G13 = this%cmgm_x(i)*duidxj(i,j,k,1)*duidxj(i,j,k,7) + this%cmgm_y(j)*duidxj(i,j,k,2)*duidxj(i,j,k,8) + &
-                  this%cmgm_z(k)*duidxj(i,j,k,3)*duidxj(i,j,k,9)
+            G13 = this%cmgm_x(i,j,k)*duidxj(i,j,k,1)*duidxj(i,j,k,7) + this%cmgm_y(i,j,k)*duidxj(i,j,k,2)*duidxj(i,j,k,8) + &
+                  this%cmgm_z(i,j,k)*duidxj(i,j,k,3)*duidxj(i,j,k,9)
 
-            G22 = this%cmgm_x(i)*duidxj(i,j,k,4)*duidxj(i,j,k,4) + this%cmgm_y(j)*duidxj(i,j,k,5)*duidxj(i,j,k,5) + &
-                  this%cmgm_z(k)*duidxj(i,j,k,6)*duidxj(i,j,k,6)
+            G22 = this%cmgm_x(i,j,k)*duidxj(i,j,k,4)*duidxj(i,j,k,4) + this%cmgm_y(i,j,k)*duidxj(i,j,k,5)*duidxj(i,j,k,5) + &
+                  this%cmgm_z(i,j,k)*duidxj(i,j,k,6)*duidxj(i,j,k,6)
 
-            G23 = this%cmgm_x(i)*duidxj(i,j,k,4)*duidxj(i,j,k,7) + this%cmgm_y(j)*duidxj(i,j,k,5)*duidxj(i,j,k,8) + &
-                  this%cmgm_z(k)*duidxj(i,j,k,6)*duidxj(i,j,k,9)
+            G23 = this%cmgm_x(i,j,k)*duidxj(i,j,k,4)*duidxj(i,j,k,7) + this%cmgm_y(i,j,k)*duidxj(i,j,k,5)*duidxj(i,j,k,8) + &
+                  this%cmgm_z(i,j,k)*duidxj(i,j,k,6)*duidxj(i,j,k,9)
 
-            G33 = this%cmgm_x(i)*duidxj(i,j,k,7)*duidxj(i,j,k,7) + this%cmgm_y(j)*duidxj(i,j,k,8)*duidxj(i,j,k,8) + &
-                  this%cmgm_z(k)*duidxj(i,j,k,9)*duidxj(i,j,k,9)
+            G33 = this%cmgm_x(i,j,k)*duidxj(i,j,k,7)*duidxj(i,j,k,7) + this%cmgm_y(i,j,k)*duidxj(i,j,k,8)*duidxj(i,j,k,8) + &
+                  this%cmgm_z(i,j,k)*duidxj(i,j,k,9)*duidxj(i,j,k,9)
 
             Gmm = G11 + G22 + G33 + eps
             
@@ -89,14 +83,14 @@ subroutine get_mgm_kernel(this, rho, duidxj, Sij, gradT, tausgs, Qjsgs)
             end if
 
             !! For Qjsgs
-            G1T = this%cmgm_x(i)*duidxj(i,j,k,1)*gradT(i,j,k,1) + this%cmgm_y(j)*duidxj(i,j,k,2)*gradT(i,j,k,2) + &
-                  this%cmgm_z(k)*duidxj(i,j,k,3)*gradT(i,j,k,3)
+            G1T = this%cmgm_x(i,j,k)*duidxj(i,j,k,1)*gradT(i,j,k,1) + this%cmgm_y(i,j,k)*duidxj(i,j,k,2)*gradT(i,j,k,2) + &
+                  this%cmgm_z(i,j,k)*duidxj(i,j,k,3)*gradT(i,j,k,3)
 
-            G2T = this%cmgm_x(i)*duidxj(i,j,k,4)*gradT(i,j,k,1) + this%cmgm_y(j)*duidxj(i,j,k,5)*gradT(i,j,k,2) + &
-                  this%cmgm_z(k)*duidxj(i,j,k,6)*gradT(i,j,k,3)
+            G2T = this%cmgm_x(i,j,k)*duidxj(i,j,k,4)*gradT(i,j,k,1) + this%cmgm_y(i,j,k)*duidxj(i,j,k,5)*gradT(i,j,k,2) + &
+                  this%cmgm_z(i,j,k)*duidxj(i,j,k,6)*gradT(i,j,k,3)
 
-            G3T = this%cmgm_x(i)*duidxj(i,j,k,7)*gradT(i,j,k,1) + this%cmgm_y(j)*duidxj(i,j,k,8)*gradT(i,j,k,2) + &
-                  this%cmgm_z(k)*duidxj(i,j,k,9)*gradT(i,j,k,3)
+            G3T = this%cmgm_x(i,j,k)*duidxj(i,j,k,7)*gradT(i,j,k,1) + this%cmgm_y(i,j,k)*duidxj(i,j,k,8)*gradT(i,j,k,2) + &
+                  this%cmgm_z(i,j,k)*duidxj(i,j,k,9)*gradT(i,j,k,3)
 
             modG = sqrt(G1T**2 + G2T**2 + G3T**2) + eps
             

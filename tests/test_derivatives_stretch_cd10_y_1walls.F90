@@ -58,7 +58,7 @@ program test_derivatives
     real(rkind) :: dx, dy, dz
     real(rkind), parameter :: omega = 3._rkind
 
-    real(rkind) :: ytau = 2.0d0, yfocus = 0.0d0 , Lx = two*pi, Ly = two*pi, Lz = two*pi, yh = pi, ystart = -pi
+    real(rkind) :: beta = 1.054d0, alpha = 0.50d0 , Lx = two*pi, Ly = two*pi, Lz = two*pi, yh = two*pi, ystart = -pi
     real(rkind) :: num, num1, den, BB, BB2
     real(rkind) :: ybyyfocm1, yuniform_loc, yfocus_loc
     real(rkind) :: linf, l2norm, err1, err2, err3, err4, errcen
@@ -113,13 +113,10 @@ program test_derivatives
 
     ! concentrate towards the center -- Pletcher, Tannehill, Anderson
     ! (Section 5.6, Transformation 3, pg. 332)
-    yfocus  = metric_params(2,1);  ytau   = metric_params(2,2);  ystart = metric_params(2,3); yh = metric_params(2,4)
     
-    yfocus_loc = (yfocus-ystart)
-    num = one + (yfocus_loc/yh) * (exp( ytau) - one)
-    den = one + (yfocus_loc/yh) * (exp(-ytau) - one)
-    BB = half/ytau*log(num/den)
-    print *, num, den, BB
+    alpha  = metric_params(2,1);  beta   = metric_params(2,2); ystart = metric_params(2,3); yh = metric_params(2,4)
+    BB = (beta + 1) / (beta - 1)
+    print *, '>>towards walls<<', alpha, beta, ystart, yh
 
     do k=1,nz
     do j=1,ny
@@ -134,9 +131,11 @@ program test_derivatives
             eta(i,j,k) = ystart + real(j-1,rkind)*dy
 
             ! then set the non-uniform coordinate
-            yuniform_loc = (eta(i,j,k) - ystart)
-            num = sinh(ytau*BB)
-            y(i,j,k) = yfocus_loc * (one + sinh(ytau * (yuniform_loc/yh-BB))/num) + ystart
+            BB   = (beta + 1) / (beta - 1)
+            yuniform_loc = eta(i,j,k) - ystart
+            num= (beta+1) - (beta-1)*(BB**(1-yuniform_loc/yh))
+            den = (BB**(1-yuniform_loc/yh)) + 1
+            y(i,j,k) = yh*(num/den) + ystart
         endif
 
         !! sin

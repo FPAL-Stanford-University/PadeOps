@@ -123,7 +123,7 @@ subroutine multiply_by_model_constant(this,qtke)
          do j = 1, this%nyL
             this%nusgs(:,j,k)  = this%cmodel_local(j)     * this%nusgs(:,j,k)
             !qtke(:,j,k)       = this%cmodel_local_tke(j) * qtke(:,j,k)
-            qtke = this%Ctke  * qtke
+            qtke(:,j,k)        = this%Ctke  * qtke(:,j,k)
             this%kapsgs(:,j,k) = this%cmodel_local_Qjsgs(j)* this%kapsgs(:,j,k)
          end do
       end do

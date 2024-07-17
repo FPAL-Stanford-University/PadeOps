@@ -44,9 +44,7 @@ module DerivativesMod
             procedure, private :: init_serial
             procedure, private :: init_procedures
             procedure, private :: init_curvilinear
-            procedure, private :: init_metric_x
-            procedure, private :: init_metric_y
-            procedure, private :: init_metric_z
+            procedure, private :: init_metric
             generic :: init => init_parallel, init_serial
             procedure :: destroy
             procedure :: ddx
@@ -350,7 +348,8 @@ contains
              if(allocated(this%dfdxbuf)) deallocate(this%dfdxbuf)
              allocate(this%dfdxbuf(this%xsz(1), this%xsz(2), this%xsz(3)))
 
-             call this%init_metric_x(x, xi, xmetric_flag, metric_params(1,:), this%dxidx, this%dxidx_sq, this%d2xidx2)
+             call this%init_metric(this%xsz(1), this%xsz(2), this%xsz(3), x, xi, xmetric_flag, metric_params(1,:), &
+                                   this%dxidx, this%dxidx_sq, this%d2xidx2)
 
              this%xmetric = .true. 
         end if
@@ -371,7 +370,8 @@ contains
              if(allocated(this%dfdybuf)) deallocate(this%dfdybuf)
              allocate(this%dfdybuf(this%ysz(1), this%ysz(2), this%ysz(3)))
 
-             call this%init_metric_y(y, eta, ymetric_flag, metric_params(2,:), this%detady, this%detady_sq, this%d2etady2)
+             call this%init_metric(this%ysz(1), this%ysz(2), this%ysz(3), y, eta, ymetric_flag, metric_params(2,:), &
+                                   this%detady, this%detady_sq, this%d2etady2)
              !! stretched  :: [x, y, z]  --> uniform :: [xi, eta, zeta]]
              !! [dfdx, dfdy] --> [dfdxi*dxidx + dfdeta*detadx, dfdxi*dxidy + dfdeta*detady]
              !! [ystretch_type, ystretch_param]
@@ -395,7 +395,8 @@ contains
              if(allocated(this%dfdzbuf)) deallocate(this%dfdzbuf)
              allocate(this%dfdzbuf(this%zsz(1), this%zsz(2), this%zsz(3)))
 
-             call this%init_metric_z(z, zeta, zmetric_flag, metric_params(3,:), this%dzetadz, this%dzetadz_sq, this%d2zetadz2)
+             call this%init_metric(this%zsz(1), this%zsz(2), this%zsz(3), z, zeta, zmetric_flag, metric_params(3,:), &
+                                      this%dzetadz, this%dzetadz_sq, this%d2zetadz2)
 
              this%zmetric = .true. 
         end if
@@ -804,15 +805,14 @@ contains
     end subroutine 
 
 
-    subroutine init_metric_x(this, xstretch, xuniform, flag, params, dxudxs, dxudxs_sq, d2xudxs2)
+    subroutine init_metric(this, nxp, nyp, nzp, xstretch, xuniform, flag, params, dxudxs, dxudxs_sq, d2xudxs2)
         class(derivatives),         intent(in) :: this
-        integer,                    intent(in) :: flag
+        integer,                    intent(in) :: nxp, nyp, nzp, flag
         real(rkind), dimension(5), intent(in)  :: params
-        real(rkind), dimension(this%xsz(1),this%xsz(2),this%xsz(3)), intent(in)  :: xstretch, xuniform
-        real(rkind), dimension(this%xsz(1),this%xsz(2),this%xsz(3)), intent(out) :: dxudxs, dxudxs_sq, d2xudxs2
-
-        real(rkind) :: xfocus, xfocus_adj, xtau, hh, xstart, num, den, BB, xstretch_loc
-        real(rkind) :: xbyxfocm1, xuniform_adj
+        real(rkind), dimension(:,:,:), intent(in)  :: xstretch, xuniform
+        real(rkind), dimension(:,:,:), intent(out) :: dxudxs, dxudxs_sq, d2xudxs2
+        real(rkind) :: xfocus, xfocus_adj, xtau, hh, xstart, num, num1, den, BB, BB2, xstretch_loc
+        real(rkind) :: xbyxfocm1, xuniform_adj, alpha, beta
         integer     :: i, j, k
 
         if(flag==1) then
@@ -825,9 +825,9 @@ contains
            num = one + (xfocus_adj/hh) * (exp( xtau) - one)
            den = one + (xfocus_adj/hh) * (exp(-xtau) - one)
            BB = half/xtau*log(num/den)
-           do k = 1, this%xsz(3)
-              do j = 1, this%xsz(2)
-                 do i = 1, this%xsz(1)
+           do k = 1, nzp
+              do j = 1, nyp
+                 do i = 1, nxp
                     ! adjust for starting point
                     xuniform_adj = (xuniform(i,j,k) - xstart) !/ hh
 
@@ -845,85 +845,88 @@ contains
                     ! metric for second derivative
                     d2xudxs2(i,j,k) = -hh * num**3 * xbyxfocm1 / (xtau*xfocus_adj*xfocus_adj * (one + (num*xbyxfocm1)**2)**1.5d0)
 
+                    !print '(i5,1x,4(e19.12,1x))', j, xstretch(1,j,1), xuniform(1,j,1), dxudxs(1,j,1), d2xudxs2(1,j,1)
+                    ! compare with xstretch specified in meshgen
+                    if(abs(xstretch(i,j,k)-xstretch_loc) > 1.0d-12) then
+                        !print '(3i5,1x,2(e19.12,1x))', i,j,k, xstretch(i,j,k), xstretch_loc
+                        call GracefulExit("flag = 1; metric is not consistent with meshgen. Check details.", 21)
+                    endif
+                 enddo
+              enddo
+           enddo
+        elseif(flag==2) then
+           ! concentrate towards the two ends(alpha = 0.5) or one side at xend(alpha = 0)
+           ! concentrate towards the center -- Pletcher, Tannehill, Anderson
+           ! (Section 5.6, Transformation 2, pg. 335) 
+           alpha  = params(1);  beta   = params(2);  xstart = params(3); hh = params(4)
+           !print '(5(e19.12,1x))', params(:)
+           !print '(5(e19.12,1x))', alpha, beta, xstart, hh
+           BB = (beta + 1) / (beta - 1)
+           num1 = 2*beta * (2*alpha+1) * (1-alpha) / log(BB)
+           do k = 1, nzp
+              do j = 1, nyp
+                 do i = 1, nxp
+                    ! adjust for starting point
+                    xuniform_adj = (xuniform(i,j,k) - xstart) / hh
+                    ! stretched location
+                    BB2 = BB ** ( (xuniform_adj-alpha) / (1-alpha) )
+                    num = ((beta+2*alpha)*BB2 - beta + 2*alpha ) * hh
+                    xstretch_loc = num/( (2*alpha+1)*(1+BB2) )   + xstart
+
+                    ! metric for first derivative
+                    BB2 = 2*alpha - ((xstretch_loc-xstart)/hh) * (2*alpha+1)
+                    dxudxs(i,j,k) = num1 / (beta**2 - BB2**2)
+
+                    ! square of the metric for first derivative
+                    dxudxs_sq(i,j,k) = dxudxs(i,j,k)**2
+
+                    ! metric for second derivative
+                    d2xudxs2(i,j,k) = - ((num1/hh) * 2* (2*alpha+1) * BB2) / ((beta**2 - BB2**2)**2)
                     !print '(i5,1x,4(e19.12,1x))', j, xstretch(1,j,1), xuniform(1,j,1), dxudxs(1,j,1), d2xudxs2(1,j,1)
                     ! compare with xstretch specified in meshgen
                     if(abs(xstretch(i,j,k)-xstretch_loc) > 1.0d-12) then
                         print '(3i5,1x,2(e19.12,1x))', i,j,k, xstretch(i,j,k), xstretch_loc
-                        call GracefulExit("flag = 1; xmetric is not consistent with meshgen. Check details.", 21)
+                        call GracefulExit("flag = 2; metric is not consistent with meshgen. Check details.", 21)
                     endif
                  enddo
               enddo
            enddo
-        elseif(flag==2) then
-           ! concentrate towards the two ends
-            call GracefulExit("flag = 2 (concentrate towards two ends) is incomplete right now",21)
         elseif(flag==3) then
-           ! concentrate at arbitrary point
-            call GracefulExit("flag = 3 (concentrate at arbitrary point) is incomplete right now",21)
-        elseif(flag==10) then
-           ! finite-difference evaluation of metrics (reduces order of accuracy)
-            call GracefulExit("flag = 4 (finite-difference evaluation of metrics) is incomplete right now",21)
-        endif
-
-    end subroutine 
-
-
-    subroutine init_metric_y(this, xstretch, xuniform, flag, params, dxudxs, dxudxs_sq, d2xudxs2)
-        class(derivatives),         intent(in) :: this
-        integer,                    intent(in) :: flag
-        real(rkind), dimension(5), intent(in)  :: params
-        real(rkind), dimension(this%ysz(1),this%ysz(2),this%ysz(3)), intent(in)  :: xstretch, xuniform
-        real(rkind), dimension(this%ysz(1),this%ysz(2),this%ysz(3)), intent(out) :: dxudxs, dxudxs_sq, d2xudxs2
-
-        real(rkind) :: xfocus, xfocus_adj, xtau, hh, xstart, num, den, BB, xstretch_loc
-        real(rkind) :: xbyxfocm1, xuniform_adj
-        integer     :: i, j, k
-
-        if(flag==1) then
-           ! concentrate towards the center -- Pletcher, Tannehill, Anderson
-           ! (Section 5.6, Transformation 3, pg. 332) 
-           xfocus = params(1);  xtau   = params(2);  xstart = params(3); hh = params(4)
+           ! concentrate at one side at xstart
+           ! (Section 5.6, Transformation 1, pg. 334) 
+           alpha  = params(1);  beta   = params(2);  xstart = params(3); hh = params(4)
            !print '(5(e19.12,1x))', params(:)
-           !print '(5(e19.12,1x))', xfocus, xtau, xstart, hh
-           xfocus_adj = xfocus - xstart
-           num = one + (xfocus_adj/hh) * (exp( xtau) - one)
-           den = one + (xfocus_adj/hh) * (exp(-xtau) - one)
-           BB = half/xtau*log(num/den)
-           do k = 1, this%ysz(3)
-              do j = 1, this%ysz(2)
-                 do i = 1, this%ysz(1)
+           !print '(5(e19.12,1x))', alpha, beta, xstart, hh
+           BB = (beta + 1) / (beta - 1)
+           num1 = (2*beta)/log(BB)
+           do k = 1, nzp
+              do j = 1, nyp
+                 do i = 1, nxp
                     ! adjust for starting point
-                    xuniform_adj = (xuniform(i,j,k) - xstart) !/ hh
-
+                    xuniform_adj = xuniform(i,j,k) - xstart
                     ! stretched location
-                    num = sinh(xtau*BB)
-                    xstretch_loc = xfocus_adj * (one + sinh(xtau * (xuniform_adj/hh-BB))/num) + xstart
-                    xbyxfocm1 = (xstretch_loc-xstart)/xfocus_adj - one
+                    num = (beta+1) - (beta-1)*(BB**(1-xuniform_adj/hh))
+                    den = (BB**(1-xuniform_adj/hh)) + 1
+                    xstretch_loc = hh*(num/den) + xstart
 
                     ! metric for first derivative
-                    dxudxs(i,j,k) = num * hh / (xtau * xfocus_adj * sqrt(one + (xbyxfocm1 * num)**2))
+                    BB2 = 1 - ((xstretch_loc-xstart)/hh)
+                    dxudxs(i,j,k) = num1/(beta**2 - BB2**2)
 
                     ! square of the metric for first derivative
                     dxudxs_sq(i,j,k) = dxudxs(i,j,k)**2
 
                     ! metric for second derivative
-                    d2xudxs2(i,j,k) = -hh * num**3 * xbyxfocm1 / (xtau*xfocus_adj*xfocus_adj * (one + (num*xbyxfocm1)**2)**1.5d0)
+                    d2xudxs2(i,j,k) = - ((num1/hh) * 2* BB2)/ ((beta**2 - BB2**2)**2)
 
-                    !print '(i5,1x,4(e19.12,1x))', j, xstretch(1,j,1), xuniform(1,j,1), dxudxs(1,j,1), d2xudxs2(1,j,1)
-                    ! compare with xstretch specified in meshgen
                     if(abs(xstretch(i,j,k)-xstretch_loc) > 1.0d-12) then
-                        !print '(i5,1x,2(e19.12,1x))', j, xstretch(1,j,1), xstretch_loc
-                        call GracefulExit("flag = 1; ymetric is not consistent with meshgen. Check details.", 21)
+                        print '(3i5,1x,2(e19.12,1x))', i,j,k, xstretch(i,j,k), xstretch_loc
+                        call GracefulExit("flag = 3; metric is not consistent with meshgen. Check details.", 21)
                     endif
                  enddo
               enddo
            enddo
-        elseif(flag==2) then
-           ! concentrate towards the two ends
-            call GracefulExit("flag = 2 (concentrate towards two ends) is incomplete right now",21)
-        elseif(flag==3) then
-           ! concentrate at arbitrary point
-            call GracefulExit("flag = 3 (concentrate at arbitrary point) is incomplete right now",21)
+
         elseif(flag==10) then
            ! finite-difference evaluation of metrics (reduces order of accuracy)
             call GracefulExit("flag = 4 (finite-difference evaluation of metrics) is incomplete right now",21)
@@ -932,66 +935,4 @@ contains
     end subroutine 
 
 
-    subroutine init_metric_z(this, xstretch, xuniform, flag, params, dxudxs, dxudxs_sq, d2xudxs2)
-        class(derivatives),         intent(in) :: this
-        integer,                    intent(in) :: flag
-        real(rkind), dimension(5), intent(in)  :: params
-        real(rkind), dimension(this%zsz(1),this%zsz(2),this%zsz(3)), intent(in)  :: xstretch, xuniform
-        real(rkind), dimension(this%zsz(1),this%zsz(2),this%zsz(3)), intent(out) :: dxudxs, dxudxs_sq, d2xudxs2
-
-        real(rkind) :: xfocus, xfocus_adj, xtau, hh, xstart, num, den, BB, xstretch_loc
-        real(rkind) :: xbyxfocm1, xuniform_adj
-        integer     :: i, j, k
-
-        if(flag==1) then
-           ! concentrate towards the center -- Pletcher, Tannehill, Anderson
-           ! (Section 5.6, Transformation 3, pg. 332) 
-           xfocus = params(1);  xtau   = params(2);  xstart = params(3); hh = params(4)
-           !print '(5(e19.12,1x))', params(:)
-           !print '(5(e19.12,1x))', xfocus, xtau, xstart, hh
-           xfocus_adj = xfocus - xstart
-           num = one + (xfocus_adj/hh) * (exp( xtau) - one)
-           den = one + (xfocus_adj/hh) * (exp(-xtau) - one)
-           BB = half/xtau*log(num/den)
-           do k = 1, this%zsz(3)
-              do j = 1, this%zsz(2)
-                 do i = 1, this%zsz(1)
-                    ! adjust for starting point
-                    xuniform_adj = (xuniform(i,j,k) - xstart) !/ hh
-
-                    ! stretched location
-                    num = sinh(xtau*BB)
-                    xstretch_loc = xfocus_adj * (one + sinh(xtau * (xuniform_adj/hh-BB))/num) + xstart
-                    xbyxfocm1 = (xstretch_loc-xstart)/xfocus_adj - one
-
-                    ! metric for first derivative
-                    dxudxs(i,j,k) = num * hh / (xtau * xfocus_adj * sqrt(one + (xbyxfocm1 * num)**2))
-
-                    ! square of the metric for first derivative
-                    dxudxs_sq(i,j,k) = dxudxs(i,j,k)**2
-
-                    ! metric for second derivative
-                    d2xudxs2(i,j,k) = -hh * num**3 * xbyxfocm1 / (xtau*xfocus_adj*xfocus_adj * (one + (num*xbyxfocm1)**2)**1.5d0)
-
-                    !print '(i5,1x,4(e19.12,1x))', j, xstretch(1,j,1), xuniform(1,j,1), dxudxs(1,j,1), d2xudxs2(1,j,1)
-                    ! compare with xstretch specified in meshgen
-                    if(abs(xstretch(i,j,k)-xstretch_loc) > 1.0d-12) then
-                        !print '(i5,1x,2(e19.12,1x))', k, xstretch(1,1,k), xstretch_loc
-                        call GracefulExit("flag = 1; zmetric is not consistent with meshgen. Check details.", 21)
-                    endif
-                 enddo
-              enddo
-           enddo
-        elseif(flag==2) then
-           ! concentrate towards the two ends
-            call GracefulExit("flag = 2 (concentrate towards two ends) is incomplete right now",21)
-        elseif(flag==3) then
-           ! concentrate at arbitrary point
-            call GracefulExit("flag = 3 (concentrate at arbitrary point) is incomplete right now",21)
-        elseif(flag==10) then
-           ! finite-difference evaluation of metrics (reduces order of accuracy)
-            call GracefulExit("flag = 4 (finite-difference evaluation of metrics) is incomplete right now",21)
-        endif
-
-    end subroutine 
 end module

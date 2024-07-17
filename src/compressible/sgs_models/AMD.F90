@@ -11,15 +11,9 @@ subroutine init_amd(this)
        call message(1, "!!!! WARNING !!!! PrSGS = ", this%PrSGS)
    endif
    
-   do k = 1,this%nzL
-      do j = 1,this%nyL
-         do i = 1,this%nxL
-            this%camd_x(i) = 1.5d0*this%dxs(i)!*sqrt(1.d0/12.0d0)*this%Csgs
-            this%camd_y(j) = 1.5d0*this%dys(j)!*sqrt(1.d0/12.0d0)*this%Csgs
-            this%camd_z(k) = 1.5d0*this%dzs(k)!*sqrt(1.d0/12.0d0)*this%Csgs           !this%PadeDer%getApproxPoincareConstant()
-         end do
-      end do
-   end do
+   this%camd_x = 1.5d0*this%dxs!*sqrt(1.d0/12.0d0)*this%Csgs
+   this%camd_y = 1.5d0*this%dys!*sqrt(1.d0/12.0d0)*this%Csgs
+   this%camd_z = 1.5d0*this%dzs!*sqrt(1.d0/12.0d0)*this%Csgs           !this%PadeDer%getApproxPoincareConstant()
 
    this%cmodel_global = this%Csgs ! one                               ! Anisotropic model constants 
    this%cmodel_global_Qjsgs =  this%Csgs /this%Prsgs !* this%Cp   !! no PrSGS for AMD model
@@ -58,29 +52,29 @@ subroutine get_amd_kernel(this, duidxj, Sij, nusgs)
          do i = 1, this%nxL
             
             ! First compute the numerator
-            num =           ((duidxj(i,j,k,1)*this%camd_x(i))*(duidxj(i,j,k,1)*this%camd_x(i)) &
-                      +      (duidxj(i,j,k,2)*this%camd_y(j))*(duidxj(i,j,k,2)*this%camd_y(j)) &
-                      +      (duidxj(i,j,k,3)*this%camd_z(k))*(duidxj(i,j,k,3)*this%camd_z(k))) * Sij(i,j,k,1)
+            num =           ((duidxj(i,j,k,1)*this%camd_x(i,j,k))*(duidxj(i,j,k,1)*this%camd_x(i,j,k)) &
+                      +      (duidxj(i,j,k,2)*this%camd_y(i,j,k))*(duidxj(i,j,k,2)*this%camd_y(i,j,k)) &
+                      +      (duidxj(i,j,k,3)*this%camd_z(i,j,k))*(duidxj(i,j,k,3)*this%camd_z(i,j,k))) * Sij(i,j,k,1)
 
-            num = num +     ((duidxj(i,j,k,4)*this%camd_x(i))*(duidxj(i,j,k,4)*this%camd_x(i)) &
-                      +      (duidxj(i,j,k,5)*this%camd_y(j))*(duidxj(i,j,k,5)*this%camd_y(j)) &
-                      +      (duidxj(i,j,k,6)*this%camd_z(k))*(duidxj(i,j,k,6)*this%camd_z(k))) * Sij(i,j,k,4)
+            num = num +     ((duidxj(i,j,k,4)*this%camd_x(i,j,k))*(duidxj(i,j,k,4)*this%camd_x(i,j,k)) &
+                      +      (duidxj(i,j,k,5)*this%camd_y(i,j,k))*(duidxj(i,j,k,5)*this%camd_y(i,j,k)) &
+                      +      (duidxj(i,j,k,6)*this%camd_z(i,j,k))*(duidxj(i,j,k,6)*this%camd_z(i,j,k))) * Sij(i,j,k,4)
 
-            num = num +     ((duidxj(i,j,k,7)*this%camd_x(i))*(duidxj(i,j,k,7)*this%camd_x(i)) &
-                      +      (duidxj(i,j,k,8)*this%camd_y(j))*(duidxj(i,j,k,8)*this%camd_y(j)) &
-                      +      (duidxj(i,j,k,9)*this%camd_z(k))*(duidxj(i,j,k,9)*this%camd_z(k))) * Sij(i,j,k,6)
+            num = num +     ((duidxj(i,j,k,7)*this%camd_x(i,j,k))*(duidxj(i,j,k,7)*this%camd_x(i,j,k)) &
+                      +      (duidxj(i,j,k,8)*this%camd_y(i,j,k))*(duidxj(i,j,k,8)*this%camd_y(i,j,k)) &
+                      +      (duidxj(i,j,k,9)*this%camd_z(i,j,k))*(duidxj(i,j,k,9)*this%camd_z(i,j,k))) * Sij(i,j,k,6)
 
-            num = num + two*((duidxj(i,j,k,1)*this%camd_x(i))*(duidxj(i,j,k,4)*this%camd_x(i)) &
-                           + (duidxj(i,j,k,2)*this%camd_y(j))*(duidxj(i,j,k,5)*this%camd_y(j)) &
-                           + (duidxj(i,j,k,3)*this%camd_z(k))*(duidxj(i,j,k,6)*this%camd_z(k))) * Sij(i,j,k,2)
+            num = num + two*((duidxj(i,j,k,1)*this%camd_x(i,j,k))*(duidxj(i,j,k,4)*this%camd_x(i,j,k)) &
+                           + (duidxj(i,j,k,2)*this%camd_y(i,j,k))*(duidxj(i,j,k,5)*this%camd_y(i,j,k)) &
+                           + (duidxj(i,j,k,3)*this%camd_z(i,j,k))*(duidxj(i,j,k,6)*this%camd_z(i,j,k))) * Sij(i,j,k,2)
             
-            num = num + two*((duidxj(i,j,k,1)*this%camd_x(i))*(duidxj(i,j,k,7)*this%camd_x(i)) &
-                           + (duidxj(i,j,k,2)*this%camd_y(j))*(duidxj(i,j,k,8)*this%camd_y(j)) &
-                           + (duidxj(i,j,k,3)*this%camd_z(k))*(duidxj(i,j,k,9)*this%camd_z(k))) * Sij(i,j,k,3)
+            num = num + two*((duidxj(i,j,k,1)*this%camd_x(i,j,k))*(duidxj(i,j,k,7)*this%camd_x(i,j,k)) &
+                           + (duidxj(i,j,k,2)*this%camd_y(i,j,k))*(duidxj(i,j,k,8)*this%camd_y(i,j,k)) &
+                           + (duidxj(i,j,k,3)*this%camd_z(i,j,k))*(duidxj(i,j,k,9)*this%camd_z(i,j,k))) * Sij(i,j,k,3)
 
-            num = num + two*((duidxj(i,j,k,4)*this%camd_x(i))*(duidxj(i,j,k,7)*this%camd_x(i)) &
-                           + (duidxj(i,j,k,5)*this%camd_y(j))*(duidxj(i,j,k,8)*this%camd_y(j)) &
-                           + (duidxj(i,j,k,6)*this%camd_z(k))*(duidxj(i,j,k,9)*this%camd_z(k))) * Sij(i,j,k,5)
+            num = num + two*((duidxj(i,j,k,4)*this%camd_x(i,j,k))*(duidxj(i,j,k,7)*this%camd_x(i,j,k)) &
+                           + (duidxj(i,j,k,5)*this%camd_y(i,j,k))*(duidxj(i,j,k,8)*this%camd_y(i,j,k)) &
+                           + (duidxj(i,j,k,6)*this%camd_z(i,j,k))*(duidxj(i,j,k,9)*this%camd_z(i,j,k))) * Sij(i,j,k,5)
 
             ! Now compute the denominator
             den =  duidxj(i,j,k,1)*duidxj(i,j,k,1) +  duidxj(i,j,k,2)*duidxj(i,j,k,2) + duidxj(i,j,k,3)*duidxj(i,j,k,3) &
@@ -110,17 +104,17 @@ subroutine get_amd_Dkernel(this, duidxj, gradT, kapsgs)
         !$omp simd 
         do i = 1,this%nxL
            ! First compute the numerator
-           num =       ((duidxj(i,j,k,1)*this%camd_x(i))*(gradT(i,j,k,1)*this%camd_x(i)) &
-                     +  (duidxj(i,j,k,2)*this%camd_y(j))*(gradT(i,j,k,2)*this%camd_y(j)) &
-                     +  (duidxj(i,j,k,3)*this%camd_z(k))*(gradT(i,j,k,3)*this%camd_z(k))) * gradT(i,j,k,1)
+           num =       ((duidxj(i,j,k,1)*this%camd_x(i,j,k))*(gradT(i,j,k,1)*this%camd_x(i,j,k)) &
+                     +  (duidxj(i,j,k,2)*this%camd_y(i,j,k))*(gradT(i,j,k,2)*this%camd_y(i,j,k)) &
+                     +  (duidxj(i,j,k,3)*this%camd_z(i,j,k))*(gradT(i,j,k,3)*this%camd_z(i,j,k))) * gradT(i,j,k,1)
 
-           num = num + ((duidxj(i,j,k,4)*this%camd_x(i))*(gradT(i,j,k,1)*this%camd_x(i)) &
-                     +  (duidxj(i,j,k,5)*this%camd_y(j))*(gradT(i,j,k,2)*this%camd_y(j)) &
-                     +  (duidxj(i,j,k,6)*this%camd_z(k))*(gradT(i,j,k,3)*this%camd_z(k))) * gradT(i,j,k,2)
+           num = num + ((duidxj(i,j,k,4)*this%camd_x(i,j,k))*(gradT(i,j,k,1)*this%camd_x(i,j,k)) &
+                     +  (duidxj(i,j,k,5)*this%camd_y(i,j,k))*(gradT(i,j,k,2)*this%camd_y(i,j,k)) &
+                     +  (duidxj(i,j,k,6)*this%camd_z(i,j,k))*(gradT(i,j,k,3)*this%camd_z(i,j,k))) * gradT(i,j,k,2)
 
-           num = num + ((duidxj(i,j,k,7)*this%camd_x(i))*(gradT(i,j,k,1)*this%camd_x(i)) &
-                      + (duidxj(i,j,k,8)*this%camd_y(j))*(gradT(i,j,k,2)*this%camd_y(j)) &
-                      + (duidxj(i,j,k,9)*this%camd_z(k))*(gradT(i,j,k,3)*this%camd_z(k))) * gradT(i,j,k,3)
+           num = num + ((duidxj(i,j,k,7)*this%camd_x(i,j,k))*(gradT(i,j,k,1)*this%camd_x(i,j,k)) &
+                      + (duidxj(i,j,k,8)*this%camd_y(i,j,k))*(gradT(i,j,k,2)*this%camd_y(i,j,k)) &
+                      + (duidxj(i,j,k,9)*this%camd_z(i,j,k))*(gradT(i,j,k,3)*this%camd_z(i,j,k))) * gradT(i,j,k,3)
 
            ! Now get the denominator
            den = gradT(i,j,k,1)*gradT(i,j,k,1) + gradT(i,j,k,2)*gradT(i,j,k,2) +  gradT(i,j,k,3)*gradT(i,j,k,3)  
