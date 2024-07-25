@@ -27,7 +27,7 @@ module spectralForcingLayerMod
       real(rkind), dimension(:,:,:), allocatable :: integralMask
       real(rkind), dimension(:),     allocatable :: integralMask_1D
       real(rkind) :: seedFact, dV, tgtKE, tgtKEon3, ampFact_x, ampFact_y, &
-        ampFact_z, ampFact_T, tgtDissipation, integralTime, tgtMPE, ampFact_time 
+        ampFact_z, tgtDissipation, integralTime, tgtMPE, ampFact_time 
       integer :: seed
       real(rkind) :: gain, buoyancyFact
       type(spectral), pointer :: spectC, spectE
@@ -404,10 +404,9 @@ module spectralForcingLayerMod
 
           if (dt > 0.d0) then
               ! Penalty term
-              this%ampFact_T = 1.d0
               this%fT = this%rmaskC*this%lambda/dt*(this%Ttgt - T)
               call this%spectC%fft(this%fT,this%fThat)
-              Trhs = Trhs + this%ampFact_T*this%fThat
+              Trhs = Trhs + this%fThat
           end if
       end subroutine
 

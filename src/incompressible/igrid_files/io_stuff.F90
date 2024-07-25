@@ -78,7 +78,6 @@
                call decomp_2d_write_one(1,this%forceLayer%fz,fname, this%gpE)
 
            end if
-       
        end if
 
        if (nrank == 0) then
@@ -565,7 +564,7 @@
        class(decomp_info), intent(in) :: gpC, gpE
        integer, intent(out) :: tid_out
        character(len=clen) :: tempname, fname
-       integer :: ierr, fid, idx 
+       integer :: ierr, fid, idx, ios 
        real(rkind) :: tmp
 
        if (tid < 0) then
@@ -604,7 +603,7 @@
 
        if (nrank == 0) then
            if (tid < 0) then
-               call assert(.false.,'Not all RESTART files have tid written out. Unsurpress this assert if you are confident yours does -- igrid_files/io.F90')
+             !call assert(.false.,'Not all RESTART files have tid written out. Surpress this assert if you are confident yours does -- igrid_files/io.F90')
                write(tempname,"(A7,A4,I2.2,A12)") "RESTART", "_Run",rid, "_info.LATEST"
            else
                write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
@@ -612,10 +611,18 @@
            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
            fid = 10
            open(unit=fid,file=trim(fname),status="old",action="read")
-           read (fid, "(100g15.5)")  this%tsim
-           !read (fid, "(100g15.5)")  tmp
-           !tid_out = int(tmp)
-           tid_out = tid
+           read (fid, *, iostat=ios)  this%tsim
+           if (ios /= 0) then
+               print*, 'Error reading simulation time: ',ios
+               close(fid)
+               stop
+           end if
+           read (fid, *, iostat=ios)  tid_out
+           if (ios /= 0) then
+               print*, 'Error reading simulation time ID: ',ios
+               close(fid)
+               stop
+           end if
            if (this%useControl) then
               read(fid,"(100g15.5)") this%restartPhi
            end if
