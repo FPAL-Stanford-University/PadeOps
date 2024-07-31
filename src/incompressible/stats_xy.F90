@@ -38,10 +38,10 @@ module stats_xy_mod
         real(rkind), dimension(:,:,:,:,:), allocatable :: dTdxj
 
         ! Momentum fields
-        real(rkind), dimension(:,:,:,:), allocatable :: psplit, fxsplit, fysplit, fzsplit
+        real(rkind), dimension(:,:,:,:), allocatable :: psplit, fxsplit, fysplit, fzsplit, fTsplit
         real(rkind), dimension(:,:,:,:,:), allocatable,public :: ujsplit, duidxj 
         real(rkind), dimension(:,:,:), pointer :: u, v, wC, pressure, dudx, dudy, dudz, &
-          dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, fx, fy, fz
+          dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, fx, fy, fz, fT
 
         ! SGS fields
         real(rkind), dimension(:,:,:,:,:), allocatable :: qjsplit
@@ -128,7 +128,7 @@ module stats_xy_mod
         character(len=clen) :: outputdir
         integer :: ioUnit, ierr, nstore, n
         integer, parameter :: nterms      = 102
-        integer, parameter :: nterms_sca  = 47
+        integer, parameter :: nterms_sca  = 49
         integer, parameter :: n_ddt_terms = 6
         real, parameter :: zero = 0.d0
         logical :: do_stats = .false.
@@ -224,6 +224,7 @@ module stats_xy_mod
             allocate(this%fxsplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales))
             allocate(this%fysplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales))
             allocate(this%fzsplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales))
+            allocate(this%fTsplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales))
             
             this%tidx = 0
             call this%link_pointers(this%tidx+1,min(1,this%nscalars),1)
@@ -251,6 +252,7 @@ module stats_xy_mod
           if (allocated(this%fxsplit)) deallocate(this%fxsplit)
           if (allocated(this%fysplit)) deallocate(this%fysplit)
           if (allocated(this%fzsplit)) deallocate(this%fzsplit)
+          if (allocated(this%fTsplit)) deallocate(this%fTsplit)
           if (allocated(this%ujsplit)) deallocate(this%ujsplit)
           if (allocated(this%duidxj)) deallocate(this%duidxj)
           if (allocated(this%dTdxj)) deallocate(this%dTdxj)
@@ -338,6 +340,7 @@ module stats_xy_mod
           if (associated(this%fx)) nullify(this%fx)
           if (associated(this%fy)) nullify(this%fy)
           if (associated(this%fz)) nullify(this%fz)
+          if (associated(this%fT)) nullify(this%fT)
           if (associated(this%tau11)) nullify(this%tau11)
           if (associated(this%tau12)) nullify(this%tau12)
           if (associated(this%tau13)) nullify(this%tau13)
@@ -414,6 +417,9 @@ module stats_xy_mod
                     this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
                     this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
                   call this%do_scale_splitting(this%sim%rbuffxC(:,:,:,3),this%qjsplit(:,:,:,:,3),kc,rbuff,cbuff)
+
+                  ! Forcing
+                  call this%do_scale_splitting(this%sim%spectForceLayer%fT,this%fTsplit,kc,rbuff,cbuff)
 
                   nullify(F, dFdx, dFdy, dFdz, q1, q2, q3)
               endif
@@ -1068,6 +1074,10 @@ module stats_xy_mod
           call this%mixed_scale_turbulent_transport(this%Tsplit,this%Tsplit,this%ujsplit,scl,this%TT_budget(:,11))
           this%TT_budget(:,11) = this%TT_budget(:,11)
 
+          ! Force production
+          call this%covariance(this%T,this%fT,this%TT_budget(:,12))
+
+
       end subroutine
 
       subroutine get_wT_budget_rhs(this,scl)
@@ -1138,6 +1148,9 @@ module stats_xy_mod
 
           ! Mixed scale turbulent transport
           call this%mixed_scale_turbulent_transport(this%Tsplit,this%ujsplit(:,:,:,:,3),this%ujsplit,scl,this%wT_budget(:,20))
+
+          ! Scalar force production
+          call this%covariance(this%wC,this%fT,this%wT_budget(:,21))
       end subroutine
 
       subroutine link_pointers(this,tidx,sca,scl)
@@ -1205,14 +1218,14 @@ module stats_xy_mod
 
         if (this%nscalars > 0) then
             id = 1
-            this%TT_budget    => this%stats_sca(:,id:id+10,tidx,sca,scl); id = id + 11
+            this%TT_budget    => this%stats_sca(:,id:id+11,tidx,sca,scl); id = id + 12
             this%dTdz         => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%meanT        => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%uT           => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%vT           => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%wT           => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%TT           => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
-            this%wT_budget    => this%stats_sca(:,id:id+19,tidx,sca,scl); id = id + 20
+            this%wT_budget    => this%stats_sca(:,id:id+20,tidx,sca,scl); id = id + 21
             this%dTdxj_var    => this%stats_sca(:,id:id+2 ,tidx,sca,scl); id = id + 3
             this%qj_var       => this%stats_sca(:,id:id+2 ,tidx,sca,scl); id = id + 3
             this%meanq3       => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
@@ -1225,6 +1238,7 @@ module stats_xy_mod
             this%dTdxC => this%dTdxj(:,:,:,scl,1)
             this%dTdyC => this%dTdxj(:,:,:,scl,2)
             this%dTdzC => this%dTdxj(:,:,:,scl,3)
+            this%fT => this%fTsplit(:,:,:,scl)
             if (this%sim%isStratified) then
                 if (sca == 1) then
                     this%T_all     => this%sim%T
@@ -1414,7 +1428,7 @@ module stats_xy_mod
 
               if (nrank == 0) then
                   id = 1
-                  open(fid, file=fname)!, status="new", action="write")
+                  open(fid, file=fname)
                   write(fid,*) "Scalar variance budget terms"
                   write(fid,"(A4,I2,A15)") "  > ",id,". Unsteady term";                     id = id + 1
                   write(fid,"(A4,I2,A26)") "  > ",id,". Mean gradient production";          id = id + 1
@@ -1427,6 +1441,7 @@ module stats_xy_mod
                   write(fid,"(A4,I2,A30)") "  > ",id,". Interscale transfer (direct)";      id = id + 1
                   write(fid,"(A4,I2,A32)") "  > ",id,". Interscale transfer (indirect)";    id = id + 1
                   write(fid,"(A4,I2,A35)") "  > ",id,". Turbulent transport (mixed scale)"; id = id + 1
+                  write(fid,"(A4,I2,A18)") "  > ",id,". Force production";                  id = id + 1
                   write(fid,*) " "
                   write(fid,*) "Misc terms:"
                   write(fid,"(A4,I2,A28)") "  > ",id,". Mean scalar gradient, dTdz"; id = id + 1
@@ -1458,6 +1473,7 @@ module stats_xy_mod
                   write(fid,"(A6,I2,A30)") "    > ",id,". Interscale transfer (direct)";      id = id + 1
                   write(fid,"(A6,I2,A32)") "    > ",id,". Interscale transfer (indirect)";    id = id + 1
                   write(fid,"(A6,I2,A35)") "    > ",id,". Turbulent transport (mixed scale)"; id = id + 1
+                  write(fid,"(A6,I2,A25)") "    > ",id,". Scalar force production";           id = id + 1
                   write(fid,*) " "
                   write(fid,*) "Temperature gradient variances"
                   write(fid,"(A4,I2,A11)") "  > ",id,". Var(dTdx)"; id = id + 1

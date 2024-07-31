@@ -837,6 +837,9 @@
                      this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
                      this%rbuffzE(:,:,:,1))
                    call this%dumpFullField(this%spectForceLayer%ampFact_z*this%rbuffxC(:,:,:,3), "frcz")
+                   if (this%isStratified) then
+                       call this%dumpFullField(this%spectForceLayer%fT, "frcT")
+                   end if
 
                end if
            end if
