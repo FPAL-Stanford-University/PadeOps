@@ -500,6 +500,13 @@ subroutine compute_vorticity(this)
 
 end subroutine 
 
+subroutine compute_potential_vorticity(this,PV)
+    class(igrid), intent(inout) :: this
+    real(rkind), dimension(:,:,:), intent(out) :: PV
+
+    PV = this%dTdxC*this%ox + this%dTdyC*this%oy + this%dTdzC*this%oz
+end subroutine
+
 subroutine compute_duidxj(this)
     class(igrid), intent(inout), target :: this
     complex(rkind), dimension(:,:,:), pointer :: ctmpz1, ctmpz2

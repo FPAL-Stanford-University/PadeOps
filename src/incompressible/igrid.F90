@@ -386,6 +386,7 @@ module IncompressibleGrid
             procedure          :: wrapup_timestep
             procedure, private :: reset_pointers
             procedure, private :: compute_vorticity
+            procedure, private :: compute_potential_vorticity
             procedure, private :: finalize_stats3D
             procedure, private :: dump_planes
             procedure, private :: dealiasRealField_C
