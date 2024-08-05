@@ -27,7 +27,7 @@ module stats_xy_mod
           R22_budget, R33_budget, wT_budget, duidxj_var, dTdxj_var, tauij_var, qj_var, &
           tke_flux, sca_var_flux
         real(rkind), dimension(:), pointer :: mke, tke, fifi, meanU, meanV, meanW, meanT, meanP, &
-          meanFx, meanFy, meanFz,&
+          meanFx, meanFy, meanFz, meanFt, fTfT, &
           uu, vv, ww, uv, uw, vw, uT, vT, wT, TT, dTdz, S12_var, S13_var, S23_var, &
           meanq3, pp, up, vp, wp
 
@@ -128,7 +128,7 @@ module stats_xy_mod
         character(len=clen) :: outputdir
         integer :: ioUnit, ierr, nstore, n
         integer, parameter :: nterms      = 102
-        integer, parameter :: nterms_sca  = 49
+        integer, parameter :: nterms_sca  = 51
         integer, parameter :: n_ddt_terms = 6
         real, parameter :: zero = 0.d0
         logical :: do_stats = .false.
@@ -243,7 +243,7 @@ module stats_xy_mod
             this%meanU,this%meanV,this%meanW,this%meanP,this%meanT,&
             this%uu,this%vv,this%ww,this%uv,this%uw,this%vw,this%uT,&
             this%vT,this%wT,this%TT,this%meanFx,this%meanFy,this%meanFz,&
-            this%pp,this%up,this%vp,this%wp)
+            this%pp,this%up,this%vp,this%wp,this%meanfT,this%fTfT)
           if (allocated(this%stats)) deallocate(this%stats)
           if (allocated(this%stats_sca)) deallocate(this%stats_sca)
           if (allocated(this%Tsplit)) deallocate(this%Tsplit)
@@ -584,6 +584,11 @@ module stats_xy_mod
                          call this%mean(this%sim%rbuffxC(:,:,:,2),this%fifi)
                          this%fifi = this%fifi - (this%meanFx*this%meanFx + &
                            this%meanFy*this%meanFy + this%meanFz*this%meanFz)
+
+                         if (this%nscalars>0) then
+                             call this%mean(this%sim%spectForceLayer%fT,this%meanfT)
+                             call this%covariance(this%fT,this%fT,this%fTfT)
+                         end if
                      else
                          this%meanFx = 0.d0
                          this%meanFy = 0.d0
@@ -1221,6 +1226,8 @@ module stats_xy_mod
             this%TT_budget    => this%stats_sca(:,id:id+11,tidx,sca,scl); id = id + 12
             this%dTdz         => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%meanT        => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
+            this%meanfT       => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
+            this%fTfT         => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%uT           => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%vT           => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%wT           => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
