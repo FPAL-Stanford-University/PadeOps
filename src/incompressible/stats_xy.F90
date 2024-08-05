@@ -1453,6 +1453,8 @@ module stats_xy_mod
                   write(fid,*) "Misc terms:"
                   write(fid,"(A4,I2,A28)") "  > ",id,". Mean scalar gradient, dTdz"; id = id + 1
                   write(fid,"(A4,I2,A14)") "  > ",id,". Mean scalar ";               id = id + 1 
+                  write(fid,"(A4,I2,A20)") "  > ",id,". Mean scalar source";         id = id + 1 
+                  write(fid,"(A4,I2,A10)") "  > ",id,". <fT'fT'>";                   id = id + 1 
                   write(fid,"(A4,I2,A8)" ) "  > ",id,". <u'T'>";                     id = id + 1 
                   write(fid,"(A4,I2,A8)" ) "  > ",id,". <v'T'>";                     id = id + 1
                   write(fid,"(A4,I2,A8)" ) "  > ",id,". <w'T'>";                     id = id + 1 
