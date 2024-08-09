@@ -780,89 +780,102 @@
      end if 
    end subroutine 
 
-   subroutine dump_visualization_files(this)
+   subroutine dump_visualization_files(this,ddt)
        use exits, only: message_min_max, message
        class(igrid), intent(inout) :: this
+       logical, intent(in), optional :: ddt
+       logical :: dump_ddt_terms = .false.
+
+       if (present(ddt)) dump_ddt_terms = ddt
 
        select case (this%ioType) 
        case(0)
-           call this%dumpFullField(this%u,'uVel')
-           call this%dumpFullField(this%v,'vVel')
-           call this%dumpFullField(this%wC,'wVel')
-           call this%dump_scalar_fields()
-           call this%dumpVisualizationInfo()
-           if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
-           if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
-           if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
-           if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
-           if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
-           if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
-           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
-           if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
-              call this%dumpFullField(this%kappa_bounding,'kBND')
-           end if 
-           if (this%computeRapidSlowPressure) then
-               call this%dumpFullField(this%prapid,'prap')
-               call this%dumpFullField(this%pslow,'pslo')
-           end if 
-           if (this%computevorticity) then
-               call this%dumpFullField(this%ox,'omgX')
-               call this%dumpFullField(this%oy,'omgY')
-               call this%dumpFullField(this%oz,'omgZ')
-               if (this%isStratified) then ! dump potential vorticity
-                   call this%compute_potential_vorticity(this%rbuffxC(:,:,:,1))
-                   call this%dumpFullField(this%rbuffxC(:,:,:,1),'pVrt')
+           if (dump_ddt_terms) then
+               call this%dumpFullField(this%dudt,'dudt')
+               call this%dumpFullField(this%dvdt,'dvdt')
+               call this%dumpFullField(this%dwdt,'dwdt')
+               if (this%isStratified) then
+                   call this%dumpFullField(this%dTdt,'dTdt')
                end if
-           end if
-           if (this%WriteTurbineForce) then 
-                call this%dumpFullField(this%WindTurbineArr%fx, "TrbX")
-                call this%dumpFullField(this%WindTurbineArr%fy, "TrbY")
-                call this%dumpFullField(this%WindTurbineArr%fz, "TrbZ")
-           end if
-
-           if (this%localizedForceLayer == 1) then
-               if (this%forceLayer%dumpForce) then
-                   this%rbuffxC(:,:,:,1) = this%forceLayer%ampfact*this%forceLayer%fx
-                   this%rbuffxC(:,:,:,2) = this%forceLayer%ampfact*this%forceLayer%fy
-                   this%rbuffxE(:,:,:,1) = this%forceLayer%ampfact*this%forceLayer%fz
-                   call this%dumpFullField(this%rbuffxC(:,:,:,1), "frcx")
-                   call this%dumpFullField(this%rbuffxC(:,:,:,2), "frcy")
-                   call this%forceLayer%interpE2C(this%rbuffxE(:,:,:,1),&
-                     this%rbuffxC(:,:,:,3), this%rbuffyC(:,:,:,1), &
-                     this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
-                     this%rbuffzE(:,:,:,1))
-                   call this%dumpFullField(this%rbuffxC(:,:,:,3), "frcz")
-                   if (this%forceLayer%dumpSplines) then
-                       call this%dumpFullField(this%forceLayer%phixC, "phxC", this%gpC)
-                       call this%dumpFullField(this%forceLayer%phiyC, "phyC", this%gpC)
-                       call this%dumpFullField(this%forceLayer%phizC, "phzC", this%gpC)
-                       
-                       call this%dumpFullField(this%forceLayer%dphixC, "dpxC", this%gpC)
-                       call this%dumpFullField(this%forceLayer%dphiyC, "dpyC", this%gpC)
-                       call this%dumpFullField(this%forceLayer%dphizC, "dpzC", this%gpC)
-                       
-                       call this%dumpFullField(this%forceLayer%phixE, "phxE", this%gpE)
-                       call this%dumpFullField(this%forceLayer%phiyE, "phyE", this%gpE)
-                       call this%dumpFullField(this%forceLayer%phizE, "phzE", this%gpE)
-                       
-                       call this%dumpFullField(this%forceLayer%dphixE, "dpxE", this%gpE)
-                       call this%dumpFullField(this%forceLayer%dphiyE, "dpyE", this%gpE)
-                       call this%dumpFullField(this%forceLayer%dphizE, "dpzE", this%gpE)
+           else
+               call this%dumpFullField(this%u,'uVel')
+               call this%dumpFullField(this%v,'vVel')
+               call this%dumpFullField(this%wC,'wVel')
+               call this%dump_scalar_fields()
+               call this%dumpVisualizationInfo()
+               if (this%isStratified .or. this%initspinup) call this%dumpFullField(this%T,'potT')
+               if (this%fastCalcPressure) call this%dumpFullField(this%pressure,'prss')
+               if (this%computeDNSpressure) call this%dumpFullField(this%pressure_dns,'pdns')
+               if (this%computeturbinepressure) call this%dumpFullField(this%pressure_turbine,'ptrb')
+               if (this%computefringepressure) call this%dumpFullField(this%pressure_fringe,'pfrn')
+               if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
+               if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
+               if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
+                  call this%dumpFullField(this%kappa_bounding,'kBND')
+               end if 
+               if (this%computeRapidSlowPressure) then
+                   call this%dumpFullField(this%prapid,'prap')
+                   call this%dumpFullField(this%pslow,'pslo')
+               end if 
+               if (this%computevorticity) then
+                   call this%dumpFullField(this%ox,'omgX')
+                   call this%dumpFullField(this%oy,'omgY')
+                   call this%dumpFullField(this%oz,'omgZ')
+                   if (this%isStratified) then ! dump potential vorticity
+                       call this%compute_potential_vorticity(this%rbuffxC(:,:,:,1))
+                       call this%dumpFullField(this%rbuffxC(:,:,:,1),'pVrt')
                    end if
                end if
-           elseif (this%localizedForceLayer == 2) then
-               if (this%spectForceLayer%dumpForce) then
-                   call this%dumpFullField(this%spectForceLayer%ampFact_x*this%spectForceLayer%fx, "frcx")
-                   call this%dumpFullField(this%spectForceLayer%ampFact_y*this%spectForceLayer%fy, "frcy")
-                   call this%spectForceLayer%interpE2C(this%spectForceLayer%fz,&
-                     this%rbuffxC(:,:,:,3), this%rbuffyC(:,:,:,1), &
-                     this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
-                     this%rbuffzE(:,:,:,1))
-                   call this%dumpFullField(this%spectForceLayer%ampFact_z*this%rbuffxC(:,:,:,3), "frcz")
-                   if (this%isStratified) then
-                       call this%dumpFullField(this%spectForceLayer%fT, "frcT")
-                   end if
+               if (this%WriteTurbineForce) then 
+                    call this%dumpFullField(this%WindTurbineArr%fx, "TrbX")
+                    call this%dumpFullField(this%WindTurbineArr%fy, "TrbY")
+                    call this%dumpFullField(this%WindTurbineArr%fz, "TrbZ")
+               end if
 
+               if (this%localizedForceLayer == 1) then
+                   if (this%forceLayer%dumpForce) then
+                       this%rbuffxC(:,:,:,1) = this%forceLayer%ampfact*this%forceLayer%fx
+                       this%rbuffxC(:,:,:,2) = this%forceLayer%ampfact*this%forceLayer%fy
+                       this%rbuffxE(:,:,:,1) = this%forceLayer%ampfact*this%forceLayer%fz
+                       call this%dumpFullField(this%rbuffxC(:,:,:,1), "frcx")
+                       call this%dumpFullField(this%rbuffxC(:,:,:,2), "frcy")
+                       call this%forceLayer%interpE2C(this%rbuffxE(:,:,:,1),&
+                         this%rbuffxC(:,:,:,3), this%rbuffyC(:,:,:,1), &
+                         this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+                         this%rbuffzE(:,:,:,1))
+                       call this%dumpFullField(this%rbuffxC(:,:,:,3), "frcz")
+                       if (this%forceLayer%dumpSplines) then
+                           call this%dumpFullField(this%forceLayer%phixC, "phxC", this%gpC)
+                           call this%dumpFullField(this%forceLayer%phiyC, "phyC", this%gpC)
+                           call this%dumpFullField(this%forceLayer%phizC, "phzC", this%gpC)
+                           
+                           call this%dumpFullField(this%forceLayer%dphixC, "dpxC", this%gpC)
+                           call this%dumpFullField(this%forceLayer%dphiyC, "dpyC", this%gpC)
+                           call this%dumpFullField(this%forceLayer%dphizC, "dpzC", this%gpC)
+                           
+                           call this%dumpFullField(this%forceLayer%phixE, "phxE", this%gpE)
+                           call this%dumpFullField(this%forceLayer%phiyE, "phyE", this%gpE)
+                           call this%dumpFullField(this%forceLayer%phizE, "phzE", this%gpE)
+                           
+                           call this%dumpFullField(this%forceLayer%dphixE, "dpxE", this%gpE)
+                           call this%dumpFullField(this%forceLayer%dphiyE, "dpyE", this%gpE)
+                           call this%dumpFullField(this%forceLayer%dphizE, "dpzE", this%gpE)
+                       end if
+                   end if
+               elseif (this%localizedForceLayer == 2) then
+                   if (this%spectForceLayer%dumpForce) then
+                       call this%dumpFullField(this%spectForceLayer%ampFact_x*this%spectForceLayer%fx, "frcx")
+                       call this%dumpFullField(this%spectForceLayer%ampFact_y*this%spectForceLayer%fy, "frcy")
+                       call this%spectForceLayer%interpE2C(this%spectForceLayer%fz,&
+                         this%rbuffxC(:,:,:,3), this%rbuffyC(:,:,:,1), &
+                         this%rbuffzC(:,:,:,1), this%rbuffyE(:,:,:,1), &
+                         this%rbuffzE(:,:,:,1))
+                       call this%dumpFullField(this%spectForceLayer%ampFact_z*this%rbuffxC(:,:,:,3), "frcz")
+                       if (this%isStratified) then
+                           call this%dumpFullField(this%spectForceLayer%fT, "frcT")
+                       end if
+
+                   end if
                end if
            end if
        case default

@@ -570,6 +570,28 @@
               if (this%useHITForcing) then
                 call this%hitforce%dumpForcing(this%outputdir,this%RunID,this%step)
               end if
+              if (this%cfl > 0) then
+                  this%dudt = (this%u  - this%dudt)/(this%dt)
+                  this%dvdt = (this%v  - this%dvdt)/(this%dt)
+                  this%dwdt = (this%wC - this%dwdt)/(this%dt)
+                  if (this%isStratified) then
+                      this%dTdt = (this%T  - this%dTdt)/(this%dt)
+                  end if
+                  call this%dump_visualization_files(ddt=.true.)
+              end if
+           else if (mod(this%step+1,this%t_dataDump) == 0) then ! Store primitive variables
+               this%dudt = this%u
+               this%dvdt = this%v
+               this%dwdt = this%wC
+               this%dTdt = this%T
+           else if (mod(this%step-1,this%t_dataDump) == 0 .and. this%CFL <= 0) then ! Compute dqdt and dump it
+               this%dudt = (this%u  - this%dudt)/(2.d0*this%dt)
+               this%dvdt = (this%v  - this%dvdt)/(2.d0*this%dt)
+               this%dwdt = (this%wC - this%dwdt)/(2.d0*this%dt)
+               if (this%isStratified) then
+                   this%dTdt = (this%T  - this%dTdt)/(2.d0*this%dt)
+               end if
+               call this%dump_visualization_files(ddt=.true.)
            end if
       end if 
 

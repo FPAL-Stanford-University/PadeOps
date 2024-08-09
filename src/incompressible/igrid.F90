@@ -111,7 +111,8 @@ module IncompressibleGrid
         real(rkind), dimension(:,:,:), allocatable :: divergence
         real(rkind), dimension(:,:,:), pointer :: xE, yE, zE
 
-        real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE
+        real(rkind), dimension(:,:,:), pointer :: u, v, wC, w, uE, vE, T, TE, dudt, dvdt, dwdt, dTdt
+        real(rkind), dimension(:,:,:,:), allocatable :: dqdt
         complex(rkind), dimension(:,:,:), pointer :: uhat, vhat, whatC, what, That, TEhat, uEhat, vEhat
         !real(rkind) :: dT0dz
         
@@ -738,6 +739,7 @@ contains
        allocate(this%dTdyC(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
        allocate(this%dTdxE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
        allocate(this%dTdyE(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)))
+       allocate(this%dqdt(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),4))
        call this%spectC%alloc_r2c_out(this%SfieldsC,4)
        call this%spectC%alloc_r2c_out(this%dTdxH)
        call this%spectC%alloc_r2c_out(this%dTdyH)
@@ -756,6 +758,11 @@ contains
        
        this%u => this%PfieldsC(:,:,:,1) ; this%v => this%PfieldsC(:,:,:,2) ; this%wC => this%PfieldsC(:,:,:,3) 
        this%w => this%PfieldsE(:,:,:,1) ; this%uE => this%PfieldsE(:,:,:,2) ; this%vE => this%PfieldsE(:,:,:,3) 
+
+       this%dudt => this%dqdt(:,:,:,1)
+       this%dvdt => this%dqdt(:,:,:,2)
+       this%dwdt => this%dqdt(:,:,:,3)
+       this%dTdt => this%dqdt(:,:,:,4)
        
        this%uhat => this%SfieldsC(:,:,:,1); this%vhat => this%SfieldsC(:,:,:,2); 
        this%whatC => this%SfieldsC(:,:,:,3); this%what => this%SfieldsE(:,:,:,1)
