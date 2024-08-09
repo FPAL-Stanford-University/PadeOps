@@ -1,0 +1,19 @@
+ &ACTUATOR_DISK
+ xLoc             =   4.0d0
+ yLoc             =   2.4d0
+ zLoc             =   0.833d0
+ diam             =   0.30d0
+ NacelleRad       =   0.0285d0
+ TSR              =   4.00d0
+ Omega		  =   5000
+ yaw              =   0.000000000000000E+000
+ tilt             =   0.000000000000000E+000
+ blade_pitch      =   0.0d0
+ num_blades       =   2
+ bladeTypeID      =   5
+ reference_length =   0.30d0
+ RPMController    =   1
+ sampleUpsDist    =   0.0d0
+ diagnostics_write_freq = 1000
+ isFan		  =   .true.
+ /

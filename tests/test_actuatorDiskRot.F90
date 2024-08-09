@@ -13,7 +13,7 @@ program test_actuatorDiscRot
 
     type(actuatorDisk_Rot), dimension(:), allocatable :: hawts_Rot
     integer, parameter :: nx = 192, ny = 96, nz = 128
-    character(len=clen) :: inputDir = "/fastscratch/nghaisas/runs/PadeOps/wupa/run3/deb/turbInfo"
+    character(len=clen) :: inputDir = "/home/vijay/codes/runs/prop/run_test1/turbInfo"
     real(rkind), dimension(:,:,:), allocatable :: xG, yG, zG
     real(rkind), dimension(:,:,:), allocatable :: u, v, w, rhs1, rhsv, rhsw, rhs2
     real(rkind), parameter :: Lx = 28.8d0, Ly = 4.8d0, Lz = 3.0d0
@@ -21,7 +21,9 @@ program test_actuatorDiscRot
     type(decomp_info) :: gp 
     integer :: idx, ix1, iy1, iz1, ixn, iyn, izn, i, j, k, ierr, prow = 0, pcol = 0, num_turbines 
     real(rkind) :: xPeriods = 2.d0, yPeriods = 2.d0, zpeak = 0.3d0, epsnd = 5.d0, z0init = 1.d-4 
-    real(rkind) :: inst_val(8)
+    real(rkind) :: inst_val(8), C_thrust, C_torque
+    integer :: num_velocities
+    real(rkind), allocatable, dimension(1) :: velocities
     real(rkind) :: comp1, comp2, maxdiff
 
     call MPI_Init(ierr)
@@ -37,6 +39,8 @@ program test_actuatorDiscRot
     allocate(rhsw(gp%xsz(1),gp%xsz(2),gp%xsz(3))) 
 
     num_turbines = 1
+    num_velocities = 10
+    allocate(velocities(num_velocities))
 
     dx = Lx/real(nx,rkind); dy = Ly/real(ny,rkind); dz = Lz/real(nz,rkind)
     ix1 = gp%xst(1); iy1 = gp%xst(2); iz1 = gp%xst(3)
@@ -64,24 +68,36 @@ call message(1,"Done Init")
     ! reset diam, CT
     diam = hawts_Rot(1)%diam
     !CT   = hawts(1)%CT
+
+    do iv = 1, num_velocities
+
+        velocities(iv) = 0.001d0 + real(iv-1, rkind) * 2.5d0
+        u = velocities(iv)
  
-    rhs1 = 0.d0
-    call mpi_barrier(mpi_comm_world, ierr)
-    call tic()
-    do idx = 1,num_turbines
-        call hawts_Rot(idx)%get_RHS(u, v, w, rhs1, rhsv, rhsw, inst_val)
-    end do 
-    call mpi_barrier(mpi_comm_world, ierr)
-    call toc()
-    call decomp_2d_write_one(1,rhs1,"temp_T1.bin", gp)
-    call message(2,"Computed Source fx (T1):", p_sum(sum(rhs1)) * dx*dy*dz)
-    call message(2,"Computed Source fy (T1):", p_sum(sum(rhsv)) * dx*dy*dz)
-    call message(2,"Computed Source fz (T1):", p_sum(sum(rhsw)) * dx*dy*dz)
-    !call message(3,"absolute error:", p_sum(sum(rhs1)) * dx*dy*dz + (num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
-    call message(2,"Relative Error  fx (T1):", (one-p_sum(inst_val(1))/(p_sum(sum(rhs1))*dx*dy*dz)))
-    call message(2,"Expected Source fy (T1):", zero)
-    call message(2,"Expected Source fz (T1):", zero)
-    
+        rhs1 = 0.d0
+        call mpi_barrier(mpi_comm_world, ierr)
+        call tic()
+        do idx = 1,num_turbines
+            call hawts_Rot(idx)%get_RHS(u, v, w, rhs1, rhsv, rhsw, inst_val)
+        end do 
+        call mpi_barrier(mpi_comm_world, ierr)
+        call toc()
+        call decomp_2d_write_one(1,rhs1,"temp_T1.bin", gp)
+        call message(2,"Computed Source fx (T1):", p_sum(sum(rhs1)) * dx*dy*dz)
+        call message(2,"Computed Source fy (T1):", p_sum(sum(rhsv)) * dx*dy*dz)
+        call message(2,"Computed Source fz (T1):", p_sum(sum(rhsw)) * dx*dy*dz)
+        !call message(3,"absolute error:", p_sum(sum(rhs1)) * dx*dy*dz + (num_turbines*0.5d0*(pi/4.d0)*(diam**2)*CT))
+        call message(2,"Relative Error  fx (T1):", (one-p_sum(inst_val(1))/(p_sum(sum(rhs1))*dx*dy*dz)))
+        call message(2,"Expected Source fy (T1):", zero)
+        call message(2,"Expected Source fz (T1):", zero)
+
+        C_thrust = inst_val(1) / (pi * inst_val(4)**2 * diam**4 / 16.0d0)
+        C_torque = inst_val(3) / (pi * inst_val(4)**2 * diam**5 / 32.0d0)
+
+        print '(i5,1x,11(e19.12,1x))', iv, velocities(iv), inst_val, C_thrust, C_torque
+
+    enddo
+ 
     deallocate(hawts_Rot)
     deallocate(xG, yG, zG, u, v, w, rhs1, rhs2)
     call MPI_Finalize(ierr)

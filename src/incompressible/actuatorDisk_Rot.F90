@@ -560,6 +560,7 @@ subroutine getMeanU(this, u, v, w)
         this%uface = this%alpha_tau*umn + (1.d0 - this%alpha_tau)*this%uface
         this%vface = this%alpha_tau*vmn + (1.d0 - this%alpha_tau)*this%vface
         this%wface = this%alpha_tau*wmn + (1.d0 - this%alpha_tau)*this%wface
+        print *, "uface  =  ", this%uface
 
         ! Get u disk
         this%rbuff = u(this%xdisk_idx,:,:); 
@@ -594,6 +595,7 @@ subroutine getMeanU(this, u, v, w)
         this%udisk = this%alpha_tau*umn + (1.d0 - this%alpha_tau)*this%udisk
         this%vdisk = this%alpha_tau*vmn + (1.d0 - this%alpha_tau)*this%vdisk
         this%wdisk = this%alpha_tau*wmn + (1.d0 - this%alpha_tau)*this%wdisk
+        print *, "udisk  =  ", this%udisk
     end if 
     this%alpha_tau = alpha_smooth
 
@@ -653,7 +655,7 @@ subroutine get_induction_factors(this,radind,dthrust,dtangen)
     real(rkind), intent(out) :: dthrust, dtangen
     real(rkind) :: radius, twist, fac, indfac, aprime, error, stopping_tol
     real(rkind) :: indfac_old, aprime_old, unrm, utan, urel, cosphi, sinphi
-    real(rkind) :: phi, aoa, dfn, dft, drad, cl, cd
+    real(rkind) :: phi, aoa, dfn, dft, drad, cl, cd, C_n, C_t, f_term, s_term, t_term, root_one, root_two
     integer     :: num_iter, max_iters
 
     dthrust = zero
@@ -668,85 +670,150 @@ subroutine get_induction_factors(this,radind,dthrust,dtangen)
       drad = this%radius_elem(radind)-this%radius_elem(radind-1)
     endif
 
-    if(radind <= this%NacelleRadInd) then
-        urel   = this%uface
-        phi    = half*pi
-        sinphi = one
-        cosphi = zero
-        aprime = -one   ! dummy
-        indfac = 0.1d0  ! dummy
-        aoa    = 0.01d0 ! dummy
-        call this%get_cl_cd(radind, aoa, cl, cd)
-    else
-
-        indfac = third; aprime = third
-        dfn = 0.0d0; dft = 0.0d0; aoa = 0.0d0; cl =0.0d0; cd =0.0d0; phi = 0.0d0
-        unrm = 0.0d0; utan = 0.0d0; urel = 0.0d0; cosphi = 0.0d0; sinphi = 0.0d0; 
-        !if(nrank==4) then
-        error = one; stopping_tol = 1.0d-4; num_iter = 0; max_iters = 100
-        do while((error > stopping_tol) .and. (num_iter < max_iters))
-            !if(nrank==0) then! .and. radind==3) then
-            !  write(*,'(a,2(i5,1x),14(e19.12,1x))') '---deb---', radind, num_iter, unrm, utan, urel, &
-            !               cosphi, sinphi, phi, aoa, cl, cd, dfn, dft, indfac, aprime, error
-            !endif
-            indfac_old = indfac; aprime_old = aprime
-
-            unrm = this%uface*(one-indfac)
-            utan = this%Omega*radius*(one+aprime)
-            urel = sqrt(utan*utan + unrm*unrm)
-            cosphi = utan/urel
-            sinphi = unrm/urel
-            phi = atan2(unrm, utan)
-            aoa = phi - this%blade_pitch - twist
+   if(this%isFan) then   ! for fan
+        if(radind <= this%NacelleRadInd) then
+            urel   = this%uface
+            phi    = half*pi
+            sinphi = one
+            cosphi = zero
+            aprime = one   ! dummy
+            indfac = 0.1d0  ! dummy
+            aoa    = 0.01d0 ! dummy
             call this%get_cl_cd(radind, aoa, cl, cd)
+        else
+            indfac = 0.2; aprime = 0.1
+            dfn = 0.0d0; dft = 0.0d0; aoa = 0.0d0; cl =0.0d0; cd =0.0d0; phi = 0.0d0
+            unrm = 0.0d0; utan = 0.0d0; urel = 0.0d0; cosphi = 0.0d0; sinphi = 0.0d0;
+            !if(nrank==4) then
+            error = one; stopping_tol = 1.0d-4; num_iter = 0; max_iters = 100
+            do while((error > stopping_tol) .and. (num_iter < max_iters))
+                !if(nrank==0) then! .and. radind==3) then
+                 ! write(*,'(a,2(i5,1x),14(e19.12,1x))') '---deb---', radind, num_iter, unrm, utan, urel, &
+                  !             cosphi, sinphi, phi, aoa, cl, cd, dfn, dft, indfac, aprime, error
+                !endif
+                indfac_old = indfac; aprime_old = aprime
 
-            !!-------first trial which did not work----------
-            !dfn = fac*urel*urel*(cl*cosphi+cd*sinphi)
-            !dft = fac*urel*urel*(cl*sinphi-cd*cosphi)
-            !indfac = half*(one-sqrt(1-dfn/this%uface/this%uface))
-            !aprime = dft/(four*this%uface*this%Omega*radius*(one-indfac))
-            !!-------first trial which did not work----------
+                unrm = this%uface*(one+indfac)
+                utan = this%Omega*radius*(one-aprime)
+                urel = sqrt(utan*utan + unrm*unrm)
+                cosphi = utan/urel
+                sinphi = unrm/urel
+                phi = atan2(unrm, utan)
+                aoa =-(phi - this%blade_pitch - twist)
+                call this%get_cl_cd(radind, aoa, cl, cd)
+                C_n = cl*cosphi-cd*sinphi
+                C_t = cl*sinphi+cd*cosphi
 
-            !!-------second trial-----------------------------
-            indfac = fac*(cl*cosphi+cd*sinphi)/(four*sinphi*sinphi + fac*(cl*cosphi+cd*sinphi))
-            aprime = fac*(cl*sinphi-cd*cosphi)/(four*sinphi*cosphi - fac*(cl*sinphi-cd*cosphi)) 
-            !!-------second trial-----------------------------
+                f_term = (1-fac*C_n/4)
+                s_term = (1-fac*C_n/2);
+                t_term = -fac*C_n/4 - (this%Omega *radius/(2*this%uface))*(this%Omega *radius/(2*this%uface))*(1-aprime_old)*(1-a
 
-            ! realizability constraint
-            if(indfac>half) then
-              ! stop iterating and suppress the "error>stopping_tol" error message
-              print '(a,i5,1x,5(e19.12,1x))', 'induction factor is beyond 0.5. Check details: ', radind, indfac, aprime, cl, cd, phi
-              indfac_old = indfac; aprime_old = aprime 
-              num_iter = max_iters + 2
-              !stop
-            endif
+                root_one = (-s_term + sqrt((s_term)*(s_term)-4*f_term*t_term))/(2*f_term);
+                root_two = (-s_term - sqrt((s_term)*(s_term)-4*f_term*t_term))/(2*f_term);
 
-            ! stopping condition
-            error = max(abs(indfac-indfac_old), abs(aprime-aprime_old))
-            num_iter = num_iter + 1
-        enddo
+                indfac   = max(root_one,root_two);
 
-        if(error>stopping_tol) then
-          write(*,'(a,i5,1x,3(e19.12,1x),2(i5,1x),2(e19.12,1x))') 'stopping: ', num_iter, error, indfac, &
-                                                           aprime, radind, nrank, this%uface, this%Omega
+                aprime=fac*(this%uface*this%uface*(1+indfac)*(1+indfac)+(this%Omega*radius*(1-aprime_old))*(this%Omega*radius*(1
+                ! stopping condition
+                error = max(abs(indfac-indfac_old), abs(aprime-aprime_old))
+                num_iter = num_iter + 1
+            enddo
+            !write(*,'(a,2(i5,1x),14(e19.12,1x))') '---deb---', radind, num_iter,unrm, utan, urel, &
+            !                                 cosphi, sinphi, phi, aoa, cl, cd, dfn, dft,indfac, aprime, error
+             write(*,'(1(i5,1x),2(e19.12,1x))') radind,indfac, aprime
+
+            if(error>stopping_tol) then
+              write(*,'(a,i5,1x,3(e19.12,1x),2(i5,1x),2(e19.12,1x))') 'stopping: ', num_iter, error, indfac, &
+                                                              aprime, radind, nrank, this%uface, this%Omega
         endif
 
+        fac = this%solidity_elem(radind)*pi*radius*drad*urel*urel
+        dthrust = -fac*(cl*cosphi-cd*sinphi)*cosphi      !! note the minus sign
+        dtangen = -fac*(cl*sinphi+cd*cosphi)*cosphi      !! and in force_x
+
+    else     ! for turbine
+
+        if(radind <= this%NacelleRadInd) then
+            urel   = this%uface
+            phi    = half*pi
+            sinphi = one
+            cosphi = zero
+            aprime = -one   ! dummy
+            indfac = 0.1d0  ! dummy
+            aoa    = 0.01d0 ! dummy
+            call this%get_cl_cd(radind, aoa, cl, cd)
+        else
+
+            indfac = third; aprime = third
+            dfn = 0.0d0; dft = 0.0d0; aoa = 0.0d0; cl =0.0d0; cd =0.0d0; phi = 0.0d0
+            unrm = 0.0d0; utan = 0.0d0; urel = 0.0d0; cosphi = 0.0d0; sinphi = 0.0d0; 
+            !if(nrank==4) then
+            error = one; stopping_tol = 1.0d-4; num_iter = 0; max_iters = 100
+            do while((error > stopping_tol) .and. (num_iter < max_iters))
+                !if(nrank==0) then! .and. radind==3) then
+                !  write(*,'(a,2(i5,1x),14(e19.12,1x))') '---deb---', radind, num_iter, unrm, utan, urel, &
+                !               cosphi, sinphi, phi, aoa, cl, cd, dfn, dft, indfac, aprime, error
+                !endif
+                indfac_old = indfac; aprime_old = aprime
+
+                unrm = this%uface*(one-indfac)
+                utan = this%Omega*radius*(one+aprime)
+                urel = sqrt(utan*utan + unrm*unrm)
+                cosphi = utan/urel
+                sinphi = unrm/urel
+                phi = atan2(unrm, utan)
+                aoa = phi - this%blade_pitch - twist
+                call this%get_cl_cd(radind, aoa, cl, cd)
+
+                !!-------first trial which did not work----------
+                !dfn = fac*urel*urel*(cl*cosphi+cd*sinphi)
+                !dft = fac*urel*urel*(cl*sinphi-cd*cosphi)
+                !indfac = half*(one-sqrt(1-dfn/this%uface/this%uface))
+                !aprime = dft/(four*this%uface*this%Omega*radius*(one-indfac))
+                !!-------first trial which did not work----------
+
+                !!-------second trial-----------------------------
+                indfac = fac*(cl*cosphi+cd*sinphi)/(four*sinphi*sinphi + fac*(cl*cosphi+cd*sinphi))
+                aprime = fac*(cl*sinphi-cd*cosphi)/(four*sinphi*cosphi - fac*(cl*sinphi-cd*cosphi)) 
+                !!-------second trial-----------------------------
+
+                ! realizability constraint
+                if(indfac>half) then
+                  ! stop iterating and suppress the "error>stopping_tol" error message
+                  print '(a,i5,1x,5(e19.12,1x))', 'induction factor is beyond 0.5. Check details: ', radind, indfac, aprime, cl, cd, phi
+                  indfac_old = indfac; aprime_old = aprime 
+                  num_iter = max_iters + 2
+                  !stop
+                endif
+
+                ! stopping condition
+                error = max(abs(indfac-indfac_old), abs(aprime-aprime_old))
+                num_iter = num_iter + 1
+            enddo
+
+            if(error>stopping_tol) then
+              write(*,'(a,i5,1x,3(e19.12,1x),2(i5,1x),2(e19.12,1x))') 'stopping: ', num_iter, error, indfac, &
+                                                               aprime, radind, nrank, this%uface, this%Omega
+            endif
+        endif
+
+
+        !!-------first trial which did not work----------
+        !dthrust = dfn*pi*radius*drad
+        !dtangen = dft*pi*radius*drad
+        !!-------first trial which did not work----------
+
+        !!-------second trial-----------------------------
+        !fac = four*(one-indfac)*this%uface*pi*radius*drad
+        !dthrust = fac*indfac*this%uface
+        !dtangen = fac*aprime*this%Omega*radius
+
+        fac = this%solidity_elem(radind)*pi*radius*drad*urel*urel
+        dthrust = fac*(cl*cosphi+cd*sinphi)
+        dtangen = fac*(cl*sinphi-cd*cosphi)
+        !!-------second trial-----------------------------
+
     endif
-
-    !!-------first trial which did not work----------
-    !dthrust = dfn*pi*radius*drad
-    !dtangen = dft*pi*radius*drad
-    !!-------first trial which did not work----------
-
-    !!-------second trial-----------------------------
-    !fac = four*(one-indfac)*this%uface*pi*radius*drad
-    !dthrust = fac*indfac*this%uface
-    !dtangen = fac*aprime*this%Omega*radius
-
-    fac = this%solidity_elem(radind)*pi*radius*drad*urel*urel
-    dthrust = fac*(cl*cosphi+cd*sinphi)
-    dtangen = fac*(cl*sinphi-cd*cosphi)
-    !!-------second trial-----------------------------
 
     this%diagnosticarr(1, radind) = this%uface
     this%diagnosticarr(2, radind) = this%Omega
@@ -790,14 +857,14 @@ subroutine get_RHS(this, u, v, w, rhsxvals, rhsyvals, rhszvals, inst_val)
           total_torque = total_torque - dtangen*this%radius_elem(i)
         enddo
 
-        if(this%isFan) then
-            !fan_mult_fac = -one
-            this%force_x = -this%force_x
-            !this%force_y = -this%force_y
-            !this%force_z = -this%force_z
-            total_thrust = -total_thrust
-            !total_torque = zero
-        endif
+        !if(this%isFan) then
+        !    !fan_mult_fac = -one
+        !    this%force_x = -this%force_x
+        !    !this%force_y = -this%force_y
+        !    !this%force_z = -this%force_z
+        !    total_thrust = -total_thrust
+        !    !total_torque = zero
+        !endif
 
 
         ist = this%startEnds_global(1);   ien = this%startEnds_global(4)
