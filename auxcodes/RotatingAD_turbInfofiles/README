@@ -3,14 +3,17 @@ File 			          ||	Description
 ActuatorDisk_Rot_0002_input.inp   ||	Rotating AD corresponding to Wu & Porte-Agel (2014) Vestas V80-2MW turbine  
 ActuatorDisk_Rot_0003_input.inp   ||	Rotating AD corresponding to Wu & Porte-Agel (2011) miniature turbine  
 ActuatorDisk_Rot_0004_input.inp   ||	Rotating AD corresponding to smaller version of V80-2MW turbine for multi-rotor sims
+ActuatorDisk_Rot_0005_input.inp   ||	Rotating AD corresponding to Fan from Casalino et al. Aerospace Sci & Tech, v.113 (2021)
 
 BladeType_000_input.inp           ||    Blades of V112-3MW turbine used in Lu & Porte-Agel (2015)
 BladeType_002_input.inp           ||    Blades of Vestas V80-2MW turbine used in Wu & Porte-Agel (2014)
 BladeType_003_input.inp           ||    Blades of miniature turbine used in Wu & Porte-Agel (2011)
 BladeType_004_input.inp           ||    Blades of smaller version of V80-2MW turbine to be used for multi-rotor sims
+BladeType_005_input.inp           ||	Blades of Fan from Casalino et al., Aerospace Sci. & Tech. v.113 (2021)
 
 AirfoilType_000_CD.inp (CL)       ||	CD (CL) table for NACA0064_A17 airfoil accompanying SOWFA
 AirfoilType_003_CD.inp (CL)       ||	CD (CL) table for Sunada (1997) flat plate extracted by me
 AirfoilType_004_CD.inp (CL)       ||	CD (CL) table for Sunada (1997) flat plate extracted by Stevens et al., Ren. Energy (2018)
 AirfoilType_005_CD.inp (CL)       ||	CD (CL) table for V80-2MW turbine from Wu & Porte-Agel (2014)
+AirfoilType_006_CD.inp (CL)       ||	CD (CL) table for Fan from Casalino et al., Aerospace Sci. & Tech. v.113 (2021)
 AirfoilType_009_CD.inp (CL)       ||	CD (CL) table for circuler cylinder, to be used in the nacelle region of any turbine
