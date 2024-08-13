@@ -47,6 +47,12 @@ module DerivativesMod
             procedure, private :: init_metric
             generic :: init => init_parallel, init_serial
             procedure :: destroy
+            procedure :: ddxi
+            procedure :: ddeta
+            procedure :: ddzeta
+            procedure :: d2dxi2
+            procedure :: d2deta2
+            procedure :: d2dzeta2
             procedure :: ddx
             procedure :: ddy
             procedure :: ddz
@@ -187,12 +193,12 @@ contains
         character(len=*)  , intent(in)             :: method_x
         character(len=*)  , intent(in)             :: method_y
         character(len=*)  , intent(in)             :: method_z
-        real(rkind),  intent(in), dimension(:,:,:) :: x, y, z
         logical           , intent(in),   optional :: xmetric
         logical           , intent(in),   optional :: ymetric
         logical           , intent(in),   optional :: zmetric
         logical           , intent(in),   optional :: curvilinear
         character(len=* ) ,intent(in),   optional :: inputfile
+        real(rkind), intent(in), dimension(:,:,:), optional :: x, y, z
         real(rkind), intent(in), optional, dimension(:,:,:) :: xi, eta, zeta
         
        
@@ -246,12 +252,12 @@ contains
         character(len=*)  , intent(in)             :: method_x
         character(len=*)  , intent(in)             :: method_y
         character(len=*)  , intent(in)             :: method_z
-        real(rkind),  intent(in), dimension(:,:,:) :: x, y, z
         logical           , intent(in),   optional :: xmetric
         logical           , intent(in),   optional :: ymetric
         logical           , intent(in),   optional :: zmetric
         logical           , intent(in),   optional :: curvilinear
         character(len=*)  , intent(in),   optional :: inputfile
+        real(rkind), intent(in), dimension(:,:,:), optional :: x, y, z
         real(rkind), intent(in), optional, dimension(:,:,:) :: xi, eta, zeta
         real(rkind), target,intent(in), optional, dimension(:,:,:,:) :: xbuf, zbuf
         real(rkind), dimension(:,:,:), pointer :: xtmp1, xtmp2, ztmp1, ztmp2
@@ -594,6 +600,75 @@ contains
 
     end subroutine
 
+    subroutine ddxi(this,f,dfdx,bc1,bcn)
+        class(derivatives), intent(in) :: this
+        real(rkind), intent(in), dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: f
+        real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: dfdx
+        integer, optional, intent(in) :: bc1, bcn
+
+        select case (this%xmethod)
+        case (1)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
+                call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+            end if
+        case (2)
+            call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+        case (3)
+            call this%xfour % dd1(f,dfdx)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+
+    end subroutine 
+
+    subroutine ddeta(this,f,dfdx,bc1,bcn)
+        class(derivatives), intent(in) :: this
+        real(rkind), intent(in), dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: f
+        real(rkind), intent(out),dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: dfdx
+        integer, optional, intent(in) :: bc1, bcn
+
+        select case (this%ymethod)
+        case (1)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
+                call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+            end if
+        case (2)
+            call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+        case (3)
+            call this%yfour % dd2(f,dfdx)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+
+    end subroutine 
+    
+    subroutine ddzeta(this,f,dfdx,bc1,bcn)
+        class(derivatives), intent(in) :: this
+        real(rkind), intent(in), dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: f
+        real(rkind), intent(out),dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: dfdx
+        integer, optional, intent(in) :: bc1, bcn
+
+        select case (this%zmethod)
+        case (1)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            else
+                call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+            end if
+        case (2)
+            call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+        case (3)
+            call this%zfour % dd3(f,dfdx)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+
+    end subroutine 
+
     subroutine ddx(this,f,dfdx,bc1,bcn)
         class(derivatives), intent(in) :: this
         real(rkind), intent(in), dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: f
@@ -801,6 +876,63 @@ contains
               d2fdx2 = d2fdx2 * this%dzetadz_sq + this%dfdzbuf * this%d2zetadz2
           endif
         endif
+
+    end subroutine 
+
+    subroutine d2dxi2(this,f,d2fdx2,bc1,bcn)
+        class(derivatives), intent(inout) :: this
+        real(rkind), intent(in), dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: f
+        real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: d2fdx2
+        integer, optional, intent(in) :: bc1, bcn
+
+        select case (this%xmethod)
+        case (1)
+            call this%xcd10 % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3),bc1,bcn)
+        case (2)
+            call GracefulExit("CD06 is incomplete right now",21)
+        case (3)
+            call this%xfour % d2d1(f,d2fdx2)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+
+    end subroutine 
+    
+    subroutine d2deta2(this,f,d2fdx2,bc1,bcn)
+        class(derivatives), intent(inout) :: this
+        real(rkind), intent(in), dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: f
+        real(rkind), intent(out),dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: d2fdx2
+        integer, optional, intent(in) :: bc1, bcn
+
+        select case (this%ymethod)
+        case (1)
+            call this%ycd10 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
+        case (2)
+            call GracefulExit("CD06 is incomplete right now",21)
+        case (3)
+            call this%yfour % d2d2(f,d2fdx2)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
+
+    end subroutine
+
+    subroutine d2dzeta2(this,f,d2fdx2,bc1,bcn)
+        class(derivatives), intent(inout) :: this
+        real(rkind), intent(in), dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: f
+        real(rkind), intent(out),dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: d2fdx2
+        integer, optional, intent(in) :: bc1, bcn
+
+        select case (this%zmethod)
+        case (1)
+            call this%zcd10 % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2),bc1,bcn)
+        case (2)
+            call GracefulExit("CD06 is incomplete right now",21)
+        case (3)
+            call this%zfour % d2d3(f,d2fdx2)
+        case (4)
+            call GracefulExit("Chebychev is incomplete right now",21)
+        end select 
 
     end subroutine 
 

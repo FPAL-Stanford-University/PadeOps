@@ -1,4 +1,4 @@
-module Shock_vortex_data
+module Vortexring_cvl_data
     use kind_parameters,  only: rkind, mpirkind, clen
     use constants,        only: zero, half, one, two, four, pi, imi
     use FiltersMod,       only: filters
@@ -295,7 +295,7 @@ contains
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
     character(len=clen) :: outputfile
 
-    dz = Lz/real(decomp%zsz(3),rkind)
+    dz = Lz/real(decomp%zsz(3)-1,rkind)
     filpt = 0.03_rkind/dz 
     thickT = real(1.0D0, rkind)
         
@@ -377,7 +377,7 @@ contains
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
     character(len=clen) :: outputfile
 
-    dy = Ly/real(decomp%ysz(2),rkind)
+    dy = Ly/real(decomp%ysz(2)-1,rkind)
     filpt = 0.03_rkind/dy 
     thickT = real(1.0D0, rkind)
         
@@ -461,7 +461,7 @@ contains
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
     character(len=clen) :: outputfile
 
-    dx = Lx/real(decomp%xsz(1),rkind)
+    dx = Lx/real(decomp%xsz(1)-1,rkind)
     filpt = 0.06_rkind/dx 
     thickT = real(2.0D0, rkind)
 
@@ -513,55 +513,117 @@ contains
     real(rkind) :: b1, b2, b3, b4, b5, b6, b7, b8
     real(rkind) :: c1, c2, c3, c4, c5, c6, c7, c8
     
-    !!!! Pressure   !!!! PR = 10; DRL = 285mm
-        a1 = 44490000000.0_rkind; b1 = -0.0008155_rkind; c1 = 0.0002232_rkind
-        a2 = -558900000.0_rkind; b2 = -0.004976_rkind; c2 = 0.001471_rkind
-        a3 = -305.3_rkind; b3 = 0.0007746_rkind; c3 = 0.0002078_rkind
-        a4 = 0.0_rkind; b4 = 90.97_rkind; c4 = 3.778_rkind
-        a5 = 13380.0_rkind; b5 = 0.001125_rkind; c5 = 0.0002818_rkind
-        a6 = 1159000.0_rkind; b6 = -0.01132_rkind; c6 = 0.008885_rkind
-        a7 = 29420.0_rkind; b7 = 0.001261_rkind; c7 = 0.0005118_rkind
-        a8 = 10340.0_rkind; b8 = 0.0006946_rkind; c8 = 0.0002622_rkind
+
+   if (tsim .le. 0.00138_rkind ) then
+    !!!! Pressure   !!!! PR = 03; DRL = 165mm
+        a1 =   97320000.0_rkind; b1 =  -0.0002813_rkind;  c1 =   0.0001025_rkind
+        a2 =   109700.0_rkind;   b2 =   0.00003148_rkind; c2 =   0.0002566_rkind
+        a3 =   87450.0_rkind;    b3 =   0.0007718_rkind;  c3 =   0.0005342_rkind
+        a4 =   22370.0_rkind;    b4 =   0.0004977_rkind;  c4 =   0.0001356_rkind
+        a5 =   4179.0_rkind;     b5 =   0.0007091_rkind;  c5 =   0.00009197_rkind
+        a6 =   22190.0_rkind;    b6 =   0.0003435_rkind;  c6 =   0.00008325_rkind
+        a7 =   81480.0_rkind;    b7 =   0.001516_rkind;   c7 =   0.0004892_rkind
 
         P0 = a1*exp(-((tsim-b1)/c1)**two) + a2*exp(-((tsim-b2)/c2)**two) +  &
              a3*exp(-((tsim-b3)/c3)**two) + a4*exp(-((tsim-b4)/c4)**two) + &
              a5*exp(-((tsim-b5)/c5)**two) + a6*exp(-((tsim-b6)/c6)**two) + &
-             a7*exp(-((tsim-b7)/c7)**two) + a8*exp(-((tsim-b8)/c8)**two)
+             a7*exp(-((tsim-b7)/c7)**two)
 
     !!!! Density
-        a1 = 0.4468_rkind; b1 = -0.000006526_rkind; c1 = 0.00003638_rkind
-        a2 = 0.5105_rkind; b2 = -0.00002627_rkind; c2 = 0.0003507_rkind
-        a3 = -0.01201_rkind; b3 = 0.0006779_rkind; c3 = 0.0002943_rkind
-        a4 = -0.407_rkind; b4 = 0.000006928_rkind; c4 = 0.0004122_rkind
-        a5 = 0.01644_rkind; b5 = 0.001145_rkind; c5 = 0.00007661_rkind
-        a6 = 0.09989_rkind; b6 = 0.001225_rkind; c6 = 0.0003107_rkind
-        a7 = 2.025_rkind; b7 = 0.0003482_rkind; c7 = 0.002634_rkind
-        a8 = -0.01438_rkind; b8 = 0.00107_rkind; c8 = 0.000005939_rkind
+        a1 = 5055.0_rkind;  b1 = -0.0003915_rkind; c1 = 0.0001282_rkind
+        a2 = 0.9431_rkind;  b2 = 0.00003233_rkind; c2 = 0.0002381_rkind
+        a3 = 1.144_rkind;   b3 = 0.0007858_rkind;  c3 = 0.0007648_rkind
+        a4 = 0.1478_rkind;  b4 = 0.0004976_rkind;  c4 = 0.0001295_rkind
+        a5 = 0.02531_rkind; b5 = 0.0007127_rkind;  c5 = 0.00007627_rkind
+        a6 = 0.1846_rkind;  b6 = 0.0003433_rkind;  c6 = 0.00008253_rkind
+        a7 = 0.7336_rkind;  b7 = 0.001618_rkind;   c7 = 0.0004885_rkind
 
         rho0 = a1*exp(-((tsim-b1)/c1)**two) + a2*exp(-((tsim-b2)/c2)**two) +  &
              a3*exp(-((tsim-b3)/c3)**two) + a4*exp(-((tsim-b4)/c4)**two) + &
              a5*exp(-((tsim-b5)/c5)**two) + a6*exp(-((tsim-b6)/c6)**two) + &
-             a7*exp(-((tsim-b7)/c7)**two) + a8*exp(-((tsim-b8)/c8)**two)
+             a7*exp(-((tsim-b7)/c7)**two)
 
     !!!! Velocity
-        a1 = 15.65_rkind; b1 = 0.00005021_rkind; c1 = 0.00003215_rkind
-        a2 = 48.56_rkind; b2 = 0.00008984_rkind; c2 = 0.0001008_rkind
-        a3 = 76.03_rkind; b3 = 0.0005396_rkind; c3 = 0.0003589_rkind
-        a4 = 32.42_rkind; b4 = 0.001104_rkind; c4 = 0.0002207_rkind
-        a5 = 0_rkind; b5 = 0.001513_rkind; c5 = 0.00000101_rkind
-        a6 = 10.39_rkind; b6 = 0.0008585_rkind; c6 = 0.0001343_rkind
-        a7 = 352.3_rkind; b7 = 0.001485_rkind; c7 = 0.002329_rkind
-        a8 = 63.68_rkind; b8 = 0.0002284_rkind; c8 = 0.0001976_rkind
+        a1 = -117.7_rkind;  b1 = 0.00007236_rkind;  c1 = 0.0001633_rkind
+        a2 = -6.428_rkind;  b2 = 0.0002879_rkind;   c2 = 0.00002214_rkind
+        a3 = -9.864_rkind;  b3 = 0.0003476_rkind;   c3 = 0.00005368_rkind
+        a4 = -270000_rkind; b4 = -0.0009989_rkind;  c4 = 0.0003654_rkind
+        a5 = zero;          b5 = -0.002467_rkind;   c5 = 0.00004653_rkind
+        a6 = 2.411_rkind;   b6 = 0.0006228_rkind;   c6 = 0.00005292_rkind
+        a7 = 653.9_rkind;   b7 = -0.001468_rkind;   c7 = 0.002015_rkind
 
         U0 = a1*exp(-((tsim-b1)/c1)**two) + a2*exp(-((tsim-b2)/c2)**two) +  &
              a3*exp(-((tsim-b3)/c3)**two) + a4*exp(-((tsim-b4)/c4)**two) + &
              a5*exp(-((tsim-b5)/c5)**two) + a6*exp(-((tsim-b6)/c6)**two) + &
-             a7*exp(-((tsim-b7)/c7)**two) + a8*exp(-((tsim-b8)/c8)**two)
+             a7*exp(-((tsim-b7)/c7)**two)
+    else if (tsim .gt. 0.00138_rkind .and. tsim .le. 0.0033828_rkind) then
+    !!!! Pressure   !!!! PR = 10; DRL = 285mm
+        a1 = 78580.0_rkind; b1 = 0.0033_rkind; c1 = 0.0009583_rkind
+        a2 = 92070.0_rkind; b2 = 0.001702_rkind; c2 = 0.001258_rkind
+        a3 = 27580.0_rkind; b3 = 0.0008947_rkind; c3 = 0.0005325_rkind
+        a4 = 9775.0_rkind; b4 = 0.003481_rkind; c4 = 0.0001721_rkind
+        a5 = 924.0_rkind; b5 = 0.002466_rkind; c5 = 0.000164_rkind
 
+        P0 = a1*exp(-((tsim-b1)/c1)**two) + a2*exp(-((tsim-b2)/c2)**two) +  &
+             a3*exp(-((tsim-b3)/c3)**two) + a4*exp(-((tsim-b4)/c4)**two) + &
+             a5*exp(-((tsim-b5)/c5)**two)
+!!!! Density
+        a1 = 1.066_rkind; b1 = 0.003275_rkind; c1 = 0.001093_rkind
+        a2 = 1.019_rkind; b2 = 0.001652_rkind; c2 = 0.001111_rkind
+        a3 = 0.4825_rkind; b3 = 0.0007822_rkind; c3 = 0.0006249_rkind
+        a4 = 0.09465_rkind; b4 = 0.003488_rkind; c4 = 0.0001782_rkind
+        a5 = 0.00903_rkind; b5 = 0.002468_rkind; c5 = 0.0001766_rkind
 
-    end subroutine
+        rho0 = a1*exp(-((tsim-b1)/c1)**two) + a2*exp(-((tsim-b2)/c2)**two) +  &
+             a3*exp(-((tsim-b3)/c3)**two) + a4*exp(-((tsim-b4)/c4)**two) + &
+             a5*exp(-((tsim-b5)/c5)**two)
 
-    subroutine stretched_coordinates(decomp, y, eta, ymetric, ymetric_flag, param1, param2, param3, param4)
+        !!!! Velocity
+        a1 = -19.99_rkind; b1 = 0.002963_rkind; c1 = 0.0006406_rkind
+        a2 = 2.35_rkind; b2 = 0.001719_rkind; c2 = 0.0002337_rkind
+        a3 = 133.0_rkind; b3 = 0.0008287_rkind; c3 = 0.0008501_rkind
+        a4 = 0.0_rkind; b4 = 0.01234_rkind; c4 = 0.0006641_rkind
+        a5 = -6.723_rkind; b5 = 0.002301_rkind; c5 = 0.0002398_rkind
+
+        U0 = a1*exp(-((tsim-b1)/c1)**two) + a2*exp(-((tsim-b2)/c2)**two) +  &
+             a3*exp(-((tsim-b3)/c3)**two) + a4*exp(-((tsim-b4)/c4)**two) + &
+             a5*exp(-((tsim-b5)/c5)**two)
+else if (tsim .gt. 0.0033828_rkind .and. tsim .le. 0.0050828_rkind ) then
+        !!!! Pressure   !!!! PR = 10; DRL = 285mm
+        a1 = 78460.0_rkind; b1 = 0.004608_rkind; c1 = 0.0007341_rkind
+        a2 = 95270.0_rkind; b2 = 0.003383_rkind; c2 = 0.0009368_rkind
+        a3 = 66360.0_rkind; b3 = 0.005373_rkind; c3 = 0.0004261_rkind
+        a4 = 8981.0_rkind; b4 = 0.004871_rkind; c4 = 0.0002552_rkind
+        a5 = -1203.0_rkind; b5 = 0.003868_rkind; c5 = 0.0001478_rkind
+
+        P0 = a1*exp(-((tsim-b1)/c1)**two) + a2*exp(-((tsim-b2)/c2)**two) +  &
+             a3*exp(-((tsim-b3)/c3)**two) + a4*exp(-((tsim-b4)/c4)**two) + &
+             a5*exp(-((tsim-b5)/c5)**two)
+
+        !!!! Density
+        a1 = 1.23_rkind; b1 = 0.004301_rkind; c1 = 0.002246_rkind
+        a2 = 0.3355_rkind; b2 = 0.00336_rkind; c2 = 0.0003216_rkind
+        a3 = 0.2435_rkind; b3 = 0.005468_rkind; c3 = 0.0004594_rkind
+        a4 = 0.02893_rkind; b4 = 0.004866_rkind; c4 = 0.0002126_rkind
+        a5 = -0.1634_rkind; b5 = 0.003405_rkind; c5 = 0.0002323_rkind
+
+        rho0 = a1*exp(-((tsim-b1)/c1)**two) + a2*exp(-((tsim-b2)/c2)**two) +  &
+             a3*exp(-((tsim-b3)/c3)**two) + a4*exp(-((tsim-b4)/c4)**two) + &
+             a5*exp(-((tsim-b5)/c5)**two)
+
+        !!!! Velocity
+        a1 = -9.215_rkind; b1 = 0.004314_rkind; c1 = 0.000329_rkind
+        a2 = -18.74_rkind; b2 = 0.003636_rkind; c2 = 0.000485_rkind
+        a3 = -30.64_rkind; b3 = 0.005678_rkind; c3 = 0.0003735_rkind
+        a4 = -4.112_rkind; b4 = 0.004914_rkind; c4 = 0.0001964_rkind
+        a5 = 0.4059_rkind; b5 = 0.003794_rkind; c5 = 0.000003343_rkind
+        U0 = a1*exp(-((tsim-b1)/c1)**two) + a2*exp(-((tsim-b2)/c2)**two) +  &
+             a3*exp(-((tsim-b3)/c3)**two) + a4*exp(-((tsim-b4)/c4)**two) + &
+             a5*exp(-((tsim-b5)/c5)**two)
+    end if    
+ end subroutine
+
+    subroutine stretched_coordinates(decomp, y, eta, ymetric_flag, param1, param2, param3, param4)
     use constants,        only: zero, half, one
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit, message, nancheck
@@ -569,7 +631,6 @@ contains
     type(decomp_info),               intent(in)    :: decomp
     real(rkind), dimension(:,:,:),   intent(inout) :: y
     real(rkind), dimension(:,:,:  ), intent(inout) :: eta
-    logical,                         intent(in   ) :: ymetric
     integer,                         intent(in)    :: ymetric_flag
     real(rkind),                     intent(in)    :: param1, param2, param3, param4
     integer     :: i,j,k
@@ -578,7 +639,9 @@ contains
 
     ! concentrate towards the center -- Pletcher, Tannehill, Anderson
     ! (Section 5.6, Transformation 3, pg. 332) 
-    if(ymetric_flag==1) then
+    if(ymetric_flag==0) then
+       y = eta
+    elseif(ymetric_flag==1) then
        ! Concentrate towards centre
        yfocus = param1; ytau = param2; ystart = param3; yh = param4
        yfocus_adj = yfocus - ystart
@@ -595,7 +658,7 @@ contains
           end do
        end do
     elseif(ymetric_flag==2) then
-       ! concentrate towards the two ends for alpha=0.5, at left end (final point) for alpha=0
+       ! concentrate towards the two ends for alpha=0.5, at right end (final point) for alpha=0
        alpha = param1; beta = param2; ystart = param3; yh = param4
        BB   = (beta + 1) / (beta - 1)
        do k = 1,decomp%ysz(3)
@@ -609,7 +672,7 @@ contains
           end do
        end do
     elseif(ymetric_flag==3) then
-       ! concentrate at right end, towards initial point
+       ! concentrate at leftt end, towards initial point
        alpha = param1; beta = param2; ystart = param3; yh = param4 !alpha not required
        BB   = (beta + 1) / (beta - 1)
        do k = 1,decomp%ysz(3)
@@ -623,7 +686,7 @@ contains
           end do
        end do
 
-    elseif(ymetric_flag==10) then
+    elseif(ymetric_flag==4) then
        ! finite-difference evaluation of metrics (reduces order of accuracy)
        call GracefulExit("flag = 4 (finite-difference evaluation of metrics) is incomplete right now",21)
     endif
@@ -632,20 +695,19 @@ contains
 end module
 
 
-subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetric, xi, eta, zeta, dxs, dys, dzs, xbuf, zbuf)
+subroutine meshgen(decomp, dxi, deta, dzeta, mesh, inputfile, meshcvl, dxs, dys, dzs, xbuf, zbuf)
     use kind_parameters,  only: rkind
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info, nrank, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
-    use Shock_vortex_data
+    use Vortexring_cvl_data
 
     implicit none
 
-    type(decomp_info),                                          intent(in)    :: decomp
-    real(rkind),                                                intent(inout) :: dx,dy,dz
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(inout) :: dxi,deta,dzeta
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     character(len=*),                intent(in)    :: inputfile
-    logical,                         intent(in   ) :: xmetric, ymetric, zmetric
-    real(rkind), dimension(:,:,:  ), intent(inout) :: xi, eta, zeta
+    real(rkind), dimension(:,:,:,:), intent(inout) :: meshcvl
     real(rkind), dimension(:,:,:  ), intent(inout) :: dxs, dys, dzs
     real(rkind), dimension(:,:,:,:), target,intent(in):: xbuf, zbuf
     real(rkind), dimension(:,:,:), pointer :: xtmp1, xtmp2, ztmp1, ztmp2
@@ -653,12 +715,12 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind) :: xfocus, xtau, xh, xstart
     real(rkind) :: yfocus, ytau, yh, ystart
     real(rkind) :: zfocus, ztau, zh, zstart
-    integer     ::  xmetric_flag,  ymetric_flag, zmetric_flag
+    integer     ::  xmetric_flag=0,  ymetric_flag=0, zmetric_flag=0, curvil_flag = 0
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
 
     namelist /PROBINPUT/ ns, Lx, Ly, Lz, Dia, Pr, Sc, gam, Rgas, mu_ref, p_ref, rho_ref, add_noise
-    namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
+    namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params, curvil_flag
 
     ioUnit = 15
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -683,14 +745,15 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     ixn = decomp%yen(1); iyn = decomp%yen(2); izn = decomp%yen(3)
 
     ! Need to set x, y and z as well as  dx, dy and dz
-    associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+    associate( x  => mesh(:,:,:,1),    y   => mesh(:,:,:,2),    z    => mesh(:,:,:,3), &
+               xi => meshcvl(:,:,:,1), eta => meshcvl(:,:,:,2), zeta => meshcvl(:,:,:,3) )
         if (nrank == 0) then
             print *, "Domain size: ",Lx,Ly,Lz
         end if
 
-        dx = Lx/real(nx-1,rkind)  
-        dy = Ly/real(ny-1,rkind)
-        dz = Lz/real(nz-1,rkind)  
+        dxi   = Lx/real(nx-1,rkind)
+        deta  = Ly/real(ny-1,rkind)
+        dzeta = Lz/real(nz-1,rkind)
 
         x1 = 0._rkind
         y1 = -Ly/2._rkind
@@ -704,9 +767,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = x1 + real( ix1 -1 + i - 1, rkind ) * dx
-                    y(i,j,k) = y1 + real( iy1 -1 + j - 1, rkind ) * dy
-                    z(i,j,k) = z1 + real( iz1 -1 + k - 1, rkind ) * dz
+                    xi(i,j,k)   = x1 + real( ix1 -1 + i - 1, rkind ) * dxi
+                    eta(i,j,k)  = y1 + real( iy1 -1 + j - 1, rkind ) * deta
+                    zeta(i,j,k) = z1 + real( iz1 -1 + k - 1, rkind ) * dzeta
                 end do
             end do
         end do
@@ -715,29 +778,20 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     yfocus = metric_params(2,1);  ytau   = metric_params(2,2);  ystart = metric_params(2,3); yh = metric_params(2,4)
     zfocus = metric_params(3,1);  ztau   = metric_params(3,2);  zstart = metric_params(3,3); zh = metric_params(3,4)
 
-    if(nrank == zero) then
-      print*, '>>xfocus=',xfocus, '>>xtau=',xtau, '>>xstart=',xstart, '>>xh=',xh, '>>xmetric=',xmetric, '>>xflag=',xmetric_flag
-      print*, '>>yfocus=',yfocus, '>>ytau=',ytau, '>>ystart=',ystart, '>>yh=',yh, '>>ymetric=',ymetric, '>>yflag=',ymetric_flag
-      print*, '>>zfocus=',zfocus, '>>ztau=',ztau, '>>zstart=',zstart, '>>zh=',zh, '>>zmetric=',zmetric, '>>zflag=',zmetric_flag
+    if(nrank == 0) then
+      print*, '>>xfocus=',xfocus, '>>xtau=',xtau, '>>xstart=',xstart, '>>xh=',xh, '>>xflag=',xmetric_flag
+      print*, '>>yfocus=',yfocus, '>>ytau=',ytau, '>>ystart=',ystart, '>>yh=',yh, '>>yflag=',ymetric_flag
+      print*, '>>zfocus=',zfocus, '>>ztau=',ztau, '>>zstart=',zstart, '>>zh=',zh, '>>zflag=',zmetric_flag
     endif
+   
+    call stretched_coordinates(decomp,x,xi,xmetric_flag,metric_params(1,1),&
+                               metric_params(1,2),metric_params(1,3),metric_params(1,4))
+
+    call stretched_coordinates(decomp,y,eta,ymetric_flag,metric_params(2,1),&
+                               metric_params(2,2),metric_params(2,3),metric_params(2,4))
     
-    if(xmetric) then
-      xi = x
-      call stretched_coordinates(decomp,x,xi,xmetric,xmetric_flag,metric_params(1,1),&
-                                 metric_params(1,2),metric_params(1,3),metric_params(1,4))
-    endif
-
-    if(ymetric) then
-      eta = y
-      call stretched_coordinates(decomp,y,eta,ymetric,ymetric_flag,metric_params(2,1),&
-                                 metric_params(2,2),metric_params(2,3),metric_params(2,4))
-    endif
-
-    if(zmetric) then
-      zeta = z
-      call stretched_coordinates(decomp,z,zeta,zmetric,zmetric_flag,metric_params(3,1),&
-                                 metric_params(3,2),metric_params(3,3),metric_params(3,4))
-    endif
+    call stretched_coordinates(decomp,z,zeta,zmetric_flag,metric_params(3,1),&
+                               metric_params(3,2),metric_params(3,3),metric_params(3,4))
 
     ! Grid width on stretched/uniform mesh
     call transpose_y_to_x(x,xtmp1,decomp)   ! Decomposition in x
@@ -791,6 +845,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     nullify(xtmp2)
     nullify(ztmp1)
     nullify(ztmp2)
+    deallocate(metric_params)   
 
 end subroutine
 
@@ -798,7 +853,7 @@ end subroutine
 subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
     use kind_parameters,             only: rkind, clen
     use constants,                   only: zero,half,one,two,four,five,pi,eight
-    use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,&
+    use CurvilCompressibleGrid,            only: rho_index,u_index,v_index,w_index,&
                                            p_index,T_index,e_index,Ys_index
     use decomp_2d,                   only: decomp_info,nrank
     use MixtureEOSMod,               only: mixture
@@ -811,7 +866,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use exits,                       only: GracefulExit, message, nancheck
     use random,                      only: gaussian_random                  
 
-    use Shock_vortex_data
+    use Vortexring_cvl_data
     use mpi
 
     implicit none
@@ -887,12 +942,12 @@ end subroutine
 subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,one,two,pi,eight
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
+    use CurvilCompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
     use decomp_2d,        only: decomp_info
     use DerivativesMod,   only: derivatives
     use MixtureEOSMod,    only: mixture
     use reductions,       only: P_MEAN
-    use Shock_vortex_data
+    use Vortexring_cvl_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -915,7 +970,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        !write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Shock_vortex_t.dat"
+        !write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Vortexring_t.dat"
 
         !open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         !do i=1,decomp%ysz(1)
@@ -932,11 +987,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     use kind_parameters,  only: rkind
     use decomp_2d,        only: decomp_info, nrank, transpose_y_to_x, transpose_x_to_y
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
+    use CurvilCompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
     use MixtureEOSMod,    only: mixture
     use operators,        only: filter3D
 
-    use Shock_vortex_data
+    use Vortexring_cvl_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -964,7 +1019,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-    !!!! NOTE: Make sure Shock_vortex_data, Lx, Ly, Lz, Rgas, filpt, thickT are mentioned correctly !!!!    
+    !!!! NOTE: Make sure Vortexring_data, Lx, Ly, Lz, Rgas, filpt, thickT are mentioned correctly !!!!    
         call get_fitted_fields(tsim, P0, rho0, U0)
 
         umin = zero;             pmin = p_ref;              rhomin = rho_ref
@@ -979,9 +1034,9 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
             do k = 1, decomp%ysz(3) 
                do j = 1, decomp%ysz(2)
                    rad = sqrt(y(1,j,1)**2 + z(1,1,k)**2)
-                   u(1,j,k)   =  umin + (one - tanh(150.0_rkind*(rad-half*Dia))) * diff_u
-                   p(1,j,k)   =  pmin + (one - tanh(150.0_rkind*(rad-half*Dia))) * diff_p
-                   rho(1,j,k) =  rhomin + (one - tanh(150.0_rkind*(rad-half*Dia))) * diff_rho
+                   u(1,j,k)   =  umin + (one - tanh(1100.0_rkind*(rad-half*Dia))) * diff_u
+                   p(1,j,k)   =  pmin + (one - tanh(1100.0_rkind*(rad-half*Dia))) * diff_p
+                   rho(1,j,k) =  rhomin + (one - tanh(1100.0_rkind*(rad-half*Dia))) * diff_rho
                    T(1,j,k)   =  p(1,j,k) / (Rgas*rho(1,j,k))
                enddo
             enddo
@@ -1043,14 +1098,14 @@ end subroutine
 subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,two
-    use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
+    use CurvilCompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
     use decomp_2d,        only: decomp_info, nrank
     use MixtureEOSMod,    only: mixture
     use sgsmod_cgrid,     only: sgs_cgrid
     use exits,            only: message
     use reductions,       only: P_MAXVAL,P_MINVAL
 
-    use Shock_vortex_data
+    use Vortexring_cvl_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -1095,7 +1150,7 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,       only: decomp_info
     use MixtureEOSMod,   only: mixture
 
-    use shock_vortex_data
+    use Vortexring_cvl_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

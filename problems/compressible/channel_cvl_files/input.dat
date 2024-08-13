@@ -1,0 +1,110 @@
+&INPUT
+
+inputdir   =  "/home/vsj/Codes/channel/test2"      ! Directory for input files
+outputdir  = "/home/vsj/Codes/channel/test2"      ! Directory for output files
+
+nx = 32                 ! Number of points in X
+ny = 32                 ! Number of points in Y
+nz = 32                 ! Number of points in Z
+
+dt = 2.0D-4               ! Fixed time step value (Set to negative to disable)
+tstop = 2D2                ! Physical time to stop the simulation
+CFL = 0.7D0                ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1                ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 10D-0                ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "channel"      ! Prefix for the visualization files
+reduce_precision  = .false.
+
+periodicx = .true.        ! Periodic in X?
+periodicy = .FALSE.       ! Periodic in Y?
+periodicz = .true.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+xmetric = .false.          ! Streching in x-direction
+ymetric = .true.           ! Streching in y-direction
+zmetric = .false.          ! Streching in z-direction
+
+prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+
+SkewSymm   = .false.
+/
+
+&CINPUT
+ns   = 1
+gam  = 1.4D0                    ! Ratio of specific heats
+Rgas = 78.3187D0                  ! Gas constant (1/gam*Mc^2)
+Cmu   = 0.002D0                 ! LAD coeff  
+Cbeta = 1.75D0                  ! LAD coeff 
+Ckap  = 0.01D0                  ! LAD coeff 
+Cdiff = 0.003D0                 ! LAD coeff 
+Cy    = 1D2                     ! LAD coeff 
+inviscid = .false.
+nrestart = 100000            ! Number of steps between restart dumps
+y_bc1 = 1                 ! Left  Y boundary ( 0 => general, 1 => symmetric ) 
+y_bcn = 1                 ! Right Y boundary ( 0 => general, 1 => symmetric ) 
+compute_tke_budget = .false.
+compute_scale_decomposition = .false.
+forcing = .false.
+useSGS   = .false.
+/
+
+&SGS_MODEL
+DynamicProcedureType     =  1        !0=Static  1=Local_mgm  2=Global_mgm
+SGSmodelID               =  2        !0=Smagorinsky  1=sigma 2=AMD 3=MGM
+useWallDamping           =  .false. 
+ncWall                   =  1.0D0
+Csgs                     =  1.3D0
+Ctke                     =  0.1D0
+DynProcFreq              =  1
+useSGSDynamicRestartFile =  .false.
+DomainAveraged_DynProc   =  .false.
+SGSDynamicRestartFile    =  "null"
+filter_in_x              =  .true. 
+filter_in_y              =  .true.
+filter_in_z              =  .true.
+testfilter_x             =  "box2"
+testfilter_y             =  "box2"   
+testfilter_z             =  "box2"
+DeltaRatio               =   2.0D0
+isEddyViscosityModel     =  .true.
+isEddyDiffmodel          =  .true.
+isTurbPrandtlconst       =  .false.
+useDynamicProcedureScalar=  .false.
+PrSGS                    =   0.7D0
+
+/
+&PROBINPUT
+ns     = 1
+Lx     = 12.5664D0
+Ly     = 2.0D0
+Lz     = 4.188D0
+Pr     = 0.7D0
+Sc     = 1.0D0
+gam    = 1.4D0
+rho_ref= 1.0D0
+Tw     = 1.0D0
+Re     = 190.71
+Mc     = 0.0955D0
+add_pert = .true.
+fname_prefix = "/home/vsj/Codes/channel/perturb_code"
+/
+
+
+&METRICS
+ymetric_flag = 2
+metric_params(2,1) = 0.5D0    !alpha (both walls concentration)
+metric_params(2,2) = 1.054D0  !beta-stretching parameter
+metric_params(2,3) = -1.0D0   !ystart
+metric_params(2,4) = 2.0D0    !yh
+
+/
+

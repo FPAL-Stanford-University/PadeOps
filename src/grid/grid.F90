@@ -21,6 +21,7 @@ module GridMod
         logical                                              :: periodicz         ! Periodic in Z?
 
         type( derivatives ), allocatable                     :: der               ! Derivative object
+        type( derivatives ), allocatable                     :: der_metric        ! Derivative object
         character(len=clen)                                  :: derivative_x      ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
         character(len=clen)                                  :: derivative_y      ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
         character(len=clen)                                  :: derivative_z      ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"

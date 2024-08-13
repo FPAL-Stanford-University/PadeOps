@@ -1,14 +1,14 @@
-#include "shock_vortex_files/hooks.F90"
+#include "vortexring_cvl_files/hooks.F90"
 
-program shock_vortex
+program vortexring_cvl
     use mpi
     use hdf5
     use kind_parameters,  only: rkind,clen
-    use CompressibleGrid, only: cgrid
+    use CurvilCompressibleGrid, only: cvlgrid
     use exits,            only: GracefulExit
     implicit none
 
-    type(cgrid) :: cgp
+    type(cvlgrid) :: cgp
     character(len=clen) :: inputfile
     integer :: ierr, error 
 
