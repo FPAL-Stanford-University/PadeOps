@@ -621,7 +621,7 @@
 
        if (nrank == 0) then
            if (tid < 0) then
-             !call assert(.false.,'Not all RESTART files have tid written out. Surpress this assert if you are confident yours does -- igrid_files/io.F90')
+             !call assert(.false.,'Not all RESTART files have tid written out. Supress this assert if you are confident yours does -- igrid_files/io.F90')
                write(tempname,"(A7,A4,I2.2,A12)") "RESTART", "_Run",rid, "_info.LATEST"
            else
                write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
