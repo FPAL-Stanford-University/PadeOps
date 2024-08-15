@@ -29,7 +29,7 @@ module stats_xy_mod
         real(rkind), dimension(:), pointer :: mke, tke, fifi, meanU, meanV, meanW, meanT, meanP, &
           meanFx, meanFy, meanFz, meanFT, fTfT, &
           uu, vv, ww, uv, uw, vw, uT, vT, wT, TT, dTdz, S12_var, S13_var, S23_var, &
-          meanq3, pp, up, vp, wp
+          meanq3, pp, up, vp, wp, ddt_meanT
 
         ! Scalar fields
         real(rkind), dimension(:,:,:), pointer :: T, dTdxC, dTdyC, dTdzC, q1, q2, q3, &
@@ -129,8 +129,7 @@ module stats_xy_mod
         character(len=clen) :: outputdir
         integer :: ioUnit, ierr, nstore, n
         integer, parameter :: nterms      = 102
-        integer, parameter :: nterms_sca  = 51
-        integer, parameter :: n_ddt_terms = 6
+        integer, parameter :: nterms_sca  = 52
         real, parameter :: zero = 0.d0
         logical :: do_stats = .false.
 
@@ -214,7 +213,7 @@ module stats_xy_mod
             allocate(this%zbuff(sim%nz,4))
             allocate(this%zbuff_(sim%nz,2))
             allocate(this%uvarold(sim%nz,this%nscales,3), this%uvarnew(sim%nz,this%nscales,3))
-            allocate(this%svarold(sim%nz,this%nscalars,this%nscales,2), this%svarnew(sim%nz,this%nscalars,this%nscales,2))
+            allocate(this%svarold(sim%nz,this%nscalars,this%nscales,2), this%svarnew(sim%nz,this%nscalars,this%nscales,3))
 
             ! These arrays are required to have all scales defined simultaneously for computing interscale transfer
             allocate(this%duidxj(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales,9))
@@ -296,6 +295,7 @@ module stats_xy_mod
           if (associated(this%meanV)) nullify(this%meanV)
           if (associated(this%meanW)) nullify(this%meanW)
           if (associated(this%meanT)) nullify(this%meanT)
+          if (associated(this%ddt_meanT)) nullify(this%ddt_meanT)
           if (associated(this%meanP)) nullify(this%meanP)
           if (associated(this%meanFx)) nullify(this%meanFx)
           if (associated(this%meanFy)) nullify(this%meanFy)
@@ -1234,6 +1234,7 @@ module stats_xy_mod
             this%TT_budget    => this%stats_sca(:,id:id+11,tidx,sca,scl); id = id + 12
             this%dTdz         => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%meanT        => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
+            this%ddt_meanT    => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%meanfT       => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%fTfT         => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
             this%uT           => this%stats_sca(:,id      ,tidx,sca,scl); id = id + 1
@@ -1461,6 +1462,7 @@ module stats_xy_mod
                   write(fid,*) "Misc terms:"
                   write(fid,"(A4,I2,A28)") "  > ",id,". Mean scalar gradient, dTdz"; id = id + 1
                   write(fid,"(A4,I2,A14)") "  > ",id,". Mean scalar ";               id = id + 1 
+                  write(fid,"(A4,I2,A18)") "  > ",id,". ddt(Mean scalar)";           id = id + 1 
                   write(fid,"(A4,I2,A20)") "  > ",id,". Mean scalar source";         id = id + 1 
                   write(fid,"(A4,I2,A10)") "  > ",id,". <fT'fT'>";                   id = id + 1 
                   write(fid,"(A4,I2,A8)" ) "  > ",id,". <u'T'>";                     id = id + 1 
@@ -1733,6 +1735,7 @@ module stats_xy_mod
             else if (terms == 'scalar') then
                 call this%covariance(this%T,  this%T,  this%svarold(:,sca,scl,1))
                 call this%covariance(this%wC, this%T,  this%svarold(:,sca,scl,2))
+                this%svarold(:,sca,scl,3) = this%meanT
             end if
             
         ! Step 2: Compute ddt terms (using t^n+1 if dt=const or t^n
@@ -1753,6 +1756,7 @@ module stats_xy_mod
                     call this%covariance(this%wC, this%T,  this%svarnew(:,sca,scl,2))
                     this%TT_budget(:,1) = (this%svarnew(:,sca,scl,1) - this%svarold(:,sca,scl,1))/(this%sim%dt)
                     this%wT_budget(:,1) = (this%svarnew(:,sca,scl,2) - this%svarold(:,sca,scl,2))/(this%sim%dt)
+                    this%ddt_meanT      = (this%meanT                - this%svarold(:,sca,scl,3))/(this%sim%dt)
                 end if
             end if
         elseif( (mod(this%sim%step-1,this%compute_freq) == 0) .and. &
@@ -1772,6 +1776,7 @@ module stats_xy_mod
                     call this%covariance(this%wC, this%T,  this%svarnew(:,sca,scl,2))
                     this%TT_budget(:,1) = (this%svarnew(:,sca,scl,1) - this%svarold(:,sca,scl,1))/(2.d0*this%sim%dt)
                     this%wT_budget(:,1) = (this%svarnew(:,sca,scl,2) - this%svarold(:,sca,scl,2))/(2.d0*this%sim%dt)
+                    this%ddt_meanT      = (this%meanT                - this%svarold(:,sca,scl,3))/(2.d0*this%sim%dt)
                 end if
             end if
         end if
