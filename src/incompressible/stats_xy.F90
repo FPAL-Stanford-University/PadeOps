@@ -36,6 +36,7 @@ module stats_xy_mod
           T_all, dTdxC_all, dTdyC_all, dTdzC_all
         real(rkind), dimension(:,:,:,:), allocatable :: Tsplit
         real(rkind), dimension(:,:,:,:,:), allocatable :: dTdxj
+        real(rkind), dimension(:,:,:), allocatable :: q3all
 
         ! Momentum fields
         real(rkind), dimension(:,:,:,:), allocatable :: psplit, fxsplit, fysplit, fzsplit, fTsplit
@@ -203,6 +204,7 @@ module stats_xy_mod
             if (this%nscalars > 0) then
                 allocate(this%stats_sca(sim%nz,nterms_sca,nstore,this%nscalars,this%nscales))
                 allocate(this%qjsplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales,3))
+                allocate(this%q3all(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3)))
                 allocate(this%Tsplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales))
                 allocate(this%dTdxj(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales,3))
             end if
@@ -257,6 +259,7 @@ module stats_xy_mod
           if (allocated(this%duidxj)) deallocate(this%duidxj)
           if (allocated(this%dTdxj)) deallocate(this%dTdxj)
           if (allocated(this%qjsplit)) deallocate(this%qjsplit)
+          if (allocated(this%q3all)) deallocate(this%q3all)
           if (allocated(this%tauij)) deallocate(this%tauij)
           if (allocated(this%zbuff)) deallocate(this%zbuff)
           if (allocated(this%zbuff_)) deallocate(this%zbuff_)
@@ -414,10 +417,10 @@ module stats_xy_mod
                   ! SGS flux
                   call this%do_scale_splitting(q1,this%qjsplit(:,:,:,:,1),kc,rbuff,cbuff)
                   call this%do_scale_splitting(q2,this%qjsplit(:,:,:,:,2),kc,rbuff,cbuff)
-                  call this%sim%spectForceLayer%interpE2C(q3, this%sim%rbuffxC(:,:,:,3), &
+                  call this%sim%spectForceLayer%interpE2C(q3, this%q3all, &
                     this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
                     this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
-                  call this%do_scale_splitting(this%sim%rbuffxC(:,:,:,3),this%qjsplit(:,:,:,:,3),kc,rbuff,cbuff)
+                  call this%do_scale_splitting(this%q3all,this%qjsplit(:,:,:,:,3),kc,rbuff,cbuff)
 
                   ! Forcing
                   call this%do_scale_splitting(this%sim%spectForceLayer%fT,this%fTsplit,kc,rbuff,cbuff)
@@ -687,7 +690,7 @@ module stats_xy_mod
                          call this%covariance(this%q1,this%q1,this%qj_var(:,1))
                          call this%covariance(this%q2,this%q2,this%qj_var(:,2))
                          call this%covariance(this%q3,this%q3,this%qj_var(:,3))
-                         call this%mean(this%q3,this%meanq3)
+                         call this%mean(this%q3all,this%meanq3)
 
                          call this%get_TT_budget_rhs(scl)
                          call this%get_wT_budget_rhs(scl)
