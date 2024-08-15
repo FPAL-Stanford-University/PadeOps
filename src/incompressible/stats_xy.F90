@@ -27,7 +27,7 @@ module stats_xy_mod
           R22_budget, R33_budget, wT_budget, duidxj_var, dTdxj_var, tauij_var, qj_var, &
           tke_flux, sca_var_flux
         real(rkind), dimension(:), pointer :: mke, tke, fifi, meanU, meanV, meanW, meanT, meanP, &
-          meanFx, meanFy, meanFz, meanFt, fTfT, &
+          meanFx, meanFy, meanFz, meanFT, fTfT, &
           uu, vv, ww, uv, uw, vw, uT, vT, wT, TT, dTdz, S12_var, S13_var, S23_var, &
           meanq3, pp, up, vp, wp
 
@@ -297,6 +297,7 @@ module stats_xy_mod
           if (associated(this%meanFx)) nullify(this%meanFx)
           if (associated(this%meanFy)) nullify(this%meanFy)
           if (associated(this%meanFz)) nullify(this%meanFz)
+          if (associated(this%meanFT)) nullify(this%meanFT)
           if (associated(this%uu)) nullify(this%uu)
           if (associated(this%vv)) nullify(this%vv)
           if (associated(this%ww)) nullify(this%ww)
@@ -594,6 +595,10 @@ module stats_xy_mod
                          this%meanFy = 0.d0
                          this%meanFz = 0.d0
                          this%fifi   = 0.d0
+                         if (this%nscalars>0) then
+                             this%meanFT = 0.d0
+                             this%fTfT = 0.d0
+                         end if
                      end if
 
                      ! Compute MKE
