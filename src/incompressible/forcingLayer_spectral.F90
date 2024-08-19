@@ -27,9 +27,10 @@ module spectralForcingLayerMod
       real(rkind), dimension(:,:,:), allocatable :: integralMask
       real(rkind), dimension(:),     allocatable :: integralMask_1D
       real(rkind) :: seedFact, dV, tgtKE, tgtKEon3, ampFact_x, ampFact_y, &
-        ampFact_z, tgtDissipation, integralTime, tgtMPE, ampFact_time 
+        ampFact_z, tgtDissipation, ampFact_time, relax_fact!, integralTime
       integer :: seed
-      real(rkind) :: gain, buoyancyFact
+      !real(rkind) :: gain, buoyancyFact
+      real(rkind) :: buoyancyFact
       type(spectral), pointer :: spectC, spectE
       type(decomp_info), pointer :: gpC => null(), gpE => null(), &
         sp_gpC => null(), sp_gpE => null()
@@ -39,7 +40,7 @@ module spectralForcingLayerMod
       logical :: dumpForce, projectDivergenceFree, isStratified
       type(Pade6Stagg), pointer :: Pade6opZ
       real(rkind) :: maxDiv, maxDivAllTime, avgFact, Re, Pr, oneOnRe, oneOnRePr
-      real(rkind) :: dz, Lx, Ly
+      real(rkind) :: dz, Lx, Ly, meanFact
       character(len=clen) :: outputdir
       real(rkind) :: lambda ! Sets the temperature forcing time scale
       real(rkind) :: Ttgt ! Target temp for forcing layer
@@ -95,13 +96,14 @@ module spectralForcingLayerMod
             rbuffzC, rbuffyE, rbuffzE
           complex(rkind), dimension(:,:,:), intent(in), target :: cbuffyC, cbuffyE, &
             cbuffzC, cbuffzE
-          integer :: ioUnit, ierr, nx, ny
+          integer :: ioUnit, ierr, nx, ny, nzF
           real(rkind) :: dx, dy
           real(rkind), dimension(:,:,:), pointer :: zC => null(), zE => null()
           real(rkind), dimension(:,:,:), allocatable, target :: zinY
-          real(rkind) :: tgtKE = 0.6d0, tgtDissipation = 0.1d0, tgtMPE = 1.d0
+          real(rkind) :: tgtKE = 5.d-6!, tgtDissipation = 0.1d0, tgtMPE = 1.d0
           real(rkind) :: zmid = 0.d0, lf = 0.1d0, kmin = 3.d0, kmax = 10.d0
-          real(rkind) :: gain = 60.d0
+          !real(rkind) :: gain = 60.d0
+          real(rkind) :: relax_fact = 10.d0
           logical :: dumpForce = .false., projectDivergenceFree = .true.
           integer :: maskType = gaussian
           real(rkind) :: fringe_delta = 0.5d0, lambdaFact_temp = 0.d0
@@ -109,8 +111,8 @@ module spectralForcingLayerMod
           integer :: nForceTimeScalesOn = 0 ! The number of forcing time scales to have forcing turned "on". Set to 0 for forcing always on
           real(rkind) :: rampfact = 0.25d0 ! Sets the rate at which the forcing turns on/off
 
-          namelist /spectForceLayer/ zmid, lf, kmin, kmax, tgtKE, tgtMPE,tgtDissipation, &
-            gain, dumpForce, maskType, fringe_delta, projectDivergenceFree, lambdaFact_temp, &
+          namelist /spectForceLayer/ zmid, lf, kmin, kmax, tgtKE, &
+            relax_fact, dumpForce, maskType, fringe_delta, projectDivergenceFree, lambdaFact_temp, &
             Temp_in_forcing_layer, nForceTimeScalesOn, onoffratio, rampfact
           
           ioUnit = 123
@@ -127,12 +129,15 @@ module spectralForcingLayerMod
           this%gpE      => null()
           this%Pade6opZ => null()
 
+          ! User safe-guard
+          call assert(this%tgtKE <= 1.d0,'tgtKE is the (forcing-layer) volume-averaged value so it should be much less than 1')
+
           this%tgtKE                 = tgtKE
-          this%tgtMPE                = tgtMPE
           this%tgtKEon3              = tgtKE/3.d0
-          this%tgtDissipation        = tgtDissipation
-          this%integralTime          = tgtKE/tgtDissipation
-          this%gain                  = gain
+          !this%tgtDissipation        = tgtDissipation
+          !this%integralTime          = tgtKE/tgtDissipation
+          !this%gain                  = gain
+          this%relax_fact            = relax_fact
           this%dumpForce             = dumpForce
           this%projectDivergenceFree = projectDivergenceFree
           this%spectC => spectC
@@ -282,18 +287,22 @@ module spectralForcingLayerMod
           call transpose_x_to_y(this%integralMask,this%rbuffyC,gpC)
           call transpose_y_to_z(this%rbuffyC,this%rbuffzC,gpC)
           this%integralMask_1D = rbuffzC(1,1,:)
+          nzF = sum(rbuffzC)
 
           ! Compute differential volume element
           this%dV = (mesh(2,1,1,1) - mesh(1,1,1,1)) * &
                     (mesh(1,2,1,2) - mesh(1,1,1,2)) * &
                     (mesh(1,1,2,3) - mesh(1,1,1,3))
 
+          ! Compute the integral normalization factor (dV/Vf = 1/Nx*Ny*Nz_force)
+          this%meanFact = 1.d0/real(nx*nx*nzF,rkind)
+
           if (associated(zC))     nullify(zC)
           if (associated(zE))     nullify(zE)
 
           call message(1,'Forcing layer initialized successfully!')
           call message(2,'Target KE',this%tgtKE)
-          call message(2,'Gain divided by time scale',this%gain/this%integralTime)
+          call message(2,'Gain divided by time scale',this%relax_fact)!this%gain/this%integralTime)
       end subroutine
 
       subroutine updateRHS(this,uhat,vhat,what,u,v,wC,ThatE,T,duidxjC,nSGS,tsim,dt,&
@@ -344,21 +353,21 @@ module spectralForcingLayerMod
               dvdx => duidxjC(:,:,:,4), dvdy => duidxjC(:,:,:,5), dvdz => duidxjC(:,:,:,6), &
               dwdx => duidxjC(:,:,:,7), dwdy => duidxjC(:,:,:,8), dwdz => duidxjC(:,:,:,9))
          
-              ! Integrated kinetic energy 
-              KE_x = this%dV*0.5d0*(p_sum(sum(this%integralMask*u *u )))
-              KE_y = this%dV*0.5d0*(p_sum(sum(this%integralMask*v *v )))
-              KE_z = this%dV*0.5d0*(p_sum(sum(this%integralMask*wC*wC)))
+              ! Volume-averaged kinetic energy 
+              KE_x = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*u *u )))
+              KE_y = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*v *v )))
+              KE_z = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*wC*wC)))
 
-              ! Integrated force work 
-              forceWork_x = this%dV*p_sum(sum(this%integralMask*(u *this%fx)))
-              forceWork_y = this%dV*p_sum(sum(this%integralMask*(v *this%fy)))
-              forceWork_z = this%dV*p_sum(sum(this%integralMask*(wC*this%fz)))
+              ! Volume-averaged force work 
+              forceWork_x = this%meanFact*p_sum(sum(this%integralMask*(u *this%fx)))
+              forceWork_y = this%meanFact*p_sum(sum(this%integralMask*(v *this%fy)))
+              forceWork_z = this%meanFact*p_sum(sum(this%integralMask*(wC*this%fz)))
 
               ! NOTE: This assumes an eddy-viscosity SGS closure
-              ! Integrated disspation
-              eps_x = this%dV*p_sum(sum(this%integralMask*(this%oneOnRe + nSGS)*(dudx*dudx + dudy*dudy + dudz*dudz)))
-              eps_y = this%dV*p_sum(sum(this%integralMask*(this%oneOnRe + nSGS)*(dvdx*dvdx + dvdy*dvdy + dvdz*dvdz)))
-              eps_z = this%dV*p_sum(sum(this%integralMask*(this%oneOnRe + nSGS)*(dwdx*dwdx + dwdy*dwdy + dwdz*dwdz)))
+              ! Volume-averaged disspation
+              eps_x = this%meanFact*p_sum(sum(this%integralMask*(this%oneOnRe + nSGS)*(dudx*dudx + dudy*dudy + dudz*dudz)))
+              eps_y = this%meanFact*p_sum(sum(this%integralMask*(this%oneOnRe + nSGS)*(dvdx*dvdx + dvdy*dvdy + dvdz*dvdz)))
+              eps_z = this%meanFact*p_sum(sum(this%integralMask*(this%oneOnRe + nSGS)*(dwdx*dwdx + dwdy*dwdy + dwdz*dwdz)))
 
               ! Buoyancy transfer
               if (this%isStratified) then
@@ -372,15 +381,18 @@ module spectralForcingLayerMod
                   call this%interpE2C(this%cbuffyE,this%cbuffyC,this%cbuffzE,this%cbuffzC)
                   call this%spectC%ifft(this%cbuffyC,this%rbuffxC)
 
-                  BV = this%dV*p_sum(sum(this%integralMask*wC*this%rbuffxC))
+                  BV = this%meanFact*p_sum(sum(this%integralMask*wC*this%rbuffxC))
               else
                   BV = 0.d0
               end if
 
               ! Compute the amplifiation factor
-              this%ampFact_x = (eps_x - this%gain*(KE_x - this%tgtKEon3)/this%integralTime     )/(forceWork_x + 1.d-14)
-              this%ampFact_y = (eps_y - this%gain*(KE_y - this%tgtKEon3)/this%integralTime     )/(forceWork_y + 1.d-14)
-              this%ampFact_z = (eps_z - this%gain*(KE_z - this%tgtKEon3)/this%integralTime - BV)/(forceWork_z + 1.d-14)
+              !this%ampFact_x = (eps_x - this%gain*(KE_x - this%tgtKEon3)/this%integralTime     )/(forceWork_x + 1.d-14)
+              !this%ampFact_y = (eps_y - this%gain*(KE_y - this%tgtKEon3)/this%integralTime     )/(forceWork_y + 1.d-14)
+              !this%ampFact_z = (eps_z - this%gain*(KE_z - this%tgtKEon3)/this%integralTime - BV)/(forceWork_z + 1.d-14)
+              this%ampFact_x = (eps_x - this%relax_fact*(KE_x - this%tgtKEon3)     )/(forceWork_x + 1.d-14)
+              this%ampFact_y = (eps_y - this%relax_fact*(KE_y - this%tgtKEon3)     )/(forceWork_y + 1.d-14)
+              this%ampFact_z = (eps_z - this%relax_fact*(KE_z - this%tgtKEon3) - BV)/(forceWork_z + 1.d-14)
           end associate
 
           call this%get_time_ampfact(tsim,this%ampFact_time)
