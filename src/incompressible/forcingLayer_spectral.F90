@@ -262,9 +262,9 @@ module spectralForcingLayerMod
               
               nullify(zC,zE)
           elseif (maskType == fringeFunction) then
-              call this%getFringeMask(mesh(:,:,:,3),gpC,zmid,lf,Fringe_delta,this%rmaskC,'x')
-              call this%getFringeMask(mesh(:,:,:,3),gpC,zmid,lf,Fringe_delta,this%cmaskC,'y') 
-              call this%getFringeMask(zEin         ,gpE,zmid,lf,Fringe_delta,this%cmaskE,'y') 
+              call this%getFringeMask(mesh(:,:,:,3),this%gpC   ,zmid,lf,Fringe_delta,this%rmaskC,'x')
+              call this%getFringeMask(mesh(:,:,:,3),this%sp_gpC,zmid,lf,Fringe_delta,this%cmaskC,'y') 
+              call this%getFringeMask(zEin         ,this%sp_gpE,zmid,lf,Fringe_delta,this%cmaskE,'y') 
           end if
           
           ! For verification purposes
@@ -287,7 +287,7 @@ module spectralForcingLayerMod
           call transpose_x_to_y(this%integralMask,this%rbuffyC,gpC)
           call transpose_y_to_z(this%rbuffyC,this%rbuffzC,gpC)
           this%integralMask_1D = rbuffzC(1,1,:)
-          nzF = sum(rbuffzC)
+          nzF = sum(this%integralMask_1D)
 
           ! Compute differential volume element
           this%dV = (mesh(2,1,1,1) - mesh(1,1,1,1)) * &
@@ -295,7 +295,7 @@ module spectralForcingLayerMod
                     (mesh(1,1,2,3) - mesh(1,1,1,3))
 
           ! Compute the integral normalization factor (dV/Vf = 1/Nx*Ny*Nz_force)
-          this%meanFact = 1.d0/real(nx*nx*nzF,rkind)
+          this%meanFact = 1.d0/real(nx*ny*nzF,rkind)
 
           if (associated(zC))     nullify(zC)
           if (associated(zE))     nullify(zE)
@@ -562,27 +562,23 @@ module spectralForcingLayerMod
           
           maskInX = 0.d0
 
-          !do k = 1,gp%xsz(3)
-              do j = 1,gp%xsz(2)
-                  do i = 1,gp%xsz(1)
-                      maskInX(i,j,:) = fringeFunc(:)
-                      !maskInX(i,j,k) = maskInX(i,j,k) + fringeFunc(k)
-                  end do 
-              end do
-          !end do
+          do j = 1,gp%xsz(2)
+              do i = 1,gp%xsz(1)
+                  maskInX(i,j,:) = fringeFunc
+              end do 
+          end do
 
-          where(maskInX > 1.d0) maskInX = 1.d0
+          call assert(maxval(maskInX) <= 1.d0,'maxval(maskInX) <= 1.d0')
+          call assert(minval(maskInX) >= 0.d0,'minval(maskInX) >= 0.d0')
 
           if (pencil == 'x') then
               mask = maskInX
           elseif (pencil == 'y') then
               call transpose_x_to_y(maskInX,maskInY,gp)
+              call assert(size(mask,1) == size(maskInY,1),'size(mask,1) == size(maskInY,1) -- forcingLayer_spectral.F90')
+              call assert(size(mask,2) == size(maskInY,2),'size(mask,2) == size(maskInY,2) -- forcingLayer_spectral.F90')
               call assert(size(mask,3) == size(maskInY,3),'size(mask,3) == size(maskInY,3) -- forcingLayer_spectral.F90')
-              do j = 1,size(mask,2)
-                  do i = 1,size(mask,1)
-                      mask(i,j,:) = maskInY(1,1,:)
-                  end do
-              end do
+              mask = maskInY
           else
               call assert(.false.,'Only x or y pencils supported for this routine -- forcingLayer_spectral.F90')
           end if
