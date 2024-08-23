@@ -103,7 +103,7 @@
    ! NOTE: If you want to dump an edge field, you need to call in dumpFullField
    ! routine with this%gpE passed in as the 3rd argument. If it's a cell field,
    ! then you don't need to pass in any gp since the default gp is this%gpC
-   subroutine dumpFullField(this,arr,label,gp2use)
+   subroutine dumpFullField(this,arr,label,gp2use,step)
        use decomp_2d_io
        use mpi
        use exits, only: message
@@ -112,8 +112,13 @@
        real(rkind), dimension(:,:,:), intent(in) :: arr
        character(len=4), intent(in) :: label
        type(decomp_info), intent(in), optional :: gp2use
+       integer, intent(in), optional :: step
 
-        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+        if (present(step)) then
+            write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",     step,".out"
+        else
+            write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+        end if
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
         if (present(gp2use)) then
            call decomp_2d_write_one(1,arr,fname,gp2use)
@@ -780,20 +785,25 @@
      end if 
    end subroutine 
 
-   subroutine dump_visualization_files(this,ddt)
+   subroutine dump_visualization_files(this,ddt,step)
        use exits, only: message_min_max, message
        class(igrid), intent(inout) :: this
        logical, intent(in), optional :: ddt
-       logical :: dump_ddt_terms = .false.
+       integer, intent(in), optional :: step
+       integer :: tstep
+       logical :: dump_ddt_terms
 
+       dump_ddt_terms = .false.
+       tstep          = this%step
        if (present(ddt)) dump_ddt_terms = ddt
+       if (present(step)) tstep = step
 
        select case (this%ioType) 
        case(0)
            if (dump_ddt_terms) then
-               call this%dumpFullField(this%dudt,'dudt')
-               call this%dumpFullField(this%dvdt,'dvdt')
-               call this%dumpFullField(this%dwdt,'dwdt')
+               call this%dumpFullField(this%dudt,'dudt',step=tstep)
+               call this%dumpFullField(this%dvdt,'dvdt',step=tstep)
+               call this%dumpFullField(this%dwdt,'dwdt',step=tstep)
                if (this%isStratified) then
                    call this%dumpFullField(this%dTdt,'dTdt')
                end if

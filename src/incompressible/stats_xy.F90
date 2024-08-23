@@ -6,12 +6,15 @@ module stats_xy_mod
     use kind_parameters,    only: rkind, clen, MPIRKIND
     use incompressibleGrid, only: igrid
     use MPI
-    use decomp_2d,          only: nrank, transpose_y_to_z
+    use decomp_2d,          only: nrank, nproc, transpose_x_to_y, transpose_y_to_z, &
+                                  transpose_y_to_x
+    use decomp_2d_io,       only: decomp_2d_write_plane, decomp_2d_write_one
     use basic_io,           only: write_2d_ascii 
     use exits,              only: message
     use fortran_assert,     only: assert
     use spectralMod,        only: spectral
     use reductions,         only: p_maxval
+    use constants,          only: im0
     !use stdlib_sorting,     only: sort_index
     implicit none
 
@@ -30,6 +33,12 @@ module stats_xy_mod
           meanFx, meanFy, meanFz, meanFT, fTfT, &
           uu, vv, ww, uv, uw, vw, uT, vT, wT, TT, dTdz, S12_var, S13_var, S23_var, &
           meanq3, pp, up, vp, wp, ddt_meanT
+
+        ! Two-point correlations
+        real(rkind), dimension(:,:,:,:,:,:), allocatable :: cq_x_all, cq_y_all, cq_z_all
+        real(rkind), dimension(:,:), allocatable :: cq_z_tmp
+        real(rkind), dimension(:,:,:,:), pointer :: cq_x, cq_y, cq_z
+        real(rkind), dimension(:,:,:), allocatable :: cq_x_mask, cq_y_mask
 
         ! Scalar fields
         real(rkind), dimension(:,:,:), pointer :: T, dTdxC, dTdyC, dTdzC, q1, q2, q3, &
@@ -97,6 +106,7 @@ module stats_xy_mod
           procedure, private :: mixed_scale_turbulent_transport
 
           ! Stats
+          procedure, private :: two_point_correlation
           procedure, private :: covariance
           procedure, private :: mean
 
@@ -127,7 +137,7 @@ module stats_xy_mod
         real(rkind), dimension(:), allocatable :: kc_for_scale_splitting
         integer :: tid_start = 1000000, compute_freq = 1000000, dump_freq = 10000000
         character(len=clen) :: outputdir
-        integer :: ioUnit, ierr, nstore, n
+        integer :: ioUnit, ierr, nstore, n, nvars
         integer, parameter :: nterms      = 102
         integer, parameter :: nterms_sca  = 52
         real, parameter :: zero = 0.d0
@@ -144,11 +154,11 @@ module stats_xy_mod
 
 
         if (do_stats) then
-            this%tid_start    = tid_start
-            this%compute_freq = compute_freq
-            this%dump_freq    = dump_freq
-            this%outputdir    = outputdir
-            this%do_stats     = do_stats
+            this%tid_start                 = tid_start
+            this%compute_freq              = compute_freq
+            this%dump_freq                 = dump_freq
+            this%outputdir                 = outputdir
+            this%do_stats                  = do_stats
             if (nscales > 1) then
                 allocate(kc_for_scale_splitting(nscales))
                 open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -200,14 +210,22 @@ module stats_xy_mod
             call assert(maxval(this%kc_vec) <= this%kmax,"kc is larger than the Nyquist wavenumber -- stats_xy.F90")
 
             ! Allocate memory and link pointers
+            nvars = 4 ! u, v, w, p
             if (this%nscalars > 0) then
                 allocate(this%stats_sca(sim%nz,nterms_sca,nstore,this%nscalars,this%nscales))
                 allocate(this%qjsplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales,3))
                 allocate(this%q3all(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3)))
                 allocate(this%Tsplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales))
                 allocate(this%dTdxj(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales,3))
+                nvars = nvars + this%nscalars
             end if
             allocate(this%stats(sim%nz,nterms,nstore,this%nscales))
+            allocate(this%cq_x_all(sim%gpC%xsz(1),sim%gpC%xsz(2),sim%gpC%xsz(3),nvars,nstore,this%nscales))
+            allocate(this%cq_y_all(sim%gpC%xsz(1),sim%gpC%xsz(2),sim%gpC%xsz(3),nvars,nstore,this%nscales))
+            allocate(this%cq_z_all(sim%gpC%zsz(3)/2+1,sim%gpC%zsz(3),1,nvars,nstore,this%nscales))
+            allocate(this%cq_z_tmp(sim%gpC%zsz(3)/2+1,sim%gpC%zsz(3)))
+            allocate(this%cq_x_mask(sim%gpC%ysz(1),sim%gpC%ysz(2),sim%gpC%ysz(3)))
+            allocate(this%cq_y_mask(sim%gpC%xsz(1),sim%gpC%xsz(2),sim%gpC%xsz(3)))
             allocate(this%time(nstore))
             allocate(this%tid(nstore))
             allocate(this%zbuff(sim%nz,4))
@@ -246,6 +264,14 @@ module stats_xy_mod
             this%vT,this%wT,this%TT,this%meanFx,this%meanFy,this%meanFz,&
             this%pp,this%up,this%vp,this%wp,this%meanfT,this%fTfT)
           if (allocated(this%stats)) deallocate(this%stats)
+          if (allocated(this%cq_x_all)) deallocate(this%cq_x_all)
+          if (allocated(this%cq_y_all)) deallocate(this%cq_y_all)
+          if (allocated(this%cq_z_all)) deallocate(this%cq_z_all)
+          if (allocated(this%cq_x_mask)) deallocate(this%cq_x_mask)
+          if (allocated(this%cq_y_mask)) deallocate(this%cq_y_mask)
+          if (associated(this%cq_x)) nullify(this%cq_x)
+          if (associated(this%cq_y)) nullify(this%cq_y)
+          if (associated(this%cq_z)) nullify(this%cq_z)
           if (allocated(this%stats_sca)) deallocate(this%stats_sca)
           if (allocated(this%Tsplit)) deallocate(this%Tsplit)
           if (allocated(this%dTdxj)) deallocate(this%dTdxj)
@@ -540,8 +566,8 @@ module stats_xy_mod
           class(stats_xy), intent(inout) :: this
           integer :: n, scl, sca
 
-          if ( (this%do_stats)                             .and. &
-               (this%sim%step >= this%tid_start          )) then
+          if ( (this%do_stats)                    .and. &
+               (this%sim%step >= this%tid_start) ) then
 
              ! Step 1: Get budget RHS terms and all other budget terms at t^n
              if (mod(this%sim%step,this%compute_freq) == 0) then
@@ -659,6 +685,21 @@ module stats_xy_mod
                      this%tke_flux(:,3) = 0.5d0*this%zbuff(:,3)! - &
                        !(this%meanU*this%uw + this%meanV*this%vw + this%meanW*this%ww)
 
+                    ! Two-point correlations
+                    call this%sim%dumpFullField(this%pressure,'pflc')
+                    call this%two_point_correlation(this%u       ,this%cq_x(:,:,:,1),'x')
+                    call this%two_point_correlation(this%v       ,this%cq_x(:,:,:,2),'x')
+                    call this%two_point_correlation(this%wC      ,this%cq_x(:,:,:,3),'x')
+                    call this%two_point_correlation(this%pressure,this%cq_x(:,:,:,4),'x')
+                    call this%two_point_correlation(this%u       ,this%cq_y(:,:,:,1),'y')
+                    call this%two_point_correlation(this%v       ,this%cq_y(:,:,:,2),'y')
+                    call this%two_point_correlation(this%wC      ,this%cq_y(:,:,:,3),'y')
+                    call this%two_point_correlation(this%pressure,this%cq_y(:,:,:,4),'y')
+                    call this%two_point_correlation(this%u       ,this%cq_z(:,:,:,1),'z')
+                    call this%two_point_correlation(this%v       ,this%cq_z(:,:,:,2),'z')
+                    call this%two_point_correlation(this%wC      ,this%cq_z(:,:,:,3),'z')
+                    call this%two_point_correlation(this%pressure,this%cq_z(:,:,:,4),'z')
+
                  end do
 
                  ! Scalar stats
@@ -703,6 +744,11 @@ module stats_xy_mod
                          this%sca_var_flux(:,1) = this%zbuff(:,1)! - 2.d0*this%meanT*this%uT
                          this%sca_var_flux(:,2) = this%zbuff(:,2)! - 2.d0*this%meanT*this%vT
                          this%sca_var_flux(:,3) = this%zbuff(:,3)! - 2.d0*this%meanT*this%wT
+
+                         ! Twp-point correlation
+                         call this%two_point_correlation(this%T,this%cq_x(:,:,:,4+n),'x')
+                         call this%two_point_correlation(this%T,this%cq_y(:,:,:,4+n),'y')
+                         call this%two_point_correlation(this%T,this%cq_z(:,:,:,4+n),'z')
                      end do
                  end do
 
@@ -756,6 +802,140 @@ module stats_xy_mod
                  end if
              end if
           end if
+      end subroutine
+
+      subroutine two_point_correlation(this,q,cq,coord)
+          class(stats_xy), intent(inout) :: this
+          real(rkind), dimension(:,:,:), intent(in) :: q
+          real(rkind), dimension(:,:,:), intent(inout) :: cq
+          character(len=1), intent(in) :: coord
+          integer :: nx, ny, nz, nx_l, ny_l, nz_l
+          integer :: i, j, k, r
+          real(rkind), dimension(:,:,:), pointer :: qiny, qinz, cqiny
+          integer :: ierr
+
+          cq = 0.d0
+          nx = this%sim%gpC%xsz(1)
+          ny = this%sim%gpC%ysz(2)
+          nz = this%sim%gpC%zsz(3)
+          select case (coord)
+          case ('x')
+              call assert(size(cq,1)==size(q,1),'size(cq,1)==size(q,1)')
+              call assert(size(cq,2)==size(q,2),'size(cq,2)==size(q,2)')
+              call assert(size(cq,3)==size(q,3),'size(cq,3)==size(q,3)')
+              ny_l = size(cq,2)
+              nz_l = size(cq,3)
+              do k = 1,nz_l
+                  do r = 1,nx/2+1
+                      do j = 1,ny_l
+                          do i = 1,nx-r+1
+                              cq(r,1,k) = cq(r,1,k) + q(i,j,k)*q(i+r-1,j,k)
+                          end do
+                      end do
+                      cq(r,1,k) = cq(r,1,k)/(ny_l*(nz-r+1)) ! local average in x & y
+                  end do
+              end do
+
+              ! Copy the correlation to all j-indices and prepare to transpose
+              do k = 1,nz_l
+                  do j = 2,ny_l
+                      cq(:,j,k) = cq(:,1,k)
+                  end do
+              end do
+
+              ! Now average across MPI ranks
+              call transpose_x_to_y(cq,this%sim%rbuffyC(:,:,:,1),this%sim%gpC)
+              this%cq_x_mask = 0.d0
+              this%cq_x_mask(:,2:ny,:) = this%sim%rbuffyC(:,2:ny,:,1) - this%sim%rbuffyC(:,1:ny-1,:,1)
+              where(abs(this%cq_x_mask) > 1.d-14) this%cq_x_mask = this%cq_x_mask/this%cq_x_mask ! normalize to be 0 to 1
+              where(abs(this%cq_x_mask) <= 1.d-14) this%cq_x_mask = 0.d0
+              this%cq_x_mask(:,1,:) = 1.d0
+
+              this%sim%rbuffyC(:,1,:,2) = sum(this%cq_x_mask*this%sim%rbuffyC(:,:,:,1),2)/(sum(this%cq_x_mask,2)+1.d-14)!this%sim%gpC%ysz(2)
+
+              ! Copy the result to the other j-indices
+              do k = 1,this%sim%gpC%ysz(3)
+                  do j = 1,this%sim%gpC%ysz(2)
+                      this%sim%rbuffyC(:,j,k,1) = this%sim%rbuffyC(:,1,k,2)
+                  end do
+              end do
+
+              ! Transpose back to cq_x
+              call transpose_y_to_x(this%sim%rbuffyC(:,:,:,1),cq,this%sim%gpC)
+
+          case ('y')
+              call assert(size(cq,1)==size(q,1),'size(cq,1)==size(q,1)')
+              call assert(size(cq,2)==size(q,2),'size(cq,2)==size(q,2)')
+              call assert(size(cq,3)==size(q,3),'size(cq,3)==size(q,3)')
+              nx_l = this%sim%gpC%ysz(1)
+              nz_l = this%sim%gpC%ysz(3)
+              cqiny => this%sim%rbuffyC(:,:,:,1)
+              qiny  => this%sim%rbuffyC(:,:,:,2)
+              call transpose_x_to_y(cq,cqiny,this%sim%gpC)
+              call transpose_x_to_y(q ,qiny ,this%sim%gpC)
+              do k = 1,nz_l
+                  do r = 1,ny/2+1
+                      do j = 1,ny-r+1
+                          do i = 1,nx_l
+                              cqiny(1,r,k) = cqiny(1,r,k) + qiny(i,j,k)*qiny(i,j+r-1,k)
+                          end do
+                      end do
+                      cqiny(1,r,k) = cqiny(1,r,k)/(nx_l*(ny-r+1))
+                  end do
+              end do
+
+              ! Copy the correlation to all i-indices
+              do k = 1,nz_l
+                  do r = 1,ny/2+1
+                      do i = 2,nx_l
+                          cqiny(i,r,k) = cqiny(1,r,k)
+                      end do
+                  end do
+              end do
+
+              ! Now average across MPI ranks
+              call transpose_y_to_x(cqInY,cq,this%sim%gpC)
+              this%cq_y_mask = 0.d0
+              this%cq_y_mask(2:nx,:,:) = cq(2:nx,:,:) - cq(1:nx-1,:,:)
+              where(abs(this%cq_y_mask) > 1.d-14) this%cq_y_mask = this%cq_y_mask/this%cq_y_mask ! normalize to be 0 to 1
+              where(abs(this%cq_y_mask) <= 1.d-14) this%cq_y_mask = 0.d0
+              this%cq_y_mask(1,:,:) = 1.d0
+
+              this%sim%rbuffxC(1,:,:,1) = sum(this%cq_y_mask*cq,1)/(sum(this%cq_y_mask,1)+1.d-14)
+
+              ! Copy the result to the other i-indices
+              do k = 1,this%sim%gpC%xsz(3)
+                  do j = 1,this%sim%gpC%xsz(2)
+                      do i = 1,this%sim%gpC%xsz(1)
+                          cq(i,j,k) = this%sim%rbuffxC(1,j,k,1)
+                      end do
+                  end do
+              end do
+
+          case ('z')
+              this%cq_z_tmp = 0.d0
+              call assert(size(cq,1)==this%sim%gpC%zsz(3)/2+1,'size(cq,1)==this%sim%gpC%zsz(3)/2+1')
+              call assert(size(cq,2)==this%sim%gpC%zsz(3),'size(cq,2)==this%sim%gpC%zsz(3)')
+              call assert(size(cq,3)==1,'size(cq,3)==1')
+              nx_l = this%sim%gpC%zsz(1)
+              ny_l = this%sim%gpC%zsz(2)
+              qiny  => this%sim%rbuffyC(:,:,:,1)
+              qinz  => this%sim%rbuffzC(:,:,:,1)
+              
+              call transpose_x_to_y(q,qiny,this%sim%gpC)
+              call transpose_y_to_z(qiny,qinz,this%sim%gpC)
+
+              do k = 1,nz
+                  do r = 1,nz/2+1
+                      if ((k - r + 1 > 0) .and. (k + r - 1 <= nz)) then
+                          this%cq_z_tmp(r,k) = sum(qinz(:,:,k-r+1)*qinz(:,:,k+r-1))
+                      end if
+                  end do
+              end do
+              call MPI_Reduce(this%cq_z_tmp,cq(:,:,1),(nz/2+1)*nz,MPIRKIND,MPI_SUM,0,MPI_COMM_WORLD,ierr)
+              cq = cq/(nx*ny)
+
+          end select
       end subroutine
 
       subroutine get_tke_budget_rhs(this,tke_budget,R11_budget,R22_budget,R33_budget,&
@@ -1229,6 +1409,10 @@ module stats_xy_mod
         this%fy => this%fysplit(:,:,:,scl)
         this%fz => this%fzsplit(:,:,:,scl)
 
+        this%cq_x => this%cq_x_all(:,:,:,:,tidx,scl)
+        this%cq_y => this%cq_y_all(:,:,:,:,tidx,scl)
+        this%cq_z => this%cq_z_all(:,:,:,:,tidx,scl)
+
         if (this%nscalars > 0) then
             id = 1
             this%TT_budget    => this%stats_sca(:,id:id+11,tidx,sca,scl); id = id + 12
@@ -1281,14 +1465,17 @@ module stats_xy_mod
           class(stats_xy), intent(inout) :: this
           integer :: n, sca, scl
           character(len=clen) :: tempname, fname
+          character(len=2) :: which_scalar
 
           if (nrank == 0) then
               do scl = 1,this%nscales
                   do n = 1,this%nwrite
+                      ! one-point correlations, means, and budgets
                       write(tempname,"(A3,I2.2,A11,I6.6,A6,I2.2,A4)")&
                         "Run",this%sim%runID,"_stats_xy_t",this%tid(n),"_scale",scl,".out"
                       fname = trim(this%outputdir)//"/"//trim(tempname)
                       call write_2d_ascii(this%stats(:,:,n,scl),trim(fname))
+
                       do sca = 1,this%nscalars
                           write(tempname,"(A3,I2.2,A13,I2.2,A2,I6.6,A6,I2.2,A4)")&
                             "Run",this%sim%runID,"_stats_xy_sca",sca,"_t",this%tid(n),"_scale",scl,".out"
@@ -1298,6 +1485,53 @@ module stats_xy_mod
                   end do
               end do
           end if
+          do scl = 1,this%nscales
+              do n = 1,this%nwrite
+                  ! two-point correlations
+                  ! > cq_x
+                  write(tempname,"(A3,I2.2,A14,I6.6,A6,I2.2)")&
+                    "Run",this%sim%runID,"_two_pt_corr_t",this%tid(n),"_scale",scl
+                  fname = trim(this%outputdir)//"/"//trim(tempname)//".cu_x.out"
+                  call decomp_2d_write_plane(1,this%cq_x_all(:,:,:,1,n,scl),2,1,trim(fname),this%sim%gpC)
+                  fname = trim(this%outputdir)//"/"//trim(tempname)//".cv_x.out"
+                  call decomp_2d_write_plane(1,this%cq_x_all(:,:,:,2,n,scl),2,1,trim(fname),this%sim%gpC)
+                  fname = trim(this%outputdir)//"/"//trim(tempname)//".cw_x.out"
+                  call decomp_2d_write_plane(1,this%cq_x_all(:,:,:,3,n,scl),2,1,trim(fname),this%sim%gpC)
+                  fname = trim(this%outputdir)//"/"//trim(tempname)//".cp_x.out"
+                  call decomp_2d_write_plane(1,this%cq_x_all(:,:,:,4,n,scl),2,1,trim(fname),this%sim%gpC)
+                  ! > cq_y
+                  fname = trim(this%outputdir)//"/"//trim(tempname)//".cu_y.out"
+                  call decomp_2d_write_plane(1,this%cq_y_all(:,:,:,1,n,scl),1,1,trim(fname),this%sim%gpC)
+                  fname = trim(this%outputdir)//"/"//trim(tempname)//".cv_y.out"
+                  call decomp_2d_write_plane(1,this%cq_y_all(:,:,:,2,n,scl),1,1,trim(fname),this%sim%gpC)
+                  fname = trim(this%outputdir)//"/"//trim(tempname)//".cw_y.out"
+                  call decomp_2d_write_plane(1,this%cq_y_all(:,:,:,3,n,scl),1,1,trim(fname),this%sim%gpC)
+                  fname = trim(this%outputdir)//"/"//trim(tempname)//".cp_y.out"
+                  call decomp_2d_write_plane(1,this%cq_y_all(:,:,:,4,n,scl),1,1,trim(fname),this%sim%gpC)
+                  ! > cq_z
+                  if (nrank == 0) then
+                      fname = trim(this%outputdir)//"/"//trim(tempname)//".cu_z.out"
+                      call write_2d_ascii(this%cq_z_all(:,:,1,1,n,scl),trim(fname))
+                      fname = trim(this%outputdir)//"/"//trim(tempname)//".cv_z.out"
+                      call write_2d_ascii(this%cq_z_all(:,:,1,2,n,scl),trim(fname))
+                      fname = trim(this%outputdir)//"/"//trim(tempname)//".cw_z.out"
+                      call write_2d_ascii(this%cq_z_all(:,:,1,3,n,scl),trim(fname))
+                      fname = trim(this%outputdir)//"/"//trim(tempname)//".cp_z.out"
+                      call write_2d_ascii(this%cq_z_all(:,:,1,4,n,scl),trim(fname))
+                  end if
+                  do sca = 1,this%nscalars
+                      write(which_scalar,'(I2.2)') sca
+                      fname = trim(this%outputdir)//"/"//trim(tempname)//".cT_x.sca"//which_scalar//".out"
+                      call decomp_2d_write_plane(1,this%cq_x_all(:,:,:,4+sca,n,scl),2,1,trim(fname),this%sim%gpC)
+                      fname = trim(this%outputdir)//"/"//trim(tempname)//".cT_y.sca"//which_scalar//".out"
+                      call decomp_2d_write_plane(1,this%cq_y_all(:,:,:,4+sca,n,scl),2,1,trim(fname),this%sim%gpC)
+                      if (nrank == 0) then
+                          fname = trim(this%outputdir)//"/"//trim(tempname)//".cT_z.sca"//which_scalar//".out"
+                          call write_2d_ascii(this%cq_z_all(:,:,1,4+sca,n,scl),trim(fname))
+                      end if
+                  end do
+              end do
+          end do
           call this%write_time_info()
       end subroutine
 

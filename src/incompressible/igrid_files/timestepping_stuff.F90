@@ -591,7 +591,7 @@
                if (this%isStratified) then
                    this%dTdt = (this%T  - this%dTdt)/(2.d0*this%dt)
                end if
-               call this%dump_visualization_files(ddt=.true.)
+               call this%dump_visualization_files(ddt=.true.,step=this%step-1)
            end if
       end if 
 
