@@ -103,7 +103,7 @@
    ! NOTE: If you want to dump an edge field, you need to call in dumpFullField
    ! routine with this%gpE passed in as the 3rd argument. If it's a cell field,
    ! then you don't need to pass in any gp since the default gp is this%gpC
-   subroutine dumpFullField(this,arr,label,gp2use,step)
+   subroutine dumpFullField(this,arr,label,gp2use,step,pencil)
        use decomp_2d_io
        use mpi
        use exits, only: message
@@ -113,6 +113,58 @@
        character(len=4), intent(in) :: label
        type(decomp_info), intent(in), optional :: gp2use
        integer, intent(in), optional :: step
+       character(len=1), intent(in), optional :: pencil
+       integer :: decomp_dir
+
+       decomp_dir = 1
+       if (present(pencil)) then
+           select case (pencil)
+           case ('x')
+               decomp_dir = 1
+           case ('y')
+               decomp_dir = 2
+           case ('z')
+               decomp_dir = 3
+           end select
+       end if
+
+       if (present(step)) then
+           write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",     step,".out"
+       else
+           write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
+       end if
+       fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+       if (present(gp2use)) then
+          call decomp_2d_write_one(decomp_dir,arr,fname,gp2use)
+       else
+          call decomp_2d_write_one(decomp_dir,arr,fname,this%gpC)
+       end if
+
+   end subroutine
+   subroutine dumpFullField_cmplx(this,arr,label,gp2use,step,pencil)
+       use decomp_2d_io
+       use mpi
+       use exits, only: message
+       class(igrid), intent(in) :: this
+       character(len=clen) :: tempname, fname
+       complex(rkind), dimension(:,:,:), intent(in) :: arr
+       character(len=4), intent(in) :: label
+       type(decomp_info), intent(in), optional :: gp2use
+       integer, intent(in), optional :: step
+       character(len=1), intent(in), optional :: pencil
+       integer :: decomp_dir
+
+       decomp_dir = 2
+       if (present(pencil)) then
+           select case (pencil)
+           case ('x')
+               decomp_dir = 1
+           case ('y')
+               decomp_dir = 2
+           case ('z')
+               decomp_dir = 3
+           end select
+       end if
 
         if (present(step)) then
             write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",     step,".out"
@@ -121,9 +173,9 @@
         end if
         fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
         if (present(gp2use)) then
-           call decomp_2d_write_one(1,arr,fname,gp2use)
+           call decomp_2d_write_one(decomp_dir,arr,fname,gp2use)
         else
-           call decomp_2d_write_one(1,arr,fname,this%gpC)
+           call decomp_2d_write_one(decomp_dir,arr,fname,this%sp_gpC)
         end if
 
    end subroutine

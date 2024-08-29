@@ -7,7 +7,7 @@ module stats_xy_mod
     use incompressibleGrid, only: igrid
     use MPI
     use decomp_2d,          only: nrank, nproc, transpose_x_to_y, transpose_y_to_z, &
-                                  transpose_y_to_x
+                                  transpose_y_to_x, transpose_z_to_y
     use decomp_2d_io,       only: decomp_2d_write_plane, decomp_2d_write_one
     use basic_io,           only: write_2d_ascii 
     use exits,              only: message
@@ -20,6 +20,8 @@ module stats_xy_mod
 
     private
     public :: stats_xy
+    
+    integer, parameter :: zbc_bot = 0, zbc_top = 0
     type :: stats_xy
 
         private
@@ -113,6 +115,9 @@ module stats_xy_mod
           ! Derivatives
           procedure, private :: ddz
           procedure, private :: d2dz2
+
+          ! Interpolator
+          procedure, private :: interpE2C
 
           ! Scale-splitting
           procedure, private :: do_scale_splitting_multiple
@@ -443,13 +448,18 @@ module stats_xy_mod
                   ! SGS flux
                   call this%do_scale_splitting(q1,this%qjsplit(:,:,:,:,1),kc,rbuff,cbuff)
                   call this%do_scale_splitting(q2,this%qjsplit(:,:,:,:,2),kc,rbuff,cbuff)
-                  call this%sim%spectForceLayer%interpE2C(q3, this%q3all, &
+                  !call this%sim%spectForceLayer%interpE2C(q3, this%q3all, &
+                  !  this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
+                  !  this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
+                  call this%interpE2C(q3, this%q3all, &
                     this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
                     this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
                   call this%do_scale_splitting(this%q3all,this%qjsplit(:,:,:,:,3),kc,rbuff,cbuff)
 
                   ! Forcing
-                  call this%do_scale_splitting(this%sim%spectForceLayer%fT,this%fTsplit,kc,rbuff,cbuff)
+                  if (this%sim%localizedForceLayer == 2) then
+                      call this%do_scale_splitting(this%sim%spectForceLayer%fT,this%fTsplit,kc,rbuff,cbuff)
+                  end if
 
                   nullify(F, dFdx, dFdy, dFdz, q1, q2, q3)
               endif
@@ -471,13 +481,15 @@ module stats_xy_mod
                   call this%do_scale_splitting(this%sim%pressure,this%psplit,kc,rbuff,cbuff)
 
                   ! Forcing
-                  call this%do_scale_splitting(this%sim%spectForceLayer%fx,this%fxsplit,kc,rbuff,cbuff)
-                  call this%do_scale_splitting(this%sim%spectForceLayer%fy,this%fysplit,kc,rbuff,cbuff)
-                  call this%sim%spectForceLayer%interpE2C(&
-                    this%sim%spectForceLayer%fz  , this%sim%rbuffxC(:,:,:,3), &
-                    this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
-                    this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
-                  call this%do_scale_splitting(this%sim%rbuffxC(:,:,:,3),this%fzsplit,kc,rbuff,cbuff)
+                  if (this%sim%localizedForceLayer == 2) then
+                      call this%do_scale_splitting(this%sim%spectForceLayer%fx,this%fxsplit,kc,rbuff,cbuff)
+                      call this%do_scale_splitting(this%sim%spectForceLayer%fy,this%fysplit,kc,rbuff,cbuff)
+                      call this%sim%spectForceLayer%interpE2C(&
+                        this%sim%spectForceLayer%fz  , this%sim%rbuffxC(:,:,:,3), &
+                        this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
+                        this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
+                      call this%do_scale_splitting(this%sim%rbuffxC(:,:,:,3),this%fzsplit,kc,rbuff,cbuff)
+                  end if
 
                   ! tauij_SGS
                   call this%sim%sgsModel%populate_tauij_E_to_C()
@@ -504,6 +516,20 @@ module stats_xy_mod
           if (associated(rbuff)) nullify(rbuff)
           if (associated(cbuff)) nullify(cbuff)
 
+      end subroutine
+      
+      subroutine interpE2C(this,fE,fC,rbuffyC,rbuffzC,rbuffyE,rbuffzE)
+          class(stats_xy), intent(inout) :: this
+          real(rkind), dimension(:,:,:), intent(in) :: fE
+          real(rkind), dimension(:,:,:), intent(out) :: fC
+          real(rkind), dimension(:,:,:), intent(inout) :: rbuffyC, rbuffyE
+          real(rkind), dimension(:,:,:), intent(inout) :: rbuffzC, rbuffzE
+          
+          call transpose_x_to_y(fE,rbuffyE,this%sim%gpE)
+          call transpose_y_to_z(rbuffyE,rbuffzE,this%sim%gpE)
+          call this%sim%pade6opZ%interpz_E2C(rbuffzE, rbuffzC, zbc_bot, zbc_top)
+          call transpose_z_to_y(rbuffzC, rbuffyC, this%sim%gpC)
+          call transpose_y_to_x(rbuffyC, fC, this%sim%gpC)
       end subroutine
 
       subroutine do_scale_splitting_multiple(this,fin,fout,kc,rbuff,cbuff)
@@ -566,241 +592,245 @@ module stats_xy_mod
           class(stats_xy), intent(inout) :: this
           integer :: n, scl, sca
 
-          if ( (this%do_stats)                    .and. &
-               (this%sim%step >= this%tid_start) ) then
+          if ((this%do_stats)) then
+              if (this%sim%step >= this%tid_start)  then
 
-             ! Step 1: Get budget RHS terms and all other budget terms at t^n
-             if (mod(this%sim%step,this%compute_freq) == 0) then
-                 call message(1,"Computing stats")
+                  ! Step 1: Get budget RHS terms and all other budget terms at t^n
+                  if (mod(this%sim%step,this%compute_freq) == 0) then
+                      call message(1,"Computing stats")
 
-                 ! If we aren't scale-splitting, this routine will simply copy the full fields
-                 call this%copy_and_scale_split(this%kc_vec,sca=1,scalar_only=.false.)
+                      ! If we aren't scale-splitting, this routine will simply copy the full fields
+                      call this%copy_and_scale_split(this%kc_vec,sca=1,scalar_only=.false.)
 
-                 this%tidx = this%tidx + 1
-                 do scl = 1,this%nscales
-                     call this%link_pointers(this%tidx,min(1,this%nscalars),scl)
+                      this%tidx = this%tidx + 1
+                      do scl = 1,this%nscales
+                          call this%link_pointers(this%tidx,min(1,this%nscalars),scl)
 
-                     ! Get mean profiles
-                     call this%mean(this%sim%u  ,this%meanU)
-                     call this%mean(this%sim%v  ,this%meanV)
-                     call this%mean(this%sim%wC ,this%meanW)
+                          ! Get mean profiles
+                          call this%mean(this%sim%u  ,this%meanU)
+                          call this%mean(this%sim%v  ,this%meanV)
+                          call this%mean(this%sim%wC ,this%meanW)
 
-                     ! TODO: This is not the true mean pressure. Need to account for
-                     ! meanT component
-                     call this%mean(this%sim%pressure,this%meanP) 
+                          ! TODO: This is not the true mean pressure. Need to account for
+                          ! meanT component
+                          call this%mean(this%sim%pressure,this%meanP) 
 
-                     !   > mean force components
-                     if (this%sim%localizedForceLayer == 2) then
-                         this%sim%rbuffxC(:,:,:,1) = this%sim%spectForceLayer%ampFact_x*this%sim%spectForceLayer%fx
-                         this%sim%rbuffxC(:,:,:,2) = this%sim%spectForceLayer%ampFact_y*this%sim%spectForceLayer%fy
-                         call this%sim%spectForceLayer%interpE2C(&
-                           this%sim%spectForceLayer%fz, this%sim%rbuffxC(:,:,:,3), &
-                           this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
-                           this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
-                         this%sim%rbuffxC(:,:,:,3) = this%sim%spectForceLayer%ampFact_z*this%sim%rbuffxC(:,:,:,3)
+                          !   > mean force components
+                          if (this%sim%localizedForceLayer == 2) then
+                              this%sim%rbuffxC(:,:,:,1) = this%sim%spectForceLayer%ampFact_x*this%sim%spectForceLayer%fx
+                              this%sim%rbuffxC(:,:,:,2) = this%sim%spectForceLayer%ampFact_y*this%sim%spectForceLayer%fy
+                              !call this%sim%spectForceLayer%interpE2C(&
+                              !  this%sim%spectForceLayer%fz, this%sim%rbuffxC(:,:,:,3), &
+                              !  this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
+                              !  this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
+                              call this%interpE2C(&
+                                this%sim%spectForceLayer%fz, this%sim%rbuffxC(:,:,:,3), &
+                                this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
+                                this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
+                              this%sim%rbuffxC(:,:,:,3) = this%sim%spectForceLayer%ampFact_z*this%sim%rbuffxC(:,:,:,3)
 
-                         call this%mean(this%sim%rbuffxC(:,:,:,1), this%meanFx)
-                         call this%mean(this%sim%rbuffxC(:,:,:,2), this%meanFy)
-                         call this%mean(this%sim%rbuffxC(:,:,:,3), this%meanFz)
+                              call this%mean(this%sim%rbuffxC(:,:,:,1), this%meanFx)
+                              call this%mean(this%sim%rbuffxC(:,:,:,2), this%meanFy)
+                              call this%mean(this%sim%rbuffxC(:,:,:,3), this%meanFz)
 
-                         ! force variance
-                         this%sim%rbuffxC(:,:,:,2) = &
-                           this%sim%spectForceLayer%ampFact_x*this%sim%spectForceLayer%ampFact_x*&
-                           this%fx*this%fx + & 
-                           this%sim%spectForceLayer%ampFact_y*this%sim%spectForceLayer%ampFact_y*&
-                           this%fy*this%fy + & 
-                           this%sim%spectForceLayer%ampFact_z*this%sim%spectForceLayer%ampFact_z*&
-                           this%fz*this%fz
-                         call this%mean(this%sim%rbuffxC(:,:,:,2),this%fifi)
-                         this%fifi = this%fifi - (this%meanFx*this%meanFx + &
-                           this%meanFy*this%meanFy + this%meanFz*this%meanFz)
+                              ! force variance
+                              this%sim%rbuffxC(:,:,:,2) = &
+                                this%sim%spectForceLayer%ampFact_x*this%sim%spectForceLayer%ampFact_x*&
+                                this%fx*this%fx + & 
+                                this%sim%spectForceLayer%ampFact_y*this%sim%spectForceLayer%ampFact_y*&
+                                this%fy*this%fy + & 
+                                this%sim%spectForceLayer%ampFact_z*this%sim%spectForceLayer%ampFact_z*&
+                                this%fz*this%fz
+                              call this%mean(this%sim%rbuffxC(:,:,:,2),this%fifi)
+                              this%fifi = this%fifi - (this%meanFx*this%meanFx + &
+                                this%meanFy*this%meanFy + this%meanFz*this%meanFz)
 
-                         if (this%nscalars>0) then
-                             call this%mean(this%sim%spectForceLayer%fT,this%meanfT)
-                             call this%covariance(this%fT,this%fT,this%fTfT)
-                         end if
-                     else
-                         this%meanFx = 0.d0
-                         this%meanFy = 0.d0
-                         this%meanFz = 0.d0
-                         this%fifi   = 0.d0
-                         if (this%nscalars>0) then
-                             this%meanFT = 0.d0
-                             this%fTfT = 0.d0
-                         end if
-                     end if
+                              if (this%nscalars>0) then
+                                  call this%mean(this%sim%spectForceLayer%fT,this%meanfT)
+                                  call this%covariance(this%fT,this%fT,this%fTfT)
+                              end if
+                          else
+                              this%meanFx = 0.d0
+                              this%meanFy = 0.d0
+                              this%meanFz = 0.d0
+                              this%fifi   = 0.d0
+                              if (this%nscalars>0) then
+                                  this%meanFT = 0.d0
+                                  this%fTfT = 0.d0
+                              end if
+                          end if
 
-                     ! Compute MKE
-                     this%mke = 0.5d0*(this%meanU*this%meanU + this%meanV*this%meanV + &
-                       this%meanW*this%meanW)
+                          ! Compute MKE
+                          this%mke = 0.5d0*(this%meanU*this%meanU + this%meanV*this%meanV + &
+                            this%meanW*this%meanW)
 
-                     ! Reynolds stresses
-                     !   > Normal stresses
-                     call this%covariance(this%u,  this%u,  this%uu)
-                     call this%covariance(this%v,  this%v,  this%vv)
-                     call this%covariance(this%wC, this%wC, this%ww)
+                          ! Reynolds stresses
+                          !   > Normal stresses
+                          call this%covariance(this%u,  this%u,  this%uu)
+                          call this%covariance(this%v,  this%v,  this%vv)
+                          call this%covariance(this%wC, this%wC, this%ww)
 
-                     !   > Cross stresses
-                     call this%covariance(this%u,  this%v,  this%uv)
-                     call this%covariance(this%u,  this%wC, this%uw)
-                     call this%covariance(this%v,  this%wC, this%vw)
+                          !   > Cross stresses
+                          call this%covariance(this%u,  this%v,  this%uv)
+                          call this%covariance(this%u,  this%wC, this%uw)
+                          call this%covariance(this%v,  this%wC, this%vw)
 
-                     ! Pressure covariances
-                     call this%covariance(this%pressure, this%pressure, this%pp)
-                     call this%covariance(this%u       , this%pressure, this%up)
-                     call this%covariance(this%v       , this%pressure, this%vp)
-                     call this%covariance(this%wC      , this%pressure, this%wp)
+                          ! Pressure covariances
+                          call this%covariance(this%pressure, this%pressure, this%pp)
+                          call this%covariance(this%u       , this%pressure, this%up)
+                          call this%covariance(this%v       , this%pressure, this%vp)
+                          call this%covariance(this%wC      , this%pressure, this%wp)
 
-                     ! Compute TKE
-                     this%tke = 0.5d0*(this%uu + this%vv + this%ww)
+                          ! Compute TKE
+                          this%tke = 0.5d0*(this%uu + this%vv + this%ww)
 
-                     ! Compute tau_SGS stats
-                     call this%covariance(this%tau11,this%tau11,this%tauij_var(:,1))
-                     call this%covariance(this%tau12,this%tau12,this%tauij_var(:,2))
-                     call this%covariance(this%tau13,this%tau13,this%tauij_var(:,3))
+                          ! Compute tau_SGS stats
+                          call this%covariance(this%tau11,this%tau11,this%tauij_var(:,1))
+                          call this%covariance(this%tau12,this%tau12,this%tauij_var(:,2))
+                          call this%covariance(this%tau13,this%tau13,this%tauij_var(:,3))
 
-                     call this%covariance(this%tau22,this%tau22,this%tauij_var(:,4))
-                     call this%covariance(this%tau23,this%tau23,this%tauij_var(:,5))
-                     call this%covariance(this%tau33,this%tau33,this%tauij_var(:,6))
+                          call this%covariance(this%tau22,this%tau22,this%tauij_var(:,4))
+                          call this%covariance(this%tau23,this%tau23,this%tauij_var(:,5))
+                          call this%covariance(this%tau33,this%tau33,this%tauij_var(:,6))
 
-                     ! Add time ID and simulation time to their respective vectors
-                     this%tid(this%tidx) = this%sim%step
-                     this%time(this%tidx) = this%sim%tsim
+                          ! Add time ID and simulation time to their respective vectors
+                          this%tid(this%tidx) = this%sim%step
+                          this%time(this%tidx) = this%sim%tsim
 
-                     ! Assemble budgets
-                     call this%get_tke_budget_rhs(this%tke_budget,this%R11_budget,&
-                       this%R22_budget,this%R33_budget,&
-                       this%tau11,this%tau12,this%tau13,this%tau22,this%tau23,this%tau33,scl)
+                          ! Assemble budgets
+                          call this%get_tke_budget_rhs(this%tke_budget,this%R11_budget,&
+                            this%R22_budget,this%R33_budget,&
+                            this%tau11,this%tau12,this%tau13,this%tau22,this%tau23,this%tau33,scl)
 
-                     ! TKE fluxes
-                     this%sim%rbuffxC(:,:,:,1) = this%u*this%u + this%v*this%v + this%wC*this%wC
-                     call this%covariance(this%u ,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,1))
-                     call this%covariance(this%v ,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,2))
-                     call this%covariance(this%wC,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,3))
+                          ! TKE fluxes
+                          this%sim%rbuffxC(:,:,:,1) = this%u*this%u + this%v*this%v + this%wC*this%wC
+                          call this%covariance(this%u ,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,1))
+                          call this%covariance(this%v ,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,2))
+                          call this%covariance(this%wC,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,3))
 
-                     this%tke_flux(:,1) = 0.5d0*this%zbuff(:,1)! - &
-                       !(this%meanU*this%uu + this%meanV*this%uv + this%meanW*this%uw)
-                     this%tke_flux(:,2) = 0.5d0*this%zbuff(:,2)! - &
-                       !(this%meanU*this%uv + this%meanV*this%vv + this%meanW*this%vw)
-                     this%tke_flux(:,3) = 0.5d0*this%zbuff(:,3)! - &
-                       !(this%meanU*this%uw + this%meanV*this%vw + this%meanW*this%ww)
+                          this%tke_flux(:,1) = 0.5d0*this%zbuff(:,1)! - &
+                            !(this%meanU*this%uu + this%meanV*this%uv + this%meanW*this%uw)
+                          this%tke_flux(:,2) = 0.5d0*this%zbuff(:,2)! - &
+                            !(this%meanU*this%uv + this%meanV*this%vv + this%meanW*this%vw)
+                          this%tke_flux(:,3) = 0.5d0*this%zbuff(:,3)! - &
+                            !(this%meanU*this%uw + this%meanV*this%vw + this%meanW*this%ww)
 
-                    ! Two-point correlations
-                    call this%sim%dumpFullField(this%pressure,'pflc')
-                    call this%two_point_correlation(this%u       ,this%cq_x(:,:,:,1),'x')
-                    call this%two_point_correlation(this%v       ,this%cq_x(:,:,:,2),'x')
-                    call this%two_point_correlation(this%wC      ,this%cq_x(:,:,:,3),'x')
-                    call this%two_point_correlation(this%pressure,this%cq_x(:,:,:,4),'x')
-                    call this%two_point_correlation(this%u       ,this%cq_y(:,:,:,1),'y')
-                    call this%two_point_correlation(this%v       ,this%cq_y(:,:,:,2),'y')
-                    call this%two_point_correlation(this%wC      ,this%cq_y(:,:,:,3),'y')
-                    call this%two_point_correlation(this%pressure,this%cq_y(:,:,:,4),'y')
-                    call this%two_point_correlation(this%u       ,this%cq_z(:,:,:,1),'z')
-                    call this%two_point_correlation(this%v       ,this%cq_z(:,:,:,2),'z')
-                    call this%two_point_correlation(this%wC      ,this%cq_z(:,:,:,3),'z')
-                    call this%two_point_correlation(this%pressure,this%cq_z(:,:,:,4),'z')
+                          ! Two-point correlations
+                          !call this%sim%dumpFullField(this%pressure,'pflc')
+                          call this%two_point_correlation(this%u       ,this%cq_x(:,:,:,1),'x')
+                          call this%two_point_correlation(this%v       ,this%cq_x(:,:,:,2),'x')
+                          call this%two_point_correlation(this%wC      ,this%cq_x(:,:,:,3),'x')
+                          call this%two_point_correlation(this%pressure,this%cq_x(:,:,:,4),'x')
+                          call this%two_point_correlation(this%u       ,this%cq_y(:,:,:,1),'y')
+                          call this%two_point_correlation(this%v       ,this%cq_y(:,:,:,2),'y')
+                          call this%two_point_correlation(this%wC      ,this%cq_y(:,:,:,3),'y')
+                          call this%two_point_correlation(this%pressure,this%cq_y(:,:,:,4),'y')
+                          call this%two_point_correlation(this%u       ,this%cq_z(:,:,:,1),'z')
+                          call this%two_point_correlation(this%v       ,this%cq_z(:,:,:,2),'z')
+                          call this%two_point_correlation(this%wC      ,this%cq_z(:,:,:,3),'z')
+                          call this%two_point_correlation(this%pressure,this%cq_z(:,:,:,4),'z')
 
-                 end do
+                      end do
 
-                 ! Scalar stats
-                 do n = 1,this%nscalars
-                     ! Run scale-splitting on each scalar so we don't have to store fields for all scales and all scalars
-                     call this%copy_and_scale_split(this%kc_vec,sca=n,scalar_only=.true.)
+                      ! Scalar stats
+                      do n = 1,this%nscalars
+                          ! Run scale-splitting on each scalar so we don't have to store fields for all scales and all scalars
+                          call this%copy_and_scale_split(this%kc_vec,sca=n,scalar_only=.true.)
 
-                     do scl = 1,this%nscales
-                         call this%link_pointers(this%tidx,n,scl)
-                         
-                         ! Mean scalar profile
-                         call this%mean(this%T_all, this%meanT)
+                          do scl = 1,this%nscales
+                              call this%link_pointers(this%tidx,n,scl)
+                              
+                              ! Mean scalar profile
+                              call this%mean(this%T_all, this%meanT)
 
-                         ! Mean scalar gradient
-                         call this%mean(this%dTdzC_all,this%dTdz)
+                              ! Mean scalar gradient
+                              call this%mean(this%dTdzC_all,this%dTdz)
 
-                         ! Scalar variance and fluxes
-                         call this%covariance(this%T,  this%T, this%TT)
-                         call this%covariance(this%u,  this%T, this%uT)
-                         call this%covariance(this%v,  this%T, this%vT)
-                         call this%covariance(this%wC, this%T, this%wT)
+                              ! Scalar variance and fluxes
+                              call this%covariance(this%T,  this%T, this%TT)
+                              call this%covariance(this%u,  this%T, this%uT)
+                              call this%covariance(this%v,  this%T, this%vT)
+                              call this%covariance(this%wC, this%T, this%wT)
 
-                         ! Scalar graident variances
-                         call this%covariance(this%dTdxC,this%dTdxC,this%dTdxj_var(:,1))
-                         call this%covariance(this%dTdyC,this%dTdyC,this%dTdxj_var(:,2))
-                         call this%covariance(this%dTdzC,this%dTdzC,this%dTdxj_var(:,3))
+                              ! Scalar graident variances
+                              call this%covariance(this%dTdxC,this%dTdxC,this%dTdxj_var(:,1))
+                              call this%covariance(this%dTdyC,this%dTdyC,this%dTdxj_var(:,2))
+                              call this%covariance(this%dTdzC,this%dTdzC,this%dTdxj_var(:,3))
 
-                         ! SGS heat flux moments
-                         call this%covariance(this%q1,this%q1,this%qj_var(:,1))
-                         call this%covariance(this%q2,this%q2,this%qj_var(:,2))
-                         call this%covariance(this%q3,this%q3,this%qj_var(:,3))
-                         call this%mean(this%q3all,this%meanq3)
+                              ! SGS heat flux moments
+                              call this%covariance(this%q1,this%q1,this%qj_var(:,1))
+                              call this%covariance(this%q2,this%q2,this%qj_var(:,2))
+                              call this%covariance(this%q3,this%q3,this%qj_var(:,3))
+                              call this%mean(this%q3all,this%meanq3)
 
-                         call this%get_TT_budget_rhs(scl)
-                         call this%get_wT_budget_rhs(scl)
+                              call this%get_TT_budget_rhs(scl)
+                              call this%get_wT_budget_rhs(scl)
 
-                         this%sim%rbuffxC(:,:,:,1) = this%T*this%T
-                         call this%covariance(this%u ,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,1))
-                         call this%covariance(this%v ,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,2))
-                         call this%covariance(this%wC,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,3))
+                              this%sim%rbuffxC(:,:,:,1) = this%T*this%T
+                              call this%covariance(this%u ,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,1))
+                              call this%covariance(this%v ,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,2))
+                              call this%covariance(this%wC,this%sim%rbuffxC(:,:,:,1),this%zbuff(:,3))
 
-                         this%sca_var_flux(:,1) = this%zbuff(:,1)! - 2.d0*this%meanT*this%uT
-                         this%sca_var_flux(:,2) = this%zbuff(:,2)! - 2.d0*this%meanT*this%vT
-                         this%sca_var_flux(:,3) = this%zbuff(:,3)! - 2.d0*this%meanT*this%wT
+                              this%sca_var_flux(:,1) = this%zbuff(:,1)! - 2.d0*this%meanT*this%uT
+                              this%sca_var_flux(:,2) = this%zbuff(:,2)! - 2.d0*this%meanT*this%vT
+                              this%sca_var_flux(:,3) = this%zbuff(:,3)! - 2.d0*this%meanT*this%wT
 
-                         ! Twp-point correlation
-                         call this%two_point_correlation(this%T,this%cq_x(:,:,:,4+n),'x')
-                         call this%two_point_correlation(this%T,this%cq_y(:,:,:,4+n),'y')
-                         call this%two_point_correlation(this%T,this%cq_z(:,:,:,4+n),'z')
-                     end do
-                 end do
+                              ! Twp-point correlation
+                              call this%two_point_correlation(this%T,this%cq_x(:,:,:,4+n),'x')
+                              call this%two_point_correlation(this%T,this%cq_y(:,:,:,4+n),'y')
+                              call this%two_point_correlation(this%T,this%cq_z(:,:,:,4+n),'z')
+                          end do
+                      end do
 
-                 ! Increment nwrite. This is to handle the edge-case where we
-                 ! started the simulation at a tid such that the first dump call is
-                 ! before we've filled the stats buffers, so we only want to write
-                 ! data that has been computed.
-                 this%nwrite = this%nwrite + 1
+                      ! Increment nwrite. This is to handle the edge-case where we
+                      ! started the simulation at a tid such that the first dump call is
+                      ! before we've filled the stats buffers, so we only want to write
+                      ! data that has been computed.
+                      this%nwrite = this%nwrite + 1
+                  end if
 
-             end if
+                  ! Step 2: compute unsteady terms
+                  ! Step 2.a: If we haven't done scaling splitting yet, do it now
+                  if ( (mod(this%sim%step+1,this%compute_freq) == 0) .or. &
+                       (mod(this%sim%step-1,this%compute_freq) == 0) ) then
+                       call this%copy_and_scale_split(this%kc_vec, sca=1,scalar_only=.false.)
+                  end if
+                  ! Step 2.b: Compute unsteady terms for uu, vv, and ww
+                  ! TODO: Need to loop over scales, link pointers, and compute the unsteady term. But we need a dimension in uvarold/new
+                  ! for the different scales
+                  do scl = 1,this%nscales
+                      call this%link_pointers(max(this%tidx,1),1,scl)
+                      call this%compute_unsteady_terms(terms='velocity',sca=1,scl=scl)
+                  end do
 
-             ! Step 2: compute unsteady terms
-             ! Step 2.a: If we haven't done scaling splitting yet, do it now
-             if ( (mod(this%sim%step+1,this%compute_freq) == 0) .or. &
-                  (mod(this%sim%step-1,this%compute_freq) == 0) ) then
-                  call this%copy_and_scale_split(this%kc_vec, sca=1,scalar_only=.false.)
-             end if
-             ! Step 2.b: Compute unsteady terms for uu, vv, and ww
-             ! TODO: Need to loop over scales, link pointers, and compute the unsteady term. But we need a dimension in uvarold/new
-             ! for the different scales
-             do scl = 1,this%nscales
-                 call this%link_pointers(max(this%tidx,1),1,scl)
-                 call this%compute_unsteady_terms(terms='velocity',sca=1,scl=scl)
-             end do
+                  ! Step 2.c: Loop over scalars, do scale splitting, link pointers, and compute/store unsteady terms
+                  do sca = 1,this%nscalars
+                      call this%copy_and_scale_split(this%kc_vec, sca=sca,scalar_only=.true.)
+                      do scl = 1,this%nscales
+                          call this%link_pointers(max(this%tidx,1),sca,scl)
+                          call this%compute_unsteady_terms(terms='scalar',sca=sca,scl=scl)
+                      end do
+                  end do
 
-             ! Step 2.c: Loop over scalars, do scale splitting, link pointers, and compute/store unsteady terms
-             do sca = 1,this%nscalars
-                 call this%copy_and_scale_split(this%kc_vec, sca=sca,scalar_only=.true.)
-                 do scl = 1,this%nscales
-                     call this%link_pointers(max(this%tidx,1),sca,scl)
-                     call this%compute_unsteady_terms(terms='scalar',sca=sca,scl=scl)
-                 end do
-             end do
-
-             ! Dump stats at the dump frequency depending on if dt is constant
-             ! or dynamic. If dynamic, dump the data because we have ddt terms.
-             ! If it is constant, we use a second order central difference for
-             ! ddt and so we need to wait until we have the ddt term at the
-             ! next time step to dump the data
-             if (mod(this%sim%step,this%dump_freq) == 0) then
-                 if (this%sim%CFL >= 0.d0) then
-                     call this%dump_stats()
-                     this%nwrite = 0
-                     this%tidx = 0
-                 end if
-             elseif (mod(this%sim%step-1,this%dump_freq) == 0) then
-                 if (this%sim%CFL <  0.d0) then
-                     call this%dump_stats()
-                     this%nwrite = 0
-                     this%tidx = 0
-                 end if
-             end if
+                  ! Dump stats at the dump frequency depending on if dt is constant
+                  ! or dynamic. If dynamic, dump the data because we have ddt terms.
+                  ! If it is constant, we use a second order central difference for
+                  ! ddt and so we need to wait until we have the ddt term at the
+                  ! next time step to dump the data
+                  if (mod(this%sim%step,this%dump_freq) == 0) then
+                      if (this%sim%CFL >= 0.d0) then
+                          call this%dump_stats()
+                          this%nwrite = 0
+                          this%tidx = 0
+                      end if
+                  elseif (mod(this%sim%step-1,this%dump_freq) == 0) then
+                      if (this%sim%CFL <  0.d0) then
+                          call this%dump_stats()
+                          this%nwrite = 0
+                          this%tidx = 0
+                      end if
+                  end if
+              end if
           end if
       end subroutine
 
@@ -971,15 +1001,17 @@ module stats_xy_mod
           end associate
 
           ! Force production
-          call this%covariance(this%fx, this%u,  this%zbuff(:,1))
-          call this%covariance(this%fy, this%v,  this%zbuff(:,2))
-          call this%covariance(this%fz, this%wC, this%zbuff(:,3))
-          tke_budget(:,3) = this%sim%spectForceLayer%ampFact_x*this%zbuff(:,1) + &
-            this%sim%spectForceLayer%ampFact_y*this%zbuff(:,2) + &
-            this%sim%spectForceLayer%ampFact_z*this%zbuff(:,3)
-          R11_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact_x*this%zbuff(:,1)
-          R22_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact_y*this%zbuff(:,2)
-          R33_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact_z*this%zbuff(:,3)
+          if (this%sim%localizedForceLayer == 2) then
+              call this%covariance(this%fx, this%u,  this%zbuff(:,1))
+              call this%covariance(this%fy, this%v,  this%zbuff(:,2))
+              call this%covariance(this%fz, this%wC, this%zbuff(:,3))
+              tke_budget(:,3) = this%sim%spectForceLayer%ampFact_x*this%zbuff(:,1) + &
+                this%sim%spectForceLayer%ampFact_y*this%zbuff(:,2) + &
+                this%sim%spectForceLayer%ampFact_z*this%zbuff(:,3)
+              R11_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact_x*this%zbuff(:,1)
+              R22_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact_y*this%zbuff(:,2)
+              R33_budget(:,3) = 2.d0*this%sim%spectForceLayer%ampFact_z*this%zbuff(:,3)
+          end if 
 
           ! Convective transport
           call this%convective_transport(this%uu,R11_budget(:,4))
@@ -1293,12 +1325,14 @@ module stats_xy_mod
           end associate
 
           ! Force production
-          this%sim%rbuffxE(:,:,:,1) = this%sim%spectForceLayer%ampFact_z*this%sim%spectForceLayer%fz
-          call this%sim%spectForceLayer%interpE2C(&
-            this%sim%rbuffxE(:,:,:,1), this%sim%rbuffxC(:,:,:,1), &
-            this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
-            this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
-          call this%covariance(this%T,this%sim%rbuffxC(:,:,:,1),this%wT_budget(:,4))
+          if (this%sim%localizedForceLayer == 2) then
+              this%sim%rbuffxE(:,:,:,1) = this%sim%spectForceLayer%ampFact_z*this%sim%spectForceLayer%fz
+              call this%sim%spectForceLayer%interpE2C(&
+                this%sim%rbuffxE(:,:,:,1), this%sim%rbuffxC(:,:,:,1), &
+                this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
+                this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
+              call this%covariance(this%T,this%sim%rbuffxC(:,:,:,1),this%wT_budget(:,4))
+          end if
 
           ! Buoyancy production
           this%wT_budget(:,5) = OnebyFr2*this%TT

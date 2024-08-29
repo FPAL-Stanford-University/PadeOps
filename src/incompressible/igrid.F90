@@ -39,7 +39,7 @@ module IncompressibleGrid
     external :: MPI_BCAST, MPI_RECV, MPI_SEND, MPI_REDUCE
 
     private
-    public :: igrid, wBC_bottom, wBC_top  
+    public :: igrid, wBC_bottom, wBC_top, readField3D 
 
     complex(rkind), parameter :: zeroC = zero + imi*zero 
 
@@ -392,6 +392,7 @@ module IncompressibleGrid
             procedure, private :: dump_planes
             procedure, private :: dealiasRealField_C
             procedure          :: dumpFullField 
+            procedure, private :: dumpFullField_cmplx 
             procedure          :: dumpSpectralField 
             procedure, private :: dump_scalar_fields
             procedure, private :: dumpVisualizationInfo
@@ -703,7 +704,8 @@ contains
        call message(1,"dz:", this%dz)
        call message(1,"Lx:", Lx)
        call message(1,"Ly:", Ly)
-       call message(1,"Lz:", Lz)
+       call message(1,"ztop:", this%zTop)
+       call message(1,"zbot:", this%zBot)
 
        ! STEP 4: ALLOCATE/INITIALIZE THE SPECTRAL DERIVED TYPES
        allocate(this%spectC)
@@ -1031,13 +1033,16 @@ contains
         if (this%useSponge) then
             allocate(this%RdampC(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)))
             allocate(this%RdampE(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)))
-            zinY => this%rbuffyC(:,:,:,1)
-            zinZ => this%rbuffzC(:,:,:,1)
-            zEinZ => this%rbuffzE(:,:,:,1); 
+            zinY  => this%rbuffyC(:,:,:,1)
+            zinZ  => this%rbuffzC(:,:,:,1)
+            zEinY => this%rbuffyE(:,:,:,1)
+            zEinZ => this%rbuffzE(:,:,:,1) 
             call transpose_x_to_y(this%mesh(:,:,:,3),zinY,this%gpC)
             call transpose_y_to_z(zinY,zinZ,this%gpC)
-            call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
-            zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
+            call transpose_x_to_y(this%meshE(:,:,:,3),zEinY,this%gpE)
+            call transpose_y_to_z(zEinY,zEinZ,this%gpE)
+            !call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
+            !zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
             !ztop = zEinZ(1,1,this%nz+1); 
             if (zstSponge >= 1) then
                 call GracefulExit("zstSponge must be less than 1.",245)
@@ -1058,7 +1063,7 @@ contains
             do idx = 1,size(zEinZ,3)
                 tmpzE(:,:,idx) = zEinZ(1,1,idx)
             end do 
-            call transpose_z_to_y(tmpzE,zEinY, this%sp_gpC) 
+            call transpose_z_to_y(tmpzE,zEinY, this%sp_gpE) 
             deallocate(tmpzE)
             nullify(zEinZ, zinZ)
 
@@ -1097,7 +1102,7 @@ contains
                     zinY  = zinY  - this%zMid
                     zEinY = zEinY - this%zMid
 
-                    this%RdampC = (one/SpongeTscale) * (one - cos(pi*(abs(zinY) - zstSponge + this%zMid) /(this%zTop - zstSponge)))/two
+                    this%RdampC = (one/SpongeTscale) * (one - cos(pi*(abs(zinY ) - zstSponge + this%zMid)/(this%zTop - zstSponge)))/two
                     this%RdampE = (one/SpongeTscale) * (one - cos(pi*(abs(zEinY) - zstSponge + this%zMid)/(this%zTop - zstSponge)))/two
 
                     where (abs(zEinY) < (zstSponge-this%zMid)) 
@@ -1106,6 +1111,8 @@ contains
                     where (abs(zinY) < (zstSponge-this%zMid)) 
                         this%RdampC = zero
                     end where
+                    call this%dumpFullField(this%RdampC,'spgC',gp2use=this%sp_gpC,pencil='y')
+                    call this%dumpFullField(this%RdampE,'spgE',gp2use=this%sp_gpE,pencil='y')
                     !call this%dump(this%RdampC,'spng',this%gpC)
                     !call this%dump(this%RdampE,'spng',this%gpE)
                 else
@@ -1148,6 +1155,23 @@ contains
             !call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
             call message(0,"Sponge Layer initialized successfully")
             call message(1,"Sponge Layer active above z = ",zstSponge)
+
+            ! DEBUG
+            !this%rbuffxC = 0.d0
+            !this%rbuffxE = 0.d0
+            !call this%getSpongeTerms(this%cbuffyC(:,:,:,2),this%cbuffyC(:,:,:,3),this%cbuffyE(:,:,:,1),this%T_rhs,&
+            !  this%rbuffxC(:,:,:,1), this%rbuffxC(:,:,:,2), this%rbuffxE(:,:,:,1), this%T)
+            !call message_min_max(2,'u-sponge min/max:',p_minval(minval(this%rbuffxC(:,:,:,2))),p_maxval(maxval(this%rbuffxC(:,:,:,2))))
+            !call message_min_max(2,'v-sponge min/max:',p_minval(minval(this%rbuffxC(:,:,:,3))),p_maxval(maxval(this%rbuffxC(:,:,:,3))))
+            !call message_min_max(2,'w-sponge min/max:',p_minval(minval(this%rbuffxE(:,:,:,1))),p_maxval(maxval(this%rbuffxE(:,:,:,1))))
+            !call message(        2,'Dumping sponge source terms')
+            !call this%dumpFullField(this%rbuffxC(:,:,:,1),'uspg')
+            !call this%dumpFullField(this%rbuffxC(:,:,:,2),'vspg')
+            !call this%dumpFullField(this%rbuffxE(:,:,:,1),'wspg',this%gpE)
+            !call this%dumpFullField_cmplx(this%uhat,'uhat')
+            !call this%dumpFullField_cmplx(this%vhat,'vhat')
+            !call this%dumpFullField_cmplx(this%what,'what',this%sp_gpE)
+            ! END DEBUG
         end if 
        
         if (this%useWindTurbines) then
@@ -1589,9 +1613,10 @@ contains
        end if 
        
        ! STEP 24: Compute pressure (REDACTED) 
-       !if ((this%storePressure) .or. (this%fastCalcPressure)) then
-       !    call this%ComputePressure()
-       !end if 
+       if ((this%storePressure) .or. (this%fastCalcPressure)) then
+           call this%ComputePressure()
+       end if 
+       call message("Max pressure",p_maxval(maxval(abs(this%pressure))))
 
        ! STEP 25: Schedule time dumps
        this%vizDump_Schedule = vizDump_Schedule
@@ -2208,9 +2233,6 @@ contains
                call this%spectC%fft(this%spectForceLayer%fy,this%spectForceLayer%fyhat)
                call this%spectE%fft(this%spectForceLayer%fz,this%spectForceLayer%fzhat)
            else
-               ! BEGIN DEBUG
-               !call assert(.false.,'Force files do not exist')
-               ! END DEBUG
 
                if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
                call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
