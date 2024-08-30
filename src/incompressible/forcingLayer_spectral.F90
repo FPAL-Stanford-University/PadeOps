@@ -543,6 +543,7 @@ module spectralForcingLayerMod
           real(rkind) :: Fringe_zst, Fringe_zen
           integer :: i, j, k
 
+          call assert(size(zinX,3) == gp%xsz(3),'size(zinX,3) == gp%xsz(3) -- forcingLayer_spectral.F90')
           allocate(z1D(gp%xsz(3)))
           allocate(z1(gp%xsz(3)), S1(gp%xsz(3)))
           allocate(z2(gp%xsz(3)), S2(gp%xsz(3)))

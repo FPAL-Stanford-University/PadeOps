@@ -236,7 +236,7 @@ module stats_xy_mod
             allocate(this%zbuff(sim%nz,4))
             allocate(this%zbuff_(sim%nz,2))
             allocate(this%uvarold(sim%nz,this%nscales,3), this%uvarnew(sim%nz,this%nscales,3))
-            allocate(this%svarold(sim%nz,this%nscalars,this%nscales,2), this%svarnew(sim%nz,this%nscalars,this%nscales,3))
+            allocate(this%svarold(sim%nz,this%nscalars,this%nscales,3), this%svarnew(sim%nz,this%nscalars,this%nscales,3))
 
             ! These arrays are required to have all scales defined simultaneously for computing interscale transfer
             allocate(this%duidxj(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales,9))

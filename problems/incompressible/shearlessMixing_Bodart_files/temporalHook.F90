@@ -5,6 +5,7 @@ module temporalHook
     use exits,              only: message, message_min_max
     use constants,          only: half
     use mpi
+    use fortran_assert,     only: assert
 
     implicit none 
 
@@ -23,6 +24,7 @@ contains
         class(igrid), intent(inout) :: gp
         integer :: n
         character(len=clen) :: mssg
+        real(rkind) :: umax, umin
 
         if (mod(gp%step,nt_print2screen) == 0) then
             maxDiv = maxval(gp%divergence)
@@ -30,7 +32,12 @@ contains
             call message(0,"Time",gp%tsim)
             call message(1,"TIDX:",gp%step)
             call message(1,"MaxDiv:",DomMaxDiv)
-            call message_min_max(1,"Bounds for u:" , p_minval(minval(gp%u)), p_maxval(maxval(gp%u)))
+            umax = p_maxval(maxval(gp%u))
+            umin = p_minval(minval(gp%u))
+            if (umax > 100.d0 .or. umin < -100.d0) then
+                call assert(.false.,'Simulation is blowing up')
+            end if
+            call message_min_max(1,"Bounds for u:" , umin, umax)
             call message_min_max(1,"Bounds for v:" , p_minval(minval(gp%v)), p_maxval(maxval(gp%v)))
             call message_min_max(1,"Bounds for w:" , p_minval(minval(gp%w)), p_maxval(maxval(gp%w)))
             call message_min_max(1,"Bounds for T:" , p_minval(minval(gp%T)), p_maxval(maxval(gp%T)))
