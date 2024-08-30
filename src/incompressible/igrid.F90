@@ -1041,9 +1041,6 @@ contains
             call transpose_y_to_z(zinY,zinZ,this%gpC)
             call transpose_x_to_y(this%meshE(:,:,:,3),zEinY,this%gpE)
             call transpose_y_to_z(zEinY,zEinZ,this%gpE)
-            !call this%OpsPP%InterpZ_Cell2Edge(zinZ,zEinZ,zero,zero)
-            !zEinZ(:,:,this%nz+1) = zEinZ(:,:,this%nz) + this%dz
-            !ztop = zEinZ(1,1,this%nz+1); 
             if (zstSponge >= 1) then
                 call GracefulExit("zstSponge must be less than 1.",245)
             end if
@@ -1068,35 +1065,9 @@ contains
             nullify(zEinZ, zinZ)
 
             zstSponge = zstSponge*(this%zTop - this%zBot) + this%zBot  !! <PERCENTAGE OF THE DOMAIN>
-            !zstSponge = zstSponge*this%zTop                   !! <PERCENTAGE OF THE DOMAIN>
             select case(sponge_type)
             case(1)
 
-                !!!!!!!!!!!!!!! OLD BLOCK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                !this%RdampC = (one/SpongeTscale) * (one - cos(pi*(zinY - zstSponge) /(this%zTop - zstSponge)))/two
-                !this%RdampE = (one/SpongeTscale) * (one - cos(pi*(zEinY - zstSponge)/(this%zTop - zstSponge)))/two
-                !if (useTopAndBottomSymmetricSponge) then
-                !   where (abs(zEinY) < zstSponge) 
-                !       this%RdampE = zero
-                !   end where
-                !   where (abs(zinY) < zstSponge) 
-                !       this%RdampC = zero
-                !   end where
-                !   if ((zEinZ(1,1,1) + zEinZ(1,1,this%nz+1))<1.d-13) then
-                !      call message(0,"WARNING: Computed domain is not symmetric &
-                !         & about z=0. You shouldn't use the symmetric sponge")
-                !      call MPI_BARRIER(mpi_comm_world, ierr)
-                !      call GracefulExit("Failed at sponge initialization",134)
-                !   end if   
-                !else
-                !   where (zEinY < zstSponge) 
-                !       this%RdampE = zero
-                !   end where
-                !   where (zinY < zstSponge) 
-                !       this%RdampC = zero
-                !   end where
-                !end if 
-                !!!!!!!!!!!!!!! OLD BLOCK -- assumes zBot = 0 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 if (useTopAndBottomSymmetricSponge) then
                     ! Ensure zinY and zEinY are centered at 0 irrespective of this%zBot
                     zinY  = zinY  - this%zMid
@@ -1113,8 +1084,6 @@ contains
                     end where
                     call this%dumpFullField(this%RdampC,'spgC',gp2use=this%sp_gpC,pencil='y')
                     call this%dumpFullField(this%RdampE,'spgE',gp2use=this%sp_gpE,pencil='y')
-                    !call this%dump(this%RdampC,'spng',this%gpC)
-                    !call this%dump(this%RdampE,'spng',this%gpE)
                 else
                     ! Ensure zinY and zEinY start at 0 irrespective of this%zBot
                     zinY  = zinY  - this%zBot
@@ -1142,36 +1111,9 @@ contains
 
             nullify(zinY, zEinY)
             deallocate(tmpyC, tmpyE)
-            ! REMOVING THE LINES BELOW TO ENSURE THAT SPONGE ONLY AFFECTS
-            ! FLUCTUATIONS
-            !call this%spectC%alloc_r2c_out(this%uBase)
-            !call this%spectC%alloc_r2c_out(this%vBase)
-            !call this%spectC%alloc_r2c_out(this%TBase)
-            !this%rbuffxC(:,:,:,1) = this%u 
-            !call this%spectC%fft(this%rbuffxC(:,:,:,1),this%uBase)
-            !this%rbuffxC(:,:,:,1) = this%v
-            !call this%spectC%fft(this%rbuffxC(:,:,:,1),this%vBase)
-            !this%rbuffxC(:,:,:,1) = this%T
-            !call this%spectC%fft(this%rbuffxC(:,:,:,1),this%TBase)
             call message(0,"Sponge Layer initialized successfully")
             call message(1,"Sponge Layer active above z = ",zstSponge)
 
-            ! DEBUG
-            !this%rbuffxC = 0.d0
-            !this%rbuffxE = 0.d0
-            !call this%getSpongeTerms(this%cbuffyC(:,:,:,2),this%cbuffyC(:,:,:,3),this%cbuffyE(:,:,:,1),this%T_rhs,&
-            !  this%rbuffxC(:,:,:,1), this%rbuffxC(:,:,:,2), this%rbuffxE(:,:,:,1), this%T)
-            !call message_min_max(2,'u-sponge min/max:',p_minval(minval(this%rbuffxC(:,:,:,2))),p_maxval(maxval(this%rbuffxC(:,:,:,2))))
-            !call message_min_max(2,'v-sponge min/max:',p_minval(minval(this%rbuffxC(:,:,:,3))),p_maxval(maxval(this%rbuffxC(:,:,:,3))))
-            !call message_min_max(2,'w-sponge min/max:',p_minval(minval(this%rbuffxE(:,:,:,1))),p_maxval(maxval(this%rbuffxE(:,:,:,1))))
-            !call message(        2,'Dumping sponge source terms')
-            !call this%dumpFullField(this%rbuffxC(:,:,:,1),'uspg')
-            !call this%dumpFullField(this%rbuffxC(:,:,:,2),'vspg')
-            !call this%dumpFullField(this%rbuffxE(:,:,:,1),'wspg',this%gpE)
-            !call this%dumpFullField_cmplx(this%uhat,'uhat')
-            !call this%dumpFullField_cmplx(this%vhat,'vhat')
-            !call this%dumpFullField_cmplx(this%what,'what',this%sp_gpE)
-            ! END DEBUG
         end if 
        
         if (this%useWindTurbines) then
