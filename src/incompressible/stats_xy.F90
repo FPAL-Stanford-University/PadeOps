@@ -1558,7 +1558,7 @@ module stats_xy_mod
                       fname = trim(this%outputdir)//"/"//trim(tempname)//".cT_x.sca"//which_scalar//".out"
                       call decomp_2d_write_plane(1,this%cq_x_all(:,:,:,4+sca,n,scl),2,1,trim(fname),this%sim%gpC)
                       fname = trim(this%outputdir)//"/"//trim(tempname)//".cT_y.sca"//which_scalar//".out"
-                      call decomp_2d_write_plane(1,this%cq_y_all(:,:,:,4+sca,n,scl),2,1,trim(fname),this%sim%gpC)
+                      call decomp_2d_write_plane(1,this%cq_y_all(:,:,:,4+sca,n,scl),1,1,trim(fname),this%sim%gpC)
                       if (nrank == 0) then
                           fname = trim(this%outputdir)//"/"//trim(tempname)//".cT_z.sca"//which_scalar//".out"
                           call write_2d_ascii(this%cq_z_all(:,:,1,4+sca,n,scl),trim(fname))

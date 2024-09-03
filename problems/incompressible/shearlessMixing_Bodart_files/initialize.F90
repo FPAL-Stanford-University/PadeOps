@@ -441,3 +441,83 @@ subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
   nullify(x,y,z) 
 end subroutine
 
+subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
+    use kind_parameters, only: rkind
+    use decomp_2d,       only: decomp_info
+    use fortran_assert,  only: assert
+    use reductions,      only: p_maxval, p_minval
+    use constants,       only: pi
+    type(decomp_info), intent(in) :: gp
+    real(rkind), dimension(:,:,:,:), intent(in), target :: mesh
+    real(rkind), dimension(:,:,:), allocatable, intent(out) :: mask
+    character(len=*), intent(in) :: inputfile
+    character(len=1), intent(in) :: gridType
+    integer :: iounit
+    real(rkind), dimension(:,:,:), pointer :: z=>null()
+    real(rkind) :: zTop, zBot, zMid, dz
+    real(rkind), dimension(:,:,:), allocatable :: Rdamp
+    ! Namelist variables
+    logical :: PeriodicInZ, useSpongeLayer, useTopAndBottomSymmetricSponge
+    logical :: useFringe, usedoublefringex, useControl
+    integer :: topWall, botWall, sponge_type, botBC_Temp, topBC_Temp
+    real(rkind) :: SpongeTScale
+    namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, &
+      SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, &
+      useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
+
+    iounit = 11
+    open(unit=iounit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
+    read(unit=iounit, NML=BCs)
+    close(iounit)
+
+    if (allocated(mask)) deallocate(mask)
+    allocate(mask( gp%xsz(1),gp%xsz(2),gp%xsz(3)))
+    allocate(Rdamp(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
+
+    z => mesh(:,:,:,3)
+    dz = z(1,1,2) - z(1,1,1)
+    select case (gridType)
+    case ('C')
+        zTop = p_maxval(maxval(z)) + dz/2.d0
+        zBot = p_minval(minval(z)) - dz/2.d0
+    case ('E')
+        zTop = p_maxval(maxval(z))
+        zBot = p_minval(minval(z))
+    end select
+    zMid = 0.5d0*(zTop + zBot)
+
+    zstSponge = zstSponge*(zTop - zBot) + zBot  !! <PERCENTAGE OF THE DOMAIN>
+    select case(sponge_type)
+    case(1)
+        if (useTopAndBottomSymmetricSponge) then
+            ! Ensure z starts -Lx/2
+            z  = z  - zMid
+
+            Rdamp = (1.d0/SpongeTscale) * (1.d0 - cos(pi*(abs(z) - zstSponge + zMid)/(zTop - zstSponge)))/2.d0
+
+            where (abs(z) < (zstSponge-zMid)) 
+                Rdamp = 0.d0
+            end where
+        else
+            ! Ensure z starts at 0 irrespective of zBot
+            z  = z  - zBot
+
+            Rdamp = (1.d0/SpongeTscale) * (1.d0 - cos(pi*(z - zstSponge) /(zTop - zstSponge)))/2.d0
+
+           where (z < (zstSponge - zBot)) 
+               Rdamp = 0.d0
+           end where
+        end if 
+    case(2)
+        z = (z - zstSponge)/(2*(zTop - zstSponge))
+        !call S_sponge_smooth(zinY,RdampC)
+        call assert(.false.,'Need to implement this -- initialize.F90')
+        Rdamp = (2.5d0/SpongeTscale)*Rdamp
+    end select 
+
+    mask = -1.d0*(SpongeTscale*Rdamp - 1.d0)
+    nullify(z)
+    deallocate(Rdamp)
+     
+end subroutine
+

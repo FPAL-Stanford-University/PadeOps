@@ -1,6 +1,7 @@
 module igrid_hooks
     use kind_parameters, only: rkind
     use decomp_2d, only: decomp_info
+    use fortran_assert, only: assert
     implicit none
 
     interface meshgen
@@ -74,6 +75,17 @@ module igrid_hooks
             real(rkind), dimension(:,:,:), intent(out) :: scalarField
             integer, intent(in) :: scalar_id
       end subroutine 
+   end interface
+
+   interface set_SGS_scalar_mask
+      subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
+            import :: rkind, decomp_info, assert
+            type(decomp_info), intent(in) :: gp
+            real(rkind), dimension(:,:,:,:), intent(in) :: mesh 
+            real(rkind), dimension(:,:,:), allocatable, intent(inout) :: mask
+            character(len=*), intent(in) :: inputfile
+            character(len=1), intent(in) :: gridType
+      end subroutine
    end interface
 
 

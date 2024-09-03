@@ -457,6 +457,7 @@ contains
         logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
         logical :: addExtraSourceTerm = .false.
         logical ::useSGS = .false.,useSpongeLayer=.false.,useWindTurbines = .false., useTopAndBottomSymmetricSponge = .false. 
+        logical :: use_SGS_scalar_mask = .false.
         logical :: useGeostrophicForcing = .false., PeriodicInZ = .false., deleteInstructions = .true., donot_dealias = .false.   
         real(rkind), dimension(:,:,:), pointer :: zinZ, zinY, zEinY, zEinZ
         integer :: AdvectionTerm = 1, NumericalSchemeVert = 0, t_DivergenceCheck = 10, ksRunID = 10
@@ -512,7 +513,7 @@ contains
                     & t_stop_pointProbe, t_pointProbe
         !namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,&
-          useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, PrandtlFluid, BulkRichardson, &
+          useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, use_SGS_scalar_mask, PrandtlFluid, BulkRichardson, &
           BuoyancyTermType,useforcedStratification, useGeostrophicForcing, &
           G_geostrophic, G_alpha, dpFdx,dpFdy,dpFdz,assume_fplane,latitude,&
           useHITForcing, useScalars, frameAngle, buoyancyDirection, &
@@ -1009,7 +1010,7 @@ contains
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
                                     this%ThetaRef, this%wTh_surf, this%Fr, this%Re, this%isInviscid, sgsmod_stratified, &
                                     this%botBC_Temp, this%initSpinUp)
-            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS)
+            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%kappaSGS, this%kappa_bounding)
 
             ! Compute nSGS (or tau_ij for non eddy viscosity models) for initialization data dump
             ! if restarting the simulation. Otherwise, the nSGS file at the
@@ -1115,6 +1116,12 @@ contains
             call message(1,"Sponge Layer active above z = ",zstSponge)
 
         end if 
+
+        ! Step 12.b - set scalar SGS mask
+        if (use_SGS_scalar_mask) then
+            call set_SGS_scalar_mask(this%sgsmodel%scalarMaskC,this%mesh ,this%gpC,inputFile,'C')
+            call set_SGS_scalar_mask(this%sgsmodel%scalarMaskE,this%meshE,this%gpE,inputFile,'E')
+        end if
        
         if (this%useWindTurbines) then
            allocate(this%WindTurbineArr)

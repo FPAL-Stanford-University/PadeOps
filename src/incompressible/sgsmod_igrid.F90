@@ -11,6 +11,7 @@ module sgsmod_igrid
     use gaussianstuff, only: gaussian
     use lstsqstuff, only: lstsq
     use PadeDerOps, only: Pade6stagg
+    use fortran_assert, only: assert
     implicit none
 
     external :: MPI_BCAST, MPI_REDUCE
@@ -94,6 +95,9 @@ module sgsmod_igrid
         integer :: BC_tau13_top = 0, BC_tau13_bot = 0, BC_tau23_top = 0, BC_tau23_bot = 0, BC_tau33_top = 0, BC_tau33_bot = 0
         ! Buoyancy factor (needed for AMD model, set using the procedure:  setBuoyancyFact)
         real(rkind) :: BuoyancyFact = 0.d0
+
+        ! Masks
+        real(rkind), dimension(:,:,:), allocatable, public :: scalarMaskC, scalarMaskE
 
         contains 
             !! ALL INIT PROCEDURES
@@ -453,6 +457,12 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
           end if 
       end if 
 
+      if (allocated(this%scalarMaskE)) call assert(allocated(this%scalarMaskC),'allocated(this%scalarMaskC) -- sgsmod_igrid.F90')
+      if (allocated(this%scalarMaskC)) then
+          call assert(allocated(this%scalarMaskE),'allocated(this%scalarMaskE) -- sgsmod_igrid.F90')
+          this%kappa_sgs_C = this%scalarMaskC*this%kappa_sgs_C
+          this%kappa_sgs_E = this%scalarMaskE*this%kappa_sgs_E
+      end if
       this%q1C = -this%kappa_sgs_C*dTdxC
       this%q2C = -this%kappa_sgs_C*dTdyC
       this%q3E = -this%kappa_sgs_E*dTdzE
@@ -465,6 +475,10 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
    if (this%useScalarBounding) then 
       call this%compute_Tscale(u, v, w) 
       call this%compute_kappa_bounding(T, dTdxC, dTdyC, dTdzC)
+      if (allocated(this%scalarMaskC)) then
+          this%kappa_boundingC = this%scalarMaskC*this%kappa_boundingC
+          this%kappa_boundingE = this%scalarMaskE*this%kappa_boundingE
+      end if
       this%q1C = this%q1C - this%kappa_boundingC*dTdxC
       this%q2C = this%q2C - this%kappa_boundingC*dTdyC
       this%q3E = this%q3E - this%kappa_boundingE*dTdzE
