@@ -862,7 +862,7 @@ module stats_xy_mod
                               cq(r,1,k) = cq(r,1,k) + q(i,j,k)*q(i+r-1,j,k)
                           end do
                       end do
-                      cq(r,1,k) = cq(r,1,k)/(ny_l*(nz-r+1)) ! local average in x & y
+                      cq(r,1,k) = cq(r,1,k)/(ny_l*(nx-r+1)) ! local average in x & y
                   end do
               end do
 
@@ -881,7 +881,7 @@ module stats_xy_mod
               where(abs(this%cq_x_mask) <= 1.d-14) this%cq_x_mask = 0.d0
               this%cq_x_mask(:,1,:) = 1.d0
 
-              this%sim%rbuffyC(:,1,:,2) = sum(this%cq_x_mask*this%sim%rbuffyC(:,:,:,1),2)/(sum(this%cq_x_mask,2)+1.d-14)!this%sim%gpC%ysz(2)
+              this%sim%rbuffyC(:,1,:,2) = sum(this%cq_x_mask*this%sim%rbuffyC(:,:,:,1),2)/(sum(this%cq_x_mask,2)+1.d-14)
 
               ! Copy the result to the other j-indices
               do k = 1,this%sim%gpC%ysz(3)
