@@ -448,14 +448,13 @@ subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
     use reductions,      only: p_maxval, p_minval
     use constants,       only: pi
     type(decomp_info), intent(in) :: gp
-    real(rkind), dimension(:,:,:,:), intent(in), target :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:), allocatable, intent(out) :: mask
     character(len=*), intent(in) :: inputfile
     character(len=1), intent(in) :: gridType
     integer :: iounit
-    real(rkind), dimension(:,:,:), pointer :: z=>null()
     real(rkind) :: zTop, zBot, zMid, dz
-    real(rkind), dimension(:,:,:), allocatable :: Rdamp
+    real(rkind), dimension(:,:,:), allocatable :: Rdamp, z
     ! Namelist variables
     logical :: PeriodicInZ, useSpongeLayer, useTopAndBottomSymmetricSponge
     logical :: useFringe, usedoublefringex, useControl
@@ -473,8 +472,9 @@ subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
     if (allocated(mask)) deallocate(mask)
     allocate(mask( gp%xsz(1),gp%xsz(2),gp%xsz(3)))
     allocate(Rdamp(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
+    allocate(z(    gp%xsz(1),gp%xsz(2),gp%xsz(3)))
 
-    z => mesh(:,:,:,3)
+    z = mesh(:,:,:,3)
     dz = z(1,1,2) - z(1,1,1)
     select case (gridType)
     case ('C')
@@ -516,8 +516,7 @@ subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
     end select 
 
     mask = -1.d0*(SpongeTscale*Rdamp - 1.d0)
-    nullify(z)
-    deallocate(Rdamp)
+    deallocate(Rdamp,z)
      
 end subroutine
 

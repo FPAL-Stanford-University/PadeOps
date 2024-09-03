@@ -1,7 +1,7 @@
 module spectralForcingLayerMod
   ! This module implements a forcing layer similar to Briggs et al. (1996), but with some modifications
     use kind_parameters, only: rkind, clen, mpirkind
-    use reductions,      only: p_maxval, p_sum
+    use reductions,      only: p_minval, p_maxval, p_sum
     use gridtools,       only: onThisRank, getStEndIndices
     use constants,       only: im0, pi
     use spectralMod,     only: spectral
@@ -40,7 +40,7 @@ module spectralForcingLayerMod
       logical :: dumpForce, projectDivergenceFree, isStratified
       type(Pade6Stagg), pointer :: Pade6opZ
       real(rkind) :: maxDiv, maxDivAllTime, avgFact, Re, Pr, oneOnRe, oneOnRePr
-      real(rkind) :: dz, Lx, Ly, meanFact
+      real(rkind) :: dz, Lx, Ly, zmin, zmax, meanFact
       character(len=clen) :: outputdir
       real(rkind) :: lambda ! Sets the temperature forcing time scale
       real(rkind) :: Ttgt ! Target temp for forcing layer
@@ -114,13 +114,29 @@ module spectralForcingLayerMod
           namelist /spectForceLayer/ zmid, lf, kmin, kmax, tgtKE, &
             relax_fact, dumpForce, maskType, fringe_delta, projectDivergenceFree, lambdaFact_temp, &
             Temp_in_forcing_layer, nForceTimeScalesOn, onoffratio, rampfact
+
           
           ioUnit = 123
           open(unit=ioUnit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
           read(unit=ioUnit, NML=spectForceLayer)
           close(ioUnit)
 
-          call message(0,'Initializing the spectral forcing layer')
+          call message(0,'Initializing the spectral forcing layer with the following inputs:')
+          call message(1,'zmid',zmid)
+          call message(1,'lf',lf)
+          call message(1,'kmin',kmin)
+          call message(1,'kmax',kmax)
+          call message(1,'tgtKE',tgtKE)
+          call message(1,'relax_fact',relax_fact)
+          call message(1,'dumpForce',dumpForce)
+          call message(1,'maskType',maskType)
+          call message(1,'fringe_delta',fringe_delta)
+          call message(1,'projectDivergenceFree',projectDivergenceFree)
+          call message(1,'lambdaFact_temp',lambdaFact_temp)
+          call message(1,'Temp_in_forcing_layer',Temp_in_forcing_layer)
+          call message(1,'nForceTimeScalesOn',nForceTimeScalesOn)
+          call message(1,'onoffratio',onoffratio)
+          call message(1,'rampfact',rampfact)
   
           ! Nullify all pointers to be safe
           this%spectC   => null()
@@ -184,11 +200,23 @@ module spectralForcingLayerMod
 
           this%Lx = dx*real(nx,rkind)
           this%Ly = dy*real(ny,rkind)
+          this%zmin = p_minval(minval(mesh(:,:,:,3)))-this%dz/2.d0
+          this%zmax = p_maxval(maxval(mesh(:,:,:,3)))+this%dz/2.d0
 
           this%Re        = Re
           this%Pr        = Pr
           this%oneOnRe   = 1.d0/Re
           this%oneOnRePr = 1.d0/(Re*Pr)
+          call message(1,'Inferred parameters:')
+          call message(2,'nx',nx)
+          call message(2,'ny',ny)
+          call message(2,'nz',this%nz)
+          call message(2,'Lx',this%Lx)
+          call message(2,'Ly',this%Ly)
+          call message(2,'zmin',this%zmin)
+          call message(2,'zmax',this%zmax)
+          call message(2,'Re',Re)
+          call message(2,'Pr',Pr)
 
           this%rbuffxC => rbuffxC
           this%rbuffyC => rbuffyC
