@@ -55,6 +55,8 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3E 
         logical :: initspinup = .false., isPeriodic = .false., useScalarBounding = .false.  
         logical :: augment_SGS_with_scalar_bounding = .false.
+        logical :: use_scalar_bounding_as_SGS = .false.
+        real(rkind) :: kappa_bounding_threshhold
 
         real(rkind) :: Tscale, lowbound_PotT, highbound_PotT, Cy_PotT, TurbPrandtlNum_PotT, lowbound, highbound
 
@@ -484,10 +486,16 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
           this%q1C = this%q1C - this%kappa_boundingC*dTdxC
           this%q2C = this%q2C - this%kappa_boundingC*dTdyC
           this%q3E = this%q3E - this%kappa_boundingE*dTdzE
-      else
+      elseif (this%use_scalar_bounding_as_SGS) then
           this%q1C = -this%kappa_boundingC*dTdxC
           this%q2C = -this%kappa_boundingC*dTdyC
           this%q3E = -this%kappa_boundingE*dTdzE
+      else ! Apply scalar_bounding locally
+          where (this%kappa_boundingC > this%kappa_bounding_threshhold) this%kappa_sgs_C = this%kappa_boundingC
+          where (this%kappa_boundingE > this%kappa_bounding_threshhold) this%kappa_sgs_E = this%kappa_boundingE
+          this%q1C = -this%kappa_SGS_C*dTdxC
+          this%q2C = -this%kappa_SGS_C*dTdyC
+          this%q3E = -this%kappa_SGS_E*dTdzE
       end if
    end if 
 

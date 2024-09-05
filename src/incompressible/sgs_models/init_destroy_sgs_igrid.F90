@@ -49,11 +49,13 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
    end if
 end subroutine 
 
-subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re, isInviscid, isStratified, botBC_temp, initSpinUp)
+subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, zMeshC, fBody_x, fBody_y, fBody_z, computeFbody, &
+    PadeDer, cbuffyC, cbuffzC, cbuffyE, cbuffzE, rbuffxC, rbuffyC, rbuffzC, rbuffyE, rbuffzE, Tsurf, ThetaRef, wTh_surf, Fr, Re,&
+    Pr_fluid, isInviscid, isStratified, botBC_temp, initSpinUp)
   class(sgs_igrid), intent(inout), target :: this
   class(decomp_info), intent(in), target :: gpC, gpE
   class(spectral), intent(in), target :: spectC, spectE
-  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re
+  real(rkind), intent(in) :: dx, dy, dz, ThetaRef, Fr, Re, Pr_fluid
   real(rkind), intent(in), target :: Tsurf, wTh_surf
   character(len=*), intent(in) :: inputfile
   real(rkind), dimension(:), intent(in) :: zMeshE, zMeshC
@@ -74,9 +76,11 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
   logical :: augment_SGS_with_scalar_bounding = .false.
+  logical :: use_scalar_bounding_as_SGS = .false.
   logical :: usePrSGS = .false., useFullyLocalWM = .false.  
   integer :: ierr, WM_matchingIndex = 1, WallFunctionType = 1 
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 , SurfaceFilterFact = 1.d0 
+  real(rkind) :: kappa_bounding_threshhold = 1.d9 ! Proportion of molecular diffusivity (i.e., 1/(Re*Pr))
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
@@ -85,12 +89,44 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
                  useScalarBounding, augment_SGS_with_scalar_bounding, &
+                 use_scalar_bounding_as_SGS, &
                  Cy, lowbound, highbound, WM_matchingIndex, & 
                  WallFunctionType, useFullyLocalWM, SurfaceFilterFact  
 
   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
   read(unit=123, NML=SGS_MODEL)
   close(123)
+
+  call message(0,'namelist SGS_MODEL inputs:')
+  call message(1,'DynamicProcedureType            ',DynamicProcedureType)
+  call message(1,'SGSmodelID                      ',SGSmodelID)
+  call message(1,'z0                              ',z0)
+  call message(1,'z0t                             ',z0t)
+  call message(1,'useWallDamping                  ',useWallDamping)
+  call message(1,'ncWall                          ',ncWall)
+  call message(1,'Csgs                            ',Csgs)
+  call message(1,'WallModelType                   ',WallModelType)
+  call message(1,'usePrSGS                        ',usePrSGS)
+  call message(1,'DynProcFreq                     ',DynProcFreq)
+  call message(1,'useSGSDynamicRestart            ',useSGSDynamicRestart)
+  call message(1,'useVerticalTfilter              ',useVerticalTfilter)
+  call message(1,'DomainAveraged_DynProc          ',DomainAveraged_DynProc)
+  call message(1,'SGSDynamicRestartFile = '//trim(SGSDynamicRestartFile))
+  call message(1,'explicitCalcEdgeEddyViscosity   ',explicitCalcEdgeEddyViscosity)
+  call message(1,'UseDynamicProcedureScalar       ',UseDynamicProcedureScalar)
+  call message(1,'deltaRatio                      ',deltaRatio)
+  call message(1,'turbPrandtl                     ',turbPrandtl)
+  call message(1,'useScalarBounding               ',useScalarBounding)
+  call message(1,'augment_SGS_with_scalar_bounding',augment_SGS_with_scalar_bounding)
+  call message(1,'kappa_bounding_threshhold       ',kappa_bounding_threshhold)
+  call message(1,'use_scalar_bounding_as_SGS      ',use_scalar_bounding_as_SGS)
+  call message(1,'Cy                              ',Cy)
+  call message(1,'lowbound                        ',lowbound)
+  call message(1,'highbound                       ',highbound)
+  call message(1,'WM_matchingIndex                ',WM_matchingIndex)
+  call message(1,'WallFunctionType                ',WallFunctionType)
+  call message(1,'useFullyLocalWM                 ',useFullyLocalWM)
+  call message(1,'SurfaceFilterFact               ',SurfaceFilterFact)
   
   this%gpC => gpC
   this%gpE => gpE
@@ -161,6 +197,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
 
   this%useScalarBounding = useScalarBounding 
   this%augment_SGS_with_scalar_bounding = augment_SGS_with_scalar_bounding
+  this%use_scalar_bounding_as_SGS = use_scalar_bounding_as_SGS
   this%Cy = Cy  
   this%lowbound = lowbound
   this%highbound = highbound 
@@ -172,6 +209,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%DynamicProcedureType = DynamicProcedureType
   this%DynProcFreq = DynProcFreq
   this%useVerticalTfilter = useVerticalTfilter
+  this%kappa_bounding_threshhold = kappa_bounding_threshhold/Re/Pr_fluid
   
   this%isInviscid = isInviscid
 

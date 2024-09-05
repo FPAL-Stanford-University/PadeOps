@@ -183,6 +183,7 @@ module stats_xy_mod
             call message(1,"outputdir    "//trim(this%outputdir))
             call message(1,"do_stats     ",do_stats)
             call message(1,"scale_split  ",this%scale_split)
+            call message(1,"nscales      ",this%nscales)
 
             this%sim    => sim
             this%spectC => this%sim%spectC
