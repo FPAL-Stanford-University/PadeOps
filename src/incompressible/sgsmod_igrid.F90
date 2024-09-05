@@ -54,6 +54,7 @@ module sgsmod_igrid
         logical :: explicitCalcEdgeEddyViscosity = .false.
         real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3E 
         logical :: initspinup = .false., isPeriodic = .false., useScalarBounding = .false.  
+        logical :: augment_SGS_with_scalar_bounding = .false.
 
         real(rkind) :: Tscale, lowbound_PotT, highbound_PotT, Cy_PotT, TurbPrandtlNum_PotT, lowbound, highbound
 
@@ -479,9 +480,15 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
           this%kappa_boundingC = this%scalarMaskC*this%kappa_boundingC
           this%kappa_boundingE = this%scalarMaskE*this%kappa_boundingE
       end if
-      this%q1C = this%q1C - this%kappa_boundingC*dTdxC
-      this%q2C = this%q2C - this%kappa_boundingC*dTdyC
-      this%q3E = this%q3E - this%kappa_boundingE*dTdzE
+      if (this%augment_SGS_with_scalar_bounding) then
+          this%q1C = this%q1C - this%kappa_boundingC*dTdxC
+          this%q2C = this%q2C - this%kappa_boundingC*dTdyC
+          this%q3E = this%q3E - this%kappa_boundingE*dTdzE
+      else
+          this%q1C = -this%kappa_boundingC*dTdxC
+          this%q2C = -this%kappa_boundingC*dTdyC
+          this%q3E = -this%kappa_boundingE*dTdzE
+      end if
    end if 
 
    if (this%useWallModel) call this%embed_WM_PotTflux()

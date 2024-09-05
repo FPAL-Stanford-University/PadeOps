@@ -73,6 +73,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   real(rkind) :: z0t = 0.001d0
   character(len=clen) :: SGSDynamicRestartFile
   logical :: explicitCalcEdgeEddyViscosity = .false., UseDynamicProcedureScalar = .false., useScalarBounding = .false.
+  logical :: augment_SGS_with_scalar_bounding = .false.
   logical :: usePrSGS = .false., useFullyLocalWM = .false.  
   integer :: ierr, WM_matchingIndex = 1, WallFunctionType = 1 
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 , SurfaceFilterFact = 1.d0 
@@ -83,7 +84,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  DomainAveraged_DynProc, SGSDynamicRestartFile, &
                  explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
-                 useScalarBounding, Cy, lowbound, highbound, WM_matchingIndex, & 
+                 useScalarBounding, augment_SGS_with_scalar_bounding, &
+                 Cy, lowbound, highbound, WM_matchingIndex, & 
                  WallFunctionType, useFullyLocalWM, SurfaceFilterFact  
 
   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
@@ -158,6 +160,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
 
 
   this%useScalarBounding = useScalarBounding 
+  this%augment_SGS_with_scalar_bounding = augment_SGS_with_scalar_bounding
   this%Cy = Cy  
   this%lowbound = lowbound
   this%highbound = highbound 
