@@ -21,12 +21,12 @@ subroutine destroy(this)
 end subroutine
 
 
-subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappaSGS, kappa_bounding)
+subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, q3C, kappaSGS, kappa_bounding)
    class(sgs_igrid), intent(in), target :: this
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: nuSGS
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: tau13, tau23
    real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
-   real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3, kappaSGS
+   real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3, q3C, kappaSGS
    real(rkind), dimension(:,:,:)  , pointer, optional, intent(inout)  :: kappa_bounding 
 
    nuSGS => this%nu_sgs_C
@@ -36,9 +36,10 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, kappa
    tauSGS_ij => this%tau_ij
   
    if (this%isStratified) then
-      q1 => this%q1C
-      q2 => this%q2C
-      q3 => this%q3E
+      q1  => this%q1C
+      q2  => this%q2C
+      q3C => this%q3C
+      q3  => this%q3E
       kappaSGS => this%kappa_sgs_C
    end if
 
@@ -176,8 +177,12 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   if (this%isStratified .or. this%initSpinUp) then
      allocate(this%q1C(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
      allocate(this%q2C(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+     allocate(this%q3C(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
      allocate(this%q3E(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
-     this%q1C = zero; this%q2C = zero; this%q3E = zero
+     this%q1C = zero
+     this%q2C = zero
+     this%q3C = zero
+     this%q3E = zero
   end if 
 
   this%isPeriodic = this%PadeDer%isPeriodic

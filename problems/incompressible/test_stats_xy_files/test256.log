@@ -1,18 +1,18 @@
-TACC:  Starting up job 678008 
+TACC:  Starting up job 971149 
 TACC:  Starting parallel tasks... 
  In auto-tuning mode......
  factors:            1           2           3           4           6
            8          12          16          24          48
- processor grid           1  by           48  time=  2.363305558295299E-002
- processor grid           2  by           24  time=  2.179870467322568E-002
- processor grid           3  by           16  time=  2.155198812639962E-002
- processor grid           4  by           12  time=  2.008245710749179E-002
- processor grid           6  by            8  time=  2.111422196806719E-002
- processor grid           8  by            6  time=  2.040048475222041E-002
- processor grid          12  by            4  time=  2.114562868761520E-002
- processor grid          16  by            3  time=  2.077658947867652E-002
- processor grid          24  by            2  time=  2.213970878316711E-002
- processor grid          48  by            1  time=  2.588570133472482E-002
+ processor grid           1  by           48  time=  2.357828487098838E-002
+ processor grid           2  by           24  time=  2.177086082519963E-002
+ processor grid           3  by           16  time=  2.175888650041695E-002
+ processor grid           4  by           12  time=  2.029388168981920E-002
+ processor grid           6  by            8  time=  2.108679005565743E-002
+ processor grid           8  by            6  time=  2.031046493599812E-002
+ processor grid          12  by            4  time=  2.118724902781348E-002
+ processor grid          16  by            3  time=  2.068243979010731E-002
+ processor grid          24  by            2  time=  2.219563670223579E-002
+ processor grid          48  by            1  time=  2.589493464135255E-002
  the best processor grid is probably            4  by           12
 > Bottom Wall Boundary Condition is:
     > Slip Wall

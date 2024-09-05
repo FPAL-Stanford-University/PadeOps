@@ -52,7 +52,7 @@ module sgsmod_igrid
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
         type(Pade6stagg), pointer :: PadeDer
         logical :: explicitCalcEdgeEddyViscosity = .false.
-        real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3E 
+        real(rkind), dimension(:,:,:), allocatable :: q1C, q2C, q3C, q3E 
         logical :: initspinup = .false., isPeriodic = .false., useScalarBounding = .false.  
         logical :: augment_SGS_with_scalar_bounding = .false.
         logical :: use_scalar_bounding_as_SGS = .false.
@@ -273,12 +273,15 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
       call this%multiply_by_model_constant()
 
       ! Step 2: Get tau_sgs
-      this%tau_11 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,1)
-      this%tau_12 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,2)
-      this%tau_13 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,3)
-      this%tau_22 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,4)
-      this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
-      this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
+      this%tau_11  = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,1)
+      this%tau_12  = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,2)
+      this%tau_13C = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,3)
+      this%tau_22  = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,4)
+      this%tau_23C = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,5)
+      this%tau_33  = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
+
+      this%tau_13  = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,3)
+      this%tau_23  = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
    else
       ! Ballouz & Ouellette model
       ! Step 0: Compute Sij
@@ -295,12 +298,15 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
    if (.not. this%isInviscid) then
       ! Embed viscous stress in tau_ij
       TwobyRe = 2.d0/this%Re
-      this%tau_11 = this%tau_11 - TwobyRe*this%S_ij_C(:,:,:,1)
-      this%tau_12 = this%tau_12 - TwobyRe*this%S_ij_C(:,:,:,2)
-      this%tau_13 = this%tau_13 - TwobyRe*this%S_ij_E(:,:,:,3)
-      this%tau_22 = this%tau_22 - TwobyRe*this%S_ij_C(:,:,:,4)
-      this%tau_23 = this%tau_23 - TwobyRe*this%S_ij_E(:,:,:,5)
-      this%tau_33 = this%tau_33 - TwobyRe*this%S_ij_C(:,:,:,6)
+      this%tau_11  = this%tau_11  - TwobyRe*this%S_ij_C(:,:,:,1)
+      this%tau_12  = this%tau_12  - TwobyRe*this%S_ij_C(:,:,:,2)
+      this%tau_13C = this%tau_13C - TwobyRe*this%S_ij_C(:,:,:,3)
+      this%tau_22  = this%tau_22  - TwobyRe*this%S_ij_C(:,:,:,4)
+      this%tau_23C = this%tau_23C - TwobyRe*this%S_ij_C(:,:,:,5)
+      this%tau_33  = this%tau_33  - TwobyRe*this%S_ij_C(:,:,:,6)
+
+      this%tau_13  = this%tau_13  - TwobyRe*this%S_ij_E(:,:,:,3)
+      this%tau_23  = this%tau_23  - TwobyRe*this%S_ij_E(:,:,:,5)
    end if 
 
    if (this%useWallModel) call this%embed_WM_stress()
@@ -377,7 +383,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
 
 end subroutine
 
-subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, TurbPrandtlNum, Cy, lowbound, highbound, q1, q2, q3)
+subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, TurbPrandtlNum, Cy, lowbound, highbound, q1, q2, q3, q3C)
    class(sgs_igrid), intent(inout), target :: this
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
@@ -386,7 +392,7 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
    real(rkind), intent(in), optional :: TurbPrandtlNum, Cy, lowbound, highbound
-   real(rkind), dimension(:,:,:), intent(inout), optional :: q1, q2, q3
+   real(rkind), dimension(:,:,:), intent(inout), optional :: q1, q2, q3, q3C
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
@@ -402,9 +408,10 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    call this%getQjSGS(dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
 
    if (present(q1)) then
-       q1 = this%q1C
-       q2 = this%q2C
-       q3 = this%q3E
+       q1  = this%q1C
+       q2  = this%q2C
+       q3  = this%q3E
+       q3C = this%q3C
    end if
 
    ! ddx(q1)
@@ -468,10 +475,12 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
       end if
       this%q1C = -this%kappa_sgs_C*dTdxC
       this%q2C = -this%kappa_sgs_C*dTdyC
+      this%q3C = -this%kappa_sgs_C*dTdzC
       this%q3E = -this%kappa_sgs_E*dTdzE
    else
       this%q1C = zero 
       this%q2C = zero 
+      this%q3C = zero 
       this%q3E = zero 
    end if
 
@@ -485,16 +494,19 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
       if (this%augment_SGS_with_scalar_bounding) then
           this%q1C = this%q1C - this%kappa_boundingC*dTdxC
           this%q2C = this%q2C - this%kappa_boundingC*dTdyC
+          this%q3C = this%q3C - this%kappa_boundingC*dTdzC
           this%q3E = this%q3E - this%kappa_boundingE*dTdzE
       elseif (this%use_scalar_bounding_as_SGS) then
           this%q1C = -this%kappa_boundingC*dTdxC
           this%q2C = -this%kappa_boundingC*dTdyC
+          this%q3C = -this%kappa_boundingC*dTdzC
           this%q3E = -this%kappa_boundingE*dTdzE
       else ! Apply scalar_bounding locally
           where (this%kappa_boundingC > this%kappa_bounding_threshhold) this%kappa_sgs_C = this%kappa_boundingC
           where (this%kappa_boundingE > this%kappa_bounding_threshhold) this%kappa_sgs_E = this%kappa_boundingE
           this%q1C = -this%kappa_SGS_C*dTdxC
           this%q2C = -this%kappa_SGS_C*dTdyC
+          this%q3C = -this%kappa_SGS_C*dTdzC
           this%q3E = -this%kappa_SGS_E*dTdzE
       end if
    end if 

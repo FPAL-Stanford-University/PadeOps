@@ -14,4 +14,5 @@ ibrun $CODEDIR/test_stats_xy input.dat | tee test256.log
 
 sed -i "4,6s/256/64/g" input.dat
 
-python3 gather_and_plot_error.py | tee process_error.log
+module load python
+python gather_and_plot_error.py | tee process_error.log

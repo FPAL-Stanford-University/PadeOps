@@ -47,7 +47,7 @@ module stats_xy_mod
           T_all, dTdxC_all, dTdyC_all, dTdzC_all
         real(rkind), dimension(:,:,:,:), allocatable :: Tsplit
         real(rkind), dimension(:,:,:,:,:), allocatable :: dTdxj
-        real(rkind), dimension(:,:,:), allocatable :: q3all
+        real(rkind), dimension(:,:,:), pointer :: q3all
 
         ! Momentum fields
         real(rkind), dimension(:,:,:,:), allocatable :: psplit, fxsplit, fysplit, fzsplit, fTsplit
@@ -220,7 +220,7 @@ module stats_xy_mod
             if (this%nscalars > 0) then
                 allocate(this%stats_sca(sim%nz,nterms_sca,nstore,this%nscalars,this%nscales))
                 allocate(this%qjsplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales,3))
-                allocate(this%q3all(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3)))
+                !allocate(this%q3all(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3)))
                 allocate(this%Tsplit(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales))
                 allocate(this%dTdxj(this%sim%gpC%xsz(1),this%sim%gpC%xsz(2),this%sim%gpC%xsz(3),this%nscales,3))
                 nvars = nvars + this%nscalars
@@ -290,7 +290,8 @@ module stats_xy_mod
           if (allocated(this%duidxj)) deallocate(this%duidxj)
           if (allocated(this%dTdxj)) deallocate(this%dTdxj)
           if (allocated(this%qjsplit)) deallocate(this%qjsplit)
-          if (allocated(this%q3all)) deallocate(this%q3all)
+          !if (allocated(this%q3all)) deallocate(this%q3all)
+          if (associated(this%q3all)) nullify(this%q3all)
           if (allocated(this%tauij)) deallocate(this%tauij)
           if (allocated(this%zbuff)) deallocate(this%zbuff)
           if (allocated(this%zbuff_)) deallocate(this%zbuff_)
@@ -418,7 +419,7 @@ module stats_xy_mod
                           dFdz => this%sim%dTdzC
                           q1   => this%sim%q1_T
                           q2   => this%sim%q2_T
-                          q3   => this%sim%q3_T
+                          q3   => this%sim%q3_TC
                       else
                           F    => this%sim%scalars(sca-1)%F
                           dFdx => this%sim%scalars(sca-1)%dFdxC
@@ -426,7 +427,7 @@ module stats_xy_mod
                           dFdz => this%sim%scalars(sca-1)%dFdzC
                           q1   => this%sim%scalars(sca-1)%q1
                           q2   => this%sim%scalars(sca-1)%q2
-                          q3   => this%sim%scalars(sca-1)%q3
+                          q3   => this%sim%scalars(sca-1)%q3C
                       end if
                   else
                       F    => this%sim%scalars(sca)%F
@@ -449,13 +450,7 @@ module stats_xy_mod
                   ! SGS flux
                   call this%do_scale_splitting(q1,this%qjsplit(:,:,:,:,1),kc,rbuff,cbuff)
                   call this%do_scale_splitting(q2,this%qjsplit(:,:,:,:,2),kc,rbuff,cbuff)
-                  !call this%sim%spectForceLayer%interpE2C(q3, this%q3all, &
-                  !  this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
-                  !  this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
-                  call this%interpE2C(q3, this%q3all, &
-                    this%sim%rbuffyC(:,:,:,1), this%sim%rbuffzC(:,:,:,1), & 
-                    this%sim%rbuffyE(:,:,:,1), this%sim%rbuffzE(:,:,:,1))
-                  call this%do_scale_splitting(this%q3all,this%qjsplit(:,:,:,:,3),kc,rbuff,cbuff)
+                  call this%do_scale_splitting(q3,this%qjsplit(:,:,:,:,3),kc,rbuff,cbuff)
 
                   ! Forcing
                   if (this%sim%localizedForceLayer == 2) then
@@ -493,7 +488,7 @@ module stats_xy_mod
                   end if
 
                   ! tauij_SGS
-                  call this%sim%sgsModel%populate_tauij_E_to_C()
+                  ! Don't need this now that the SGS model class populates all components of tauijC -- call this%sim%sgsModel%populate_tauij_E_to_C()
                   call this%sim%sgsModel%get_tauijC(this%tauij(:,:,:,1,1),&
                     this%tauij(:,:,:,1,2),this%tauij(:,:,:,1,3),this%tauij(:,:,:,1,4),&
                     this%tauij(:,:,:,1,5),this%tauij(:,:,:,1,6))
@@ -1477,17 +1472,20 @@ module stats_xy_mod
             if (this%sim%isStratified) then
                 if (sca == 1) then
                     this%T_all     => this%sim%T
+                    this%q3all     => this%sim%q3_TC
                     this%dTdxC_all => this%sim%dTdxC
                     this%dTdyC_all => this%sim%dTdyC
                     this%dTdzC_all => this%sim%dTdzC
                 else
                     this%T_all     => this%sim%scalars(sca-1)%F
+                    this%q3all     => this%sim%scalars(sca-1)%q3C
                     this%dTdxC_all => this%sim%scalars(sca-1)%dFdxC
                     this%dTdyC_all => this%sim%scalars(sca-1)%dFdyC
                     this%dTdzC_all => this%sim%scalars(sca-1)%dFdzC
                 end if
             else
                 this%T_all     => this%sim%scalars(sca)%F
+                this%q3all     => this%sim%scalars(sca)%q3C
                 this%dTdxC_all => this%sim%scalars(sca)%dFdxC
                 this%dTdyC_all => this%sim%scalars(sca)%dFdyC
                 this%dTdzC_all => this%sim%scalars(sca)%dFdzC

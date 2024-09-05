@@ -458,3 +458,22 @@ subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
   nullify(x,y,z) 
 end subroutine
 
+subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
+    use kind_parameters, only: rkind
+    use decomp_2d,       only: decomp_info
+    use fortran_assert,  only: assert
+    use reductions,      only: p_maxval, p_minval
+    use constants,       only: pi
+    type(decomp_info), intent(in) :: gp
+    real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+    real(rkind), dimension(:,:,:), allocatable, intent(out) :: mask
+    character(len=*), intent(in) :: inputfile
+    character(len=1), intent(in) :: gridType
+    integer :: iounit
+    real(rkind) :: zTop, zBot, zMid, dz
+    real(rkind), dimension(:,:,:), allocatable :: Rdamp, z
+
+    if (allocated(mask)) deallocate(mask)
+    allocate(mask(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
+    mask = 1.d0
+end subroutine

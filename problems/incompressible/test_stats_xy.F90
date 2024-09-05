@@ -21,7 +21,7 @@ program test_stats_xy
     character(len=clen) :: inputfile1, inputfile, tempname, stats_info_dir
     character(len=clen) :: stmt
     integer :: ierr, n, ioUnit, stid, i
-    real(rkind), dimension(:,:,:), allocatable :: tau11, tau12, tau13, tau22, tau23, tau33
+    real(rkind), dimension(:,:,:), allocatable :: tau11, tau12, tau13, tau22, tau23, tau33, tau13C, tau23C
     real(rkind), dimension(:,:,:), pointer :: x, y, z, xE, yE, zE
     real(rkind), dimension(:,:,:), allocatable :: stats_cpy
     real(rkind), dimension(:,:,:,:), allocatable :: stats_sca_cpy
@@ -173,8 +173,10 @@ program test_stats_xy
       ! Allocate memory
       allocate(tau11(SM%gpC%xsz(1),SM%gpC%xsz(2),SM%gpC%xsz(3)))
       allocate(tau12(SM%gpC%xsz(1),SM%gpC%xsz(2),SM%gpC%xsz(3)))
+      allocate(tau13C(SM%gpC%xsz(1),SM%gpC%xsz(2),SM%gpC%xsz(3)))
       allocate(tau13(SM%gpE%xsz(1),SM%gpE%xsz(2),SM%gpE%xsz(3)))
       allocate(tau22(SM%gpC%xsz(1),SM%gpC%xsz(2),SM%gpC%xsz(3)))
+      allocate(tau23C(SM%gpC%xsz(1),SM%gpC%xsz(2),SM%gpC%xsz(3)))
       allocate(tau23(SM%gpE%xsz(1),SM%gpE%xsz(2),SM%gpE%xsz(3)))
       allocate(tau33(SM%gpC%xsz(1),SM%gpC%xsz(2),SM%gpC%xsz(3)))
       allocate(stats_cpy(SM%gpC%zsz(3),102,2))
@@ -250,17 +252,20 @@ program test_stats_xy
                                         wavenums(2)*coefs(3,3)*sin(wavenums(2)*x )*cos(wavenums(2)*y )*cos(wavenums(2)*(z -zmin-Lz/2))
 
       ! SGS fields
-      tau11 = tauCoefs(1)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
-      tau12 = tauCoefs(2)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
-      tau13 = tauCoefs(3)*sin(wavenums(3)*xE)*cos(wavenums(3)*yE)*cos(wavenums(3)*(zE-zmin-Lz/2))
-      tau22 = tauCoefs(4)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
-      tau23 = tauCoefs(5)*sin(wavenums(3)*xE)*cos(wavenums(3)*yE)*cos(wavenums(3)*(zE-zmin-Lz/2))
-      tau33 = tauCoefs(6)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
-      call SM%sgsmodel%set_tauij(tau11,tau12,tau13,tau22,tau23,tau33)
+      tau11  = tauCoefs(1)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
+      tau12  = tauCoefs(2)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
+      tau13C = tauCoefs(3)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
+      tau13  = tauCoefs(3)*sin(wavenums(3)*xE)*cos(wavenums(3)*yE)*cos(wavenums(3)*(zE-zmin-Lz/2))
+      tau22  = tauCoefs(4)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
+      tau23  = tauCoefs(5)*sin(wavenums(3)*xE)*cos(wavenums(3)*yE)*cos(wavenums(3)*(zE-zmin-Lz/2))
+      tau23C = tauCoefs(5)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
+      tau33  = tauCoefs(6)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
+      call SM%sgsmodel%set_tauij(tau11,tau12,tau13,tau22,tau23,tau33,tau13C,tau23C)
 
-      SM%q1_T = tauCoefs(7)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2)) 
-      SM%q2_T = tauCoefs(8)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
-      SM%q3_T = tauCoefs(9)*sin(wavenums(3)*xE)*cos(wavenums(3)*yE)*cos(wavenums(3)*(zE-zmin-Lz/2))
+      SM%q1_T  = tauCoefs(7)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2)) 
+      SM%q2_T  = tauCoefs(8)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
+      SM%q3_T  = tauCoefs(9)*sin(wavenums(3)*xE)*cos(wavenums(3)*yE)*cos(wavenums(3)*(zE-zmin-Lz/2))
+      SM%q3_TC = tauCoefs(9)*sin(wavenums(3)*x )*cos(wavenums(3)*y )*cos(wavenums(3)*(z -zmin-Lz/2))
 
       ! dTdx
       SM%dTdxC =               wavenums(1)*coefs(5,2)*cos(wavenums(1)*x )*cos(wavenums(1)*y )*sin(wavenums(1)*(z -zmin-Lz/2)) + &
