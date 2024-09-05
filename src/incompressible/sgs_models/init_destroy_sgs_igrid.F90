@@ -81,7 +81,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   logical :: usePrSGS = .false., useFullyLocalWM = .false.  
   integer :: ierr, WM_matchingIndex = 1, WallFunctionType = 1 
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 , SurfaceFilterFact = 1.d0 
-  real(rkind) :: kappa_bounding_threshhold = 1.d9 ! Proportion of molecular diffusivity (i.e., 1/(Re*Pr))
+  real(rkind) :: kappa_bounding_threshhold = 0.1d0 ! Proportion of molecular diffusivity (i.e., 1/(Re*Pr))
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
