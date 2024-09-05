@@ -90,7 +90,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  explicitCalcEdgeEddyViscosity, &
                  UseDynamicProcedureScalar, deltaRatio, turbPrandtl, &
                  useScalarBounding, augment_SGS_with_scalar_bounding, &
-                 use_scalar_bounding_as_SGS, &
+                 use_scalar_bounding_as_SGS, kappa_bounding_threshhold, &
                  Cy, lowbound, highbound, WM_matchingIndex, & 
                  WallFunctionType, useFullyLocalWM, SurfaceFilterFact  
 
