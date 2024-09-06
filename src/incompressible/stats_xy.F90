@@ -288,7 +288,6 @@ module stats_xy_mod
           if (allocated(this%fTsplit)) deallocate(this%fTsplit)
           if (allocated(this%ujsplit)) deallocate(this%ujsplit)
           if (allocated(this%duidxj)) deallocate(this%duidxj)
-          if (allocated(this%dTdxj)) deallocate(this%dTdxj)
           if (allocated(this%qjsplit)) deallocate(this%qjsplit)
           !if (allocated(this%q3all)) deallocate(this%q3all)
           if (associated(this%q3all)) nullify(this%q3all)
