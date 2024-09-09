@@ -13,7 +13,7 @@ module stats_xy_mod
     use exits,              only: message
     use fortran_assert,     only: assert
     use spectralMod,        only: spectral
-    use reductions,         only: p_maxval
+    use reductions,         only: p_maxval, p_minval
     use constants,          only: im0
     !use stdlib_sorting,     only: sort_index
     implicit none
@@ -1984,6 +1984,7 @@ module stats_xy_mod
         call this%covariance(gSGS2,dfdy,this%zbuff(:,2))
         call this%covariance(gSGS3,dfdz,this%zbuff(:,3))
         dissipation = -1.d0*(this%zbuff(:,1) + this%zbuff(:,2) + this%zbuff(:,3))
+        !call message('Minimum SGS destruction',p_minval(minval(dissipation)))
 
     end subroutine
 

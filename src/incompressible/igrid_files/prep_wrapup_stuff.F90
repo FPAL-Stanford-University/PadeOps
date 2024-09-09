@@ -700,32 +700,30 @@ subroutine compute_dTdxi(this)
         call transpose_z_to_y(ctmpz2, this%dTdzH, this%sp_gpE)
         call this%spectE%ifft(this%dTdzH,this%dTdzE)
 
+
         if (.not. this%isInviscid) then
             call this%Pade6opZ%ddz_C2C(ctmpz1,ctmpz3,dTdzBC_bottom,dTdzBC_top)  
             call transpose_z_to_y(ctmpz3,this%d2Tdz2hatC,this%sp_gpC)
         end if 
         
     else
+        ! Get dTdzC from TE
         call transpose_y_to_z(this%TEhat, ctmpz2, this%sp_gpE)
         call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz1,TBC_bottom,TBC_top)
         call transpose_z_to_y(ctmpz1,this%dTdzHC,this%sp_gpC)
-        call this%Pade6opZ%interpz_C2E(ctmpz1,ctmpz2,dTdzBC_bottom,dTdzBC_top)
+
+        ! Get dTdzE from TC to preserve the Nyquist wavenumber
+        call transpose_y_to_z(this%That,ctmpz1,this%sp_gpC)
+        call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
         call transpose_z_to_y(ctmpz2,this%dTdzH,this%sp_gpE)
+
         if (.not. this%isInviscid) then
-            call this%Pade6opZ%ddz_C2C(ctmpz1,ctmpz3,dTdzBC_bottom,dTdzBC_top)
+            !call this%Pade6opZ%ddz_C2C(ctmpz1,ctmpz3,dTdzBC_bottom,dTdzBC_top)
+            call this%Pade6opZ%ddz_E2C(ctmpz2,ctmpz3,dTdzBC_bottom,dTdzBC_top)
             call transpose_z_to_y(ctmpz3,this%d2Tdz2hatC,this%sp_gpC)
         end if 
         call this%spectE%ifft(this%dTdzH,this%dTdzE)
         call this%spectC%ifft(this%dTdzHC,this%dTdzC)
-
-        !call transpose_y_to_z(this%That, ctmpz1, this%sp_gpC)
-        !call this%Pade6opZ%ddz_C2E(ctmpz1,ctmpz2,TBC_bottom,TBC_top)
-        !if (.not. this%isInviscid) then
-        !    call this%Pade6opZ%d2dz2_C2C(ctmpz1,ctmpz3,TBC_bottom, TBC_top)    
-        !    call transpose_z_to_y(ctmpz3,this%d2Tdz2hatC,this%sp_gpC)
-        !end if 
-        !call this%Pade6opZ%interpz_E2C(ctmpz2,ctmpz1,dTdzBC_bottom,dTdzBC_top)
-
     
     end if 
 
