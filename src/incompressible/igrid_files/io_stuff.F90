@@ -873,7 +873,12 @@
                if ((this%useSGS) .and. (this%dump_NU_SGS)) call this%dumpFullField(this%nu_SGS,'nSGS')
                if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified)) call this%dumpFullField(this%kappaSGS,'kSGS')
                if ((this%useSGS) .and. (this%dump_KAPPA_SGS) .and. (this%isStratified) .and. associated(this%kappa_bounding)) then
-                  call this%dumpFullField(this%kappa_bounding,'kBND')
+                  if (this%augment_SGS_with_scalar_bounding .or. this%use_scalar_bounding_as_SGS) then
+                      call this%dumpFullField(this%kappa_bounding,'kBND')
+                  else
+                      this%rbuffxC(:,:,:,1) = this%kappa_bounding*this%kappa_bounding_mask
+                      call this%dumpFullField(this%rbuffxC(:,:,:,1),'kBND')
+                  end if
                end if 
                if (this%computeRapidSlowPressure) then
                    call this%dumpFullField(this%prapid,'prap')

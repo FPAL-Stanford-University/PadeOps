@@ -216,7 +216,8 @@ module IncompressibleGrid
 
         ! Pointers linked to SGS stuff
         real(rkind), dimension(:,:,:,:), pointer :: tauSGS_ij
-        real(rkind), dimension(:,:,:)  , pointer :: kappaSGS, nu_SGS, tau13, tau23, kappa_bounding
+        real(rkind), dimension(:,:,:)  , pointer :: kappaSGS, nu_SGS, tau13, tau23, kappa_bounding, kappa_bounding_mask
+        logical :: use_scalar_bounding_as_SGS, augment_SGS_with_scalar_bounding 
         real(rkind), dimension(:,:,:)  , pointer :: c_SGS, q1, q2, q3, q3C
         real(rkind), dimension(:,:,:), allocatable :: q1_T, q2_T, q3_T, q3_TC
         real(rkind), dimension(:,:,:), allocatable :: fbody_x, fbody_y, fbody_z
@@ -1199,7 +1200,8 @@ contains
                                     this%rbuffxC, this%rbuffyC, this%rbuffzC, this%rbuffyE, this%rbuffzE, this%Tsurf, &
                                     this%ThetaRef, this%wTh_surf, this%Fr, this%Re, this%PrandtlFluid, this%isInviscid, sgsmod_stratified, &
                                     this%botBC_Temp, this%initSpinUp)
-            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%q3C, this%kappaSGS, this%kappa_bounding)
+            call this%sgsModel%link_pointers(this%nu_SGS, this%tauSGS_ij, this%tau13, this%tau23, this%q1, this%q2, this%q3, this%q3C, this%kappaSGS, &
+              this%kappa_bounding, this%kappa_bounding_mask, this%augment_SGS_with_scalar_bounding, this%use_scalar_bounding_as_SGS)
 
             ! Compute nSGS (or tau_ij for non eddy viscosity models) for initialization data dump
             ! if restarting the simulation. Otherwise, the nSGS file at the

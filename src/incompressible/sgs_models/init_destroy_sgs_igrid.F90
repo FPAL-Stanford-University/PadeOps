@@ -21,13 +21,15 @@ subroutine destroy(this)
 end subroutine
 
 
-subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, q3C, kappaSGS, kappa_bounding)
+subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, q3C, kappaSGS, &
+    kappa_bounding, kappa_bounding_mask, augment_SGS_with_scalar_bounding, use_scalar_bounding_as_SGS)
    class(sgs_igrid), intent(in), target :: this
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: nuSGS
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: tau13, tau23
    real(rkind), dimension(:,:,:,:), pointer, intent(inout) :: tauSGS_ij
    real(rkind), dimension(:,:,:)  , pointer, intent(inout) :: q1, q2, q3, q3C, kappaSGS
-   real(rkind), dimension(:,:,:)  , pointer, optional, intent(inout)  :: kappa_bounding 
+   real(rkind), dimension(:,:,:)  , pointer, optional, intent(inout)  :: kappa_bounding, kappa_bounding_mask
+   logical, intent(inout), optional :: augment_SGS_with_scalar_bounding, use_scalar_bounding_as_SGS
 
    nuSGS => this%nu_sgs_C
    tau13 => this%tau_13
@@ -45,7 +47,13 @@ subroutine link_pointers(this, nuSGS, tauSGS_ij, tau13, tau23, q1, q2, q3, q3C, 
 
    if (this%useScalarBounding) then
       if(present(kappa_bounding)) then
-         kappa_bounding => this%kappa_boundingC
+         call assert(present(kappa_bounding_mask)             ,'present(kappa_bounding_mask) -- init_destroy_sgs_igrid.F90')
+         call assert(present(augment_SGS_with_scalar_bounding),'present(augment_SGS_with_scalar_bounding) -- init_destroy_sgs_igrid.F90')
+         call assert(present(use_scalar_bounding_as_SGS)      ,'present(use_scalar_bounding_as_SGS) -- init_destroy_sgs_igrid.F90')
+         kappa_bounding      => this%kappa_boundingC
+         kappa_bounding_mask => this%kappa_bounding_maskC
+         augment_SGS_with_scalar_bounding = this%augment_SGS_with_scalar_bounding
+         use_scalar_bounding_as_SGS = this%use_scalar_bounding_as_SGS
       end if 
    end if
 end subroutine 
@@ -81,7 +89,9 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   logical :: usePrSGS = .false., useFullyLocalWM = .false.  
   integer :: ierr, WM_matchingIndex = 1, WallFunctionType = 1 
   real(rkind) :: lowbound = 0.d0 , highbound = 1.d0 , SurfaceFilterFact = 1.d0 
-  real(rkind) :: kappa_bounding_threshhold = 0.1d0 ! Proportion of molecular diffusivity (i.e., 1/(Re*Pr))
+  real(rkind) :: kappa_bounding_threshhold = 0.01d0
+  integer :: kappa_bounding_scheme = Cook04
+  real(rkind) :: shrink_scalar_bounds_fact = 0.d0 ! kappa bounding nonzero when the scalar is +/- epsilon away from the bounds
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
@@ -92,7 +102,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
                  useScalarBounding, augment_SGS_with_scalar_bounding, &
                  use_scalar_bounding_as_SGS, kappa_bounding_threshhold, &
                  Cy, lowbound, highbound, WM_matchingIndex, & 
-                 WallFunctionType, useFullyLocalWM, SurfaceFilterFact  
+                 WallFunctionType, useFullyLocalWM, SurfaceFilterFact, &
+                 kappa_bounding_scheme, shrink_scalar_bounds_fact 
 
   open(unit=123, file=trim(inputfile), form='FORMATTED', iostat=ierr)
   read(unit=123, NML=SGS_MODEL)
@@ -120,6 +131,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   call message(1,'useScalarBounding               ',useScalarBounding)
   call message(1,'augment_SGS_with_scalar_bounding',augment_SGS_with_scalar_bounding)
   call message(1,'kappa_bounding_threshhold       ',kappa_bounding_threshhold)
+  call message(1,'kappa_bounding_scheme           ',kappa_bounding_scheme)
+  call message(1,'shrink_scalar_bounds_fact       ',shrink_scalar_bounds_fact)
   call message(1,'use_scalar_bounding_as_SGS      ',use_scalar_bounding_as_SGS)
   call message(1,'Cy                              ',Cy)
   call message(1,'lowbound                        ',lowbound)
@@ -215,6 +228,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%DynProcFreq = DynProcFreq
   this%useVerticalTfilter = useVerticalTfilter
   this%kappa_bounding_threshhold = kappa_bounding_threshhold/Re/Pr_fluid
+  this%kappa_bounding_scheme = kappa_bounding_scheme
   
   this%isInviscid = isInviscid
 
@@ -254,8 +268,14 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   end if
   
   if (this%useScalarBounding) then 
-      allocate(this%kappa_boundingC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
-      allocate(this%kappa_boundingE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+      allocate(this%kappa_boundingC(     gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+      allocate(this%eta_boundingC(       gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+      allocate(this%kappa_bounding_maskC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+      allocate(this%kappa_boundingE(     gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+      allocate(this%eta_boundingE(       gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+      allocate(this%kappa_bounding_maskE(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+      this%kappa_bounding_maskC = 1.d0
+      this%kappa_bounding_maskE = 1.d0
       ierr = this%gaussianX%init(gpC%xsz(1), .true.)
       ierr = this%gaussianY%init(gpC%ysz(2), .true.)
       ierr = this%gaussianZ%init(gpC%zsz(3), this%isPeriodic)

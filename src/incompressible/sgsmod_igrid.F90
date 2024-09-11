@@ -23,6 +23,7 @@ module sgsmod_igrid
     complex(rkind), parameter :: zeroC = zero + imi*zero
     logical :: useVerticalTfilter = .false. 
     real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
+    integer, parameter :: Cook04 = 0, CookMod1 = 1, CookMod2 = 2
 
     type :: sgs_igrid
         private 
@@ -41,6 +42,7 @@ module sgsmod_igrid
         real(rkind) :: cmodel_global, cmodel_global_x, cmodel_global_y, cmodel_global_z, Cy, dx, dy, dz
         real(rkind), dimension(:,:,:), allocatable :: nu_sgs_C, nu_sgs_E
         real(rkind), dimension(:,:,:), allocatable :: kappa_sgs_C, kappa_sgs_E, kappa_boundingC, kappa_boundingE
+        real(rkind), dimension(:,:,:), allocatable :: eta_boundingC, eta_boundingE
         logical :: isEddyViscosityModel = .false.
         logical :: usePrSGS = .false.
         real(rkind), dimension(:,:,:,:), allocatable :: tau_ij
@@ -56,7 +58,8 @@ module sgsmod_igrid
         logical :: initspinup = .false., isPeriodic = .false., useScalarBounding = .false.  
         logical :: augment_SGS_with_scalar_bounding = .false.
         logical :: use_scalar_bounding_as_SGS = .false.
-        real(rkind) :: kappa_bounding_threshhold
+        real(rkind) :: kappa_bounding_threshhold, shrink_scalar_bounds_fact
+        integer :: kappa_bounding_scheme = Cook04
 
         real(rkind) :: Tscale, lowbound_PotT, highbound_PotT, Cy_PotT, TurbPrandtlNum_PotT, lowbound, highbound
 
@@ -101,6 +104,7 @@ module sgsmod_igrid
 
         ! Masks
         real(rkind), dimension(:,:,:), allocatable, public :: scalarMaskC, scalarMaskE
+        real(rkind), dimension(:,:,:), allocatable :: kappa_bounding_maskC, kappa_bounding_maskE
 
         contains 
             !! ALL INIT PROCEDURES
@@ -152,8 +156,12 @@ module sgsmod_igrid
             procedure, private :: readSGSDynamicRestart
             procedure, private :: interpolate_eddy_viscosity
             procedure, private :: interpolate_kappaSGS 
+
+            !! SCALAR BOUDING STUFF
             procedure, private :: compute_kappa_bounding   
             procedure, private :: compute_Tscale
+            procedure, private :: filter_and_interpolate_kappa_bounding
+            procedure, private :: interpolate_C2E
 
             !! ALL DESTROY PROCEDURES
             procedure          :: destroy
@@ -467,6 +475,8 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
           end if 
       end if 
 
+      ! Scalar masks are used to spatially mask portions of the domain. This should not be changed within the sgsmod class, but is
+      ! specified by the user via the user defined hooks module and the initialize.F90 file used for the problem.
       if (allocated(this%scalarMaskE)) call assert(allocated(this%scalarMaskC),'allocated(this%scalarMaskC) -- sgsmod_igrid.F90')
       if (allocated(this%scalarMaskC)) then
           call assert(allocated(this%scalarMaskE),'allocated(this%scalarMaskE) -- sgsmod_igrid.F90')
@@ -486,7 +496,7 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
 
    if (this%useScalarBounding) then 
       call this%compute_Tscale(u, v, w) 
-      call this%compute_kappa_bounding(T, dTdxC, dTdyC, dTdzC)
+      call this%compute_kappa_bounding(T, dTdxC, dTdyC, dTdzC, u, v, w)
       if (allocated(this%scalarMaskC)) then
           this%kappa_boundingC = this%scalarMaskC*this%kappa_boundingC
           this%kappa_boundingE = this%scalarMaskE*this%kappa_boundingE
@@ -502,12 +512,17 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
           this%q3C = -this%kappa_boundingC*dTdzC
           this%q3E = -this%kappa_boundingE*dTdzE
       else ! Apply scalar_bounding locally
-          where (this%kappa_boundingC > this%kappa_bounding_threshhold) this%kappa_sgs_C = this%kappa_boundingC
-          where (this%kappa_boundingE > this%kappa_bounding_threshhold) this%kappa_sgs_E = this%kappa_boundingE
-          this%q1C = -this%kappa_SGS_C*dTdxC
-          this%q2C = -this%kappa_SGS_C*dTdyC
-          this%q3C = -this%kappa_SGS_C*dTdzC
-          this%q3E = -this%kappa_SGS_E*dTdzE
+          this%kappa_bounding_maskC = 0.d0
+          this%kappa_bounding_maskE = 0.d0
+          where (this%eta_boundingC > this%kappa_bounding_threshhold) this%kappa_bounding_maskC = 1.d0
+          where (this%eta_boundingE > this%kappa_bounding_threshhold) this%kappa_bounding_maskE = 1.d0
+          ! Need to actually modify kappa_SGS in order for stats_xy and igrid_io to use the correct fields
+          this%kappa_SGS_C = (1.d0-this%kappa_bounding_maskC)*this%kappa_SGS_C + this%kappa_bounding_maskC*this%kappa_boundingC
+          this%kappa_SGS_E = (1.d0-this%kappa_bounding_maskE)*this%kappa_SGS_E + this%kappa_bounding_maskE*this%kappa_boundingE
+          this%q1C = -this%kappa_sgs_C*dTdxC
+          this%q2C = -this%kappa_sgs_C*dTdyC
+          this%q3C = -this%kappa_sgs_C*dTdzC
+          this%q3E = -this%kappa_sgs_E*dTdzE
       end if
    end if 
 
