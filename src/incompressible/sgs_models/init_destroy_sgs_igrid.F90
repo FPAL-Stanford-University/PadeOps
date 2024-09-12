@@ -130,7 +130,6 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   call message(1,'turbPrandtl                     ',turbPrandtl)
   call message(1,'useScalarBounding               ',useScalarBounding)
   call message(1,'augment_SGS_with_scalar_bounding',augment_SGS_with_scalar_bounding)
-  call message(1,'kappa_bounding_threshhold       ',kappa_bounding_threshhold)
   call message(1,'kappa_bounding_scheme           ',kappa_bounding_scheme)
   call message(1,'shrink_scalar_bounds_fact       ',shrink_scalar_bounds_fact)
   call message(1,'use_scalar_bounding_as_SGS      ',use_scalar_bounding_as_SGS)
@@ -227,8 +226,14 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%DynamicProcedureType = DynamicProcedureType
   this%DynProcFreq = DynProcFreq
   this%useVerticalTfilter = useVerticalTfilter
-  this%kappa_bounding_threshhold = kappa_bounding_threshhold/Re/Pr_fluid
   this%kappa_bounding_scheme = kappa_bounding_scheme
+  select case (kappa_bounding_scheme)
+  case (Cook04)
+      this%kappa_bounding_threshhold = kappa_bounding_threshhold/Re/Pr_fluid
+  case default
+      this%kappa_bounding_threshhold = kappa_bounding_threshhold
+  end select
+  call message(1,'kappa_bounding_threshhold       ',this%kappa_bounding_threshhold)
   
   this%isInviscid = isInviscid
 

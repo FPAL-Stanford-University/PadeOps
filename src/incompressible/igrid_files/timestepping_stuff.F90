@@ -566,11 +566,17 @@
       else
            if (mod(this%step,this%t_dataDump) == 0) then
               call message(0,"Scheduled visualization dump.")
+              if (this%dump_primitives_for_ddt .and. this%cfl > 0) then
+                  call this%dumpFullField(this%dudt,'uVel',step=this%step-1)
+                  call this%dumpFullField(this%dvdt,'vVel',step=this%step-1)
+                  call this%dumpFullField(this%dwdt,'wVel',step=this%step-1)
+                  if (this%isStratified) call this%dumpFullField(this%dTdt,'potT',step=this%step-1)
+              end if
               call this%dump_visualization_files()
               if (this%useHITForcing) then
                 call this%hitforce%dumpForcing(this%outputdir,this%RunID,this%step)
               end if
-              if (this%cfl > 0) then
+              if (this%cfl > 0 .and. this%dump_ddt_terms) then
                   this%dudt = (this%u  - this%dudt)/(this%dt)
                   this%dvdt = (this%v  - this%dvdt)/(this%dt)
                   this%dwdt = (this%wC - this%dwdt)/(this%dt)
@@ -585,13 +591,27 @@
                this%dwdt = this%wC
                this%dTdt = this%T
            else if (mod(this%step-1,this%t_dataDump) == 0 .and. this%CFL <= 0) then ! Compute dqdt and dump it
-               this%dudt = (this%u  - this%dudt)/(2.d0*this%dt)
-               this%dvdt = (this%v  - this%dvdt)/(2.d0*this%dt)
-               this%dwdt = (this%wC - this%dwdt)/(2.d0*this%dt)
-               if (this%isStratified) then
-                   this%dTdt = (this%T  - this%dTdt)/(2.d0*this%dt)
+               if (this%dump_primitives_for_ddt .and. this%cfl > 0) then
+                   call this%dumpFullField(this%u   ,'uVel')
+                   call this%dumpFullField(this%v   ,'vVel')
+                   call this%dumpFullField(this%wC  ,'wVel')
+                   call this%dumpFullField(this%dudt,'uVel',step=this%step-2)
+                   call this%dumpFullField(this%dvdt,'vVel',step=this%step-2)
+                   call this%dumpFullField(this%dwdt,'wVel',step=this%step-2)
+                   if (this%isStratified) then
+                       call this%dumpFullField(this%T,'potT')
+                       call this%dumpFullField(this%dTdt,'potT',step=this%step-2)
+                   end if
                end if
-               call this%dump_visualization_files(ddt=.true.,step=this%step-1)
+               if (this%dump_ddt_terms) then
+                   this%dudt = (this%u  - this%dudt)/(2.d0*this%dt)
+                   this%dvdt = (this%v  - this%dvdt)/(2.d0*this%dt)
+                   this%dwdt = (this%wC - this%dwdt)/(2.d0*this%dt)
+                   if (this%isStratified) then
+                       this%dTdt = (this%T  - this%dTdt)/(2.d0*this%dt)
+                   end if
+                   call this%dump_visualization_files(ddt=.true.,step=this%step-1)
+               end if
            end if
       end if 
 

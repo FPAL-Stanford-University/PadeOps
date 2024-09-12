@@ -514,8 +514,13 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
       else ! Apply scalar_bounding locally
           this%kappa_bounding_maskC = 0.d0
           this%kappa_bounding_maskE = 0.d0
-          where (this%eta_boundingC > this%kappa_bounding_threshhold) this%kappa_bounding_maskC = 1.d0
-          where (this%eta_boundingE > this%kappa_bounding_threshhold) this%kappa_bounding_maskE = 1.d0
+          if (this%kappa_bounding_scheme == Cook04) then
+              where (this%kappa_boundingC > this%kappa_bounding_threshhold) this%kappa_bounding_maskC = 1.d0
+              where (this%kappa_boundingE > this%kappa_bounding_threshhold) this%kappa_bounding_maskE = 1.d0
+          else
+              where (this%eta_boundingC   > this%kappa_bounding_threshhold) this%kappa_bounding_maskC = 1.d0
+              where (this%eta_boundingE   > this%kappa_bounding_threshhold) this%kappa_bounding_maskE = 1.d0
+          end if
           ! Need to actually modify kappa_SGS in order for stats_xy and igrid_io to use the correct fields
           this%kappa_SGS_C = (1.d0-this%kappa_bounding_maskC)*this%kappa_SGS_C + this%kappa_bounding_maskC*this%kappa_boundingC
           this%kappa_SGS_E = (1.d0-this%kappa_bounding_maskE)*this%kappa_SGS_E + this%kappa_bounding_maskE*this%kappa_boundingE

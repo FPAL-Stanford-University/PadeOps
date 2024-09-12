@@ -247,6 +247,7 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), allocatable :: urhs_turbine, vrhs_turbine, wrhs_turbine
 
         logical :: Dump_NU_SGS = .false., Dump_KAPPA_SGS = .false. 
+        logical :: dump_ddt_terms = .false., dump_primitives_for_ddt = .false.
 
         ! Rapid and slow decomposition
         real(rkind), dimension(:,:,:), allocatable :: prapid, uM, vM, wM, pslow
@@ -479,6 +480,8 @@ contains
         integer :: num_scalars = 0
         logical :: reset2decomp, InitSpinUp = .false., useExhaustiveFFT = .true., computeFringePressure = .false. , computeDNSPressure = .false.  
         logical :: sgsmod_stratified, dump_NU_SGS = .false., dump_KAPPA_SGS = .false., computeTurbinePressure = .false., useScalars = .false. 
+        logical :: dump_ddt_terms = .false.
+        logical :: dump_primitives_for_ddt = .true.
         integer :: zHubIndex = 16
         real(rkind) :: angleTrigger=0.1d0, Ra = 1.d14
         character(len=4) :: scheme_xy = "FOUR"
@@ -511,7 +514,7 @@ contains
                         restartFromDifferentGrid, nxS, nyS, nzS
         namelist /IO/ vizDump_Schedule, deltaT_dump, t_restartDump, t_dataDump, ioType, dumpPlanes, runID, useProbes, &
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
-                    & t_stop_pointProbe, t_pointProbe
+                    & t_stop_pointProbe, t_pointProbe, dump_ddt_terms, dump_primitives_for_ddt
         !namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,&
           useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, use_SGS_scalar_mask, PrandtlFluid, BulkRichardson, &
@@ -578,6 +581,8 @@ contains
         this%frameAngle = frameAngle; this%computeVorticity = computeVorticity 
         this%deleteInstructions = deleteInstructions; this%TopBC_Temp = TopBC_temp
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
+        this%dump_ddt_terms = dump_ddt_terms
+        this%dump_primitives_for_ddt = dump_primitives_for_ddt
         this%donot_dealias = donot_dealias; this%ioType = ioType; this%HITForceTimeScale = HITForceTimeScale
         this%moistureFactor = moistureFactor; this%useHITRealSpaceLinearForcing = useHITRealSpaceLinearForcing
         this%NumericalSchemeVert = NumericalSchemeVert
@@ -665,6 +670,8 @@ contains
        call message(1,'useProbes',useProbes)
        call message(1,'dump_NU_SGS',dump_NU_SGS)
        call message(1,'dump_KAPPA_SGS',dump_KAPPA_SGS)
+       call message(1,'dump_ddt_terms',dump_ddt_terms)
+       call message(1,'dump_primitives_for_ddt',dump_primitives_for_ddt)
        call message(1,'t_planeDump',t_planeDump)
        call message(1,'t_stop_planeDump',t_stop_planeDump)
        call message(1,'t_start_planeDump',t_start_planeDump)

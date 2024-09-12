@@ -38,12 +38,14 @@ subroutine compute_kappa_bounding(this, T, dTdx, dTdy, dTdz, u, v, w)
                    num = this%dx*abs(dTdx(i,j,k)) + this%dy*abs(dTdy(i,j,k)) + this%dz*abs(dTdz(i,j,k))
                    delta = num/(den + 1.d-20) 
                 end if 
-                this%eta_boundingC(i,j,k)   = abs(T(i,j,k) - this%lowbound) + this%lowbound - this%highbound + abs(this%highbound - T(i,j,k))
-                this%kappa_boundingC(i,j,k) = this%Cy*(delta*delta/this%Tscale)*(this%eta_boundingC(i,j,k))
+                !this%eta_boundingC(i,j,k)   = abs(T(i,j,k) - this%lowbound) + this%lowbound - this%highbound + abs(this%highbound - T(i,j,k))
+                !this%kappa_boundingC(i,j,k) = this%Cy*(delta*delta/this%Tscale)*(this%eta_boundingC(i,j,k))
+                this%kappa_boundingC(i,j,k) = this%Cy*(delta*delta/this%Tscale)*(&
+                  abs(T(i,j,k) - this%lowbound) + this%lowbound - this%highbound + abs(this%highbound - T(i,j,k)))
              end do
           end do 
        end do 
-       call this%filter_and_interpolate_kappa_bounding(this%eta_boundingC  ,this%eta_boundingE  )
+       !call this%filter_and_interpolate_kappa_bounding(this%eta_boundingC  ,this%eta_boundingE  )
        call this%filter_and_interpolate_kappa_bounding(this%kappa_boundingC,this%kappa_boundingE)
    case (CookMod1)
        lowbound  = this%lowbound  + this%shrink_scalar_bounds_fact 
