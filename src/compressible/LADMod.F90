@@ -90,6 +90,7 @@ contains
         this%Cvf1       = Cvf1
         this%Cvf2       = Cvf2
 
+        print *, "Cy", this%Cy
         ! Point type pointers to external types
         this%decomp => decomp
         this%der => der
@@ -969,7 +970,7 @@ contains
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: Ysdiff
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: minYs, minVF
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask,rhom,rhomstar,Ysstar
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) ::  diffstar,adiffstar,H1,H2,H3,mask,rhom,rhomstar,Ysstar, Lm
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7,ytmp8
         real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2, ztmp3,ztmp4,Ys
@@ -992,6 +993,15 @@ contains
         elsewhere
            H2 = 0
         endwhere
+
+        where( Ys .GE. minYs)
+                Lm = 1
+        elsewhere(Ys .LE. (1-minYs))
+                Lm = 1
+        elsewhere
+                Lm = 0
+        endwhere
+
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
@@ -1152,15 +1162,15 @@ contains
 
     end subroutine
 
-     subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dphidx,dphidy,dphidz,minYs,minVF,sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch)
+     subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dphidx,dphidy,dphidz,minYs,minVF,sos,adiff,rhodiff,outdiff,x_bc,y_bc,z_bc,detady,dy_stretch)
         class(ladobject),  intent(in) :: this
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz,dy_stretch,detady
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: dphidx, dphidy,dphidz
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff, outdiff
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: minYs, minVF
         real(rkind), dimension(:,:,:), pointer ::dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask,dil,omega, drYdmag, Ys, outb, Lm, Lm2
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2, ztmp3,ztmp4
@@ -1171,7 +1181,7 @@ contains
         tmp1 = drYsdx*drYsdx
         tmp2 = drYsdy*drYsdy
         tmp3 = drYsdz*drYsdz
-
+        Ys = rhoYs/rho
         where( abs((Ys)*(1 - (Ys))) .GT. 0)
            H1 = 1
         elsewhere
@@ -1194,13 +1204,32 @@ contains
 
         mask = ( 1 - 4*Ys*(1-Ys) )**nmask
 
+
+        where( Ys .GE. minYs)
+                Lm = 1
+        elsewhere(Ys .LE. (1-minYs))
+                Lm = 1
+        elsewhere
+                Lm = 0
+        endwhere
+
+
+        where( VF .GE. minVF)
+                Lm2 = 1
+        elsewhere(VF .LE. (1-minVF))
+                Lm2 = 1
+        elsewhere
+                Lm2 = 0
+        endwhere
+
+
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         xtmp2 = xtmp1*this%dx**4 
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        diffstar = ytmp4 * ( this%dx * tmp1 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        diffstar = ytmp4 * ( this%dx  * tmp1 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(Ys,ztmp1,this%decomp)
@@ -1208,7 +1237,7 @@ contains
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
         ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
-        diffstar = diffstar + ytmp4 * ( this%dz * tmp3 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        diffstar = diffstar + ytmp4 * ( this%dz   * tmp3 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
@@ -1219,16 +1248,16 @@ contains
           dely = ( (dy_stretch*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(tmp1 + tmp2 + tmp3) + real(1.0D-32,rkind)) )
         else
           ytmp4 = ytmp5*this%dy**4
-          diffstar = diffstar + ytmp4 * ( this%dy * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+          diffstar = diffstar + ytmp4 * ( this%dy  * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
           dely = ( (this%dy*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(tmp1 + tmp2 + tmp3)+ real(1.0D-32,rkind)) )
         endif
 
-        outb = this%CY*sos*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*dely
-        diffstar = sos*abs(diffstar) !*fd !/rho ! CD part of diff
+        outb = this%Cy*sos*( half*(abs(Ys)-(one-minYs) + abs((Ys)-(one-minYs))) )*dely
+        diffstar = sos*abs(diffstar) !*H1  !*fd !/rho ! CD part of diff
         call this%filter(diffstar, x_bc, y_bc, z_bc)
         call this%filter(outb, x_bc, y_bc, z_bc)
-        rhodiff = this%Crho*diffstar 
-
+        diffstar= this%Crho*diffstar 
+        outdiff = outb
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         !                              VF                                   !
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1274,11 +1303,11 @@ contains
         ytmp5 = this%Cvf2*sos*( half*(abs(VF)-(one) + abs((VF)-(one))) )*delphi
         call this%filter(adiffstar, x_bc, y_bc, z_bc)
         call this%filter(ytmp5, x_bc, y_bc, z_bc)
-
-        adiff = max(adiffstar, ytmp5 )
+        ytmp5 = ytmp5
+        adiff = max(adiffstar,ytmp5) !max(adiffstar, ytmp5 )
         ! Filter each part
         
-        rhodiff =  max(rhodiff,adiffstar) + max(outb,ytmp5)
+        rhodiff = max(diffstar,adiffstar) + max(outb,ytmp5) ! max(rhodiff,adiffstar,outb,ytmp5) !max(rhodiff,adiffstar) + max(outb,ytmp5)
 
     end subroutine
 

@@ -4868,7 +4868,7 @@ contains
 
            endif
 
-           rhsYs = tmp + this%intSharp_RFV + this%YsLAD + this%intSharp_RDiffFV
+           rhsYs = tmp + this%intSharp_RFV + this%YsLAD !+ this%intSharp_RDiffFV
            this%u_int = u_int
            this%v_int = v_int
            this%w_int = w_int

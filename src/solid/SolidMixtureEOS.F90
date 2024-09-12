@@ -937,107 +937,26 @@ stop
         ! subtract elastic energy to determine hydrostatic energy. Temperature
         ! is assumed a function of only hydrostatic energy. Not sure if this is
         ! correct.
-        ehmix = mixE !*mixRho
+        ehmix = mixE*mixRho
         mixrhoE = ehmix
      !   ehmix = ehmix*mixRho
         tmp = zero
 
         thresh = 1d-16
 
-!        where((this%material(1)%VF .LE. thresh) .OR. (this%material(1)%Ys .LE. thresh*this%material(1)%elastic%rho0) )
-!             this%material(1)%VF = thresh
-!             this%material(1)%Ys = thresh*this%material(1)%elastic%rho0
-        !     this%material(2)%VF = 1-this%material(1)%VF 
-        !     this%material(2)%Ys = 1 - this%material(1)%Ys
-              
-!        endwhere
-
-
-!        where((this%material(2)%VF .LE. thresh) .OR. (this%material(2)%Ys .LE. thresh/this%material(1)%elastic%rho0) )
-!             this%material(2)%VF = thresh
-!             this%material(2)%Ys = thresh/this%material(1)%elastic%rho0
-         !    this%material(1)%VF = 1-this%material(2)%VF
-         !    this%material(1)%Ys = 1 - this%material(2)%Ys
-
-!        endwhere
-
-
-!        where((this%material(1)%VF .GE. 1-thresh) .OR. (this%material(1)%Ys .GE. 1-thresh*this%material(1)%elastic%rho0) )
-!             this%material(1)%VF = 1-thresh
-!             this%material(1)%Ys = 1-thresh*this%material(1)%elastic%rho0
-!        endwhere
-
-
-!        where((this%material(2)%VF .GE. 1-thresh) .OR. (this%material(2)%Ys .GE. 1-thresh/this%material(1)%elastic%rho0) )
-!             this%material(2)%VF = 1-thresh
-!             this%material(2)%Ys = 1-thresh/this%material(1)%elastic%rho0
-!        endwhere
-
-!        do imat = 1, this%ns
-!         do k=1,this%nzp
-!                do j = 1,this%nyp
-!                    do i = 1,this%nxp
-!                        if ( this%material(imat)%Ys(i,j,k) *this%material(imat)%VF(i,j,k) < zero ) then
-!                            print *, "Found negative Ys*VF in material after thresh ", imat," at ", i, j, k
-!                            print *, "  Ys = ", this%material(imat)%Ys(i,j,k)
-!                            print *, "  VF = ", this%material(imat)%Vf(i,j,k)
-!                            ! exit
-!                        end if
-!                    end do
-!                end do
-!            end do
-!        enddo
-
-       ! cutoff = 1d-5
-       ! where( this%material(1)%Ys .LE. cutoff*this%material(1)%elastic%rho0)
-       !    this%material(1)%rhom = cutoff
-       !    this%material(1)%VF = this%material(1)%Ys*mixRho/this%material(1)%rhom 
-       ! endwhere
-
-       ! where( this%material(2)%Ys .LE. cutoff/this%material(1)%elastic%rho0)
-       !    this%material(2)%rhom = cutoff
-       !    this%material(2)%VF = this%material(2)%Ys*mixRho/this%material(2)%rhom  
-       ! endwhere
-
-       ! this%material(2)%VF = 1 - this%material(1)%VF
-       ! this%material(2)%Ys = 1 - this%material(1)%Ys
-
-!       do imat = 1, this%ns
-
-!         call this%material(imat)%getSpeciesDensity(mixRho,rhom)
-
-!       enddo     
 
         do imat = 1, this%ns
         
       
 !       ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
-        call this%material(imat)%getSpeciesDensity(mixRho,rhom)
-        gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
+           call this%material(imat)%getSpeciesDensity(mixRho,rhom)
+           gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
 
-    !    where( this%material(imat)%VF .LE. thresh)
 
-    !        this%material(imat)%VF = thresh
-
-    !    endwhere
-      ! where( this%material(imat)%VF .lt. this%intSharp_cut)      
-           !  ehmix = ehmix - gamfac*this%material(imat)%VF
-           !ehmix = ehmix - gamfac*this%material(imat)%VF/mixRho
-           !  tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%Ys/rhom
-      !     ehmix = ehmix - gamfac*(this%intSharp_cut)
-      !     tmp = tmp + this%material(imat)%hydro%onebygam_m1*(this%intSharp_cut)
-
-      !  elsewhere( this%material(imat)%VF .gt. 1-this%intSharp_cut)
-
-      !    ehmix = ehmix - gamfac*(1-this%intSharp_cut)
-      !    tmp = tmp + this%material(imat)%hydro%onebygam_m1*(1-this%intSharp_cut)
-
-      !  elsewhere
-
-         ehmix = ehmix - gamfac*this%material(imat)%Ys/rhom
-        ! tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
-         tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%Ys/rhom
-      !  endwhere
+           ehmix = ehmix - gamfac*this%material(imat)%VF
+           ! tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
+           tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
+           !  endwhere
             
 
             
@@ -1060,127 +979,6 @@ stop
 
        mixP = ehmix/tmp
        
-       !call filter3D(this%decomp, this%fil, mixP, 1, this%x_bc, this%y_bc,this%z_bc)
-       !fac = (mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1 - &
-       !      (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1
-       !this%material(1)%VF = (mixrhoE -  (mixP + this%material(2)%hydro%gam*this%material(2)%hydro%PInf)*this%material(2)%hydro%onebygam_m1)/fac 
-       !this%material(2)%VF = (-mixrhoE +  (mixP + this%material(1)%hydro%gam*this%material(1)%hydro%PInf)*this%material(1)%hydro%onebygam_m1)/fac       
-         ! a = minloc(ehmix)
-         ! !a(1) = 122; a(2:3) = 1
-         ! print *, "Mat1 Ys, VF = ", this%material(1)%Ys(a(1),a(2),a(3)), this%material(1)%VF(a(1),a(2),a(3))
-         ! print *, "Mat2 Ys, VF = ", this%material(2)%Ys(a(1),a(2),a(3)), this%material(2)%VF(a(1),a(2),a(3))
-         ! print *, "Mat1,2 T1   = ", this%material(1)%hydro%gam * this%material(1)%hydro%onebygam_m1 * this%material(1)%hydro%PInf   * this%material(1)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3)),  this%material(2)%hydro%gam * this%material(2)%hydro%onebygam_m1 * this%material(2)%hydro%PInf   * this%material(2)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
-         ! print *, "Mat1,2 eel = ",  this%material(1)%eel(a(1),a(2),a(3)),  this%material(2)%eel(a(1),a(2),a(3))
-         ! print *, "Mat1,2 g11 = ",  this%material(1)%g11(a(1),a(2),a(3)),  this%material(2)%g11(a(1),a(2),a(3))
-         ! print *, "Mat1,2 g22 = ",  this%material(1)%g22(a(1),a(2),a(3)),  this%material(2)%g22(a(1),a(2),a(3))
-         ! print *, "Mix eh      = ",  mixE(a(1),a(2),a(3)), mixE(a(1),a(2),a(3)) -   (this%material(1)%Ys(a(1),a(2),a(3)) * this%material(1)%eel(a(1),a(2),a(3)) + this%material(2)%Ys(a(1),a(2),a(3)) * this%material(2)%eel(a(1),a(2),a(3)) )
-         ! print *, "ehmix      = ",  ehmix(a(1),a(2),a(3))
-         ! print *, "tmp        = ",  tmp(a(1),a(2),a(3))
-         ! print *, "Mat2 Ys, VF = ", this%material(2)%Ys(a(1),a(2),a(3)), this%material(2)%VF(a(1),a(2),a(3))
-         ! print *, "Mat1,2 T1   = ", this%material(1)%hydro%gam * this%material(1)%hydro%onebygam_m1 * this%material(1)%hydro%PInf   * this%material(1)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3)),  this%material(2)%hydro%gam * this%material(2)%hydro%onebygam_m1 * this%material(2)%hydro%PInf   * this%material(2)%VF(a(1),a(2),a(3))/mixRho(a(1),a(2),a(3))
-         ! print *, "Mat1,2 eel = ",  this%material(1)%eel(a(1),a(2),a(3)),  this%material(2)%eel(a(1),a(2),a(3))
-         ! print *, "Mat1,2 g11 = ",  this%material(1)%g11(a(1),a(2),a(3)),  this%material(2)%g11(a(1),a(2),a(3))
-         ! print *, "Mat1,2 g22 = ",  this%material(1)%g22(a(1),a(2),a(3)),  this%material(2)%g22(a(1),a(2),a(3))
-         ! print *, "Mix eh      = ",  mixE(a(1),a(2),a(3)), mixE(a(1),a(2),a(3)) -   (this%material(1)%Ys(a(1),a(2),a(3)) * this%material(1)%eel(a(1),a(2),a(3)) + this%material(2)%Ys(a(1),a(2),a(3)) * this%material(2)%eel(a(1),a(2),a(3)) )
-         ! print *, "ehmix      = ",  ehmix(a(1),a(2),a(3))
-         ! print *, "tmp        = ",  tmp(a(1),a(2),a(3))
-         ! print *, "mixP       = ",  mixP(a(1),a(2),a(3))
-         
-         !print*, "ehmix: ", minval(ehmix), maxval(ehmix)
-         !print*, "tmp  : ", minval(tmp), maxval(tmp)
-         !print*, "mixP : ", minval(mixP), maxval(mixP)
-      
-         !if (minval(mixP) < zero) then
-         !    print *, "  loc: ", minloc(mixP)
-         !end if
-
-         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-         !! Zoe's scheme for 2 species!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
-!         !! Retrieve material densities
-!         call this%material(1)%getSpeciesDensity(mixRho,rhom1)
-!         call this%material(2)%getSpeciesDensity(mixRho,rhom2)
-    
-!         rho2gambyone = rhom2*(this%material(2)%hydro%gam -1)
-!         rho1gambyone = rhom1*(this%material(1)%hydro%gam -1)
-
-!         denom = 0
-         
-        ! eps1 = this%intSharp_cut
-          
-!        where(this%material(1)%Ys .lt. eps)
-!           VF1 = abs(this%material(1)%Ys)
-!        elsewhere(this%material(1)%Ys .gt. 1+eps)
-!           VF1 = 1 - abs(this%material(1)%Ys -1)
-!        elsewhere
-!           VF1 = this%material(1)%Ys
-!        endwhere
-
-        ! eps2 = this%intSharp_cut
-!         where(this%material(2)%Ys .lt. eps)
-!           VF2 = abs(this%material(2)%Ys)
-!         elsewhere(this%material(2)%Ys .gt. 1+eps)
-!           VF2 = 1 - abs(this%material(2)%Ys - 1)
-!         elsewhere
-!           VF2 = this%material(2)%Ys
-!         endwhere
-        
-!         denom = VF1*rho2gambyone + VF2*rho1gambyone
-
-!         diffPInf = this%material(1)%hydro%gam*this%material(1)%hydro%PInf - this%material(2)%hydro%gam*this%material(2)%hydro%PInf
-
-         !! Solve for species energys (these formulas are from Conservation of
-         !Energy where emix = summation Yi*eh_i & from isobaric assumption p1 = p2 = ei*rho_i*(gam_i-1)
-        
-      !  e_species = this%material(1)%eh
-
-       !  where(this%material(2)%Ys .lt. eps)
-       !     this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*eps)/denom
-       !  elsewhere(this%material(2)%Ys .gt. (1))
-       !     this%material(1)%eh =(rho2gambyone*ehmix + diffPInf*(1))/denom
-       !  elsewhere
-       !     this%material(1)%eh = (rho2gambyone*ehmix +  diffPInf*VF2)/denom
-       ! endwhere
-     
-         !del_e = this%material(1)%eh-e_species
-         !delta_max = (s - 1)*e_species
-         !delta_min = (1/s - 1)*e_species
-
-         ! Use limitors on species energy
-         !delta_e1 =  min( del_e, delta_max )
-         !delta_e2 = max( delta_e1, delta_min )
-
-         !this%material(1)%eh = e_species + delta_e2
-
-         !e_species = this%material(2)%eh
-
-         !where(this%material(1)%Ys .lt. eps)
-
-        !   this%material(2)%eh =(rho1gambyone*ehmix - diffPInf*eps)/denom
-  
-        ! elsewhere(this%material(1)%Ys .gt. (1))
-
-        !   this%material(2)%eh =(rho1gambyone*ehmix - diffPInf*(1))/denom
-
-        ! elsewhere
-
-        ! this%material(2)%eh = (rho1gambyone*ehmix -diffPInf*VF1)/denom
-
-       !  endwhere
-        ! del_e = this%material(2)%eh-e_species
-        ! delta_max = (s - 1)*e_species
-        ! delta_min = (1/s - 1)*e_species
-
-         ! Use limitors on species energy
-        ! delta_e1 =  min( del_e, delta_max )
-        ! delta_e2 = max( delta_e1, delta_min )
-
-        ! this%material(2)%eh = e_species + delta_e2
-
-              
-        ! mixP = this%material(1)%eh*rhom1*(this%material(1)%hydro%gam -1)-this%material(1)%hydro%gam*this%material(1)%hydro%PInf
 
          do imat = 1, this%ns
 
@@ -1850,8 +1648,11 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         integer :: i
 
         logical, intent(in) :: use_gTg,strainHard
-        minYs(1) = this%material(1)%elastic%rho0/this%material(2)%elastic%rho0*this%intSharp_cut
-        minYs(2) = this%material(2)%elastic%rho0/this%material(1)%elastic%rho0*this%intSharp_cut
+        minYs(1) = this%material(1)%elastic%rho0/this%material(2)%elastic%rho0*1e-8 !this%intSharp_cut
+        minYs(2) = this%material(2)%elastic%rho0/this%material(1)%elastic%rho0*1e-8 !this%intSharp_cut
+
+        !print *, "minYs 1 = ", minYs(1)
+        !print *, "minYs 2 = ", minYs(2)
         umag = u*u + v*v + w*w
 
         do i = 1,this%ns
@@ -1871,15 +1672,18 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                                           this%material(i)%Ji(:,:,:,2), this%material(i)%Ji(:,:,:,3), &
                                           sos, this%material(i)%diff, x_bc, y_bc, z_bc)
             else
+                !this%material(i)%adiff = 0
+                !this%material(i)%rhodiff = 0
+                !this%material(i)%outdiff = 0
                 call gradient(this%decomp,this%der,this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3))
                 call gradient(this%decomp,this%der,this%material(i)%VF,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3))
-                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1), gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2), gradphi(:,:,:,3),minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc, z_bc,detady,dy_stretch)
+                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%outdiff,x_bc,y_bc, z_bc,detady,dy_stretch)
                !call this%LAD%get_diffusivity_Steve(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
             
                 !call this%LAD%get_diffusivity_Ys(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%Ysdiff,x_bc,y_bc,z_bc)
                 this%material(i)%Ysdiff = 0.0
                 !call this%LAD%get_diffusivity_N2F(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff_stagg,this%material(i)%rhodiff_stagg, periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-                 !call this%LAD%get_diffusivity_Aslani(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
+              ! call this%LAD%get_diffusivity_Aslani(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
                 ! call this%LAD%get_diffusivity_Bounds(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%outdiff,x_bc,y_bc,z_bc)
 
 
@@ -2780,7 +2584,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom, Db
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: gradVF_x,gradVF_y, gradVF_z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i,VF_RHS_i, Kij_coeff_i
-        real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-100, intSharp_exp = -1.0D0,gradDiff,md1,md2 !, intSharp_tnh = 0.1
+        real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-32, intSharp_exp = -1.0D0,gradDiff,md1,md2 !, intSharp_tnh = 0.1
 !1.0D-2
         integer :: i,j,ii,jj,kk,iflag = one,im,jm,km,k
         logical :: useTiwari = .FALSE., useRhoYsbound = .FALSE., useTotalRho = .FALSE.
@@ -2827,7 +2631,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
              endwhere
 
-             call gradientFV(this,this%xi,gradXi_FV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+             !all gradientFV(this,this%xi,gradXi_FV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
              !! Psi Grad
              if(this%intSharp_d02) then
@@ -2933,9 +2737,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               endif
 
                !! This is HIGH ORDER
-              call gradFV_N2Fx(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-              call gradFV_N2Fy(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-              call gradFV_N2Fz(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+              call gradFV_N2Fx(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+              call gradFV_N2Fy(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+              call gradFV_N2Fz(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
                  !call
                  !divergenceFV(this,gradFVFV,this%intdiff,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
