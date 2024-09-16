@@ -1,7 +1,8 @@
-module MultiphaseFluid_shock_data
+module MultiphaseAdvection_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,eight,three,six,sixth,zero,four
     use FiltersMod,       only: filters
+    use DerivativesStaggeredMod, only: derivativesStagg
     implicit none
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
@@ -129,7 +130,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use MultiphaseFluid_shock_data
+    use MultiphaseAdvection_data
 
     implicit none
 
@@ -173,7 +174,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz, x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index,rho_index
@@ -183,19 +184,26 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
     use DerivativesMod,   only: derivatives
+    use DerivativesStaggeredMod, only: derivativesStagg
+    use InterpolatorsMod,        only: interpolators
 
-    use MultiphaseFluid_shock_data
+
+    use MultiphaseAdvection_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
     type(decomp_info),               intent(in)    :: decomp
     type(derivatives),               intent(in)    :: der
+    type(derivatives),               intent(in)    :: derStagg
+    type(interpolators),             intent(in)    :: interpMid
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
+    logical :: periodicx,periodicy,periodicz
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, noise, tmpeta,eta
     real(rkind), dimension(8) :: fparams
@@ -380,11 +388,9 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
         !tmp = half * ( one - erf((0.25 - (x-interface_init)*(x-interface_init) - (y-3.0_rkind)*(y-3.0_rkind))/(thick*dx) ) )
         !tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) - (y-0.5)*(y-0.5))/(thick*dx) ) )
-        tmpeta = atanh( 2.0*y / ( 1.0 + 1.0 / STRETCH_RATIO) )
-        Lr =  Ly /( tmpeta(1, ny,1) - tmpeta(1,1,1))
-        eta = tmpeta
 
-        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - x*x -(eta)*(eta))/(thick*dx) ) ) 
+        print *, "tmp"
+        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - x*x -(y)*(y))/(thick*dx) ) ) 
         ! tmp = half * ( one - erf((0.25_rkind**2 - (x-0.5)*(x-0.5)-(y-0.5)*(y-0.5))/(thick*dx) ) )
         ! tmp = half * ( one - erf((0.35**2 - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
 
@@ -455,6 +461,36 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
 end subroutine
 
+subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index,e_index
+    use decomp_2d,        only: decomp_info, nrank
+    use exits,            only: GracefulExit
+    use SolidMixtureMod,  only: solid_mixture
+    use MultiphaseAdvection_data
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(in)    :: dx,dy,dz
+    type(solid_mixture),             intent(inout) :: mix
+    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(inout):: sponge
+    real(rkind), dimension(2), intent(inout) :: rhou, rhov,rhow,rhoe
+    integer :: ioUnit,i,iy
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
+    integer, dimension(2) :: iparams
+    real(rkind) :: a0, a0_2, sigma1, sigma2
+    integer :: nx,ny,nz,k,ix,j
+    integer :: ierr, rank,fh, filesize, chunksize, offset, offset2,totalproc
+    integer, allocatable :: data(:), recvbuf(:)
+
+    sponge = 0.0
+end subroutine
+
+
 subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,eps,half,one,two,pi,four,eight
@@ -466,7 +502,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use operators,        only: curl
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
 
-    use MultiphaseFluid_shock_data
+    use MultiphaseAdvection_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -515,7 +551,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        ! if (decomp%ysz(2) == 1) then
-       !     write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/MultiphaseFluid_shock_"//trim(str)//"_", vizcount, ".dat"
+       !     write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/MultiphaseAdvection_"//trim(str)//"_", vizcount, ".dat"
 
        !     open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
        !     write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rhoRatio
@@ -591,7 +627,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        curl_p = P_MEAN(mix%material(1)%curl_p)*six*one
 
           
-       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/MultiphaseFluid_shock_statistics.dat"
+       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/MultiphaseAdvection_statistics.dat"
 
        if (vizcount == 0) then
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
@@ -730,6 +766,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     end associate
 end subroutine
 
+
 subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one
@@ -738,7 +775,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
-    use MultiphaseFluid_shock_data
+    use MultiphaseAdvection_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -771,37 +808,37 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
         mix%material(1)%g31 = zero; mix%material(1)%g32 = zero; mix%material(1)%g33 = one
 
-       if(decomp%yst(2)==1) then
-          if(y_bc(1)==0) then
-              rho( :,1,:) = 1.0
-              u  ( :,1,:) = 10 !u(:,2,:)
-              v  ( :,1,:) = 0 !v(:,2,:)
-              w  ( :,1,:) = zero
-              mix%material(1)%p(:,1,:) = p_amb
-              mix%material(2)%p(:,1,:) = p_amb
+ !      if(decomp%yst(2)==1) then
+ !         if(y_bc(1)==0) then
+ !             rho( :,1,:) = 1.0
+ !             u  ( :,1,:) = 10 !u(:,2,:)
+ !             v  ( :,1,:) = 0 !v(:,2,:)
+ !             w  ( :,1,:) = zero
+ !             mix%material(1)%p(:,1,:) = p_amb
+ !             mix%material(2)%p(:,1,:) = p_amb
         !
-              mix%material(1)%VF ( :,1,:) = 1.0 - minVF
-              mix%material(2)%VF ( :,1,:) = minVF
-              mix%material(1)%Ys ( :,1,:) = 1.0 - minVF
-              mix%material(2)%Ys ( :,1,:) = minVF
-          end if
-        endif
+ !             mix%material(1)%VF ( :,1,:) = 1.0 - minVF
+ !             mix%material(2)%VF ( :,1,:) = minVF
+ !             mix%material(1)%Ys ( :,1,:) = 1.0 - minVF
+ !             mix%material(2)%Ys ( :,1,:) = minVF
+ !         end if
+ !       endif
 
-      if(decomp%yen(2)==decomp%ysz(2)) then
-          if(y_bc(2)==0) then
-              rho( :,ny,:) = 1.0
-              u  ( :,ny,:) = 10 !u(:,ny-1,:)
-              v  ( :,ny,:) = 0 !v(:,ny-1,:)
-              w  ( :,ny,:) = zero
-              mix%material(1)%p(:,ny,:) = p_amb
-              mix%material(2)%p(:,ny,:) = p_amb
+ !     if(decomp%yen(2)==decomp%ysz(2)) then
+ !         if(y_bc(2)==0) then
+ !             rho( :,ny,:) = 1.0
+ !             u  ( :,ny,:) = 10 !u(:,ny-1,:)
+ !             v  ( :,ny,:) = 0 !v(:,ny-1,:)
+ !             w  ( :,ny,:) = zero
+ !             mix%material(1)%p(:,ny,:) = p_amb
+ !            mix%material(2)%p(:,ny,:) = p_amb
 
-              mix%material(1)%VF ( :,ny,:) = 1.0 - minVF
-              mix%material(2)%VF ( :,ny,:) = minVF
-              mix%material(1)%Ys ( :,ny,:) = 1.0 - minVF
-              mix%material(2)%Ys ( :,ny,:) = minVF
-          end if
-        endif
+ !            mix%material(1)%VF ( :,ny,:) = 1.0 - minVF
+ !            mix%material(2)%VF ( :,ny,:) = minVF
+ !            mix%material(1)%Ys ( :,ny,:) = 1.0 - minVF
+ !            mix%material(2)%Ys ( :,ny,:) = minVF
+ !        end if
+ !      endif
 
          
      xspng = -0.5 + 0.05
@@ -810,42 +847,42 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
      dum = half*(one - tanh( (y-xspng)/(tspng) )) + half*(one+tanh((y - 0.45)/tspng))
 
 
-     do i=1,4
-        tmp = u
-        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        u = u + dum*(tmp - u)
+!    do i=1,4
+!       tmp = u
+!       call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!       u = u + dum*(tmp - u)
 
-        tmp = v
-        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        v = v + dum*(tmp - v)
-       tmp = w
-        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        w = w + dum*(tmp - w)
+!       tmp = v
+!       call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!       v = v + dum*(tmp - v)
+!      tmp = w
+!       call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!       w = w + dum*(tmp - w)
 
-        tmp = e
-        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        e = e + dum*(tmp - e)
+!       tmp = e
+!       call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!       e = e + dum*(tmp - e)
 
-        tmp = rho
-        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        rho = rho + dum*(tmp - rho)
+!       tmp = rho
+!       call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!       rho = rho + dum*(tmp - rho)
 
-        tmp = mix%material(1)%p
-        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+!       tmp = mix%material(1)%p
+!       call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!       mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
 
-        tmp = mix%material(2)%p
-        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+!       tmp = mix%material(2)%p
+!       call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!       mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
 
-        tmp = mix%material(1)%VF
-        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        mix%material(1)%VF = mix%material(1)%VF + dum*(tmp - mix%material(1)%VF)
+!       tmp = mix%material(1)%VF
+!       call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!       mix%material(1)%VF = mix%material(1)%VF + dum*(tmp - mix%material(1)%VF)
 
-        tmp = mix%material(2)%VF
-        call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-        mix%material(2)%VF = mix%material(2)%VF + dum*(tmp - mix%material(2)%VF)
-     end do
+!       tmp = mix%material(2)%VF
+!       call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!       mix%material(2)%VF = mix%material(2)%VF + dum*(tmp - mix%material(2)%VF)
+!    end do
 
     end associate
 end subroutine
@@ -858,7 +895,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use MultiphaseFluid_shock_data
+    use MultiphaseAdvection_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -902,7 +939,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use MultiphaseFluid_shock_data
+    use MultiphaseAdvection_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -928,7 +965,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use MultiphaseFluid_shock_data
+    use MultiphaseAdvection_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -948,7 +985,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use MultiphaseFluid_shock_data
+    use MultiphaseAdvection_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -968,7 +1005,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use MultiphaseFluid_shock_data
+    use MultiphaseAdvection_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -988,7 +1025,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use MultiphaseFluid_shock_data
+    use MultiphaseAdvection_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

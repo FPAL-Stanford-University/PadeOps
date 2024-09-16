@@ -1733,12 +1733,14 @@ contains
 
     subroutine advance_RK45(this)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B
+        use timer,      only: tic, toc
         use exits,      only: message,nancheck,GracefulExit
         use reductions, only: P_MAXVAL, P_MINVAL
         use decomp_2d,  only: nrank
         use operators, only: divergence,gradient
         use constants,               only: pi
         class(sgrid), target, intent(inout) :: this
+
 
         real(rkind)                                               :: Qtmpt      ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: rhs        ! RHS for conserved variables
@@ -1749,6 +1751,7 @@ contains
         integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind) :: Ystime, VFtime, consvTime, intsharp
         character(len=clen) :: charout
 
 
@@ -1815,10 +1818,12 @@ contains
                this%mix%intSharp_hDiff = zero
                this%mix%intSharp_hFV = zero
                this%mix%intSharp_kFV = zero
-
+               
+               call tic()
                call this%mix%get_intSharp_clean2(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
-
-            else      
+               call toc(intSharp)
+               print *, "int sharp time", intSharp
+       else      
                   ! !debug
                   ! if ((isub.eq.one).and.(nrank.eq.0)) print*,"overwriting intSharp"
                    do imat=1,this%mix%ns
@@ -1863,12 +1868,15 @@ contains
 
             ! Update total mixture conserved variables
 
+            call tic()
             if (this%useNC) then
               call this%getRHS_NC(rhs,divu, viscwork)
             else
               call this%getRHS(rhs,divu,viscwork)
             endif
-           !!!!!!!!!!!!!! UNCOMMENT            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            call toc(consvTime)
+            print *, "consv time", consvTime
+            !!!!!!!!!!!!!! UNCOMMENT            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
            Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
            this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
            !!!!!!!!!!!!!!!!!!! UNCOMMENT       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1886,11 +1894,19 @@ contains
             !call this%get_primitive_g()
 
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            call tic()
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)               ! Volume Fraction
+            call toc(Ystime)
+            print *, "Ys time ", Ystime
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
-                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)   
+
+                call tic()    
+                call
+                this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)
+                call toc(VFtime)
+                print *, "VF time ", VFtime
              !  call this%update_P(Qtmpp,isub,this%dt,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
             elseif(this%pRelax) then
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)                        ! Volume Fraction
