@@ -193,6 +193,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
                   & usefringe, usedoublefringe, fringe_x, fringe_x1, fringe_x2)
          
    use kind_parameters, only: clen
+   use exits,           only: message
 
    class(scalar_igrid), intent(inout), target :: this
    type(decomp_info), target, intent(in) :: gpC, gpE
@@ -231,6 +232,17 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    open(unit=123, file=trim(fname), form='FORMATTED', iostat=ierr)
    read(unit=123, NML=SCALAR_INFO)
    close(123)
+
+   call message(0,'namelist SCALAR_INFO inputs:')
+   call message(1,'useSource',useSource)
+   call message(1,'PrandtlNum',PrandtlNum)
+   call message(1,'bc_bottom',bc_bottom)
+   call message(1,'bc_top',bc_top)
+   call message(1,'TurbPrandtlNum',TurbPrandtlNum)
+   call message(1,'Cy',Cy)
+   call message(1,'RejectScalarRestart',RejectScalarRestart)
+   call message(1,'lowbound',lowbound)
+   call message(1,'highbound',highbound)
 
    this%PrandtlNum = PrandtlNum
    this%TurbPrandtlNum = TurbPrandtlNum

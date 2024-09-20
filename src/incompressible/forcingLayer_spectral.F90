@@ -434,6 +434,8 @@ module spectralForcingLayerMod
           wrhs = wrhs + this%ampFact_z*this%fzhat
 
           if (this%isStratified) call this%updateScalarRHS(T,dt,Trhs)
+          ! NOTE: if using passive scalars, "updateScalarRHS()" is
+          ! used in the scalar_igrid.F90 module and so should not be called here
       end subroutine
 
       subroutine updateScalarRHS(this,T,dt,Trhs)
