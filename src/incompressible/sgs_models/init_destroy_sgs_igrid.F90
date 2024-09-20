@@ -227,12 +227,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
   this%DynProcFreq = DynProcFreq
   this%useVerticalTfilter = useVerticalTfilter
   this%kappa_bounding_scheme = kappa_bounding_scheme
-  select case (kappa_bounding_scheme)
-  case (Cook04)
-      this%kappa_bounding_threshhold = kappa_bounding_threshhold/Re/Pr_fluid
-  case default
-      this%kappa_bounding_threshhold = kappa_bounding_threshhold
-  end select
+  this%Pr_fluid = Pr_fluid
+  this%kappa_bounding_threshhold = kappa_bounding_threshhold
   call message(1,'kappa_bounding_threshhold       ',this%kappa_bounding_threshhold)
   
   this%isInviscid = isInviscid
@@ -291,6 +287,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
 
   if (this%isStratified) then
       this%TurbPrandtlNum_PotT = turbPrandtl
+      this%PrandtlNum_PotT = Pr_fluid
   end if
 
   if (DynamicProcedureType .ne. 0) then

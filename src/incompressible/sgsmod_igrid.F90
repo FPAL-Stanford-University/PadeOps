@@ -61,7 +61,7 @@ module sgsmod_igrid
         real(rkind) :: kappa_bounding_threshhold, shrink_scalar_bounds_fact
         integer :: kappa_bounding_scheme = Cook04
 
-        real(rkind) :: Tscale, lowbound_PotT, highbound_PotT, Cy_PotT, TurbPrandtlNum_PotT, lowbound, highbound
+        real(rkind) :: Tscale, lowbound_PotT, highbound_PotT, Cy_PotT, TurbPrandtlNum_PotT, lowbound, highbound, PrandtlNum_PotT
 
         type(gaussian) :: gaussianX, gaussianY, gaussianZ
         
@@ -75,7 +75,7 @@ module sgsmod_igrid
         integer :: botBC_temp = 1
         real(rkind), public :: ustar = 1.d0, InvObLength = 0.d0, PsiM = 0.0d0, uw_surf = 0.0d0, vw_surf = 0.0d0
         real(rkind) :: umn = 1.d0, vmn = 1.d0, uspmn = 1.d0, Tmn = 1.d0!, wTh_surf = 0.d0
-        real(rkind) :: z0, z0t, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr
+        real(rkind) :: z0, z0t, meanfact, ThetaRef, Fr, WallMfactor, Re, Pr, Pr_fluid
         real(rkind), pointer :: Tsurf, wTh_surf
         complex(rkind), dimension(:,:), allocatable :: q3HAT_AtWall
         integer :: WM_matchingIndex, WallFunctionType = 1 
@@ -392,7 +392,7 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
 end subroutine
 
 subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, &
-    TurbPrandtlNum, Cy, lowbound, highbound, q1, q2, q3, q3C, kappaC, kappa_bounding_C)
+    PrandtlNum, TurbPrandtlNum, Cy, lowbound, highbound, q1, q2, q3, q3C, kappaC, kappa_bounding_C)
    class(sgs_igrid), intent(inout), target :: this
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
@@ -400,7 +400,7 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
-   real(rkind), intent(in), optional :: TurbPrandtlNum, Cy, lowbound, highbound
+   real(rkind), intent(in), optional :: PrandtlNum, TurbPrandtlNum, Cy, lowbound, highbound
    real(rkind), dimension(:,:,:), intent(inout), optional :: q1, q2, q3, q3C, kappaC
    real(rkind), dimension(:,:,:), intent(inout), allocatable, optional :: kappa_bounding_C
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
@@ -413,6 +413,7 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    if (present(Cy)) this%Cy = Cy 
    if (present(lowbound)) this%lowbound = lowbound
    if (present(highbound)) this%highbound = highbound
+   if (present(PrandtlNum)) this%Pr_fluid = PrandtlNum 
 
    ! First get qj's 
    call this%getQjSGS(dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
@@ -451,6 +452,7 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    if (present(Cy)) this%Cy = this%Cy_PotT
    if (present(lowbound)) this%lowbound = this%lowbound_PotT
    if (present(highbound)) this%highbound = this%highbound_PotT
+   if (present(PrandtlNum)) this%Pr_fluid = this%PrandtlNum_PotT
 
 end subroutine
 
@@ -523,8 +525,8 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
           this%kappa_bounding_maskC = 0.d0
           this%kappa_bounding_maskE = 0.d0
           if (this%kappa_bounding_scheme == Cook04) then
-              where (this%kappa_boundingC > this%kappa_bounding_threshhold) this%kappa_bounding_maskC = 1.d0
-              where (this%kappa_boundingE > this%kappa_bounding_threshhold) this%kappa_bounding_maskE = 1.d0
+              where (this%kappa_boundingC > this%kappa_bounding_threshhold/this%Pr_fluid/this%Re) this%kappa_bounding_maskC = 1.d0
+              where (this%kappa_boundingE > this%kappa_bounding_threshhold/this%Pr_fluid/this%Re) this%kappa_bounding_maskE = 1.d0
           else
               where (this%eta_boundingC   > this%kappa_bounding_threshhold) this%kappa_bounding_maskC = 1.d0
               where (this%eta_boundingE   > this%kappa_bounding_threshhold) this%kappa_bounding_maskE = 1.d0

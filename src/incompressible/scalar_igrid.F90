@@ -148,9 +148,10 @@ subroutine populateRHS(this, dt, spect_force_layer)
 
    if (this%useSGS) then
       call this%sgsmodel%getRHS_SGS_Scalar(this%rhs, this%dFdxC, this%dFdyC, this%dFdzC, this%dFdzE, &
-         this%u, this%v, this%wC, this%F, this%Fhat, this%duidxj, this%TurbPrandtlNum, this%Cy, &
-         this%lowbound, this%highbound, q1 = this%q1, q2 = this%q2, q3 = this%q3, q3C = this%q3C,&
-         kappaC = this%kappaSGS, kappa_bounding_C = this%kappa_bounding)
+         this%u, this%v, this%wC, this%F, this%Fhat, this%duidxj, &
+         PrandtlNum=this%PrandtlNum, TurbPrandtlNum=this%TurbPrandtlNum, Cy=this%Cy, &
+         lowbound=this%lowbound, highbound=this%highbound, q1=this%q1, q2=this%q2, q3=this%q3, q3C=this%q3C,&
+         kappaC=this%kappaSGS, kappa_bounding_C=this%kappa_bounding)
    end if
 
    if (.not. this%isinviscid) then
