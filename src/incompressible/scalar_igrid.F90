@@ -28,7 +28,7 @@ module scalar_igridMod
 
       real(rkind), dimension(:,:,:), allocatable, public :: d2Fdz2, dFdxC, dFdyC, dFdzC
       real(rkind), dimension(:,:,:), allocatable :: dfdzE
-      real(rkind), dimension(:,:,:), allocatable, public :: q1, q2, q3, q3C
+      real(rkind), dimension(:,:,:), allocatable, public :: q1, q2, q3, q3C, kappaSGS, kappa_bounding
       
       complex(rkind), dimension(:,:,:), allocatable, public :: source_hat
 
@@ -149,7 +149,8 @@ subroutine populateRHS(this, dt, spect_force_layer)
    if (this%useSGS) then
       call this%sgsmodel%getRHS_SGS_Scalar(this%rhs, this%dFdxC, this%dFdyC, this%dFdzC, this%dFdzE, &
          this%u, this%v, this%wC, this%F, this%Fhat, this%duidxj, this%TurbPrandtlNum, this%Cy, &
-         this%lowbound, this%highbound, this%q1, this%q2, this%q3, this%q3C)
+         this%lowbound, this%highbound, q1 = this%q1, q2 = this%q2, q3 = this%q3, q3C = this%q3C,&
+         kappaC = this%kappaSGS, kappa_bounding_C = this%kappa_bounding)
    end if
 
    if (.not. this%isinviscid) then
@@ -182,6 +183,12 @@ subroutine destroy(this)
 
    if (allocated(this%source_hat)) deallocate(this%source_hat)
    if (allocated(this%d2Fdz2)) deallocate(this%d2Fdz2)
+   if (allocated(this%q1)) deallocate(this%q1)
+   if (allocated(this%q2)) deallocate(this%q2)
+   if (allocated(this%q3)) deallocate(this%q3)
+   if (allocated(this%q3C)) deallocate(this%q3C)
+   if (allocated(this%kappaSGS)) deallocate(this%kappaSGS)
+   if (allocated(this%kappa_bounding)) deallocate(this%kappa_bounding)
 
 end subroutine
 
@@ -316,6 +323,8 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    allocate(this%q2(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    allocate(this%q3C(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    allocate(this%q3(gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+   allocate(this%kappaSGS(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   !if (this%sgsmodel%useScalarBounding) allocate(this%kappa_bounding(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
   
    allocate(this%Sfields(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),4))
    allocate(this%rhs_storage(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3),2))
@@ -439,10 +448,11 @@ subroutine dump_planes(this, tid, pid, dirid, dirlabel)
 
 end subroutine
 
-subroutine dumpScalarField(this, tid)!, viz_hdf5 )
+subroutine dumpScalarField(this, tid, dump_kappaSGS)!, viz_hdf5 )
    use decomp_2d_io
    class(scalar_igrid), intent(in) :: this
    integer, intent(in) :: tid
+   logical, intent(in) :: dump_kappaSGS
    character(len=clen) :: tempname, fname
    !type(io_hdf5), intent(inout), optional :: viz_hdf5
    character(len=4) :: scalar_label
@@ -454,6 +464,16 @@ subroutine dumpScalarField(this, tid)!, viz_hdf5 )
       write(tempname,"(A3,I2.2,A3,I2.2,A2,I6.6,A4)") "Run", this%RunID, "_sc",this%scalar_number,"_t",tid,".out" 
       fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
       call decomp_2d_write_one(1,this%F,fname, this%gpC)
+      if (dump_kappaSGS) then
+          write(tempname,"(A3,I2.2,A5,I2.2,A2,I6.6,A4)") "Run", this%RunID, "_kSGS",this%scalar_number,"_t",tid,".out" 
+          fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
+          call decomp_2d_write_one(1,this%kappaSGS,fname, this%gpC)
+          if (allocated(this%kappa_bounding)) then
+              write(tempname,"(A3,I2.2,A5,I2.2,A2,I6.6,A4)") "Run", this%RunID, "_kBND",this%scalar_number,"_t",tid,".out" 
+              fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
+              call decomp_2d_write_one(1,this%kappa_bounding,fname, this%gpC)
+          end if
+      end if
   ! end if 
 
 end subroutine

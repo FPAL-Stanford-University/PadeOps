@@ -829,7 +829,7 @@
      if ((this%usescalars) .and. allocated(this%scalars)) then
         do idx = 1,this%n_scalars
            if (this%ioType == 0) then
-              call this%scalars(idx)%dumpScalarField(this%step)
+              call this%scalars(idx)%dumpScalarField(this%step,this%dump_KAPPA_SGS)
            else
               !call this%scalars(idx)%dumpScalarField(this%step, this%viz_hdf5)
            end if 

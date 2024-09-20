@@ -391,7 +391,8 @@ subroutine getRHS_SGS(this, urhs, vrhs, wrhs, duidxjC, duidxjE, uhatC, vhatC, wh
 
 end subroutine
 
-subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, TurbPrandtlNum, Cy, lowbound, highbound, q1, q2, q3, q3C)
+subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC, &
+    TurbPrandtlNum, Cy, lowbound, highbound, q1, q2, q3, q3C, kappaC, kappa_bounding_C)
    class(sgs_igrid), intent(inout), target :: this
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(inout) :: Trhs
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: dTdxC, dTdyC, dTdzC
@@ -400,7 +401,8 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
    complex(rkind), dimension(:,:,:), pointer :: cbuffy1, cbuffy2, cbuffz1, cbuffz2
    real(rkind), intent(in), optional :: TurbPrandtlNum, Cy, lowbound, highbound
-   real(rkind), dimension(:,:,:), intent(inout), optional :: q1, q2, q3, q3C
+   real(rkind), dimension(:,:,:), intent(inout), optional :: q1, q2, q3, q3C, kappaC
+   real(rkind), dimension(:,:,:), intent(inout), allocatable, optional :: kappa_bounding_C
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
 
    cbuffy1 => this%cbuffyC(:,:,:,1); cbuffy2 => this%cbuffyE(:,:,:,1); 
@@ -420,6 +422,12 @@ subroutine getRHS_SGS_Scalar(this, Trhs, dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T,
        q2  = this%q2C
        q3  = this%q3E
        q3C = this%q3C
+   end if
+   if (present(kappaC)) kappaC = this%kappa_sgs_C
+   if (present(kappa_bounding_C) .and. this%useScalarBounding) then
+       if (.not. allocated(kappa_bounding_C)) allocate(kappa_bounding_C(&
+         this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+       kappa_bounding_C = this%kappa_boundingC
    end if
 
    ! ddx(q1)
