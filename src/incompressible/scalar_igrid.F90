@@ -424,14 +424,13 @@ subroutine dumpRestart(this, tid)
 
    write(tempname,"(A7,A4,I2.2,A7,I2.2,A1,I6.6)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".",tid
    fname = this%OutputDataDir(:len_trim(this%OutputDataDir))//"/"//trim(tempname)
+   call message(0,"Dumping restart for scalar number", this%scalar_number)
+   call decomp_2d_write_one(1,this%F,fname, this%gpC)
    if (nrank == 0) then
        ! Link "LATEST" restart file to the recently dumped file
        write(tempname,"(A7,A4,I2.2,A7,I2.2,A7)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".LATEST"
        call execute_command_line('ln -s '//trim(fname)//' '//trim(this%outputdatadir)//'/'//trim(tempname))
    end if
-
-   call message(0,"Dumping restart for scalar number", this%scalar_number)
-   call decomp_2d_write_one(1,this%F,fname, this%gpC)
 
 end subroutine 
 
