@@ -2617,8 +2617,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
             
             do i = 1,this%ns
              !! gradVF derivatives
-             call gradient(this%decomp,this%derD02,this%material(i)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3))
-             call gradient(this%decomp,this%derD06,this%material(i)%VF,gradVFdiff(:,:,:,1),gradVFdiff(:,:,:,2),gradVFdiff(:,:,:,3))
+        !     call gradient(this%decomp,this%derD02,this%material(i)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3))
+        !     call gradient(this%decomp,this%derD06,this%material(i)%VF,gradVFdiff(:,:,:,1),gradVFdiff(:,:,:,2),gradVFdiff(:,:,:,3))
 
              !! Construct Psi
              where( this%material(i)%VF .GE. 1-this%intSharp_cut)
@@ -2676,10 +2676,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               call interpolateFV(this,w,wFVint,periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
               call interpolateFV(this,rho,rhoFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-              call interpolateFV_6(this,u,uFVint_6,periodicx,periodicy,periodicz,-this%x_bc,this%y_bc,this%z_bc)
-              call interpolateFV_6(this,v,vFVint_6,periodicx,periodicy,periodicz,this%x_bc,-this%y_bc,this%z_bc)
-              call interpolateFV_6(this,w,wFVint_6,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,-this%z_bc)
-              call interpolateFV_6(this,rho,rhoFVint_6,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+         !     call interpolateFV_6(this,u,uFVint_6,periodicx,periodicy,periodicz,-this%x_bc,this%y_bc,this%z_bc)
+         !     call interpolateFV_6(this,v,vFVint_6,periodicx,periodicy,periodicz,this%x_bc,-this%y_bc,this%z_bc)
+         !     call interpolateFV_6(this,w,wFVint_6,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,-this%z_bc)
+         !     call interpolateFV_6(this,rho,rhoFVint_6,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
               if(useRhoLocal) then !use local component density --- recommended
                  call interpolateFV(this,rhoi(:,:,:,i),rhoiFVint(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -2688,41 +2688,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               endif
 
               call interpolateFV(this,rhoi(:,:,:,i),rhoiFVint_local(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              if(this%intSharp_d02) then !which FD VF gradient to interpolate
-                 !not used
-                 !TODO: make sure these BCS for gradVF are correct
-                 call interpolateFV(this,gradVF(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
-                 call interpolateFV(this,gradVF(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
-                 call interpolateFV(this,gradVF(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
 
-              else
-                 !used in high order version
-                 !TODO: make sure these BCS for gradVF are correct
-
-
-                 call interpolateFV_6(this,gradVFdiff(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
-                 call interpolateFV_6(this,gradVFdiff(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
-                 call interpolateFV_6(this,gradVFdiff(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
-              endif
-
-
-              this%normFV(:,:,:,1) = NMint(:,:,:,1,1)
-              this%normFV(:,:,:,2) = NMint(:,:,:,2,2)
-              this%normFV(:,:,:,3) = NMint(:,:,:,3,3)
-
-              !calculate antiDiffFVint term
-              antiDiffFVint(:,:,:,1,i) = -this%intSharp_gam * (VFint(:,:,:,1)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,1))*NMint(:,:,:,1,1)
-              antiDiffFVint(:,:,:,2,i) = -this%intSharp_gam * (VFint(:,:,:,2)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,2))*NMint(:,:,:,2,2)
-              antiDiffFVint(:,:,:,3,i) = -this%intSharp_gam * (VFint(:,:,:,3)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,3))*NMint(:,:,:,3,3)
-              this%antidiff = antiDiffFVint(:,:,:,1,i)
-
-
-!              call filter3D(this%decomp, this%fil, antiDiffFVint(:,:,:,1, i),
-!              iflag, x_bc,y_bc,z_bc)
-!              call filter3D(this%decomp, this%fil, antiDiffFVint(:,:,:,2, i),
-!              iflag, x_bc,y_bc,z_bc)
-!              call filter3D(this%decomp, this%fil, antiDiffFVint(:,:,:,3, i),
-!              iflag, x_bc,y_bc,z_bc)
 
 
               if (this%usePhiForm) then
@@ -2734,9 +2700,35 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                  call divergenceFV(this,antiDiffFVint(:,:,:,:,i),this%antidiff,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-              endif
+              else   
 
-               !! This is HIGH ORDER
+                 if(this%intSharp_d02) then !which FD VF gradient to interpolate
+                 !not used
+                 !TODO: make sure these BCS for gradVF are correct
+                   call interpolateFV(this,gradVF(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
+                   call interpolateFV(this,gradVF(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
+                   call interpolateFV(this,gradVF(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
+
+                 else
+                 !used in high order version
+                 !TODO: make sure these BCS for gradVF are correct
+
+
+                   call interpolateFV_6(this,gradVFdiff(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
+                   call interpolateFV_6(this,gradVFdiff(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
+                   call interpolateFV_6(this,gradVFdiff(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
+                 endif
+  
+
+                 !calculate antiDiffFVint term
+                  antiDiffFVint(:,:,:,1,i) = -this%intSharp_gam * (VFint(:,:,:,1)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,1))*NMint(:,:,:,1,1)
+                  antiDiffFVint(:,:,:,2,i) = -this%intSharp_gam * (VFint(:,:,:,2)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,2))*NMint(:,:,:,2,2)
+                  antiDiffFVint(:,:,:,3,i) = -this%intSharp_gam * (VFint(:,:,:,3)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,3))*NMint(:,:,:,3,3)
+                  this%antidiff = antiDiffFVint(:,:,:,1,i)
+
+               endif
+
+                !! This is HIGH ORDER
               call gradFV_N2Fx(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
               call gradFV_N2Fy(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
               call gradFV_N2Fz(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -2774,37 +2766,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  enddo
               endif
 
-              Db = maxval(1 - this%material(i)%VF / (this%intSharp_cut)**(0.5) )
-              call filter3D(this%decomp,this%gfil,Db,iflag,x_bc, y_bc,z_bc)
-              call interpolateFV_6(this,Db,Db_int,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,-this%z_bc)             
-              intDiff(:,:,:,:,i) = 0
- 
-              if(this%intSharp_msk) then
-                where(VFint(:,:,:,1).gt.this%intSharp_cut)
-                   Db_int(:,:,:,1) = zero
-                elsewhere(VFint(:,:,:,1).lt.one-this%intSharp_cut)
-                   Db_int(:,:,:,1) = zero
-                endwhere
-                where(VFint(:,:,:,2).gt.this%intSharp_cut)
-                   Db_int(:,:,:,2)  = zero
-                elsewhere(VFint(:,:,:,2).lt.one-this%intSharp_cut)
-                   Db_int(:,:,:,2) = zero
-                endwhere
-                where(VFint(:,:,:,3).gt.this%intSharp_cut)
-                   Db_int(:,:,:,3) = zero
-                elsewhere(VFint(:,:,:,3).lt.one-this%intSharp_cut)
-                   Db_int(:,:,:,3) = zero
-                endwhere
-
-                intDiff(:,:,:,:,i) = this%intSharp_eps*this%intSharp_dif*Db_int*gradFV_N2F
-
-             endif
               
               !compute divergence and calculate RHS terms
               call divergenceFV(this,antiDiffFVint(:,:,:,:,i),this%material(i)%intSharp_aFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
               call divergenceFV(this,rhoiFVint(:,:,:,:,i)*antiDiffFVint(:,:,:,:,i),this%material(i)%intSharp_RFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call divergenceFV_6(this,intDiff(:,:,:,:,i),this%material(i)%intSharp_aDiffFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call divergenceFV_6(this,rhoiFVint_6(:,:,:,:,i)*intDiff(:,:,:,:,i),this%material(i)%intSharp_RDiffFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
             enddo
           
@@ -2814,16 +2779,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               do i = 1,this%ns
                  !FV term
                  fv_f = fv_f +rhoiFVint(:,:,:,:,i)*antiDiffFVint(:,:,:,:,i)
-                 uDiff = uDiff + rhoiFVint_6(:,:,:,:,i)*intDiff(:,:,:,:,i)
               enddo
 
               call divergenceFV(this,fv_f*uFVint,this%intSharp_fFV(:,:,:,1),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
               call divergenceFV(this,fv_f*vFVint,this%intSharp_fFV(:,:,:,2),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
               call divergenceFV(this,fv_f*wFVint,this%intSharp_fFV(:,:,:,3),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
              
-              call divergenceFV_6(this,uDiff*uFVint_6,this%intSharp_fDiffFV(:,:,:,1),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call divergenceFV_6(this,uDiff*vFVint_6,this%intSharp_fDiffFV(:,:,:,2),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call divergenceFV_6(this,uDiff*wFVint_6,this%intSharp_fDiffFV(:,:,:,3),dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
  
                do i = 1,this%ns
                     if(this%PTeqb) then
@@ -2837,15 +2798,11 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                        call interpolateFV(this,this%material(i)%p,pFVint(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
                        hiFVint(:,:,:,:,i) = (this%material(i)%hydro%gam*pFVint(:,:,:,:,i) + this%material(i)%hydro%gam*this%material(i)%hydro%PInf)*this%material(i)%hydro%onebygam_m1
-                       call interpolateFV_6(this,this%material(i)%p,pFVint_6(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-                       hiFVint_6(:,:,:,:,i) = (this%material(i)%hydro%gam*pFVint_6(:,:,:,:,i) + this%material(i)%hydro%gam*this%material(i)%hydro%PInf)*this%material(i)%hydro%onebygam_m1
 
               enddo
              
               fv_h = zero
               fv_k = zero
-              kDiff = zero
-              hDiff = zero
               do i=1,this%ns
 
                  if(this%PTeqb) then
@@ -2854,16 +2811,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  else
                    fv_h = fv_h + antiDiffFVint(:,:,:,:,i)*(hiFVint(:,:,:,:,i))
                    fv_k = fv_k + antiDiffFVint(:,:,:,:,i)*rhoiFVint(:,:,:,:,i)*half*(uFVint**two+vFVint**two+wFVint**two)
-                   hDiff = hDiff + intDiff(:,:,:,:,i)*hiFVint_6(:,:,:,:,i)
-                   kDiff = kDiff + intDiff(:,:,:,:,i)*half*(uFVint_6**two+vFVint_6**two+wFVint_6**two)
                  endif
               enddo
 
               call divergenceFV(this,fv_h,this%intSharp_hFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
               call divergenceFV(this,fv_k,this%intSharp_kFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
               
-              call divergenceFV_6(this,hDiff,this%intSharp_hDiffFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call divergenceFV_6(this,kDiff,this%intSharp_kDiffFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
     end subroutine
     subroutine get_intSharp(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
