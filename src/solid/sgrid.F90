@@ -1819,10 +1819,7 @@ contains
                this%mix%intSharp_hFV = zero
                this%mix%intSharp_kFV = zero
                
-               call tic()
                call this%mix%get_intSharp_clean2(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
-               call toc(intSharp)
-               print *, "int sharp time", intSharp
        else      
                   ! !debug
                   ! if ((isub.eq.one).and.(nrank.eq.0)) print*,"overwriting intSharp"
@@ -1868,14 +1865,11 @@ contains
 
             ! Update total mixture conserved variables
 
-            call tic()
             if (this%useNC) then
               call this%getRHS_NC(rhs,divu, viscwork)
             else
               call this%getRHS(rhs,divu,viscwork)
             endif
-            call toc(consvTime)
-            print *, "consv time", consvTime
             !!!!!!!!!!!!!! UNCOMMENT            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
            Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
            this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
@@ -1894,19 +1888,12 @@ contains
             !call this%get_primitive_g()
 
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            call tic()
             call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)               ! Volume Fraction
-            call toc(Ystime)
-            print *, "Ys time ", Ystime
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             !if (.NOT. this%PTeqb) then
             if(this%pEqb) then
 
-                call tic()    
-                call
-                this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)
-                call toc(VFtime)
-                print *, "VF time ", VFtime
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)
              !  call this%update_P(Qtmpp,isub,this%dt,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
             elseif(this%pRelax) then
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge)                        ! Volume Fraction
@@ -3424,9 +3411,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call interpolateFV_x(this%decomp,this%interpMid,this%w,w_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_x(this%decomp,this%interpMid,this%p,p_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_x(this%decomp,this%interpMid,this%rho,rho_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_x(this%decomp,this%interpMid,this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_x(this%decomp,this%interpMid,qx,qx_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_x(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       ! call interpolateFV_x(this%decomp,this%interpMid,this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       ! call interpolateFV_x(this%decomp,this%interpMid,qx,qx_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       ! call interpolateFV_x(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         tauRho_mid = 0.0
         rhoe_prim = p_int
         num = 0
@@ -3442,29 +3429,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         rhoe_prim = p_int*num + gam
 
-        !rho_int = 0.0
-        !num = 0.0; den = 0.0;
-!        call interpolateFV_x(this%decomp,this%interpMid,this%mix%material(1)%VF,VF_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        VF_int(:,:,:,2) = 1 - VF_int(:,:,:,1)
-
-        !do i = 1,2
-
-        !  call interpolateFV_x(this%decomp,this%interpMid,this%rho*this%mix%material(i)%Ys,rhoYs_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  call interpolateFV_x(this%decomp,this%interpMid,this%mix%material(i)%VF,VF_int(:,:,:,i),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  rho_int = rho_int + rhoYs_int
-        !  num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf*this%mix%material(i)%hydro%onebygam_m1
-        !  den = den + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
-        !enddo
-
-        !e_int = (1/rho_int)*(p_int*den + num)
-
         flux = 0.0
         buff = rho_int*u_int*u_int + p_int - tauxx !x-momentum
-        !buff = rhou_int*u_int + p_int - tauxx_int
-!print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
-        !if(this%use_CnsrvSurfaceTension) then
 
-        !    buff = buff - this%mix%surfaceTension_fxx
 
         !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3473,10 +3440,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         flux =0.0
         buff = rho_int*u_int*v_int  - tauxy !y-momentum
-        !buff = rhov_int*u_int - tauxy_int
-        !if(this%use_CnsrvSurfaceTension) then
 
-        !    buff = buff - this%mix%surfaceTension_fxy_x
 
         !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3484,9 +3448,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         this%xflux_y = flux
 
         buff = rho_int*u_int*w_int - tauxz !z-momentum
-        !if(this%use_CnsrvSurfaceTension) then
 
-        !    buff = buff - this%mix%surfaceTension_fxz_x
 
         !endif
         !buff = rhow_int*u_int - tauxz_int
@@ -3498,23 +3460,11 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         TE = rhoe_prim + rho_int*half*(u_int*u_int + v_int*v_int + w_int*w_int) 
         !TE = rhoe_int + half*rho_int*(u_int*u_int + v_int*v_int + w_int*w_int)
         buff = ( TE + p_int - tauxx )*u_int - v_int*tauxy - w_int*tauxz ! + qx !+ tauRho_mid
-        !buff = ( TE + p_int )*u_int ! qx_int - v_int*tauxy_int - w_int*tauxz_int
-
-        !if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff + this%mix%surfaceTension_pe_x*u_int -this%mix%surfaceTension_fxx*u_int - this%mix%surfaceTension_fxy_x*v_int - this%mix%surfaceTension_fxz_x*w_int
 
         !endif       
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
         this%xflux_e = flux
-
-        this%rho_int = rho_int
-        this%u_int = u_int
-        this%v_int = v_int
-        this%w_int = w_int
-        this%e_int     = e_int
-        this%p_int     = p_int
 
     end subroutine
 
@@ -3537,9 +3487,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call interpolateFV_y(this%decomp,this%interpMid,this%w,w_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_y(this%decomp,this%interpMid,this%p,p_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_y(this%decomp,this%interpMid,this%rho,rho_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_y(this%decomp,this%interpMid,this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_y(this%decomp,this%interpMid,qy,qy_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_y(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        !call interpolateFV_y(this%decomp,this%interpMid,this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        !call interpolateFV_y(this%decomp,this%interpMid,qy,qy_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        !call interpolateFV_y(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
        
         rhoe_prim = p_int
 
@@ -3566,10 +3516,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         flux = 0.0
         buff = rho_int*v_int*v_int + p_int   - tauyy !+ rho_int*g !y-momentum
-        !buff = rhov_int*v_int + p_int - tauyy_int
-        !if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff - this%mix%surfaceTension_fyy
 
         !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3578,10 +3524,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         flux = 0.0
         buff = rho_int*v_int*w_int   - tauyz !z-momentum
-        !buff = rhow_int*w_int -tauyz_int
-        !        if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff - this%mix%surfaceTension_fxy_y
 
         !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3592,11 +3534,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         TE = rhoe_prim + rho_int*half*(u_int*u_int + v_int*v_int + w_int*w_int) 
         !TE = rhoe_int + half*(rhou_int*u_int + v_int*rhov_int + w_int*rhow_int)
         buff = ( TE + p_int - tauyy )*v_int  - u_int*tauxy -w_int*tauyz ! + qy !+! v_int*rho_int*g
-        !buff = ( TE + p_int  )*v_int 
-
-        ! if(this%use_CnsrvSurfaceTension) then
-
-        !    buff = buff + this%mix%surfaceTension_pe_y*v_int - this%mix%surfaceTension_fxy_y*u_int - this%mix%surfaceTension_fyy*v_int - this%mix%surfaceTension_fyz_y*w_int
 
         !endif
 
@@ -3604,12 +3541,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
         this%yflux_e = flux
 
-        !this%rho_int = rho_int
-        !this%u_int = u_int
-        this%v_int = v_int
-        !this%w_int = w_int
-        !this%e_int     = e_int
-        !this%p_int     = p_int
 
     end subroutine
 
@@ -3621,7 +3552,8 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) ::tauxz,tauyz,tauzz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff,flux,TE,u_int,v_int, w_int, p_int, tauxz_int, tauzz_int, tauyz_int, qz_int,e_int,rho_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int, spe_int, rhoYs_int, VF_int, den, num
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int, spe_int, rhoYs_int, den, num,gam,rhoe_prim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         integer :: i
 
@@ -3630,57 +3562,41 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call interpolateFV_z(this%decomp,this%interpMid,this%w,w_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_z(this%decomp,this%interpMid,this%p,p_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_z(this%decomp,this%interpMid,this%rho,rho_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_z(this%decomp,this%interpMid,this%e*this%rho,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_z(this%decomp,this%interpMid,this%mix%surfaceTension_pe,spe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV_z(this%decomp,this%interpMid,qz,qz_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        
-        !rho_int = 0.0
-        !num = 0.0; den = 0.0;
-        !do i = 1,2
+      !  call interpolateFV_z(this%decomp,this%interpMid,this%e*this%rho,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      !  call interpolateFV_z(this%decomp,this%interpMid,this%mix%surfaceTension_pe,spe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      !  call interpolateFV_z(this%decomp,this%interpMid,qz,qz_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       
+        num = 0
+        gam = 0
+        do i = 1,2
 
-        !  call interpolateFV_z(this%decomp,this%interpMid,this%rho*this%mix%material(i)%Ys,rhoYs_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  call interpolateFV_z(this%decomp,this%interpMid,this%mix%material(i)%VF,VF_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !  rho_int = rho_int + rhoYs_int
-        !  num = num + VF_int*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf*this%mix%material(i)%hydro%onebygam_m1
-        !  den = den + VF_int*this%mix%material(i)%hydro%onebygam_m1
-        !enddo
+           call interpolateFV_z(this%decomp,this%interpMid,this%mix%material(i)%VF,VF_int(:,:,:,i),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+           num =num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
+           gam = gam + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%PInf*this%mix%material(i)%hydro%gam
 
-        !e_int = (1/rho_int)*(p_int*den + num)
+
+        enddo
+
+        rhoe_prim = p_int*num + gam
+
 
         flux  = 0
         buff  = 0
         buff = rho_int*w_int*u_int  - tauxz !x-momentum
         !buff = rhou_int*w_int -tauxz_int
-        if(this%use_CnsrvSurfaceTension) then
-
-            buff = buff - this%mix%surfaceTension_fxz_z
-
-        endif
-!print *, 'flux 1', flux(89,1,1), this%u(89,1,1), this%p(89,1,1), tauxx(89,1,1)
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%zflux_x = flux 
 
         flux = 0.0
         buff = rho_int*w_int*v_int   - tauyz !y-momentum
-        !buff = rhov_int*w_int - tauyz_int
-        if(this%use_CnsrvSurfaceTension) then
 
-            buff = buff - this%mix%surfaceTension_fyz_z
-
-        endif
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%zflux_y = flux
 
         flux = 0.0
         buff = rho_int*w_int*w_int + p_int   - tauzz !z-momentum
-        !buff = rhow_int*w_int + p_int -tauzz_int
-        if(this%use_CnsrvSurfaceTension) then
-
-            buff = buff - this%mix%surfaceTension_fzz
-
-        endif
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
@@ -3690,12 +3606,8 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         TE = rhoe_int + rho_int*half*(u_int*u_int + v_int*v_int + w_int*w_int) 
 
         buff = ( TE + p_int - tauzz )*w_int - u_int*tauxz-v_int*tauyz + qz
-        !buff = ( TE + p_int )*w_int 
-        if(this%use_CnsrvSurfaceTension) then
+        !buff = ( TE + p_int )*w_int
 
-            buff = buff + this%mix%surfaceTension_pe_z*w_int - this%mix%surfaceTension_fxz_z*u_int - this%mix%surfaceTension_fyz_z*v_int - this%mix%surfaceTension_fzz*w_int
-
-        endif
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
         this%zflux_e = flux
