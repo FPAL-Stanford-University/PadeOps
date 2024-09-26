@@ -4850,9 +4850,9 @@ contains
 
            call interpolateFV_z(this%decomp,this%interpMid,w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           call interpolateFV(this%decomp,this%interpMid,this%Ys,Ys_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          ! call interpolateFV(this%decomp,this%interpMid,this%Ys,Ys_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          ! call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
            call interpolateFV(this%decomp, this%interpMid,rho*this%Ys,rhoYs_int,periodicx, periodicy, periodicz, x_bc, y_bc, z_bc)
            !call divergenceFV(this%decomp,this%derStagg,-u_int*rho_int(:,:,:,1)*Ys_int(:,:,:,1),-v_int*rho_int(:,:,:,2)*Ys_int(:,:,:,2),-w_int*rho_int(:,:,:,3)*Ys_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -4938,8 +4938,8 @@ contains
            call interpolateFV_x(this%decomp,this%interpMid,u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV_y(this%decomp,this%interpMid,v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV_z(this%decomp,this%interpMid,w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV(this%decomp,this%interpMid,this%Ys,Ys_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          ! call interpolateFV(this%decomp,this%interpMid,this%Ys,Ys_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          ! call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,rhoYs_int,periodicx, periodicy, periodicz, x_bc, y_bc,z_bc)
            !call divergenceFV(this%decomp,this%derStagg,-u_int*rho_int(:,:,:,1)*Ys_int(:,:,:,1),-v_int*rho_int(:,:,:,2)*Ys_int(:,:,:,2),-w_int*rho_int(:,:,:,3)*Ys_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
@@ -5262,9 +5262,9 @@ contains
          call divergenceFV(this%decomp,this%derStagg,u_int,v_int,w_int,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call divergenceFV(this%decomp,this%derStagg,-u_int*VF_int(:,:,:,1),-v_int*VF_int(:,:,:,2),-w_int*VF_int(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-         call divergence(this%decomp,this%der,this%intSharp_aDiff(:,:,:,1),this%intSharp_aDiff(:,:,:,2),this%intSharp_aDiff(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc)
+    !    call divergence(this%decomp,this%der,this%intSharp_aDiff(:,:,:,1),this%intSharp_aDiff(:,:,:,2),this%intSharp_aDiff(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc)
 
-          rhsVF = tmp + this%VF*div_u + div_uVF + this%intSharp_aFV + this%vfLAD + this%intSharp_aDiffFV
+          rhsVF = this%VF*div_u + div_uVF + this%intSharp_aFV + this%vfLAD ! + this%intSharp_aDiffFV
           this%VF_int =VF_int
       endif
 
