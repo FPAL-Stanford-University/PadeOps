@@ -430,6 +430,7 @@ subroutine dumpRestart(this, tid)
        ! Link "LATEST" restart file to the recently dumped file
        write(tempname,"(A7,A4,I2.2,A7,I2.2,A7)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".LATEST"
        call execute_command_line('ln -s '//trim(fname)//' '//trim(this%outputdatadir)//'/'//trim(tempname))
+       print*, "Linked the resetart file for SCALAR",this%scalar_number
    end if
 
 end subroutine 
