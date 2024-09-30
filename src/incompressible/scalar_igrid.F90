@@ -55,6 +55,10 @@ module scalar_igridMod
       type(sgs_igrid), pointer, public :: sgsmodel
       logical :: useSource, isinviscid, useSGS, usefringe, usedoublefringe
 
+      ! If using active scalars
+      logical :: isActive
+      real(rkind) :: buoyancyFact
+
       real(rkind) :: lowbound, highbound 
       contains
          procedure :: init
@@ -70,9 +74,10 @@ module scalar_igridMod
          procedure :: readRestart
          procedure :: dump_planes
          procedure :: dumpScalarField
+         procedure :: amIactive
+         procedure :: get_buoyancyFact
    end type 
 contains
-
 
 subroutine dealias(this)
    class(scalar_igrid), intent(inout) :: this
@@ -226,9 +231,12 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    integer ::  bc_bottom = 1, bc_top = 1 
    character(len=clen) :: tempname, fname
    real(rkind) :: lowbound = 0.d0, highbound = 1.d0
+   logical :: isActive = .false.
+   real(rkind) :: buoyancyFact = 0.d0
 
 
-   namelist /SCALAR_INFO/ useSource, PrandtlNum, bc_bottom, bc_top,TurbPrandtlNum, Cy, RejectScalarRestart, lowbound, highbound
+   namelist /SCALAR_INFO/ useSource, PrandtlNum, bc_bottom, bc_top,TurbPrandtlNum, Cy, RejectScalarRestart, lowbound, highbound,&
+     isActive, buoyancyFact
 
    
    this%InputDataDir = InputDataDir
@@ -251,6 +259,8 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    call message(1,'RejectScalarRestart',RejectScalarRestart)
    call message(1,'lowbound',lowbound)
    call message(1,'highbound',highbound)
+   call message(1,'isActive',isActive)
+   call message(1,'buoyancyFact',buoyancyFact)
 
    this%PrandtlNum = PrandtlNum
    this%TurbPrandtlNum = TurbPrandtlNum
@@ -269,6 +279,8 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%usefringe = usefringe
    this%usedoublefringe = usedoublefringe
 
+   this%isActive = isActive
+   this%buoyancyFact = buoyancyFact
 
    this%fringe_x => fringe_x
    this%fringe_x1 => fringe_x1
@@ -477,5 +489,17 @@ subroutine dumpScalarField(this, tid, dump_kappaSGS)!, viz_hdf5 )
   ! end if 
 
 end subroutine
+
+function amIactive(this) result(isActive)
+    class(scalar_igrid), intent(in) :: this
+    logical :: isActive
+    isActive = this%isActive
+end function
+
+function get_buoyancyFact(this) result(buoyancyFact)
+    class(scalar_igrid), intent(in) :: this
+    real(rkind) :: buoyancyFact
+    buoyancyFact = this%buoyancyFact
+end function
 
 end module 

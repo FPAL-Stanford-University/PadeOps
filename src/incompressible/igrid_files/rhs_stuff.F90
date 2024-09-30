@@ -469,7 +469,7 @@
        real(rkind), dimension(:,:,:), pointer :: rbuffE
        complex(rkind), dimension(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2), this%sp_gpE%ysz(3)), intent(inout) :: wrhs
        complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2), this%sp_gpC%ysz(3)), intent(inout) :: urhs, vrhs
-       integer :: mind
+       integer :: mind, sclr
 
        fT1E => this%cbuffyE(:,:,:,1)
        fT1C => this%cbuffyC(:,:,:,1)
@@ -507,6 +507,30 @@
                this%fbody_z = this%fbody_z + rbuffE
            end if
        end select 
+
+       ! Generalize to multiple stratifying agents
+       select case (this%BuoyancyDirection)
+       case(1)
+           call assert(.false.,'Need to implement')
+       case(2)
+           call assert(.false.,'Need to implement')
+       case(3)
+           do sclr = 1,this%n_scalars
+               if ((this%scalars(sclr)%amIactive()) .and. (sclr .ne. this%moistureIndex)) then
+                   ! Interpolate Fhat to edge
+                   call transpose_y_to_z(this%scalars(sclr)%Fhat,this%cbuffzC(:,:,:,1),this%sp_gpC)
+                   call this%Pade6opZ%interpz_C2E(this%cbuffzC(:,:,:,1),this%cbuffzE(:,:,:,1),&
+                     this%scalars(sclr)%bc_bottom,this%scalars(sclr)%bc_top)
+
+                   ! Update the vertical velocity
+                   fT1E = (this%cbuffzE(:,:,:,1))*this%scalars(sclr)%get_buoyancyFact()
+                   if (this%spectE%carryingZeroK) then
+                       fT1E(1,1,:) = cmplx(zero,zero,rkind)
+                   end if 
+                   wrhs = wrhs + fT1E
+               end if
+           end do
+       end select
 
 
    end subroutine
