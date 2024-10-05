@@ -117,11 +117,11 @@ contains
 
     end subroutine
 
-    subroutine get_viscosities(this,rho,p,sos,duidxj,mu,bulk,x_bc,y_bc,z_bc,dt,pfloor,detady,dy_stretch)
+    subroutine get_viscosities(this,rho,p,sos,duidxj,mu,bulk,x_bc,y_bc,z_bc,dt,pfloor,detady,dy_stretch,fsw,divgrad)
         class(ladobject),        intent(in) :: this
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(in)  :: rho,p,sos,detady, dy_stretch
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(in)  :: rho,p,sos,detady,dy_stretch
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), target, intent(in)  :: duidxj
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(inout) :: mu, bulk
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(inout) :: mu,bulk,fsw,divgrad
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: pfloor
 
@@ -193,30 +193,30 @@ contains
         call transpose_y_to_x(func,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
-        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2)) 
-        xtmp1 = xtmp2*this%dx**6
-        call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
+        !call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2)) 
+        xtmp2 = xtmp1*this%dx**4
+        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         bulkstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(func,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
-        call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
-        ztmp1 = ztmp2*this%dz**6
-        call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
+        !all this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
+        ztmp2 = ztmp1*this%dz**4
+        call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         bulkstar = bulkstar + ytmp4 * ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
 
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(func,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
-        call this%der%d2dy2(ytmp5,ytmp4,y_bc(1),y_bc(2))
+       !call this%der%d2dy2(ytmp5,ytmp4,y_bc(1),y_bc(2))
         if(this%yMetric) then
-          ytmp5 = (detady**6)*ytmp4*dy_stretch**6
-          bulkstar = bulkstar + ytmp5 * ( dy_stretch * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+          ytmp4 = (detady**4)*ytmp5*dy_stretch**4
+          bulkstar = bulkstar + ytmp4 * ( dy_stretch * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
         else
-          ytmp5 = ytmp4*this%dy**6
-          bulkstar = bulkstar + ytmp5 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
+          ytmp4 = ytmp5*this%dy**4
+          bulkstar = bulkstar + ytmp4 * ( this%dy * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )**2
         endif
 
         ! Now, all ytmps are free to use
@@ -231,6 +231,8 @@ contains
             ytmp1 = zero
         end where
 
+        fsw = ytmp1
+        divgrad = abs(bulkstar)
         ! ! new
         ! ! Calculate the switching function
         ! ytmp1 = one

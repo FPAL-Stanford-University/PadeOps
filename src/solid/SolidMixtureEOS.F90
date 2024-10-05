@@ -4484,6 +4484,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,udiv, divuphi,VFmag,tanhmask, GVFmag, GPHImag, mask2, updatedKappa, weight, kappaSum, phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2,divu,divphiu,dirac,H
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi, gradxi, gradVFk, p_int, VF_int, gradH,u_int, uphi_int, gradFV
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
+        real(rkind)   :: cut_off = 1d-6
 	integer :: iflag = one
 	real(rkind) :: r = 0.4D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0, e = 1D-100 
 	!TODO: add additional arrays to be used locally in calculation of surface tension force
@@ -4583,7 +4584,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               !  endif
 
 
-                this%fmask =(this%material(1)%VF-this%intSharp_cut)*(one-this%intSharp_cut-this%material(1)%VF)
+                this%fmask =(this%material(1)%VF-cut_off)*(one-cut_off-this%material(1)%VF)
 	
 		if (this%use_FV) then
              
@@ -4607,12 +4608,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 	if (this%use_gradXi) then
 
                
-          where( this%material(1)%VF .GE. 1-this%intSharp_cut)
-                 this%xi(:,:,:,1) = this%intSharp_eps*log( ( 1-2*this%intSharp_cut+ e )/ (e))*(1/(1-2*this%intSharp_cut))
-          elsewhere( this%material(1)%VF .LE. this%intSharp_cut )
-                 this%xi(:,:,:,1)  = this%intSharp_eps*log( ( e) / (1 -2*this%intSharp_cut + e))*(1/(1-2*this%intSharp_cut))
+          where( this%material(1)%VF .GE. 1-cut_off)
+                 this%xi(:,:,:,1) = this%intSharp_eps*log( ( 1-2*cut_off+ e )/ (e))*(1/(1-2*cut_off))
+          elsewhere( this%material(1)%VF .LE. cut_off )
+                 this%xi(:,:,:,1)  = this%intSharp_eps*log( ( e) / (1 -2*cut_off + e))*(1/(1-2*cut_off))
           elsewhere
-                 this%xi(:,:,:,1)  = this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( (this%material(1)%VF -this%intSharp_cut + e )/ (1 - this%intSharp_cut -this%material(1)%VF + e) )
+                 this%xi(:,:,:,1)  = this%intSharp_eps*(1/(1-2*cut_off))*log( (this%material(1)%VF - cut_off + e )/ (1 - cut_off -this%material(1)%VF + e) )
           endwhere
 
           if(this%use_FV) then
@@ -4648,7 +4649,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         
          ! this%fmask = 0.25*(1 - (tanh((1-2*this%intSharp_cut)*this%xi(:,:,:,1)/(2 *this%intSharp_eps)))**2)-0.5*(1+tanh((1-2*this%intSharp)*this%xi(:,:,:,1)/(2 *this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut
 
-          this%fmask =(this%material(1)%VF-this%intSharp_cut)*(one-this%intSharp_cut-this%material(1)%VF)
+          this%fmask =(this%material(1)%VF-cut_off)*(one-cut_off-this%material(1)%VF)
 
          if(this%use_FV) then
 
