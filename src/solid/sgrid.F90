@@ -1432,6 +1432,7 @@ contains
        this%dy_stretch(:,2:this%nyp-1,:) = abs((this%eta2(:,3:this%nyp,:)-this%eta2(:,1:this%nyp-2,:))/2)
        this%dy_stretch(:,1,:) = abs((this%eta2(:,2,:)-this%eta2(:,1,:)))
        this%dy_stretch(:,this%nyp,:) = abs((this%eta2(:,this%nyp,:)-this%eta2(:,this%nyp-1,:)) )
+
     end subroutine 
 
     subroutine update_P(this,Qtmpp,isub,dt,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -1584,22 +1585,24 @@ contains
         call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,  this%y_bc,  this%z_bc)
         call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
         call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
-        do i=1,this%mix%ns
+
+        !do i=1,this%mix%ns
             !if (this%use_gTg) then
                 ! Project g tensor to SPD space
                 !call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
                 !call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g_t) !mca check
             !end if
             ! Get massfraction gradients in Ji
-            call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
-                               this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
-        end do
+        !    call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
+        !                       this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
+        !end do
 
             
         ! compute artificial shear and bulk viscosities
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
         call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad)
+
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
             ehmix = this%e
@@ -1627,7 +1630,6 @@ contains
 
          !       this%mix%surfaceTension_f = this%mix%gradp
         endif
-
         !call this%mix%Test_Der_NP(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         !call this%mix%Test_1DStretch(this%x,this%y,this%z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         this%metric = this%yMetric
@@ -1649,7 +1651,6 @@ contains
 
 
        call this%mix%get_gradp(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
-
        
 
         ! Write out initial conditions
@@ -3969,13 +3970,14 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         ! If inviscid set everything to zero (otherwise use a model)
         this%mu   = this%phys_mu1   * this%mix%material(1)%VF
         this%bulk = this%phys_bulk1 * this%mix%material(1)%VF
-        this%mix%material(1)%physmu = this%phys_mu1
-        this%mix%material(2)%physmu = this%phys_mu2
+        !this%mix%material(1)%physmu = this%phys_mu1
+        !this%mix%material(2)%physmu = this%phys_mu2
 
         if (this%mix%ns .eq. 2) then
             this%mu   = this%mu   + this%phys_mu2   * this%mix%material(2)%VF
             this%bulk = this%bulk + this%phys_bulk2 * this%mix%material(2)%VF
         endif
+
 
         if (this%PTeqb) then
             this%kap  = this%phys_kap1  * this%mix%material(1)%VF

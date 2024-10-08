@@ -77,7 +77,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: rho
         real(rkind), allocatable :: Ys_thick, VF_thick, Ys_wiggle, VF_wiggle        
         ! species-specific artificial properties
-        real(rkind), dimension(:,:,:),   allocatable :: adiff,fd
+        real(rkind), dimension(:,:,:),   allocatable :: adiff,fd, physmu
         real(rkind), dimension(:,:,:),   allocatable :: rhodiff,outdiff,Ysdiff
         real(rkind), dimension(:,:,:),   allocatable :: kap
         real(rkind), dimension(:,:,:,:), allocatable :: qi,rhodiff_stagg,adiff_stagg
@@ -87,7 +87,6 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: diff_gp
         real(rkind), dimension(:,:,:),   allocatable :: diff_pe
         real(rkind), dimension(:,:,:,:), allocatable :: Ji
-        real(rkind), dimension(:,:,:,:), allocatable :: physmu
         ! species-specific variables for interface sharpening
         real(rkind), dimension(:,:,:,:), allocatable :: intSharp_a,intSharp_R,intSharp_aDiff,intSharp_RDiff
         real(rkind), dimension(:,:,:),   allocatable :: intSharp_aFV,intSharp_RFV,intSharp_aDiffFV,intSharp_RDiffFV
@@ -515,8 +514,8 @@ contains
         if( allocated( this%kap ) ) deallocate( this%kap )
         allocate( this%kap(this%nxp,this%nyp,this%nzp) )
 
-    !    if( allocated( this%physmu ) ) deallocate( this%physmu )
-    !    allocate( this%physmu(this%nxp,this%nyp,this%nzp) )
+        if( allocated( this%physmu ) ) deallocate( this%physmu )
+        allocate( this%physmu(this%nxp,this%nyp,this%nzp) )
 
         ! Allocate material diffusive flux
         if( allocated( this%qi ) ) deallocate( this%qi )
@@ -755,7 +754,7 @@ contains
         if( allocated( this%diff_gp ) ) deallocate( this%diff_gp )
         if( allocated( this%diff_pe ) ) deallocate( this%diff_pe )
         if( allocated( this%kap )  ) deallocate( this%kap )
-      !  if( allocated( this%physmu )  ) deallocate( this%physmu )
+        if( allocated( this%physmu )  ) deallocate( this%physmu )
         if( allocated( this%T )    ) deallocate( this%T )
         if( allocated( this%p )    ) deallocate( this%p )
         if( allocated( this%modDevSigma ) ) deallocate( this%modDevSigma )
@@ -846,7 +845,7 @@ contains
         this%diff_gp = zero
         this%diff_pe = zero
         this%kap = zero
-      !  this%physmu = zero
+        this%physmu = zero
 
     end subroutine
 

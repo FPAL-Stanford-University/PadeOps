@@ -234,9 +234,6 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
     ! Initialize MPI
     !all MPI_Init(ierr)
-    call MPI_Comm_RANK(MPI_COMM_WORLD, rank, ierr)
-    call MPI_Comm_SIZE(MPI_COMM_WORLD, totalproc, ierr)
-    nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF,  &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
@@ -246,7 +243,12 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
                           diff_c_ge,diff_c_ge_2,diff_c_gp,diff_c_gp_2,diff_c_gt,diff_c_gt_2,alpha,epsP, epsRho, &
-                          v0, alpha4, v_disturb, alpha3, alpha2,v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho,pointy, pointx, epsilonk        
+                          v0, alpha4, v_disturb, alpha3, alpha2,v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho,pointy, pointx, epsilonk       
+
+   ! call MPI_Comm_RANK(MPI_COMM_WORLD, rank, ierr)
+   ! call MPI_Comm_SIZE(MPI_COMM_WORLD, totalproc, ierr)
+    nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
+ 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
@@ -318,6 +320,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
            v = 0
            w = 0
 
+        print *, "read in files"
         phi_i = 0
         phi_r = 0
         do i = 1,4        
@@ -362,6 +365,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
               close(26)
          end do
 
+         print *, "finished reading"
 !        open (unit=20, file="Phi_I_2.txt", status='old', action='read' )
 !        open (unit=22, file="Phi_R_2.txt", status='old', action='read' )
 !        open (unit=24, file="DPhi_I_2.txt", status='old', action='read' )
