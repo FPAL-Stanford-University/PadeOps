@@ -18,12 +18,13 @@ module sgsmod_igrid
 
     private
     public :: sgs_igrid, getRotationTensor, getInverseRotationTensor, &
-              contract_Rik_Skl_invRlj 
+              contract_Rik_Skl_invRlj, AMD_ID
 
     complex(rkind), parameter :: zeroC = zero + imi*zero
     logical :: useVerticalTfilter = .false. 
     real(rkind), parameter :: beta_h = 7.8_rkind, beta_m = 4.8_rkind
     integer, parameter :: Cook04 = 0, CookMod1 = 1, CookMod2 = 2
+    integer, parameter :: SMAG_ID = 0, SIGMA_ID = 1, AMD_ID = 2, BALLOUZ_ID = 3
 
     type :: sgs_igrid
         private 
@@ -191,6 +192,7 @@ module sgsmod_igrid
             procedure          :: getSGSheatFlux
             procedure          :: IamEddyViscosityModel
             procedure          :: set_tauij
+            procedure          :: get_model_ID
     end type 
 
 contains
@@ -467,7 +469,7 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
    if (this%useWallModel) call this%computeWall_PotTFlux()
 
    if (this%isEddyViscosityModel) then
-      if ((this%mid == 2) .and. (.not. this%usePrSGS))then ! AMD model has its own formula for kappaSGS
+      if ((this%mid == AMD_ID) .and. (.not. this%usePrSGS))then ! AMD model has its own formula for kappaSGS
           call get_amd_Dkernel(this%kappa_sgs_C,this%camd_x, this%camd_y, this%camd_z, duidxjC, &
                             & dTdxC, dTdyC, dTdzC, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
           call this%interpolate_kappaSGS(.true.)

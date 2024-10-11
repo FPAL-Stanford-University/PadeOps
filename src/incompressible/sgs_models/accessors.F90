@@ -229,3 +229,9 @@ pure function IamEddyViscosityModel(this) result(res)
 
     res = this%isEddyViscosityModel
 end function
+
+pure function get_model_ID(this) result(mid)
+    class(sgs_igrid), intent(in) :: this
+    integer :: mid
+    mid = this%mid
+end function

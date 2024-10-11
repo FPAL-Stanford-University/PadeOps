@@ -5,13 +5,13 @@ subroutine destroy(this)
   if (this%isEddyViscosityModel) call this%destroyMemory_EddyViscosity()
   if (this%DynamicProcedureType .ne. 0) call this%destroyMemory_DynamicProcedure()
   select case (this%mid)
-  case (0)
+  case (SMAG_ID)
      call this%destroy_smagorinsky()
-  case (1)
+  case (SIGMA_ID)
      call this%destroy_sigma()
-  case (2)
+  case (AMD_ID)
      call this%destroy_amd()
-  case (3)
+  case (BALLOUZ_ID)
      call this%destroy_ballouz()
   end select
   nullify(this%tau_11, this%tau_12, this%tau_22, this%tau_33)
@@ -307,7 +307,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
       call gracefulExit("You cannot use dynamic procedure for a scalar without & 
                & using dynamic procedure for momentum.",123)
   end if 
-  if ((this%mid .ne. 0) .and. (UseDynamicProcedureScalar)) then
+  if ((this%mid .ne. SMAG_ID) .and. (UseDynamicProcedureScalar)) then
       call gracefulExit("Dynamic procedure for scalar  only supported for smagorinsky",312)
   end if
 

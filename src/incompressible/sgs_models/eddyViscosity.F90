@@ -42,7 +42,7 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE, dTdx, dTdy, dTdz, dTdxE, dTdyE,
    real(rkind), dimension(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3)), intent(in) :: dTdxE, dTdyE, dTdzE
 
    select case(this%mid) 
-   case (0)
+   case (SMAG_ID)
       ! Smagorinsky
       call get_smagorinsky_kernel(this%S_ij_C,this%nu_sgs_C, &
                                  this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3))
@@ -51,14 +51,14 @@ subroutine get_SGS_kernel(this,duidxjC, duidxjE, dTdx, dTdy, dTdz, dTdxE, dTdyE,
          call get_smagorinsky_kernel(this%S_ij_E,this%nu_sgs_E, &
                               this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3))
       end if
-   case (1)
+   case (SIGMA_ID)
       ! Sigma
       call get_sigma_kernel(this%nu_sgs_C, duidxjC, this%gpC%xsz(1), this%gpC%xsz(2), this%gpC%xsz(3))
       
       if (this%explicitCalcEdgeEddyViscosity) then
          call get_sigma_kernel(this%nu_sgs_E, duidxjE, this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3))
       end if
-   case (2)
+   case (AMD_ID)
       ! AMD 
       if (this%isStratified) then
           call this%spectC%fft(dTdz,this%cbuffyC(:,:,:,1))

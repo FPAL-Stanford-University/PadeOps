@@ -14,7 +14,7 @@ module IncompressibleGrid
     use reductions, only: p_maxval, p_sum, p_minval
     use timer, only: tic, toc
     use PadePoissonMod, only: Padepoisson 
-    use sgsmod_igrid, only: sgs_igrid
+    use sgsmod_igrid, only: sgs_igrid, AMD_ID
     use numerics
     !use cd06staggstuff, only: cd06stagg
     use cf90stuff, only: cf90
@@ -1747,6 +1747,10 @@ contains
                            & this%isinviscid, this%useSGS, idx, this%inputdir, this%outputdir, &
                            & this%runID, useRestartFile, restartfile_TID, this%usefringe, this%usedoublefringex, &
                            & this%fringe_x, this%fringe_x1, this%fringe_x2)
+              ! User safe-guard against using AMD SGS model with active scalars (SGS model logic needs to be modified)
+              if (this%sgsmodel%get_model_ID() == AMD_ID .and. this%scalars(idx)%amIactive()) then
+                  call assert(.false.,'AMD SGS model does not support active scalars at this time')
+              end if
            end do 
            call message(0, "SCALAR fields initialized successfully.")
        end if  
