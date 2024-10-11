@@ -648,6 +648,7 @@
            write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_u.",tid
        end if
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+       call check_file_existence(trim(fname))
        call decomp_2d_read_one(1,u,fname, gpC)
 
        if (tid < 0) then
@@ -656,6 +657,7 @@
            write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_v.",tid
        end if
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+       call check_file_existence(trim(fname))
        call decomp_2d_read_one(1,v,fname, gpC)
 
        if (tid < 0) then
@@ -664,6 +666,7 @@
            write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_w.",tid
        end if
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+       call check_file_existence(trim(fname))
        call decomp_2d_read_one(1,w,fname, gpE)
 
        if (this%isStratified) then
@@ -673,17 +676,18 @@
                write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_T.",tid
            end if
            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+           call check_file_existence(trim(fname))
            call decomp_2d_read_one(1,T,fname, gpC)
        end if
 
        if (nrank == 0) then
            if (tid < 0) then
-             !call assert(.false.,'Not all RESTART files have tid written out. Supress this assert if you are confident yours does -- igrid_files/io.F90')
                write(tempname,"(A7,A4,I2.2,A12)") "RESTART", "_Run",rid, "_info.LATEST"
            else
                write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
            end if
            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+           call check_file_existence(trim(fname))
            fid = 10
            open(unit=fid,file=trim(fname),status="old",action="read")
            read (fid, *, iostat=ios)  this%tsim
@@ -705,12 +709,6 @@
        end if
 
        call MPI_BCast(tid_out,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
-
-       !if (this%usescalars) then
-       !    do idx = 1,this%n_scalars
-       !       call this%scalars(idx)%readrestart(tid_out)
-       !    end do
-       !end if
 
        call mpi_barrier(mpi_comm_world, ierr)
        call mpi_bcast(this%tsim,1,mpirkind,0,mpi_comm_world,ierr)
@@ -738,14 +736,17 @@
 
        write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid, "_uVel_t",tid,".out"
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+       call check_file_existence(trim(fname))
        call decomp_2d_read_one(1,u,fname, gpC)
 
        write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid, "_vVel_t",tid,".out"
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+       call check_file_existence(trim(fname))
        call decomp_2d_read_one(1,v,fname, gpC)
 
        write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid, "_wVel_t",tid,".out"
        fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+       call check_file_existence(trim(fname))
        call decomp_2d_read_one(1,wC,fname, gpC)
        call transpose_x_to_y(this%wC, this%rbuffyC(:,:,:,1), gpC)
        call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), gpC)
@@ -754,12 +755,14 @@
        if (this%isStratified) then
            write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid,"_potT_t",tid,".out"
            fname = this%InputDir(:len_trim(this%InputDir))//"/"//trim(tempname)
+           call check_file_existence(trim(fname))
            call decomp_2d_read_one(1,T,fname, gpC)
        end if
        
        if (nrank == 0) then
          write(tempname,"(A3,I2.2,A7,I6.6,A4)") "Run",rid, "_info_t",tid,".out"
          fname = this%inputdir(:len_trim(this%inputdir))//"/"//trim(tempname)
+         call check_file_existence(trim(fname))
          open(unit=10,file=fname,access='sequential',form='formatted')
          read (10, *)  this%tsim
          close(10)

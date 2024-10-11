@@ -202,6 +202,14 @@ contains
 
     end subroutine
 
+    subroutine check_file_existence(fname)
+        character(len=*), intent(in) :: fname
+        logical :: file_exists
+
+        inquire(file=trim(fname),exist=file_exists)
+        call assert(file_exists,trim(fname)//' does not exist')
+    end subroutine
+
     subroutine assert(statement,mssg) 
         logical, intent(in) :: statement
         character(len=*), intent(in) :: mssg

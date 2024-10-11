@@ -8,6 +8,7 @@ module scalar_igridMod
    use igrid_hooks!, only: setDirichletBC_Temp, set_Reference_Temperature, meshgen_WallM, initfields_wallM, set_planes_io, set_KS_planes_io 
    use fringeMethod, only: fringe 
    use spectralForcingLayerMod, only: SpectForcingLayer
+   use basic_io, only: check_file_existence
    !use io_hdf5_stuff, only: io_hdf5 
    implicit none
    
@@ -261,6 +262,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    call message(1,'highbound',highbound)
    call message(1,'isActive',isActive)
    call message(1,'buoyancyFact',buoyancyFact)
+   call message(1,'restartSim',restartSim)
 
    this%PrandtlNum = PrandtlNum
    this%TurbPrandtlNum = TurbPrandtlNum
@@ -348,7 +350,6 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%Fhat3 => this%Sfields(:,:,:,4)
    this%rhs => this%rhs_storage(:,:,:,1)
 
-
    if (.not. this%isInviscid) then
       allocate(this%d2Fdz2(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    end if
@@ -413,13 +414,14 @@ subroutine readRestart(this, tid)
    integer, intent(in) :: tid
    character(len=clen) :: tempname, fname
 
-
    if (tid < 0) then
        write(tempname,"(A7,A4,I2.2,A7,I2.2,A7)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".LATEST"
    else
        write(tempname,"(A7,A4,I2.2,A7,I2.2,A1,I6.6)") "RESTART", "_Run", this%RunID, "_SCALAR",this%scalar_number,".",tid
    end if
    fname = this%InputDataDir(:len_trim(this%InputDataDir))//"/"//trim(tempname)
+   call check_file_existence(trim(fname))
+
    call decomp_2d_read_one(1,this%F,fname, this%gpC)
    
    call message(1,"Restart data successfully read for scalar number", this%scalar_number)

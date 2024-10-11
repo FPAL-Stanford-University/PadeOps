@@ -32,7 +32,7 @@ module IncompressibleGrid
     use spectralForcingLayerMod, only: spectForcingLayer
     use interpolatorMod, only: interpolator
     use fortran_assert, only: assert
-    use basic_io, only: write_2D_ascii 
+    use basic_io, only: write_2D_ascii, check_file_existence
 
     implicit none
 
