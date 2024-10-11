@@ -1,3 +1,11 @@
+   subroutine dump_primitives(this)
+       class(igrid), intent(in) :: this
+       call this%dumpFullField(this%u ,'uVel')
+       call this%dumpFullField(this%v ,'vVel')
+       call this%dumpFullField(this%wC,'wVel')
+       if (this%isStratified) call this%dumpFullField(this%T,'potT')
+       call this%dump_scalar_fields() 
+   end subroutine
    subroutine dumpRestartFile(this)
        use decomp_2d_io
        use mpi
@@ -826,7 +834,7 @@
    end subroutine 
 
    subroutine dump_scalar_fields(this)
-     class(igrid), intent(inout) :: this
+     class(igrid), intent(in) :: this
      integer :: idx
 
      if ((this%usescalars) .and. allocated(this%scalars)) then
@@ -845,8 +853,9 @@
        class(igrid), intent(inout) :: this
        logical, intent(in), optional :: ddt
        integer, intent(in), optional :: step
-       integer :: tstep
+       integer :: tstep, sclr
        logical :: dump_ddt_terms
+       character(len=clen) :: tempname, fname
 
        dump_ddt_terms = .false.
        tstep          = this%step
@@ -859,8 +868,13 @@
                call this%dumpFullField(this%dudt,'dudt',step=tstep)
                call this%dumpFullField(this%dvdt,'dvdt',step=tstep)
                call this%dumpFullField(this%dwdt,'dwdt',step=tstep)
-               if (this%isStratified) then
-                   call this%dumpFullField(this%dTdt,'dTdt')
+               if (this%isStratified) call this%dumpFullField(this%dTdt,'dTdt')
+               if (allocated(this%scalars)) then
+                   do sclr = 1,size(this%scalars)
+                       write(tempname,"(A3,I2.2,A1,A4,I2.2,A2,I6.6,A4)") "Run",this%runID, "_","dFdt",sclr,"_t",tstep,".out"
+                       fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
+                       call decomp_2d_write_one(1,this%scalars(sclr)%dFdt,trim(fname),this%gpC)
+                   end do
                end if
            else
                call this%dumpFullField(this%u,'uVel')

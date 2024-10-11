@@ -24,7 +24,7 @@ module scalar_igridMod
       type(decomp_info), pointer :: sp_gpC, sp_gpE
       type(Pade6stagg), pointer  :: der
       
-      real(rkind), dimension(:,:,:), allocatable, public :: F
+      real(rkind), dimension(:,:,:), allocatable, public :: F, dFdt
       complex(rkind), dimension(:,:,:), pointer, public :: Fhat
 
       real(rkind), dimension(:,:,:), allocatable, public :: d2Fdz2, dFdxC, dFdyC, dFdzC
@@ -187,6 +187,7 @@ subroutine destroy(this)
 
    deallocate(this%F, this%Fhat, this%dFdxC, this%dFdyC, this%dFdzC, this%dFdzE, this%rhs)
    deallocate(this%fhat1, this%fhat2, this%fhat3)
+   if (allocated(this%dFdt)) deallocate(this%dFdt)
 
    if (allocated(this%source_hat)) deallocate(this%source_hat)
    if (allocated(this%d2Fdz2)) deallocate(this%d2Fdz2)
@@ -327,7 +328,8 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%duidxj => duidxj
 
 
-   allocate(this%F (gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(this%F   (gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(this%dFdt(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
 
    allocate(this%dFdxC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    allocate(this%dFdyC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))

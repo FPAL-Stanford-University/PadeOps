@@ -363,7 +363,7 @@
        class(igrid), intent(inout) :: this
 
        logical :: forceWrite, exitStat, forceDumpPressure, restartWrite, forceDumpProbes 
-       integer :: ierr = -1, ierr2
+       integer :: ierr = -1, ierr2, sclr
 
        ! STEP 1: Update Time, BCs and record probe data
        this%step = this%step + 1
@@ -566,12 +566,6 @@
       else
            if (mod(this%step,this%t_dataDump) == 0) then
               call message(0,"Scheduled visualization dump.")
-              if (this%dump_primitives_for_ddt .and. this%cfl > 0) then
-                  call this%dumpFullField(this%dudt,'uVel',step=this%step-1)
-                  call this%dumpFullField(this%dvdt,'vVel',step=this%step-1)
-                  call this%dumpFullField(this%dwdt,'wVel',step=this%step-1)
-                  if (this%isStratified) call this%dumpFullField(this%dTdt,'potT',step=this%step-1)
-              end if
               call this%dump_visualization_files()
               if (this%useHITForcing) then
                 call this%hitforce%dumpForcing(this%outputdir,this%RunID,this%step)
@@ -580,35 +574,36 @@
                   this%dudt = (this%u  - this%dudt)/(this%dt)
                   this%dvdt = (this%v  - this%dvdt)/(this%dt)
                   this%dwdt = (this%wC - this%dwdt)/(this%dt)
-                  if (this%isStratified) then
-                      this%dTdt = (this%T  - this%dTdt)/(this%dt)
+                  if (this%isStratified) this%dTdt = (this%T  - this%dTdt)/(this%dt)
+                  if (allocated(this%scalars)) then
+                      do sclr = 1,size(this%scalars)
+                          this%scalars(sclr)%dFdt = (this%scalars(sclr)%F - this%scalars(sclr)%dFdt)/(this%dt)
+                      end do
                   end if
                   call this%dump_visualization_files(ddt=.true.)
               end if
            else if (mod(this%step+1,this%t_dataDump) == 0) then ! Store primitive variables
+               if (this%dump_primitives_for_ddt) call this%dump_primitives()
                this%dudt = this%u
                this%dvdt = this%v
                this%dwdt = this%wC
                this%dTdt = this%T
-           else if (mod(this%step-1,this%t_dataDump) == 0 .and. this%CFL <= 0) then ! Compute dqdt and dump it
-               if (this%dump_primitives_for_ddt .and. this%cfl > 0) then
-                   call this%dumpFullField(this%u   ,'uVel')
-                   call this%dumpFullField(this%v   ,'vVel')
-                   call this%dumpFullField(this%wC  ,'wVel')
-                   call this%dumpFullField(this%dudt,'uVel',step=this%step-2)
-                   call this%dumpFullField(this%dvdt,'vVel',step=this%step-2)
-                   call this%dumpFullField(this%dwdt,'wVel',step=this%step-2)
-                   if (this%isStratified) then
-                       call this%dumpFullField(this%T,'potT')
-                       call this%dumpFullField(this%dTdt,'potT',step=this%step-2)
-                   end if
+               if (allocated(this%scalars)) then
+                   do sclr = 1,size(this%scalars)
+                       this%scalars(sclr)%dFdt = this%scalars(sclr)%F
+                   end do
                end if
+           else if (mod(this%step-1,this%t_dataDump) == 0 .and. this%CFL <= 0) then ! Compute dqdt and dump it
+               if (this%dump_primitives_for_ddt) call this%dump_primitives()
                if (this%dump_ddt_terms) then
                    this%dudt = (this%u  - this%dudt)/(2.d0*this%dt)
                    this%dvdt = (this%v  - this%dvdt)/(2.d0*this%dt)
                    this%dwdt = (this%wC - this%dwdt)/(2.d0*this%dt)
-                   if (this%isStratified) then
-                       this%dTdt = (this%T  - this%dTdt)/(2.d0*this%dt)
+                   if (this%isStratified) this%dTdt = (this%T  - this%dTdt)/(2.d0*this%dt)
+                   if (allocated(this%scalars)) then
+                       do sclr = 1,size(this%scalars)
+                           this%scalars(sclr)%dFdt = (this%scalars(sclr)%F - this%scalars(sclr)%dFdt)/(2.d0*this%dt)
+                       end do
                    end if
                    call this%dump_visualization_files(ddt=.true.,step=this%step-1)
                end if

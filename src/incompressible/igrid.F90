@@ -397,6 +397,7 @@ module IncompressibleGrid
             procedure, private :: dumpFullField_cmplx 
             procedure          :: dumpSpectralField 
             procedure, private :: dump_scalar_fields
+            procedure, private :: dump_primitives
             procedure, private :: dumpVisualizationInfo
             procedure, private :: DeletePrevStats3DFiles
             procedure, private :: Delete_file_if_present
