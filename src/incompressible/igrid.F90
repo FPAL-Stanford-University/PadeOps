@@ -159,7 +159,7 @@ module IncompressibleGrid
         integer :: BuoyancyTermType = 0 
         real(rkind) :: Ra, BuoyancyFact = 0.d0
 
-        integer :: moistureIndex = 1
+        integer :: moistureIndex = 0
         real(rkind) :: moistureFactor = 0.61d0 ! converts g/kg to K
 
         logical :: periodicInZ  = .false. 
@@ -1704,6 +1704,7 @@ contains
               call message(2,"Rayleigh number:", this%Ra)
               call message(2,"Reynolds number:", this%Re)
            end select
+           call message(2,"BuoyancyFact:",this%BuoyancyFact)
 
            call this%sgsModel%set_BuoyancyFactor(this%BuoyancyFact)
        elseif (this%initSpinup) then
@@ -1746,7 +1747,7 @@ contains
                            & this%cbuffyC,this%cbuffzC,this%cbuffyE,this%cbuffzE, this%Re, &
                            & this%isinviscid, this%useSGS, idx, this%inputdir, this%outputdir, &
                            & this%runID, useRestartFile, restartfile_TID, this%usefringe, this%usedoublefringex, &
-                           & this%fringe_x, this%fringe_x1, this%fringe_x2)
+                           & this%fringe_x, this%fringe_x1, this%fringe_x2, this%Pade6opZ)
               ! User safe-guard against using AMD SGS model with active scalars (SGS model logic needs to be modified)
               if (this%sgsmodel%get_model_ID() == AMD_ID .and. this%scalars(idx)%amIactive()) then
                   call assert(.false.,'AMD SGS model does not support active scalars at this time')

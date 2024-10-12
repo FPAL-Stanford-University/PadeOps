@@ -296,6 +296,7 @@ end subroutine
 subroutine interp_PrimitiveVars(this)
     class(igrid), intent(inout), target :: this
     complex(rkind), dimension(:,:,:), pointer :: ybuffC, zbuffC, zbuffE
+    integer :: sclr
     
     zbuffE => this%cbuffzE(:,:,:,1)
     zbuffC => this%cbuffzC(:,:,:,1)
@@ -353,6 +354,16 @@ subroutine interp_PrimitiveVars(this)
         call transpose_z_to_y(zbuffE,this%TEhat,this%sp_gpE)
         call this%spectE%ifft(this%TEhat,this%TE)
     end if 
+
+    ! Step 5: Interpolate Scalars
+    if (allocated(this%scalars)) then
+        do sclr = 1,size(this%scalars)
+            call transpose_y_to_z(this%scalars(sclr)%Fhat,zbuffC,this%sp_gpC)
+            call this%Pade6opZ%interpz_C2E(zbuffC,zbuffE,this%scalars(sclr)%BC_bottom, this%scalars(sclr)%BC_top)
+            call transpose_z_to_y(zbuffE,this%scalars(sclr)%FEhat,this%sp_gpE)
+            call this%spectE%ifft(this%scalars(sclr)%FEhat,this%scalars(sclr)%FE)
+        end do
+    end if
 end subroutine
    
 subroutine ApplyCompactFilter(this)

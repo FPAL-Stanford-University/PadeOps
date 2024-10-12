@@ -39,9 +39,7 @@
        end if 
      
        ! Step 4: Buoyance + Sponge (inside Buoyancy)
-       if (this%isStratified .or. this%initspinup) then
-           call this%addBuoyancyTerm(this%u_rhs, this%v_rhs, this%w_rhs)
-       end if 
+       call this%addBuoyancyTerm(this%u_rhs, this%v_rhs, this%w_rhs)
        
        if (present(CopyForDNSpress)) then
            if (CopyForDNSpress) then
@@ -62,7 +60,7 @@
 
            if (this%isStratified .or. this%initspinup) then
               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
-                                         this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr, &
+                                         this%u, this%v, this%wC, this%T, this%That, this%duidxjC, &
                                          q1 = this%q1_T, q2 = this%q2_T, q3 = this%q3_T, q3C = this%q3_TC)
            end if
        else
@@ -140,7 +138,7 @@
        end if 
      
        ! Step 4: Buoyance + Sponge (inside Buoyancy)
-       if ((this%isStratified .or. this%initspinup) .and. (associated(this%wb))) then
+       if ((associated(this%wb))) then
            call this%addBuoyancyTerm(this%u_rhs, this%v_rhs, this%wb)
            this%w_rhs = this%w_rhs + this%wb
        end if 
@@ -172,10 +170,10 @@
            if (this%isStratified .or. this%initspinup) then
               if (associated(this%Tsgs)) then
                 call this%sgsmodel%getRHS_SGS_Scalar(this%Tsgs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
-                                           this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
+                                           this%u, this%v, this%wC, this%T, this%That, this%duidxjC)
               else
                 call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
-                                           this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
+                                           this%u, this%v, this%wC, this%T, this%That, this%duidxjC)
               end if
            end if
 

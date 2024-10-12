@@ -97,6 +97,7 @@
        class(igrid), intent(inout), target :: this
        complex(rkind), dimension(:,:,:), intent(inout), optional :: urhs, vrhs, wrhs, Trhs
        complex(rkind), dimension(:,:,:), pointer :: deviationC
+       integer :: sclr
 
        deviationC => this%cbuffyC(:,:,:,1)
        
@@ -134,6 +135,13 @@
            Trhs = Trhs - (this%RdampC/this%dt)*deviationC
        else
            this%T_rhs = this%T_rhs - (this%RdampC/this%dt)*deviationC
+       end if
+       
+       if (allocated(this%scalars)) then
+           do sclr = 1,size(this%scalars)
+               deviationC = this%scalars(sclr)%Fhat
+               this%scalars(sclr)%rhs = this%scalars(sclr)%rhs - (this%RdampC/this%dt)*deviationC
+           end do
        end if
    end subroutine  
    
@@ -489,48 +497,61 @@
        endif
 
        !this%w_rhs = this%w_rhs + fT1E 
-       select case (this%BuoyancyDirection)
-       case(1)
-           fT1C = (this%That)*this%BuoyancyFact ! See definition of buoyancy factor in init 
-           urhs = urhs + fT1C
-       case(2)
-           fT1C = (this%That)*this%BuoyancyFact ! See definition of buoyancy factor in init 
-           vrhs = vrhs + fT1C
-       case(3)
-           fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
-           if (this%spectE%carryingZeroK) then
-               fT1E(1,1,:) = cmplx(zero,zero,rkind)
-           end if 
-           wrhs = wrhs + fT1E
-           if (this%storeFbody) then
-               call this%spectE%ifft(fT1E, rbuffE)
-               this%fbody_z = this%fbody_z + rbuffE
-           end if
-       end select 
+       if (this%isStratified .or. this%initspinup) then
+           select case (this%BuoyancyDirection)
+           case(1)
+               fT1C = (this%That)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+               urhs = urhs + fT1C
+           case(2)
+               fT1C = (this%That)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+               vrhs = vrhs + fT1C
+           case(3)
+               fT1E = (this%TEhat)*this%BuoyancyFact ! See definition of buoyancy factor in init 
+               if (this%spectE%carryingZeroK) then
+                   fT1E(1,1,:) = cmplx(zero,zero,rkind)
+               end if 
+               wrhs = wrhs + fT1E
+               if (this%storeFbody) then
+                   call this%spectE%ifft(fT1E, rbuffE)
+                   this%fbody_z = this%fbody_z + rbuffE
+               end if
+           end select 
+       end if
 
        ! Generalize to multiple stratifying agents
-       select case (this%BuoyancyDirection)
-       case(1)
-           call assert(.false.,'Need to implement')
-       case(2)
-           call assert(.false.,'Need to implement')
-       case(3)
-           do sclr = 1,this%n_scalars
-               if ((this%scalars(sclr)%amIactive()) .and. (sclr .ne. this%moistureIndex)) then
-                   ! Interpolate Fhat to edge
-                   call transpose_y_to_z(this%scalars(sclr)%Fhat,this%cbuffzC(:,:,:,1),this%sp_gpC)
-                   call this%Pade6opZ%interpz_C2E(this%cbuffzC(:,:,:,1),this%cbuffzE(:,:,:,1),&
-                     this%scalars(sclr)%bc_bottom,this%scalars(sclr)%bc_top)
+       if (allocated(this%scalars)) then
+           select case (this%BuoyancyDirection)
+           case(1)
+               do sclr = 1,size(this%scalars)
+                   if ((this%scalars(sclr)%amIactive()) .and. (sclr .ne. this%moistureIndex)) then
+                       call assert(.false.,'Need to implement')
+                   end if
+               end do
+           case(2)
+               do sclr = 1,size(this%scalars)
+                   if ((this%scalars(sclr)%amIactive()) .and. (sclr .ne. this%moistureIndex)) then
+                       call assert(.false.,'Need to implement')
+                   end if
+               end do
+           case(3)
+               do sclr = 1,size(this%scalars)
+                   if ((this%scalars(sclr)%amIactive()) .and. (sclr .ne. this%moistureIndex)) then
+                       ! Interpolate Fhat to edge
+                       call transpose_y_to_z(this%scalars(sclr)%Fhat,this%cbuffzC(:,:,:,1),this%sp_gpC)
+                       call this%Pade6opZ%interpz_C2E(this%cbuffzC(:,:,:,1),this%cbuffzE(:,:,:,1),&
+                         this%scalars(sclr)%bc_bottom,this%scalars(sclr)%bc_top)
+                       call transpose_z_to_y(this%cbuffzE(:,:,:,1),fT1E,this%sp_gpE)
 
-                   ! Update the vertical velocity
-                   fT1E = (this%cbuffzE(:,:,:,1))*this%scalars(sclr)%get_buoyancyFact()
-                   if (this%spectE%carryingZeroK) then
-                       fT1E(1,1,:) = cmplx(zero,zero,rkind)
-                   end if 
-                   wrhs = wrhs + fT1E
-               end if
-           end do
-       end select
+                       ! Update the vertical velocity
+                       fT1E = (fT1E)*this%scalars(sclr)%get_buoyancyFact()
+                       if (this%spectE%carryingZeroK) then
+                           fT1E(1,1,:) = cmplx(zero,zero,rkind)
+                       end if 
+                       wrhs = wrhs + fT1E
+                   end if
+               end do
+           end select
+       end if
 
 
    end subroutine

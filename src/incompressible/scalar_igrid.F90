@@ -24,8 +24,9 @@ module scalar_igridMod
       type(decomp_info), pointer :: sp_gpC, sp_gpE
       type(Pade6stagg), pointer  :: der
       
-      real(rkind), dimension(:,:,:), allocatable, public :: F, dFdt
+      real(rkind), dimension(:,:,:), allocatable, public :: F, FE, dFdt
       complex(rkind), dimension(:,:,:), pointer, public :: Fhat
+      complex(rkind), dimension(:,:,:), allocatable, public :: FEhat
 
       real(rkind), dimension(:,:,:), allocatable, public :: d2Fdz2, dFdxC, dFdyC, dFdzC
       real(rkind), dimension(:,:,:), allocatable :: dfdzE
@@ -55,6 +56,7 @@ module scalar_igridMod
       integer, public :: bc_bottom, bc_top
       type(sgs_igrid), pointer, public :: sgsmodel
       logical :: useSource, isinviscid, useSGS, usefringe, usedoublefringe
+      type(Pade6Stagg), pointer :: Pade6opZ
 
       ! If using active scalars
       logical :: isActive
@@ -106,19 +108,38 @@ subroutine reset_pointers(this,reset_rhs)
 end subroutine 
 
 subroutine addAdvectionTerm(this)
-   class(scalar_igrid), intent(inout) :: this
+   class(scalar_igrid), intent(inout), target :: this
+   real(rkind), dimension(:,:,:), pointer :: T1C, T1E, fT1C, fT1E, TzE, TzC
+   integer, parameter :: WFBC_bottom = -1, WFBC_top = -1
 
-   this%rbuffxC(:,:,:,1) = -this%dFdxC*this%u
-   call this%spectC%fft(this%rbuffxC(:,:,:,1), this%rhs)
+   !this%rbuffxC(:,:,:,1) = -this%dFdxC*this%u
+   !call this%spectC%fft(this%rbuffxC(:,:,:,1), this%rhs)
 
-   this%rbuffxC(:,:,:,1) = -this%dFdyC*this%v
-   call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))
+   !this%rbuffxC(:,:,:,1) = -this%dFdyC*this%v
+   !call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,1))
 
-   this%rbuffxC(:,:,:,1) = -this%dFdzC*this%wC
-   call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,2))
+   !this%rbuffxC(:,:,:,1) = -this%dFdzC*this%wC
+   !call this%spectC%fft(this%rbuffxC(:,:,:,1), this%cbuffyC(:,:,:,2))
 
-   this%rhs = this%rhs + this%cbuffyC(:,:,:,1) + this%cbuffyC(:,:,:,2)
+   !this%rhs = this%rhs + this%cbuffyC(:,:,:,1) + this%cbuffyC(:,:,:,2)
 
+   associate(T1C => this%rbuffxC(:,:,:,1), T1E => this%rbuffxE(:,:,:,1), &
+       fT1C => this%cbuffyC(:,:,:,1), fT1E => this%cbuffyE(:,:,:,1), &
+       TzE => this%cbuffzE(:,:,:,1), TzC => this%cbuffzC(:,:,:,1))
+       T1C = -this%u*this%F
+       call this%spectC%fft(T1C,this%rhs)
+       call this%spectC%mtimes_ik1_ip(this%rhs)
+       T1C = -this%v*this%F
+       call this%spectC%fft(T1C,fT1C)
+       call this%spectC%mtimes_ik2_ip(fT1C)
+       this%rhs = this%rhs + fT1C
+       T1E = -this%w * this%FE
+       call this%spectE%fft(T1E,fT1E)
+       call transpose_y_to_z(fT1E,TzE,this%sp_gpE)
+       call this%Pade6opZ%ddz_E2C(tzE,tzC,WFBC_bottom,WFBC_top)
+       call transpose_z_to_y(tzC,fT1C,this%sp_gpC)
+       this%rhs = this%rhs + fT1C
+   end associate
 
 end subroutine 
 
@@ -152,17 +173,15 @@ subroutine populateRHS(this, dt, spect_force_layer)
 
    if (this%useSource) this%rhs = this%rhs + this%source_hat
 
-   if (this%useSGS) then
+   if (this%useSGS) then ! molecular diffusive flux embedded in SGS flux
       call this%sgsmodel%getRHS_SGS_Scalar(this%rhs, this%dFdxC, this%dFdyC, this%dFdzC, this%dFdzE, &
          this%u, this%v, this%wC, this%F, this%Fhat, this%duidxj, &
          PrandtlNum=this%PrandtlNum, TurbPrandtlNum=this%TurbPrandtlNum, Cy=this%Cy, &
          lowbound=this%lowbound, highbound=this%highbound, q1=this%q1, q2=this%q2, q3=this%q3, q3C=this%q3C,&
          kappaC=this%kappaSGS, kappa_bounding_C=this%kappa_bounding)
+   else
+       if (.not. this%isinviscid) call this%addViscousTerm()
    end if
-
-   if (.not. this%isinviscid) then
-      call this%addViscousTerm()
-   end if 
    
    ! Add the fringe contributions
    if (this%usedoublefringe) then
@@ -179,6 +198,8 @@ subroutine populateRHS(this, dt, spect_force_layer)
        call spect_force_layer%updateScalarRHS(this%F,dt,this%rhs)
    end if
 
+   ! To be consistent with the primitive variables, the sponge is added in the igrid class (if a sponge is used)
+
 end subroutine 
 
 
@@ -188,6 +209,9 @@ subroutine destroy(this)
    deallocate(this%F, this%Fhat, this%dFdxC, this%dFdyC, this%dFdzC, this%dFdzE, this%rhs)
    deallocate(this%fhat1, this%fhat2, this%fhat3)
    if (allocated(this%dFdt)) deallocate(this%dFdt)
+   if (allocated(this%FE)) deallocate(this%FE)
+   if (allocated(this%FEhat)) deallocate(this%FEhat)
+   if (allocated(this%Sfields)) deallocate(this%Sfields)
 
    if (allocated(this%source_hat)) deallocate(this%source_hat)
    if (allocated(this%d2Fdz2)) deallocate(this%d2Fdz2)
@@ -205,7 +229,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
                   & rbuffxC,rbuffyC,rbuffzC,rbuffxE,rbuffyE,rbuffzE, cbuffyC,&
                   & cbuffzC,cbuffyE,cbuffzE, Re, isinviscid, useSGS, scalar_number, &
                   & InputDataDir, OutputDataDir, RunID, restartSim, tid_restart, &
-                  & usefringe, usedoublefringe, fringe_x, fringe_x1, fringe_x2)
+                  & usefringe, usedoublefringe, fringe_x, fringe_x1, fringe_x2, Pade6opZ)
          
    use kind_parameters, only: clen
    use exits,           only: message
@@ -227,6 +251,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    real(rkind), intent(in) :: Re
    character(len=*), intent(in) :: inputFile, inputDir, InputDataDir, OutputDataDir
    integer, intent(in) :: scalar_number, RunID, tid_restart 
+   type(Pade6Stagg), intent(in), target :: Pade6opZ
    integer :: ierr
    logical :: useSource = .false., RejectScalarRestart = .false. 
    real(rkind) :: PrandtlNum = 1.d0, TurbPrandtlNum = 1.d0, Cy = 100.d0 
@@ -327,9 +352,12 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%wC => wC
    this%duidxj => duidxj
 
+   this%Pade6opZ => Pade6opZ
 
    allocate(this%F   (gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    allocate(this%dFdt(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
+   allocate(this%FE  (gpE%xsz(1),gpE%xsz(2),gpE%xsz(3)))
+   allocate(this%FEhat(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%zsz(3)))
 
    allocate(this%dFdxC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    allocate(this%dFdyC(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
@@ -352,7 +380,7 @@ subroutine init(this,gpC,gpE,spectC,spectE,sgsmodel,der,inputFile, inputDir,mesh
    this%Fhat3 => this%Sfields(:,:,:,4)
    this%rhs => this%rhs_storage(:,:,:,1)
 
-   if (.not. this%isInviscid) then
+   if ((.not. this%isInviscid) .and. (.not. this%useSGS)) then
       allocate(this%d2Fdz2(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3)))
    end if
 
@@ -385,11 +413,14 @@ subroutine get_derivatives(this)
    call transpose_x_to_y(this%F, this%rbuffyC(:,:,:,1), this%gpC)
    call transpose_y_to_z(this%rbuffyC(:,:,:,1),this%rbuffzC(:,:,:,1), this%gpC)
    call this%der%ddz_C2E(this%rbuffzC(:,:,:,1),this%rbuffzE(:,:,:,1), this%bc_bottom, this%bc_top)
+   call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+   call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%dFdzE, this%gpE)
+
    call this%der%interpz_C2E(this%rbuffzC(:,:,:,1),this%rbuffzE(:,:,:,2), this%bc_bottom, this%bc_top)
    call this%der%ddz_E2C(this%rbuffzE(:,:,:,2),this%rbuffzC(:,:,:,2), this%bc_bottom, this%bc_top)
    
-   call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
-   call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%dFdzE, this%gpE)
+   !call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+   !call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%dFdzE, this%gpE)
 
    call transpose_z_to_y(this%rbuffzC(:,:,:,2), this%rbuffyC(:,:,:,2), this%gpC)
    call transpose_y_to_x(this%rbuffyC(:,:,:,2), this%dFdzC, this%gpC)
@@ -400,7 +431,7 @@ subroutine get_derivatives(this)
    call this%spectC%mtimes_ik2_oop(this%Fhat, this%cbuffyC(:,:,:,1))
    call this%spectC%ifft(this%cbuffyC(:,:,:,1),this%dFdyC)
 
-   if (.not. this%isInviscid) then
+   if ((.not. this%isInviscid) .and. (.not. this%useSGS)) then
       call this%der%d2dz2_C2C(this%rbuffzC(:,:,:,1), this%rbuffzC(:,:,:,2), this%bc_bottom, this%bc_top)
       call transpose_z_to_y(this%rbuffzC(:,:,:,2), this%rbuffyC(:,:,:,2), this%gpC)
       call transpose_y_to_x(this%rbuffyC(:,:,:,2), this%d2Fdz2, this%gpC)

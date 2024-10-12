@@ -465,7 +465,9 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v, w, T
    complex(rkind), dimension(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)), intent(in) :: That
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9), intent(in) :: duidxjC
+   real(rkind) :: OnebyRePr
 
+   OnebyRePr = 1.d0/this%Re/this%Pr_fluid
    if (this%useWallModel) call this%computeWall_PotTFlux()
 
    if (this%isEddyViscosityModel) then
@@ -527,8 +529,8 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
           this%kappa_bounding_maskC = 0.d0
           this%kappa_bounding_maskE = 0.d0
           if (this%kappa_bounding_scheme == Cook04) then
-              where (this%kappa_boundingC > this%kappa_bounding_threshhold/this%Pr_fluid/this%Re) this%kappa_bounding_maskC = 1.d0
-              where (this%kappa_boundingE > this%kappa_bounding_threshhold/this%Pr_fluid/this%Re) this%kappa_bounding_maskE = 1.d0
+              where (this%kappa_boundingC > this%kappa_bounding_threshhold*OnebyRePr) this%kappa_bounding_maskC = 1.d0
+              where (this%kappa_boundingE > this%kappa_bounding_threshhold*OnebyRePr) this%kappa_bounding_maskE = 1.d0
           else
               where (this%eta_boundingC   > this%kappa_bounding_threshhold) this%kappa_bounding_maskC = 1.d0
               where (this%eta_boundingE   > this%kappa_bounding_threshhold) this%kappa_bounding_maskE = 1.d0
@@ -541,6 +543,13 @@ subroutine getQjSGS(this,dTdxC, dTdyC, dTdzC, dTdzE, u, v, w, T, That, duidxjC)
           this%q3C = -this%kappa_sgs_C*dTdzC
           this%q3E = -this%kappa_sgs_E*dTdzE
       end if
+   end if 
+   if (.not. this%isInviscid) then
+      ! Embed molecular diffusion in q_j
+      this%q1C = this%q1C - OnebyRePr*dTdxC
+      this%q2C = this%q2C - OnebyRePr*dTdyC
+      this%q3C = this%q3C - OnebyRePr*dTdzC
+      this%q3E = this%q3E - OnebyRePr*dTdzE
    end if 
 
    if (this%useWallModel) call this%embed_WM_PotTflux()
