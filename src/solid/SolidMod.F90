@@ -23,7 +23,7 @@ module SolidMod
         logical :: explPlast = .FALSE.
         logical :: PTeqb = .TRUE., pEqb = .FALSE., pRelax = .FALSE., updateEtot = .TRUE., includeSources = .FALSE.
         logical :: useAkshayForm = .FALSE.,twoPhaseLAD = .FALSE.,LAD5eqn = .FALSE.,use_gTg = .FALSE.,useOneG = .FALSE.,intSharp = .FALSE.,intSharp_spf = .TRUE.,intSharp_ufv = .TRUE.,intSharp_d02 = .TRUE.,strainHard = .TRUE.,cnsrv_g = .FALSE.,cnsrv_gt = .FALSE.,cnsrv_gp = .FALSE.,cnsrv_pe = .FALSE., intSharp_cpg_west = .FALSE.
-
+        logical :: skew_Ys = .false., skew_VF = .false., skew_mass = .false.
         class(stiffgas ), allocatable :: hydro
         class(sep1solid), allocatable :: elastic
 
@@ -40,7 +40,7 @@ module SolidMod
         real(rkind), dimension(:,:,:), allocatable :: eel
         real(rkind), dimension(:,:,:), allocatable ::  u_int,v_int,fluxYs, w_int
         real(rkind), dimension(:,:,:), allocatable ::  YsLAD, vfLAD,YsDiffLAD
-        real(rkind), dimension(:,:,:,:), allocatable :: g,g_t,g_p,rg,rg_t,rg_p,VF_int,Ys_int, rho_int, rhoYs_mid, VF_mid
+        real(rkind), dimension(:,:,:,:), allocatable :: g,g_t,g_p,rg,rg_t,rg_p,VF_int,Ys_int, rho_int, rhoYs_mid, VF_mid,Ys_mid,rho_mid
         real(rkind), dimension(:,:,:),   allocatable :: e_p,e_pp,pe,rpe
         real(rkind), dimension(:,:,:),   allocatable :: curl_e,curl_t,curl_p,det_e,det_t,det_p
         real(rkind), dimension(:,:,:),   pointer     :: g11,gt11,gp11
@@ -86,7 +86,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: diff_gt
         real(rkind), dimension(:,:,:),   allocatable :: diff_gp
         real(rkind), dimension(:,:,:),   allocatable :: diff_pe
-        real(rkind), dimension(:,:,:,:), allocatable :: Ji, Ji_phi
+        real(rkind), dimension(:,:,:,:), allocatable :: Ji, Ji_phi, JiYs
         ! species-specific variables for interface sharpening
         real(rkind), dimension(:,:,:,:), allocatable :: intSharp_a,intSharp_R,intSharp_aDiff,intSharp_RDiff
         real(rkind), dimension(:,:,:),   allocatable :: intSharp_aFV,intSharp_RFV,intSharp_aDiffFV,intSharp_RDiffFV
@@ -96,11 +96,11 @@ module SolidMod
         real(rkind), dimension(:,:,:,:), allocatable ::  intSharp_rgFV,intSharp_rgtFV,intSharp_rgpFV,intSharp_gFV,intSharp_gtFV,intSharp_gpFV
          
         ! species-specific conserved variables
-        real(rkind), dimension(:,:,:,:), allocatable :: consrv
+        real(rkind), dimension(:,:,:,:), allocatable :: consrv,spec_consrv
 
         ! work arrays
         real(rkind), dimension(:,:,:,:), allocatable :: Qtmpg,Qtmpg_t,Qtmpg_p
-        real(rkind), dimension(:,:,:),   allocatable :: QtmpYs
+        real(rkind), dimension(:,:,:),   allocatable :: QtmpYs,QtmpspecYs
         real(rkind), dimension(:,:,:),   allocatable :: Qtmpeh
         real(rkind), dimension(:,:,:),   allocatable :: QtmpVF
         real(rkind), dimension(:,:,:),   allocatable :: Qtmppe
@@ -137,6 +137,7 @@ module SolidMod
         procedure :: update_g
         !procedure :: update_gTg
         procedure :: update_Ys
+        procedure :: update_specYs
         procedure :: update_eh
         procedure :: update_VF
         procedure :: getPhysicalProperties
@@ -150,6 +151,7 @@ module SolidMod
         procedure :: get_conserved
         procedure :: get_conserved_g
         procedure :: getYs
+        procedure :: getRHS_specYs
         procedure :: get_primitive
         procedure :: get_primitive_g
         procedure :: getSpeciesDensity
@@ -239,7 +241,7 @@ module SolidMod
 contains
 
     !function init(decomp,der,fil,hydro,elastic) result(this)
-    subroutine init(this,decomp,der,derD02,derD04,derD06,derStagg,derStaggd02,interpMid,interpMid02,use_Stagg,LADN2F, LADInt,LADMass_Consv,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,useAkshayForm,twoPhaseLAD,LAD5eqn, updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns, x_bc, y_bc, z_bc,SpongeLayer)
+    subroutine init(this,decomp,der,derD02,derD04,derD06,derStagg,derStaggd02,interpMid,interpMid02,use_Stagg,LADN2F, LADInt,LADMass_Consv,fil,gfil,PTeqb,pEqb,pRelax,use_gTg,useOneG,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cut,intSharp_cpg_west,useAkshayForm,twoPhaseLAD,LAD5eqn, updateEtot,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe,ns, x_bc, y_bc, z_bc,SpongeLayer, skew_mass, skew_Ys, skew_VF)
         class(solid), target, intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der,derD02,derD04, derD06
@@ -247,7 +249,7 @@ contains
         type(interpolators), target, intent(in)    :: interpMid, interpMid02
         type(filters),     target, intent(in) :: fil, gfil
         logical, intent(in) :: PTeqb,pEqb,pRelax,updateEtot, SpongeLayer
-        logical, intent(in) :: use_gTg,useOneG,use_Stagg,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cpg_west,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe, useAkshayForm, twoPhaseLAD, LAD5eqn, LADInt, LADN2F,LADMass_Consv
+        logical, intent(in) :: use_gTg,useOneG,use_Stagg,intSharp,intSharp_spf,intSharp_ufv,intSharp_d02,intSharp_cpg_west,strainHard,cnsrv_g,cnsrv_gt,cnsrv_gp,cnsrv_pe, useAkshayForm, twoPhaseLAD, LAD5eqn, LADInt, LADN2F,LADMass_Consv, skew_mass, skew_Ys, skew_VF
         integer, intent(in) :: ns
         real(rkind), intent(in) :: intSharp_cut
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
@@ -284,7 +286,9 @@ contains
         this%useAkshayForm = useAkshayForm
         this%twoPhaseLAD   = twoPhaseLAD
         this%LAD5eqn       = LAD5eqn
-
+        this%skew_mass     = skew_mass
+        this%skew_Ys       = skew_Ys
+        this%skew_VF       = skew_VF
         this%strainHard = strainHard
         this%cnsrv_g  = cnsrv_g
         this%cnsrv_gt = cnsrv_gt
@@ -295,6 +299,10 @@ contains
         this%x_bc = x_bc
         this%y_bc = y_bc
         this%z_bc = z_bc
+
+         print *, " solidmod skew mass ", this%skew_mass
+         print *, " solidmod skew Ys   ", this%skew_Ys
+         print *, " solidmod skew VF   ", this%skew_VF
 
         ! Assume everything is in Y decomposition
         this%nxp = decomp%ysz(1)
@@ -369,6 +377,12 @@ contains
         !Allocate material density
         if( allocated( this%VF_mid ) ) deallocate( this%VF_mid )
         allocate( this%VF_mid(this%nxp,this%nyp,this%nzp,3) )
+
+         if( allocated( this%Ys_mid ) ) deallocate( this%Ys_mid )
+        allocate( this%Ys_mid(this%nxp,this%nyp,this%nzp,3) )
+
+         if( allocated( this%rho_mid ) ) deallocate( this%rho_mid )
+        allocate( this%rho_mid(this%nxp,this%nyp,this%nzp,3) )
 
         ! Allocate material elastic inverse deformation gradients and associate pointers
         if( allocated( this%g ) ) deallocate( this%g)
@@ -562,6 +576,10 @@ contains
         if( allocated( this%Ji_phi ) ) deallocate( this%Ji_phi )
         allocate( this%Ji_phi(this%nxp,this%nyp,this%nzp,3) )
 
+          ! Allocate material diffusive flux
+        if( allocated( this%JiYs ) ) deallocate( this%JiYs )
+        allocate( this%JiYs(this%nxp,this%nyp,this%nzp,3) )
+
         if( allocated( this%adiff ) ) deallocate( this%adiff )
         allocate( this%adiff(this%nxp,this%nyp,this%nzp) )
 
@@ -643,8 +661,6 @@ contains
 
         ! Allocate interface sharpening rho*gp flux
         if( allocated( this%intSharp_rgp ) ) deallocate( this%intSharp_rgp )
-        allocate( this%intSharp_rgp(this%nxp,this%nyp,this%nzp,9,3) )
-        ! Allocate interface sharpening rho*gp diffusion flux
         if( allocated( this%intSharp_rgpDiff ) ) deallocate( this%intSharp_rgpDiff )
         allocate( this%intSharp_rgpDiff(this%nxp,this%nyp,this%nzp,9,3) )
         ! Allocate interface sharpening rho*gp FV flux
@@ -663,8 +679,10 @@ contains
 
         ! Allocate material conserved variables
         if( allocated( this%consrv ) ) deallocate( this%consrv )
+        if( allocated( this%spec_consrv ) ) deallocate( this%spec_consrv )
         if(this%PTeqb .or. this%pEqb) then
             allocate( this%consrv(this%nxp,this%nyp,this%nzp,1) )
+            allocate( this%spec_consrv(this%nxp,this%nyp,this%nzp,1) )
         else
             allocate( this%consrv(this%nxp,this%nyp,this%nzp,2) )
         endif
@@ -686,6 +704,9 @@ contains
         if( allocated( this%QtmpYs ) ) deallocate( this%QtmpYs )
         allocate( this%QtmpYs(this%nxp,this%nyp,this%nzp) )
 
+        !Spec Ys Eqn
+        if( allocated( this%QtmpspecYs ) ) deallocate( this%QtmpspecYs )
+        allocate( this%QtmpspecYs(this%nxp,this%nyp,this%nzp) )
         ! pe equation
         if( allocated( this%Qtmppe ) ) deallocate( this%Qtmppe )
         allocate( this%Qtmppe(this%nxp,this%nyp,this%nzp) )
@@ -715,9 +736,18 @@ contains
         if( allocated( this%QtmpVF ) ) deallocate( this%QtmpVF )
         if( allocated( this%Qtmpeh ) ) deallocate( this%Qtmpeh )
         if( allocated( this%QtmpYs ) ) deallocate( this%QtmpYs )
+        if( allocated( this%QtmpspecYs ) ) deallocate( this%QtmpspecYs )
         if( allocated( this%Qtmpg  ) ) deallocate( this%Qtmpg )
         if( allocated( this%Qtmpg_t  ) ) deallocate( this%Qtmpg_t )
         if( allocated( this%Qtmpg_p  ) ) deallocate( this%Qtmpg_p )
+        if( allocated( this%Qtmppe  ) ) deallocate( this%Qtmppe )
+        if( allocated( this%consrv ) ) deallocate( this%consrv )
+        
+        if( allocated( this%intSharp_a )   ) deallocate( this%intSharp_a )
+        if( allocated( this%intSharp_R )   ) deallocate( this%intSharp_R )
+        if( allocated( this%intSharp_aDiff )   ) deallocate( this%intSharp_aDiff )
+        if( allocated( this%intSharp_RDiff )   ) deallocate( this%intSharp_RDiff )
+        if( allocated( this%intSharp_aFV )   ) deallocate( this%intSharp_aFV )
         if( allocated( this%Qtmppe  ) ) deallocate( this%Qtmppe )
         if( allocated( this%consrv ) ) deallocate( this%consrv )
         
@@ -748,12 +778,14 @@ contains
         if( allocated( this%vfLAD )   ) deallocate( this%vfLAD )
         if( allocated( this%Ji )   ) deallocate( this%Ji )
         if( allocated( this%Ji_phi )   ) deallocate( this%Ji_phi )
+        if( allocated( this%JiYs )   ) deallocate( this%JiYs )
         if( allocated( this%rhodiff )   ) deallocate( this%rhodiff )
         if( allocated( this%adiff )   ) deallocate( this%adiff )
         if( allocated( this%outdiff )   ) deallocate( this%outdiff )
         if( allocated( this%Ysdiff )   ) deallocate( this%Ysdiff )
         if( allocated( this%fd )   ) deallocate( this%fd )
-
+        if( allocated( this%adiff_stagg)) deallocate( this%adiff_stagg )
+        if( allocated( this%rhodiff_stagg))   deallocate( this%rhodiff_stagg)
         if( allocated( this%diff ) ) deallocate( this%diff )
         if( allocated( this%diff_g ) ) deallocate( this%diff_g )
         if( allocated( this%diff_gt ) ) deallocate( this%diff_gt )
@@ -825,8 +857,8 @@ contains
         if( allocated( this%fluxYs )  ) deallocate( this%fluxYs )
         if( allocated( this%VF_mid )  ) deallocate( this%VF_mid )
         if( allocated( this%rhoYs_mid )  ) deallocate( this%rhoYs_mid )
-
-
+        if( allocated( this%Ys_mid )  ) deallocate( this%Ys_mid )
+        if( allocated( this%rho_mid )  ) deallocate( this%rho_mid )
         ! Now deallocate the EOS objects
         if ( allocated(this%hydro)   ) deallocate(this%hydro)
         if ( allocated(this%elastic) ) deallocate(this%elastic)
@@ -4701,17 +4733,21 @@ contains
 
          call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,this%rhoYs_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV(this%decomp,this%interpMid,this%VF,this%VF_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call interpolateFV(this%decomp,this%interpMid,rho,this%rho_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call interpolateFV(this%decomp,this%interpMid,this%Ys,this%Ys_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
     end subroutine
-    subroutine getYsLad(this,rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-       use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z, gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz
+    subroutine getYsLAD(this,rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+       use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z, gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz,interpolateMax
         class(solid),intent(inout)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,sos
+        real(rkind),                                          intent(in)  :: dx,dy,dz
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: tmp,tmp1,tmp2,tmp3,u_int,v_int,w_int,dYdx,dYdy,dYdz,ysLAD2
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)  :: Ys_int,rho_int,rhoYs_int, rhodiff_int, outdiff_int, Ysdiff_int, adiff_int,rhom_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x,dYdy_y,dYdz_z,outLAD, diffLAD,rhom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: tmp,tmp1,tmp2,tmp3,u_int,v_int,w_int,dYdx,dYdy,dYdz,ysLAD2,rhom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)  :: Ys_int,rho_int,rhoYs_int, rhodiff_int, outdiff_int, Ysdiff_int, adiff_int,rhom_int,sos_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)  :: VF_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x,dYdy_y,dYdz_z,outLAD, diffLAD
 
         if( this%LADInt) then
 
@@ -4719,46 +4755,26 @@ contains
            call interpolateFV_x(this%decomp,this%interpMid,dYdx,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV_y(this%decomp,this%interpMid,dYdy,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV_z(this%decomp,this%interpMid,dYdz,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call interpolateMax(this%decomp,this%interpMid02,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
 
         else if(this%LADN2F) then
-
+           call this%getSpeciesDensity(rho,rhom)
            
-           !call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
-           !call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
-
            call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+   !       call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+   !       call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+   !       call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+        !   call interpolateFV(this%decomp,this%interpMid,rhom,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call interpolateFV(this%decomp,this%interpMid02,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call interpolateFV(this%decomp,this%interpMid,sos,sos_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call interpolateFV(this%decomp,this%interpMid,this%VF,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
+    !       rhodiff_int   = 1d3*sos_int*( half*(abs(VF_int)-(one) + abs((VF_int)-(one))) )*(dx*dy*dx)**(1.0/3.0)
            call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !all this%getSpeciesDensity(rho,rhom)
-           !call interpolateFV(this%decomp,this%interpMid,rhom,rhom_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           !call gradFV_N2Fx(this%decomp,this%derStagg,this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call gradFV_N2Fy(this%decomp,this%derStagg,this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call gradFV_N2Fz(this%decomp,this%derStagg,this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call divergenceFV(this%decomp,this%derStagg,rhom_int(:,:,:,1)*rhodiff_int(:,:,:,1)*dYdx_x,rhom_int(:,:,:,2)*rhodiff_int(:,:,:,2)*dYdy_y,rhom_int(:,:,:,3)*rhodiff_int(:,:,:,3)*dYdz_z,ysLAD2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call divergenceFV(this%decomp,this%derStagg,rhom_int(:,:,:,1)*adiff_int(:,:,:,1)*dYdx_x,rhom_int(:,:,:,2)*adiff_int(:,:,:,2)*dYdy_y,rhom_int(:,:,:,3)*adiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-          
-           !call gradFV_N2Fx(this%decomp,this%derStagg,this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call gradFV_N2Fy(this%decomp,this%derStagg,this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call gradFV_N2Fz(this%decomp,this%derStagg,this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call interpolateFV(this%decomp,this%interpMid,this%Ysdiff,Ysdiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           !call divergenceFV(this%decomp,this%derStagg,rho_int(:,:,:,1)*Ysdiff_int(:,:,:,1)*dYdx_x,rho_int(:,:,:,2)*Ysdiff_int(:,:,:,2)*dYdy_y,rho_int(:,:,:,3)*Ysdiff_int(:,:,:,3)*dYdz_z,diffLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
- 
-         !  this%YsLAD = this%YsLAD !+ysLAD2
         else
 
            call gradient(this%decomp,this%der,rho*this%Ys,dYdx,dYdy,dYdz,x_bc,y_bc,z_bc)
@@ -4768,27 +4784,31 @@ contains
 
     end subroutine
 
-    subroutine update_Ys(this,isub,dt,rho,u,v,w,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge)
+     subroutine update_Ys(this,isub,dt,rho,u,v,w,sos,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,sponge,alpha)
         use decomp_2d,  only: nrank
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,sos
+
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2),   intent(in)  :: sponge
+        real(rkind) :: alpha
         logical :: periodicx,periodicy,periodicz
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHS formass fraction equation
-        real(rkind)  :: dx,dy
+        real(rkind)  :: dx,dy,dz
         integer :: i
         dy = y(1,2,1) - y(1,1,1)
+        dx = x(2,1,1) - x(1,1,1)
+        dz = z(2,1,1) - z(1,1,1)
 
 
         if(this%intSharp) then        
-           call this%getRHS_Ys_intSharp(rho,u,v,w,rhsYs,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call this%getRHS_Ys_intSharp(rho,u,v,w,sos,rhsYs,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, alpha)
         else
-           call this%getRHS_Ys(rho,u,v,w,rhsYs,dy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call this%getRHS_Ys(rho,u,v,w,sos,rhsYs,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
         endif
 
         call hook_material_mass_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,rho,u,v,w,this%Ys,this%VF,this%p,rhsYs)
@@ -4805,15 +4825,65 @@ contains
         if(isub==1) this%QtmpYs = zero                   ! not really needed, since RK45_A(1) = 0
         this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
         this%consrv(:,:,:,1) = this%consrv(:,:,:,1)  + RK45_B(isub)*this%QtmpYs
+        
     end subroutine
 
-    subroutine getRHS_Ys_intSharp(this,rho,u,v,w,rhsYs,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    subroutine update_specYs(this,isub,dt,rho,u,v,w,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge,alpha)
+        use decomp_2d,  only: nrank
+        use RKCoeffs,   only: RK45_A,RK45_B
+        class(solid), intent(inout) :: this
+        integer, intent(in) :: isub
+        real(rkind), intent(in) :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2),   intent(in)  :: sponge
+        real(rkind) :: alpha
+        logical :: periodicx,periodicy,periodicz
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsYs  ! RHSformass fraction equation
+        real(rkind)  :: dx,dy
+        integer :: i
+        dy = y(1,2,1) - y(1,1,1)
+
+
+       call this%getRHS_specYs(rho,u,v,w,rhsYs,dy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
+
+
+        ! advance sub-step
+        if(isub==1) this%QtmpYs = zero                   ! not really needed,since RK45_A(1) = 0
+        this%QtmpspecYs  = dt*rhsYs + RK45_A(isub)*this%QtmpspecYs
+        this%spec_consrv(:,:,:,1) = this%spec_consrv(:,:,:,1)  + RK45_B(isub)*this%QtmpspecYs
+        this%consrv(:,:,:,1) = 1 / this%spec_consrv(:,:,:,1)
+    end subroutine
+
+     subroutine getRHS_specYs(this,rho,u,v,w,rhsYs,dy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
+        use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z
+        class(solid),                                         intent(inout)  :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)     :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out)    :: rhsYs
+        real(rkind),                                          intent(in)     :: dy
+        real(rkind),                                          intent(in)     :: alpha
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        logical :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: vcon,tmp,tmp1,tmp2,tmp3,u_int,v_int, w_int,flux, dYdx, dYdy, dYdz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x,dYdy_y,dYdz_z,drYdx,drYdy,drYdz,divu_node
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rho_int,Ys_int,rhoYs_int, rhodiff_int
+
+
+        
+
+
+    end subroutine
+ 
+    subroutine getRHS_Ys_intSharp(this,rho,u,v,w,sos,rhsYs,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
         use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x, interpolateFV_y,interpolateFV_z
         use reductions, only: P_MAXVAL, P_MINVAL
         use decomp_2d,  only: nrank
         class(solid),                                         intent(inout)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,sos
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out) :: rhsYs
+        real(rkind),                                          intent(in)  :: alpha
+        real(rkind),                                          intent(in)  :: dx,dy,dz
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: tmp,tmp1, tmp2,tmp3,u_int,v_int,w_int,dYdx,dYdy,dYdz
@@ -4898,16 +4968,12 @@ contains
            else
 
                if( .NOT. this%LADMass_Consv ) then
-                  call this%getYsLad(rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                  call this%getYsLAD(rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
                endif
            endif
 
            rhsYs = tmp + this%intSharp_RFV + this%YsLAD !+ this%intSharp_RDiffFV
 
-       !    tmp_min = P_MINVAL(tmp)
-       !    int_min = P_MINVAL(this%intSharp_RFV)
-       !    lad_min = P_MINVAL(this%YsLAD)
-       !    if (nrank.eq.0) print*,tmp_min,int_min, lad_min
            this%u_int = u_int
            this%v_int = v_int
            this%w_int = w_int
@@ -4920,16 +4986,19 @@ contains
 
     end subroutine
 
-    subroutine getRHS_Ys(this,rho,u,v,w,rhsYs,dy, periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    subroutine getRHS_Ys(this,rho,u,v,w,sos,rhsYs,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
         use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z
         class(solid),                                         intent(inout)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)     :: rho,u,v,w
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)     :: rho,u,v,w,sos
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out)    :: rhsYs
-        real(rkind),                                          intent(in)     :: dy 
+        real(rkind),                                          intent(in)     :: dy,dx,dz
+        real(rkind),                                          intent(in)     :: alpha 
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: vcon,tmp,tmp1, tmp2,tmp3,u_int,v_int, w_int,flux, dYdx, dYdy, dYdz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x, dYdy_y,dYdz_z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x, dYdy_y,dYdz_z,drYdx,drYdy,drYdz,divu_node
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: drdx,drdy,drdz,drsdx,drsdy,drsdz,divuY, divur
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: divuVF,divurs,rhom, dVFdx,dVFdy,dVFdz,divuphi
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rho_int, Ys_int,rhoYs_int, rhodiff_int
     
 
@@ -4946,7 +5015,7 @@ contains
 
              !original terms
              call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)    !mass fraction equation is anti-symmetric
-             call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),this%YsLAD,-x_bc, -y_bc,-z_bc)
+!             call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),this%YsLAD,-x_bc, -y_bc,-z_bc)
 
            else
 
@@ -4972,25 +5041,65 @@ contains
            else
 
                 if( .NOT. this%LADMass_Consv ) then
-                  call this%getYsLad(rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                  call this%getYsLAD(rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
                endif
 
 
            endif
-          ! call interpolateFV_x(this%decomp,this%interpMid,u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          ! call interpolateFV_y(this%decomp,this%interpMid,v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          ! call interpolateFV_z(this%decomp,this%interpMid,w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          ! call interpolateFV(this%decomp,this%interpMid,this%Ys,Ys_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          ! call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          ! call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,rhoYs_int,periodicx, periodicy, periodicz, x_bc, y_bc,z_bc)
-           !call divergenceFV(this%decomp,this%derStagg,-u_int*rho_int(:,:,:,1)*Ys_int(:,:,:,1),-v_int*rho_int(:,:,:,2)*Ys_int(:,:,:,2),-w_int*rho_int(:,:,:,3)*Ys_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         !  call interpolateFV_x(this%decomp,this%interpMid,u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         !  call interpolateFV_y(this%decomp,this%interpMid,v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         !  call interpolateFV_z(this%decomp,this%interpMid,w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         !  call interpolateFV(this%decomp,this%interpMid,this%Ys,Ys_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         !  call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         !  call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,rhoYs_int,periodicx, periodicy, periodicz, x_bc, y_bc,z_bc)
+         !  call divergenceFV(this%decomp,this%derStagg,-u_int*rho_int(:,:,:,1)*Ys_int(:,:,:,1),-v_int*rho_int(:,:,:,2)*Ys_int(:,:,:,2),-w_int*rho_int(:,:,:,3)*Ys_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-          ! call divergenceFV(this%decomp,this%derStagg,-u_int*rhoYs_int(:,:,:,1),-v_int*rhoYs_int(:,:,:,2),-w_int*rhoYs_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-     
+         !  call divergenceFV(this%decomp,this%derStagg,-u_int*rho_int(:,:,:,1)*Ys_int(:,:,:,1),-v_int*rho_int(:,:,:,2)*Ys_int(:,:,:,2),-w_int*rho_int(:,:,:,3)*Ys_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    
+           !this%rhoYs_mid = this%Ys_mid*this%rho_mid
+           tmp =0.0 
            call divergenceFV(this%decomp,this%derStagg,-u*this%rhoYs_mid(:,:,:,1),-v*this%rhoYs_mid(:,:,:,2),-w*this%rhoYs_mid(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
+           call gradient(this%decomp,this%der,rho*this%Ys,drYdx,drYdy,drYdz,x_bc,y_bc,z_bc)
+           call divergence(this%decomp,this%der,u,v,w,divu_node,x_bc,y_bc,z_bc) 
+           if(this%skew_mass) then
+               print *, "skew mass"
+               rhsYs = alpha*tmp - (1.0 - alpha)*(u*drYdx + v*drYdy + w*drYdz + rho*divu_node) + this%YsLAD
 
-           rhsYs = tmp + this%YsLAD
+           else if(this%skew_Ys) then
+               print *, "skew Ys"
+               call divergence(this%decomp,this%der,u*this%Ys,v*this%Ys,w*this%Ys,divuY,x_bc,y_bc,z_bc)
+
+               call divergence(this%decomp,this%der,u*rho,v*rho,w*rho,divur,x_bc,y_bc,z_bc)
+
+               call gradient(this%decomp,this%der,rho,drdx,drdy,drdz,x_bc,y_bc,z_bc)
+
+               call gradient(this%decomp,this%der,this%Ys,dYdx,dYdy,dYdz,x_bc,y_bc,z_bc) 
+
+               rhsYs = 0.25 * tmp - 0.25*( u*drYdx + v*drYdy + w*drYdz + rho*divuY + this%Ys*divur) &
+                       - 0.25*( rho*u*dYdx + rho*v*dYdy + rho*w*dYdz + rho*this%Ys*divu_node +           &
+                       this%Ys*u*drdx + this%Ys*v*drdy + this%Ys*w*drdz )
+
+           else if(this%skew_VF) then
+               print *, "skew VF"
+               call this%getSpeciesDensity(rho,rhom)
+
+               call divergence(this%decomp,this%der,u*this%VF,v*this%VF,w*this%VF,divuphi,x_bc,y_bc,z_bc)
+
+               call divergence(this%decomp,this%der,u*rhom,v*rhom,w*rhom,divurs,x_bc,y_bc,z_bc)
+
+               call gradient(this%decomp,this%der,rhom,drsdx,drsdy,drsdz,x_bc,y_bc,z_bc)
+
+               call gradient(this%decomp,this%der,this%VF,dVFdx,dVFdy,dVFdz,x_bc,y_bc,z_bc)
+
+               rhsYs = 0.25 * tmp - 0.25*( u*drYdx + v*drYdy + w*drYdz + rho*divuphi + this%Ys*divurs) &
+                       - 0.25*( rho*u*dVFdx + rho*v*dVFdy + rho*w*dVFdz + rhom*this%VF*divu_node +      &
+                       this%VF*u*drsdx + this%VF*v*drsdy + this%VF*w*drsdz )
+
+           else
+
+               rhsYs=tmp + this%YsLAD
+           endif
            this%u_int = u_int
            this%v_int = v_int
            this%w_int = w_int
@@ -5089,7 +5198,7 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge)
+    subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge,alpha)
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
         class(solid), intent(in)    :: other
@@ -5098,6 +5207,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,src
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2),   intent(in)  :: sponge
+        real(rkind),                                            intent(in)  :: alpha
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
@@ -5111,7 +5221,7 @@ contains
         if(this%intSharp) then        
            call this%getRHS_VF_intSharp(other,rho,u,v,w,divu,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         else
-           call this%getRHS_VF(other,rho,u,v,w,divu,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call this%getRHS_VF(other,rho,u,v,w,divu,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
         endif
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
         
@@ -5130,8 +5240,8 @@ contains
 
     end subroutine
 
-    subroutine getRHS_VF(this,other,rho,u,v,w,divu,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        use operators, only: gradient, divergence,divergenceFV,interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z
+    subroutine getRHS_VF(this,other,rho,u,v,w,divu,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
+        use operators, only: gradient, divergence,divergenceFV,interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z,gradFV_x,gradFV_y,gradFV_z,filter3D
         use constants, only: one
         class(solid),                                       intent(inout)  :: this
         class(solid),                                       intent(in)  :: other
@@ -5139,12 +5249,13 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
         logical :: periodicx,periodicy,periodicz
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),           intent(in) :: alpha
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2, tmp3, tmp4, tmp5, tmp6,rhocsq1, rhocsq2
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: div_u,div_uVF,u_int, v_int, w_int, dVFdx, dVFdy, dVFdz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx_x, dVFdy_y,dVFdz_z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: div_u,div_uVF,u_int, v_int, w_int, dVFdx, dVFdy, dVFdz,divu_node
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx_x, dVFdy_y,dVFdz_z, VF_fil
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int,divu_d,divuVF_d, uVF_int, vVF_int, wVF_int, adiff_int
- 
+        integer :: iflag = one 
         if(.NOT. this%use_Stagg) then
           ! Add C/rhom to Fsource
           !--call this%getSpeciesDensity(rho,tmp1)  !-- use this%rhom
@@ -5175,7 +5286,7 @@ contains
            !   call secondder(this%VF,tmp4,tmp5,tmp6,[0,0],[0,0],[0,0])
  
            
-                  rhsVF = this%VF*tmp5 + tmp4 -rhsVF/this%rhom ! + this%physmu*(tmp4 + tmp5 + tmp6)
+                  rhsVF = this%VF*tmp5 + tmp4 !-rhsVF/this%rhom ! + this%physmu*(tmp4 + tmp5 + tmp6)
       
           endif
 
@@ -5192,11 +5303,19 @@ contains
           ! call divergenceFV(this%decomp,this%derStagg,u_int,v_int,w_int,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           ! call divergenceFV(this%decomp,this%derStagg,-u_int*VF_int(:,:,:,1),-v_int*VF_int(:,:,:,2),-w_int*VF_int(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
+           call gradFV_x(this%decomp,this%derStagg,this%VF_mid(:,:,:,1),dVFdx,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call gradFV_y(this%decomp,this%derStagg,this%VF_mid(:,:,:,2),dVFdy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call gradFV_z(this%decomp,this%derStagg,this%VF_mid(:,:,:,3),dVFdz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
            call divergenceFV(this%decomp,this%derStagg,u,v,w,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call divergenceFV(this%decomp,this%derStagg,-u*this%VF_mid(:,:,:,1),-v*this%VF_mid(:,:,:,2),-w*this%VF_mid(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call gradient(this%decomp,this%der,this%VF,dVFdx,dVFdy,dVFdz,x_bc,y_bc,z_bc)
 
-           rhsVF = this%VF*div_u + div_uVF + this%vfLAD
-           this%VF_int = VF_int
+          call divergence(this%decomp,this%der,u,v,w,divu_node,x_bc,y_bc,z_bc)
+
+          VF_fil = this%VF
+          call filter3D(this%decomp, this%fil, VF_fil, iflag,x_bc,y_bc, z_bc) 
+          rhsVF = VF_fil*div_u + div_uVF + this%vfLAD ! - (1-alpha)*(this%VF*divu_node + u*dVFdx + v*dVFdy + w*dVFdz)
 
         endif
 
@@ -5204,7 +5323,7 @@ contains
     end subroutine
 
     subroutine getLAD_VF(this,rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        use operators, only: gradient,divergence, interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z, divergenceFV,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz
+        use operators, only: gradient,divergence, interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z, divergenceFV,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz,interpolateMax
         use constants, only: one
         class(solid), intent(inout)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
@@ -5233,10 +5352,14 @@ contains
           !call interpolateFV(this%decomp,this%interpMid,rhom,rhom_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         !  call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         !  call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,ysLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !  call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dVFdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !  call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dVFdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !  call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dVFdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !  call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,ysLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dVFdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dVFdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dVFdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call interpolateFV(this%decomp,this%interpMid02,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
           !this%vfLAD = this%vfLAD
@@ -5408,7 +5531,7 @@ contains
 
 
         if (present(fil)) then
-            fil_ => fil
+           fil_ => fil
         else
             fil_ => this%fil
         end if
@@ -5986,10 +6109,6 @@ contains
     !                         gradf_new(3,2) = beta_new(3)*beta_new(1);
     !                         gradf_new(3,3) = beta_new(1)*beta_new(2)
 
-    !                         betasum = sum( beta_new*(beta_new-one) ) / three
-    !                         f2 = -( beta_new*(beta_new-one) - betasum ); f2(3) = beta_new(1)*beta_new(2)*beta_new(3)
-    !                         dbeta_new = (f-f2)
-    !                         call dgesv(3, 1, gradf_new, 3, ipiv, dbeta_new, 3, info)
     !                         residual_new = -sum( (f2-f)*dbeta_new )                                    ! lambda**2
 
     !                         do while ( (abs(residual_new) .GE. abs(residual)) .AND. (t > eps) )
@@ -6031,60 +6150,6 @@ contains
     !                         end if
     !                     end do
     !                     if ((iters >= niters) .OR. (t <= eps)) then
-    !                         write(charout,'(4(A,I0))') 'Newton solve in sliding_deformation did not converge at index ',i,',',j,',',k,' of process ',nrank
-    !                         print '(A)', charout
-    !                         print '(A,3(X,I0))', 'sty = ', this%decomp%yst
-    !                         print '(A)', 'g = '
-    !                         print '(4X,3(ES15.5))', this%g(i,j,k,1), this%g(i,j,k,2), this%g(i,j,k,3)
-    !                         print '(4X,3(ES15.5))', this%g(i,j,k,4), this%g(i,j,k,5), this%g(i,j,k,6)
-    !                         print '(4X,3(ES15.5))', this%g(i,j,k,7), this%g(i,j,k,8), this%g(i,j,k,9)
-    !                         print '(A,ES15.5)', '( ||S||^2 - (2/3) sigma_Y^2 )/mu^2 = ', ycrit
-
-    !                         print '(A,ES15.5)', 'Relaxation, t = ', t
-    !                         print '(A,ES15.5)', 'Residual = ', residual
-    !                         call GracefulExit(charout,6382)
-    !                     end if
-
-    !                     ! Then get new svals
-    !                     sval = sqrt(beta) * sqrt_om**(one/three)
-
-    !                     if (this%use_gTg) then
-    !                         sval = sval*sval ! New eigenvalues of G
-                            
-    !                         ! Get g = v*sval*vt
-    !                         u = sigma_tilde; vt = transpose(u)
-    !                         vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! eigval*vt
-    !                         G = MATMUL(u,vt) ! v*eigval*vt
-    !                     else
-    !                         ! Get g = u*sval*vt
-    !                         u = sigma_tilde; vt = transpose(u)
-    !                         vt(1,:) = vt(1,:)*sval(1); vt(2,:) = vt(2,:)*sval(2); vt(3,:) = vt(3,:)*sval(3)  ! sval*vt
-    !                         g = MATMUL(u,vt) ! u*sval*vt
-    !                     end if
-
-
-    !                     ! Try to make it a smoother transition to sliding
-    !                     this%g(i,j,k,1) = mask(i,j,k)*g(1,1) + (one - mask(i,j,k))*this%g(i,j,k,1)
-    !                     this%g(i,j,k,2) = mask(i,j,k)*g(1,2) + (one - mask(i,j,k))*this%g(i,j,k,2)
-    !                     this%g(i,j,k,3) = mask(i,j,k)*g(1,3) + (one - mask(i,j,k))*this%g(i,j,k,3)
-    !                     this%g(i,j,k,4) = mask(i,j,k)*g(2,1) + (one - mask(i,j,k))*this%g(i,j,k,4)
-    !                     this%g(i,j,k,5) = mask(i,j,k)*g(2,2) + (one - mask(i,j,k))*this%g(i,j,k,5)
-    !                     this%g(i,j,k,6) = mask(i,j,k)*g(2,3) + (one - mask(i,j,k))*this%g(i,j,k,6)
-    !                     this%g(i,j,k,7) = mask(i,j,k)*g(3,1) + (one - mask(i,j,k))*this%g(i,j,k,7)
-    !                     this%g(i,j,k,8) = mask(i,j,k)*g(3,2) + (one - mask(i,j,k))*this%g(i,j,k,8)
-    !                     this%g(i,j,k,9) = mask(i,j,k)*g(3,3) + (one - mask(i,j,k))*this%g(i,j,k,9)
-
-    !                     ! this%g(i,j,k,1) = g(1,1); this%g(i,j,k,2) = g(1,2); this%g(i,j,k,3) = g(1,3)
-    !                     ! this%g(i,j,k,4) = g(2,1); this%g(i,j,k,5) = g(2,2); this%g(i,j,k,6) = g(2,3)
-    !                     ! this%g(i,j,k,7) = g(3,1); this%g(i,j,k,8) = g(3,2); this%g(i,j,k,9) = g(3,3)
-
-    !                 end if
-    !             end do
-    !         end do
-    !     end do
-
-    !     ! ! Get devstress for debugging
-    !     ! call this%get_eelastic_devstress()
     !     ! sigma(1,1) = this%sxx(21,64,1); sigma(1,2) = this%sxy(21,64,1); sigma(1,3) = this%sxz(21,64,1);
     !     ! sigma(2,1) = this%sxy(21,64,1); sigma(2,2) = this%syy(21,64,1); sigma(2,3) = this%syz(21,64,1);
     !     ! sigma(3,1) = this%sxz(21,64,1); sigma(3,2) = this%syz(21,64,1); sigma(3,3) = this%szz(21,64,1);

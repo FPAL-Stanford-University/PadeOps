@@ -1,6 +1,6 @@
 module Advection_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight,three,six,sixth,zero
+    use constants,        only: one,two,eight,three,six,sixth,zero,pi
     use FiltersMod,       only: filters
     use DerivativesStaggeredMod, only: derivativesStagg
     implicit none
@@ -16,11 +16,11 @@ module Advection_data
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
     real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e
     real(rkind) :: kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2
-    real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, Nvel = 0, p_disturb = 0.1, width = 0.75d0;
+    real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, Nvel = 0, p_disturb = 0.1, width = 0.5d0;
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 3d0, Lx = 3d0, interface_init = 0.5, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 2d0, Lx = 2d0, interface_init = 0.5, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -149,12 +149,6 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     ix1 = decomp%yst(1); iy1 = decomp%yst(2); iz1 = decomp%yst(3)
     ixn = decomp%yen(1); iyn = decomp%yen(2); izn = decomp%yen(3)
    
-    print *, "ix1 = ", ix1
-    print *, "ixn = ", ixn
-    print *, "iy1 = ", iy1
-    print *, "iyn = ", iyn
-    print *, "iz1 = ", iz1
-    print *, "izn = ", izn 
     ! Create mesh from [0,1)x[0,1)x[0,1) using nx, ny, nz points in x, y and z respectively
     ! Need to set x, y and z as well as  dx, dy and dz
 
@@ -171,12 +165,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - 1.5 
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy - 1.5
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - 1.0 
+                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy - 1.0
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
-                    print *, " x = ", x(i,j,k)
-                    print *, " y = ", y(i,j,k)
-                    print *, " z = ", z(i,j,k)
                 end do
             end do
         end do
@@ -188,7 +179,7 @@ end subroutine
 subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
-    use SolidGrid,        only: u_index,v_index,w_index,rho_index
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index,p_index
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use StiffGasEOS,      only: stiffgas
@@ -246,7 +237,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                   "gaussian", "gaussian", "gaussian" )
      nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
-                 rho => fields(:,:,:,rho_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+                 rho => fields(:,:,:,rho_index),p=>fields(:,:,:,p_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
@@ -305,11 +296,11 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp ! + (noise-0.5)*1d-7
-        mix%material(2)%VF = 1 - mix%material(1)%VF
+        mix%material(2)%VF =  1 - mix%material(1)%VF
 
         !Set density profile and mass fraction based on volume fraction
         rho = rho_0*mix%material(1)%VF + rho_0_2*mix%material(2)%VF
-        mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
+        mix%material(1)%Ys =  mix%material(1)%VF * rho_0 / rho
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
         u = v0
@@ -321,6 +312,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         !set mixture pressure (uniform)
 !	mix%material(1)%p  =p_amb+10*exp(-((y-0.8)**2)/(2*(0.05)**2))
         !mix%material(1)%p  = (p_amb +p_disturb)*tmp2+p_amb
+
+        p = p_amb
         mix%material(1)%p = p_amb
         mix%material(2)%p  = mix%material(1)%p
 !        mix%material(1)%T = 298
@@ -374,7 +367,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use SolidMixtureMod,  only: solid_mixture
-    use MultiphaseAdvection_data
+    use Advection_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -410,7 +403,7 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
     use DerivativesStaggeredMod, only: derivativesStagg
     use InterpolatorsMod,        only: interpolators
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
-    use ShearLayerComp_data
+    use Advection_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile

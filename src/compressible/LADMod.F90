@@ -28,6 +28,7 @@ module LADMod
         real(rkind) :: Crho
         real(rkind) :: Cvf1
         real(rkind) :: Cvf2
+        real(rkind) :: Ce
         type(decomp_info), pointer :: decomp
         type(derivatives), pointer :: der
         type(filters),     pointer :: fil
@@ -55,6 +56,7 @@ module LADMod
         procedure          :: get_diffusivity_N2F
         procedure          :: get_diff_g
         procedure          :: get_diff_pe
+        procedure          :: get_e
         procedure, private :: filter
         final              :: destroy
 
@@ -62,7 +64,7 @@ module LADMod
 
 contains
 
-    subroutine init(this,decomp,der,derStagg,interpMid,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1, Cvf2,yMetric)
+    subroutine init(this,decomp,der,derStagg,interpMid,fil,nfils,dx,dy,dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1, Cvf2,Ce,yMetric)
         class(ladobject),        intent(inout) :: this
         type(decomp_info), target, intent(in) :: decomp
         type(derivatives), target, intent(in) :: der
@@ -71,7 +73,7 @@ contains
         type(filters),     target, intent(in) :: fil
         logical,           intent(in) :: yMetric
         integer,           intent(in) :: nfils
-        real(rkind),       intent(in) :: Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1,Cvf2,dx,dy,dz    
+        real(rkind),       intent(in) :: Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1,Cvf2,dx,dy,dz,Ce    
 
         ! Set all coefficients
         this%Cbeta = Cbeta
@@ -89,7 +91,7 @@ contains
         this%Crho       = Crho
         this%Cvf1       = Cvf1
         this%Cvf2       = Cvf2
-
+        this%Ce         = Ce
         print *, "Cy", this%Cy
         ! Point type pointers to external types
         this%decomp => decomp
@@ -478,6 +480,81 @@ contains
         kap = kap + kapstar
     end subroutine
 
+    subroutine get_e(this,rho,p,e,T,sos,eLAD,x_bc,y_bc,z_bc,tfloor)
+        class(ladobject),  intent(in) :: this
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in) :: rho,e,T,sos,p
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: eLAD
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: estar
+        real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp,xdum
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,kapP,func
+        real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2,ztmp,zdum,H1
+        real(rkind), intent(in) :: tfloor
+
+        integer :: i,j,k
+
+        where( rho .GT. 0.998)
+           H1 = 1
+        elsewhere( rho .LT. 0.998d-3)
+           H1 = 1
+        elsewhere
+           H1 = 0
+        endwhere
+
+
+        ! -------- Artificial Conductivity --------
+
+        ! Step 1: Get components of grad(e) squared individually
+        call gradient(this%decomp,this%der,e,ytmp1,ytmp2,ytmp3,x_bc,y_bc,z_bc)
+        !! Does not use any Y buffers
+        ! Get Y derivatives
+        !all this%der%ddy(e,ytmp1,y_bc(1),y_bc(2))
+        ! Get X derivatives
+       !call transpose_y_to_x(e,xtmp,this%decomp)
+       !call this%der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
+       !call transpose_x_to_y(xdum,ytmp2,this%decomp)
+        ! Get Z derivatives
+       ! call transpose_y_to_z(e,ztmp,this%decomp)
+       ! call this%der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
+       ! call transpose_z_to_y(zdum,ytmp3,this%decomp)
+        ytmp1 = ytmp1*ytmp1
+        ytmp2 = ytmp2*ytmp2
+        ytmp3 = ytmp3*ytmp3
+
+        ! Step 2: Get 4th derivative in X
+        call transpose_y_to_x(e,xtmp1,this%decomp)
+        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+        call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
+        xtmp2 = xtmp1*this%dx**4
+        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+        estar = ytmp4 * ( this%dx ) ! * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )
+
+        ! Step 3: Get 4th derivative in Z
+        call transpose_y_to_z(e,ztmp1,this%decomp)
+        call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
+        call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
+        ztmp2 = ztmp1*this%dz**4
+        call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+        estar = estar + ytmp4 * ( this%dz ) ! * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+
+        ! Step 4: Get 4th derivative in Y
+        call this%der%d2dy2(e,ytmp4,y_bc(1),y_bc(2))
+        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
+        ytmp4 = ytmp5*this%dy**4
+        estar = estar + ytmp4 * ( this%dy ) ! * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+
+        estar = this%Ce*rho*sos*abs(estar)/e
+
+        call this%filter(estar, x_bc, y_bc, z_bc)
+        call this%filter(estar, x_bc, y_bc, z_bc)
+        call this%filter(estar, x_bc, y_bc, z_bc)
+        eLAD =  estar
+    end subroutine
+
+ 
     subroutine get_conductivity(this,rho,p,e,T,sos,kap,x_bc,y_bc,z_bc,tfloor)
         class(ladobject),  intent(in) :: this
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)  :: rho,e,T,sos,p
@@ -498,16 +575,17 @@ contains
         !call gradient(this%decomp,this%der,e,ytmp1,ytmp2,ytmp3,x_bc,y_bc,z_bc) ! Does not use any Y buffers
 
         ! Get Y derivatives
-        call this%der%ddy(e,ytmp1,y_bc(1),y_bc(2))
+        call this%der%ddy(e,ytmp2,y_bc(1),y_bc(2))
         ! Get X derivatives
         call transpose_y_to_x(e,xtmp,this%decomp)
         call this%der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
-        call transpose_x_to_y(xdum,ytmp2,this%decomp)
+        call transpose_x_to_y(xdum,ytmp1,this%decomp)
         ! Get Z derivatives
         call transpose_y_to_z(e,ztmp,this%decomp)
         call this%der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,ytmp3,this%decomp)
-        
+       
+        ytmp1 = ytmp1*ytmp1 
         ytmp2 = ytmp2*ytmp2
         ytmp3 = ytmp3*ytmp3
 
@@ -518,7 +596,6 @@ contains
         xtmp2 = xtmp1*this%dx**4
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         kapstar = ytmp4 * ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
-        
 
         ! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(e,ztmp1,this%decomp)
@@ -597,7 +674,7 @@ contains
 
         ! Filter kapstar
         call this%filter(kapstar, x_bc, y_bc, z_bc)
-        kap = kap + kapstar
+        kap = kapstar
     end subroutine
 
     
@@ -1164,66 +1241,42 @@ contains
 
     end subroutine
 
-     subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dphidx,dphidy,dphidz,minYs,minVF,sos,adiff,rhodiff,outdiff,x_bc,y_bc,z_bc,detady,dy_stretch)
+     subroutine get_diffusivity_5eqn(this,rho,VF,rhoYs,u,v,w,drYsdx,drYsdy,drYsdz,dphidx,dphidy,dphidz,minYs,minVF,sos,adiff,rhodiff,outdiff,rhodiff_I,adiff_I,x_bc,y_bc,z_bc,detady,dy_stretch)
+        use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
         class(ladobject),  intent(in) :: this
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz,dy_stretch,detady
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: dphidx, dphidy,dphidz
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)    :: dphidx, dphidy,dphidz,u,v,w
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff, outdiff
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),3),intent(inout)  :: adiff_I, rhodiff_I
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: minYs, minVF
         real(rkind), dimension(:,:,:), pointer ::dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask,dil,omega, drYdmag, Ys, outb, Lm, Lm2
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask,dil,omega, drYdmag, Ys, outb, Lm, Lm2,outVF
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
-        real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2, ztmp3,ztmp4
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: tmp1,tmp2, tmp3, delphi,dely,num,den,tot
-        real(rkind) :: nmask = 40d0, e = 1d-15
+        real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2, ztmp3,ztmp4,rhom
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: tmp1,tmp2, tmp3, delphi, dely, num, den, tot, umag,umax,dt_inv,outrhom
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: outbx,outby,outbz,outVFx,outVFy,outVFz
+        real(rkind) :: nmask = 40d0, e = 1d-15, msos, len_scale
+        
+        umag =sqrt( u*u + v*v + w*w )
+        umax = P_MAXVAL(umag)
+        msos = P_MINVAL(sos)
+
+        dt_inv = sqrt ( (u/this%dx)**2 + (v/this%dy)**2 + (w/this%dz)**2 )
+
         
         ! Step 1: Construct Heaviside Functions
         tmp1 = drYsdx*drYsdx
         tmp2 = drYsdy*drYsdy
         tmp3 = drYsdz*drYsdz
         Ys = rhoYs/rho
-        where( abs((Ys)*(1 - (Ys))) .GT. 0)
+        rhom = rhoYs / (VF + 1d-16)
+        where( rhom .LT. 0)
            H1 = 1
         elsewhere
            H1 = 0
         endwhere
-
-
-        where( abs((VF)*(1 - (VF))) .GT. 0)
-           H2 = 1
-        elsewhere
-           H2 = 0
-        endwhere
-
-
-        where( VF - minVF .GT. 0)
-          H3 = 1
-        elsewhere
-          H3 = 0
-        endwhere
-
-        mask = ( 1 - 4*Ys*(1-Ys) )**nmask
-
-
-        where( Ys .GE. minYs)
-                Lm = 1
-        elsewhere(Ys .LE. (1-minYs))
-                Lm = 1
-        elsewhere
-                Lm = 0
-        endwhere
-
-
-        where( VF .GE. minVF)
-                Lm2 = 1
-        elsewhere(VF .LE. (1-minVF))
-                Lm2 = 1
-        elsewhere
-                Lm2 = 0
-        endwhere
-
 
         ! Step 2: Get 4th derivative in X
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
@@ -1255,12 +1308,23 @@ contains
         endif
     
         dely = (this%dx*this%dy*this%dz)**(1.0/3.0)
-        outb = this%Cy*sos*( half*(abs(Ys)-(one-minYs) + abs((Ys)-(one-minYs))) )*dely
-        diffstar = sos*abs(diffstar) !*H1  !*fd !/rho ! CD part of diff
+        outb = 0.0
+        outb = this%Cy*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*dely*sos
+        diffstar = this%Crho*umag*abs(diffstar) !*fd !/rho ! CD part of diff
+        outrhom = this%Cdiff*H1*umag*dely
+
+        outbx = this%Cy*dt_inv*dt_inv*dely*abs(drYsdx) / sqrt( drYsdx*drYsdx + drYsdy*drYsdy +drYsdz*drYsdz )*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )
+        outby = this%Cy*dt_inv*dt_inv*dely*abs(drYsdy) / sqrt( drYsdx*drYsdx + drYsdy*drYsdy +drYsdz*drYsdz )*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )
+        outbz = this%Cy*dt_inv*dt_inv*dely*abs(drYsdz) / sqrt( drYsdx*drYsdx + drYsdy*drYsdy +drYsdz*drYsdz )*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )
         call this%filter(diffstar, x_bc, y_bc, z_bc)
+        !call this%filter(diffstar, x_bc, y_bc, z_bc)
         call this%filter(outb, x_bc, y_bc, z_bc)
-        diffstar= this%Crho*diffstar 
-        outdiff = outb
+        !all this%filter(outrhom, x_bc, y_bc, z_bc)
+        call this%filter(outbx, x_bc, y_bc, z_bc)
+        call this%filter(outby, x_bc, y_bc, z_bc)
+        call this%filter(outbz, x_bc, y_bc, z_bc)
+
+        outdiff = 0.0 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         !                              VF                                   !
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1303,16 +1367,29 @@ contains
         endif
 
         delphi = (this%dx*this%dy*this%dz)**(1.0/3.0)
-        adiffstar = this%Cvf1*sos*abs(adiffstar)
-        ytmp5 = this%Cvf2*sos*( half*(abs(VF)-(one) + abs((VF)-(one))) )*delphi
+        adiffstar = this%Cvf1*umag*abs(adiffstar)/rho
+        outVF = this%Cvf2*( half*(abs(VF)-(one) + abs((VF)-(one))))*delphi*sos
+        outVFx = this%Cvf2*dt_inv*dt_inv*dely*abs(dphidx) / sqrt( dphidx*dphidx + dphidy*dphidy +dphidz*dphidz )*( half*(abs(VF)-(one) + abs((VF)-(one))) )
+        outVFy = this%Cvf2*dt_inv*dt_inv*dely*abs(dphidy) / sqrt( dphidx*dphidx + dphidy*dphidy +dphidz*dphidz )*( half*(abs(VF)-(one) + abs((VF)-(one))) )
+        outVFz = this%Cvf2*dt_inv*dt_inv*dely*abs(dphidz) / sqrt( dphidx*dphidx + dphidy*dphidy +dphidz*dphidz )*( half*(abs(VF)-(one) + abs((VF)-(one))) )
         call this%filter(adiffstar, x_bc, y_bc, z_bc)
-        call this%filter(ytmp5, x_bc, y_bc, z_bc)
-        ytmp5 = ytmp5
-        adiff = max(adiffstar, ytmp5 )
-        ! Filter each part
+!       call this%filter(adiffstar, x_bc, y_bc, z_bc)
+        call this%filter(outVF, x_bc, y_bc, z_bc)
+        call this%filter(outVFx, x_bc, y_bc, z_bc)
+        call this%filter(outVFy, x_bc, y_bc, z_bc)
+        call this%filter(outVFz, x_bc, y_bc, z_bc)
+
+        adiff = max(outVF,adiffstar,outrhom)
+        ! Fydiffstar)ilter each part
         
-        rhodiff = max(adiffstar,ytmp5) ! + max(outb,ytmp5) ! max(rhodiff,adiffstar,outb,ytmp5) !max(rhodiff,adiffstar) + max(outb,ytmp5)
- !       adiff = rhodiff
+        rhodiff = max(outVF,adiffstar,diffstar,outb,outrhom) ! + max(outb,ytmp5) ! max(rhodiff,adiffstar,outb,ytmp5) !max(rhodiff,adiffstar) + max(outb,ytmp5)
+        adiff_I(:,:,:,1) = outVFx
+        adiff_I(:,:,:,2) = outVFy
+        adiff_I(:,:,:,3) = outVFz
+
+        rhodiff_I(:,:,:,1) = max(outbx,outVFx)
+        rhodiff_I(:,:,:,2) = max(outby,outVFy)
+        rhodiff_I(:,:,:,3) = max(outbz,outVFz)
     end subroutine
 
     subroutine get_diff_pe(this,pe,sos,diff_pe,x_bc,y_bc,z_bc)

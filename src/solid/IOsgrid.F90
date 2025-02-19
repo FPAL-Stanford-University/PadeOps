@@ -469,21 +469,21 @@ contains
 !         E_IO = VTK_VAR_XML(NC_NN=nn,varname='DerYstagg', var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
 !         if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%intX_error,tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='intX_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%intX_error,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='intX_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%intY_error,tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='intY_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%intY_error,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='intY_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%VF_intx,tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='VFintX',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%VF_intx,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='VFintX',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%VF_inty,tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='VFinty',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%VF_inty,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='VFinty',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
 !          call update_halo(mix%derX_error,tmp1,1,gp,.FALSE.)
 !          E_IO =VTK_VAR_XML(NC_NN=nn,varname='derX_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
@@ -505,13 +505,13 @@ contains
 !          E_IO =VTK_VAR_XML(NC_NN=nn,varname='derYstagg_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
 !          if( allocated(tmp1) ) deallocate(tmp1)
  
-!          call update_halo(mix%intx_exact,tmp1,1,gp,.FALSE.)
-!          E_IO=VTK_VAR_XML(NC_NN=nn,varname='intX_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%intx_exact,tmp1,1,gp,.FALSE.)
+          E_IO=VTK_VAR_XML(NC_NN=nn,varname='intX_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%inty_exact,tmp1,1,gp,.FALSE.)
-!          E_IO=VTK_VAR_XML(NC_NN=nn,varname='intY_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%inty_exact,tmp1,1,gp,.FALSE.)
+          E_IO=VTK_VAR_XML(NC_NN=nn,varname='intY_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
 !          call update_halo(mix%VF_intz,tmp1,1,gp,.FALSE.)
 !          E_IO = VTK_VAR_XML(NC_NN=nn,varname='VFintz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))

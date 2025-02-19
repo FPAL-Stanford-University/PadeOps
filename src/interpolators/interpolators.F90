@@ -4,6 +4,8 @@ module InterpolatorsMod
     !TODO change names to be interpolators (get rid of all d's)
     use cd10stuff, only: cd10 !-> ci10
     use ci06stuff, only: ci06 !-> ci06
+    use ci04stuff, only: ci04
+    use ci08stuff, only: ci08
     use ei02stuff, only: ei02 !explicit interpolator, 2nd order
     use d04stuff,  only: d04 !-> ei04
     use ei06stuff, only: ei06
@@ -33,6 +35,8 @@ module InterpolatorsMod
         !TODO: change names to be interpolators, list out different ones
         type(cd10), allocatable :: xcd10, ycd10, zcd10 
         type(ci06), allocatable :: xci06, yci06, zci06 
+        type(ci04), allocatable :: xci04, yci04, zci04
+        type(ci08), allocatable :: xci08, yci08, zci08
         type(ei02),  allocatable :: xei02, yei02, zei02 
         type(d04),  allocatable :: xd04, yd04, zd04 
         type(ei06),  allocatable :: xei06, yei06, zei06 
@@ -118,6 +122,10 @@ contains
             m = "d04"
         case (7)
             m = "ei06"
+        case(8)
+            m = "ci04"
+        case(9)
+            m = "ci08"
         end select 
 
     end function
@@ -140,6 +148,10 @@ contains
             m = "d04"
         case (7)
             m = "ei06"
+        case(8)
+            m = "ci04"
+        case(9)
+            m = "ci08"
         end select 
 
     end function
@@ -162,6 +174,10 @@ contains
             m = "d04"
         case (7)
             m = "ei06"
+        case(8)
+            m = "ci04"
+        case(9)
+            m = "ci08"
         end select 
 
     end function
@@ -338,7 +354,14 @@ contains
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing ci06 failed in X ",12)
             end if 
-            this%xmethod = 2 
+            this%xmethod = 2
+        case ("ci04")
+            allocate(this%xci04)
+            ierr = this % xci04%init( this%xsz(1), dx, periodic_x, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing ci04 failed in X ",12)
+            end if
+            this%xmethod = 8
         case ("ei02")
             allocate(this%xei02)
             ierr = this % xei02%init( this%xsz(1), dx, periodic_x, 0, 0)
@@ -359,7 +382,14 @@ contains
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing ei06 failed in X ",12)
             end if 
-            this%xmethod = 7 
+            this%xmethod = 7
+        case ("ci08")
+            allocate(this%xci08)
+            ierr = this % xci08%init( this%xsz(1), dx, periodic_x, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing ci08 failed in X ",12)
+            end if
+            this%xmethod = 9
         case default 
             call GracefulExit("Invalid method selected in x direction ",01)
         end select
@@ -380,6 +410,13 @@ contains
                 call GracefulExit("Initializing ci06 failed in Y",12)
             end if 
             this%ymethod = 2 
+        case ("ci04")
+            allocate(this%yci04)
+            ierr = this % yci04%init( this%ysz(2), dy, periodic_y, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing ci04 failed in Y",12)
+            end if
+            this%ymethod = 8
         case ("ei02")
             allocate(this%yei02)
             ierr = this % yei02%init( this%ysz(2), dy, periodic_y, 0, 0)
@@ -401,6 +438,13 @@ contains
                 call GracefulExit("Initializing ei06 failed in Y ",12)
             end if 
             this%ymethod = 7 
+        case ("ci08")
+            allocate(this%yci08)
+            ierr = this % yci08%init( this%ysz(2), dy, periodic_y, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing ci08 failed in Y",12)
+            end if
+            this%ymethod = 9
         case default 
             call GracefulExit("Invalid method selected in y direction",01)
         end select
@@ -421,7 +465,14 @@ contains
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing ci06 failed in Z",12)
             end if 
-            this%zmethod = 2 
+            this%zmethod = 2
+        case ("ci04")
+            allocate(this%zci04)
+            ierr = this % zci04%init( this%zsz(3), dz, periodic_z, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing ci04 failed in Z",12)
+            end if
+            this%zmethod = 8
         case ("ei02")
             allocate(this%zei02)
             ierr = this % zei02%init( this%zsz(3), dz, periodic_z, 0, 0)
@@ -443,6 +494,14 @@ contains
                 call GracefulExit("Initializing ei06 failed in Z ",12)
             end if 
             this%zmethod = 7 
+        case ("ci08")
+            allocate(this%zci08)
+            ierr = this % zci08%init( this%zsz(3), dz, periodic_z, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing ci08 failed in Z",12)
+            end if
+            this%zmethod = 9
+
         case default 
             call GracefulExit("Invalid method selected in z direction",01)
         end select
@@ -473,6 +532,12 @@ contains
         case (7)
             call this%xei06%destroy
             deallocate(this%xei06)
+        case (8)
+            call this%xci04%destroy
+            deallocate(this%xci04)
+        case (9)
+            call this%xci08%destroy
+            deallocate(this%xci08)
         end select 
         
         select case (this%ymethod) 
@@ -495,6 +560,13 @@ contains
         case (7)
             call this%yei06%destroy
             deallocate(this%yei06)
+        case (8)
+            call this%yci04%destroy
+            deallocate(this%yci04)
+        case (9)
+            call this%yci08%destroy
+            deallocate(this%yci08)
+
         end select 
 
         select case (this%zmethod) 
@@ -517,6 +589,12 @@ contains
         case (7)
             call this%zei06%destroy
             deallocate(this%zei06)
+        case (8)
+            call this%zci04%destroy
+            deallocate(this%zci04)
+        case (9)
+            call this%zci08%destroy
+            deallocate(this%zci08)
         end select
 
         this%xmetric = .false. 
@@ -569,6 +647,18 @@ contains
                 call this%xei06 % iN2F1(fN,fF,this%xsz(2),this%xsz(3))
 
             end if
+        case (8)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%xci04 % iN2F1(fN,fF,this%xsz(2),this%xsz(3),bc1,bcn)
+             else
+            call this%xci04 % iN2F1(fN,fF,this%xsz(2),this%xsz(3))
+            end if
+        case (9)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%xci08 % iN2F1(fN,fF,this%xsz(2),this%xsz(3),bc1,bcn)
+             else
+            call this%xci08 % iN2F1(fN,fF,this%xsz(2),this%xsz(3))
+            end if
         end select 
 
     end subroutine 
@@ -617,6 +707,18 @@ contains
                 call this%yei06 % iN2F2(fN,fF,this%ysz(1),this%ysz(3))
 
             end if
+        case (8)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%yci04 % iN2F2(fN,fF,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
+            call this%yci04 % iN2F2(fN,fF,this%ysz(1),this%ysz(3))
+            end if
+        case (9)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%yci08 % iN2F2(fN,fF,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
+            call this%yci08 % iN2F2(fN,fF,this%ysz(1),this%ysz(3))
+            end if
         end select 
 
     end subroutine 
@@ -635,7 +737,11 @@ contains
                 call this%zcd10 % dd3(fN,fF,this%zsz(1),this%zsz(2))
             end if
         case (2)
-            call this%zci06 % iN2F3(fN,fF,this%zsz(1),this%zsz(2))
+            if (present(bc1) .AND. present(bcn)) then
+            call this%zci06 % iN2F3(fN,fF,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
+            call this%zci06 % iN2F3(fN,fF,this%ysz(1),this%ysz(3))
+            end if
         case (3)
             call GracefulExit("Case doesn't exist",453)
         case (4)
@@ -658,6 +764,20 @@ contains
 
             else
                 call this%zei06 % iN2F3(fN,fF,this%zsz(1),this%zsz(2))
+            end if
+        case (8)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%zci04 % iN2F3(fN,fF,this%zsz(1),this%zsz(2),bc1,bcn)
+
+            else
+                call this%zci04 % iN2F3(fN,fF,this%zsz(1),this%zsz(2))
+            end if
+         case (9)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%zci08 % iN2F3(fN,fF,this%zsz(1),this%zsz(2),bc1,bcn)
+
+            else
+                call this%zci08 % iN2F3(fN,fF,this%zsz(1),this%zsz(2))
             end if
         end select 
     end subroutine 
@@ -700,6 +820,8 @@ contains
             else
                 call this%xei06 % iF2N1(fF,fN,this%xsz(2),this%xsz(3))
             end if
+         case (8)
+            call this%xci04 % iF2N1(fF,fN,this%xsz(2),this%xsz(3))
         end select 
 
     end subroutine 
@@ -742,6 +864,8 @@ contains
             else
                 call this%yei06 % iF2N2(fF,fN,this%ysz(2),this%ysz(3))
             end if
+        case (8)
+            call this%yci04 % iF2N2(fF,fN,this%ysz(2),this%ysz(3))
         end select 
 
     end subroutine 
@@ -783,6 +907,8 @@ contains
             else
                 call this%zei06 % iF2N3(fF,fN,this%zsz(2),this%zsz(3))
             end if
+        case (8)
+            call this%zci04 % iF2N3(fF,fN,this%zsz(2),this%zsz(3))
         end select 
 
     end subroutine 

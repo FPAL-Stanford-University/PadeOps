@@ -55,18 +55,67 @@ contains
     end subroutine
 
     
-    subroutine interpolateFV(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    subroutine interpolateMax(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         !interpolates from Nodes to faces for finite volume treatment of terms
         !in interface advection
         type(decomp_info), intent(in) :: decomp
-        type(interpolators), intent(in) :: interpMid 
-        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)), intent(in) :: nodes
+        type(interpolators), intent(in) :: interpMid
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)),intent(in) :: nodes
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), 3), intent(out) :: faces
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
         integer :: i,j,k, one = 1
+        integer :: nx,ny,nz
+
+        faces = 0.0
+        xbuf = 0.0
+        zbuf = 0.0
+        xint = 0.0
+        zint = 0.0
+        nx = decomp%ysz(1)
+        ny = decomp%ysz(2)
+        nz = decomp%ysz(3)
+
+        do i = 2,nx-2
+           faces(i,:,:,1) = max(nodes(i-1,:,:),nodes(i,:,:),nodes(i+1,:,:),nodes(i+2,:,:) )
+        end do
+        faces(1,:,:,1) = max(nodes(nx,:,:),nodes(1,:,:),nodes(2,:,:),nodes(3,:,:) )
+        faces(nx-1,:,:,1) = max(nodes(nx-2,:,:),nodes(nx-1,:,:),nodes(nx,:,:),nodes(1,:,:) )
+        faces(nx,:,:,1) = max(nodes(nx-1,:,:),nodes(nx,:,:),nodes(1,:,:),nodes(2,:,:) )
+
+        do j = 2,ny-2
+           faces(:,j,:,2) = max(nodes(:,j-1,:),nodes(:,j,:),nodes(:,j+1,:),nodes(:,j+2,:) )
+        end do
+        faces(:,1,:,2) = max(nodes(:,ny,:),nodes(:,1,:),nodes(:,2,:),nodes(:,3,:) )
+        faces(:,ny-1,:,2) = max(nodes(:,ny-2,:),nodes(:,ny-1,:),nodes(:,ny,:),nodes(:,1,:) )
+        faces(:,ny,:,2) = max(nodes(:,ny-1,:),nodes(:,ny,:),nodes(:,1,:),nodes(:,2,:) )
+
+        do k = 2,nz-2
+           faces(:,:,k,3) = max(nodes(:,:,k-1),nodes(:,:,k),nodes(:,:,k+1),nodes(:,:,k+2) )
+        end do
+        faces(:,:,1,3) = max(nodes(:,:,nz),nodes(:,:,1),nodes(:,:,2),nodes(:,:,3) )
+        faces(:,:,nz-1,3) = max(nodes(:,:,nz-2),nodes(:,:,nz-1),nodes(:,:,nz),nodes(:,:,1) )
+        faces(:,:,nz,3) = max(nodes(:,:,nz-1),nodes(:,:,nz),nodes(:,:,1),nodes(:,:,2) )
+
+    
+
+                
+    end subroutine
+
+    subroutine interpolateFV(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !interpolates from Nodes to faces for fnite volume treatment of terms
+        !in interface advection
+        type(decomp_info), intent(in) :: decomp
+        type(interpolators), intent(in) :: interpMid 
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)), intent(in) :: nodes
+        real(rkind), dimension(size(nodes,1),size(nodes,2),size(nodes,3), 3), intent(out) :: faces
+        logical, intent(in) :: periodicx,periodicy,periodicz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
+        integer :: i,j,k, one = 1,nx,ny,nz
 
         faces = 0.0
         xbuf = 0.0

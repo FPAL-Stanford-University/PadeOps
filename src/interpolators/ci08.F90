@@ -1,7 +1,7 @@
 ! Routines specific to 6th order Compact Finite Differencing scheme
 ! Periodic LU based on  Neossi Nguetchue, Abelman (Appl. Math. & Comp. 2008)
 
-module ci06stuff
+module ci08stuff
 
     use kind_parameters, only: rkind
     use constants,       only : zero,one,two,half
@@ -10,13 +10,14 @@ module ci06stuff
     implicit none
 
     private
-    public :: ci06, alpha06d1, a06d1, b06d1
+    public :: ci08, alpha06d1, a06d1, b06d1
     
     ! 6th order first derivative coefficients (See Lele (1992) for explanation)
-    real(rkind), parameter :: alpha06d1= 0.35_rkind ! 3.0_rkind / 10.0_rkind
-    real(rkind), parameter :: c06d1    = (-10_rkind*alpha06d1 + 3_rkind) /128_rkind
-    real(rkind), parameter :: a06d1    = (70_rkind*alpha06d1 + 75_rkind) / 64_rkind / 2.0_rkind !(3.0_rkind / 2.0_rkind) / 2.0_rkind
-    real(rkind), parameter :: b06d1    = (126_rkind*alpha06d1 -25_rkind) / 128_rkind / 2.0_rkind   !( 1.0_rkind / 10.0_rkind) / 2.0_rkind
+    real(rkind), parameter :: alpha06d1=  5.0_rkind / 14.0_rkind
+    real(rkind), parameter :: c06d1    =  (5._rkind*alpha06d1 -2._rkind )/ 48._rkind
+    real(rkind), parameter :: a06d1    = (1.0_rkind / 8.0_rkind) * (10._rkind + 7._rkind*alpha06d1 ) / 2.0_rkind
+    real(rkind), parameter :: b06d1    = 1._rkind/112._rkind*(189._rkind*alpha06d1 - 50._rkind ) / 2.0_rkind !1.0_rkind / 10.0_rkind) / 2.0_rkind
+    
      ! 2nd order first derivative explicit centeral difference coefficients
     real(rkind), parameter :: aI02     =  150.0/256.0 !75.0d0/64.0d0
     real(rkind), parameter :: bI02     =  -25.0/256.0!-25.0d0/128.0d0
@@ -71,7 +72,7 @@ module ci06stuff
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     
     
-    type ci06
+    type ci08
 
         private
 
@@ -126,14 +127,14 @@ module ci06stuff
 contains
 
     pure function GetSize(this) result(val)
-        class(ci06), intent(in) :: this
+        class(ci08), intent(in) :: this
         integer  :: val 
         val = this%n
     end function
     
     function init(this, n_, dx_, periodic_, bc1_, bcn_) result(ierr)
     
-        class( ci06 ), intent(inout) :: this
+        class( ci08 ), intent(inout) :: this
         integer, intent(in) :: n_
         real(rkind), intent(in) :: dx_
         logical, intent(in) :: periodic_
@@ -190,7 +191,7 @@ contains
 
     subroutine destroy(this)
 
-        class( ci06 ), intent(inout) :: this
+        class( ci08 ), intent(inout) :: this
 
         ! Dellocate 1st derivative LU matrix.
         if(allocated( this%LU1 )) deallocate( this%LU1 )
@@ -247,7 +248,7 @@ contains
     end subroutine
     
     subroutine ComputeTri1(this,bc1,bcn)
-        class (ci06), intent(inout) :: this
+        class (ci08), intent(inout) :: this
         integer, intent(in) :: bc1, bcn
         integer             :: i
         real(rkind), dimension(this%n) :: a, b, c, cp, den
@@ -313,7 +314,7 @@ contains
     
     subroutine SolveXLU1(this,y,n2,n3)
         
-        class (ci06), intent(in) :: this
+        class (ci08), intent(in) :: this
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHS and put solution into it
         integer :: i, j, k
@@ -343,7 +344,7 @@ contains
 
     subroutine SolveYLU1(this,y,n1,n3)
         
-        class (ci06), intent(in) :: this
+        class (ci08), intent(in) :: this
         integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y  ! Take in RHS and put solution into it
         integer ::  j, k
@@ -372,7 +373,7 @@ contains
     
     subroutine SolveZLU1(this,y,n1,n2)
         
-        class (ci06), intent(in) :: this
+        class (ci08), intent(in) :: this
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  ! Take in RHS and put solution into it
         integer ::  k
@@ -398,7 +399,7 @@ contains
 
     subroutine SolveXTri1(this,y,n2,n3)
     
-        class (ci06), intent(in) :: this
+        class (ci08), intent(in) :: this
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  
         integer :: i, j, k
@@ -420,7 +421,7 @@ contains
    
     subroutine SolveYTri1(this,y,n1,n3)
     
-        class (ci06), intent(in) :: this
+        class (ci08), intent(in) :: this
         integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y  
         integer :: j, k
@@ -440,7 +441,7 @@ contains
     
     subroutine SolveZTri1(this,y,n1,n2)
     
-        class (ci06), intent(in) :: this
+        class (ci08), intent(in) :: this
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  
         integer :: k
@@ -459,14 +460,14 @@ contains
     
     subroutine ComputeXD1RHS(this,f,RHS, dir, n2, n3,bc1,bcn) 
          
-        class( ci06 ), intent(in) :: this
+        class( ci08 ), intent(in) :: this
         integer, intent(in) :: n2, n3
         integer,optional, intent(in) ::bc1,bcn
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
         character(len=*)  , intent(in)             :: dir
         integer ::  j, k
-        real(rkind) :: a06,b06,a10,a104,a102,b10,b102,b104,c10,c102,c104,a101,c06
+        real(rkind) :: a06, b06,a10,a104,a102,b10,b102,b104,c10,c102,c104,a101,c06
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_3, b_np_3, c_np_3, d_np_3   
         real(rkind) :: a_np_2, b_np_2, alpha_np_2 = 1._rkind / 6._rkind
@@ -476,41 +477,39 @@ contains
         case (.TRUE.)
             a06 = a06d1 
             b06 = b06d1 
-            c06 = c06d1/2
+            c06 = c06d1 / 2._rkind
             RHS = 0.0d0
          select case(dir)
            case("N2F")
    
             do k = 1,n3
                 do j = 1,n2
-                    RHS(1         ,j,k) = a06 * ( f(2,j,k)          + f(1,j,k) ) &
-                                        + b06 * ( f(3,j,k)         + f(this%n,j,k) ) &
-                                        + c06 *( f(4,j,k)          + f(this%n-1,j,k) )
+                    RHS(1         ,j,k) = a06 * ( f(2,j,k)          + f(1       ,j,k) ) &
+                                        + b06 * ( f(3,j,k)          + f(this%n  ,j,k) ) &
+                                        + c06 *( f(4,j,k)           + f(this%n-1,j,k) )
 
                     RHS(2         ,j,k) = a06 * ( f(3,j,k)          + f(2 ,j,k) ) &
                                         + b06 * ( f(4,j,k)          + f(1 ,j,k) ) &
                                         + c06 *( f(5,j,k)           + f(this%n,j,k) )
 
                     RHS(3:this%n-3,j,k) = a06 * ( f(4:this%n-2,j,k) + f(3:this%n-3,j,k) ) &
-                                        + b06 * ( f(5:this%n-1  ,j,k)  + f(2:this%n-4,j,k) ) &
+                                        + b06 * ( f(5:this%n-1  ,j,k) + f(2:this%n-4,j,k) ) &
                                         + c06 * ( f(6:this%n, j, k )  + f(1:this%n-5,j,k) )
 
                     RHS(this%n-2  ,j,k) = a06 * ( f(this%n-1,j,k)     + f(this%n-2,j,k) ) &
-                                        + b06 * ( f(this%n,j,k)       + f(this%n-3,j,k) ) &
-                                        + c06 * ( f(1,j,k)            + f(this%n-4,j,k) )
+                                        + b06 * ( f(this%n,j,k)          + f(this%n-3,j,k) ) &
+                                        + c06 * ( f(1,j,k)          + f(this%n-4,j,k) )
 
-                    RHS(this%n-1  ,j,k) = a06 * ( f(this%n,j,k)      + f(this%n-1,j,k) ) &
+                    RHS(this%n-1  ,j,k) = a06 * ( f(this%n,j,k)          + f(this%n-1,j,k) ) &
                                         + b06 * ( f(1,j,k)          + f(this%n-2,j,k) ) &
                                         + c06 * ( f(2,j,k)          + f(this%n-3,j,k) )
-
-                    RHS(this%n    ,j,k) = a06 * ( f(1,j,k)          + f(this%n,j,k) ) &
+                    
+                    RHS(this%n    ,j,k) = a06 * ( f(1,j,k)          + f(this%n  ,j,k) ) &
                                         + b06 * ( f(2,j,k)          + f(this%n-1,j,k) ) &
                                         + c06 * ( f(3,j,k)          + f(this%n-2,j,k) )
-
-
+                end do 
             end do 
-         enddo  
-        case("F2N")
+          case("F2N")
     
            !!!!!!!!!!!!!! TO DO         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -583,7 +582,7 @@ contains
 
     subroutine ComputeYD1RHS(this,f, RHS,dir, n1, n3,bc1,bcn) 
          
-        class( ci06 ), intent(in) :: this
+        class( ci08 ), intent(in) :: this
         integer, intent(in) :: n1, n3
         integer,optional, intent(in) ::bc1,bcn
         real(rkind), dimension(n1,this%n,n3), intent(in) :: f
@@ -600,20 +599,34 @@ contains
         case (.TRUE.)
             a06 = a06d1 
             b06 = b06d1 
-            c06 = c06d1/2
+            c06 = c06d1 / 2._rkind
             RHS = 0.0d0
            
           select case(dir)
             case("N2F")
             do k = 1,n3
-                
-                 RHS(:,1         ,k) = a06 * ( f(:,2,k)          + f(:,1,k) ) & 
-                                        + b06 * ( f(:,3,k)       + f(:,this%n,k) ) &
-                                        + c06 *( f(:,4,k)        + f(:,this%n-1,k) )
+
+                !    RHS(:, 1    ,k) = a06 * ( f(:,2,  k) +  f(:,1,k) ) &
+                !                        + b06 * ( f(:,3,k)          + f(:,this%n,k) )
+
+
+                !    RHS(:,2:this%n-2,k) = a06 * ( f(:,3:this%n-1,k) + f(:,2:this%n-2,k) ) &
+                !                        + b06 * ( f(:,4:this%n ,k) + f(:,1:this%n-3,k) ) 
+
+                !    RHS(:,this%n-1 ,k) = a06 * ( f(:,this%n,k)          +f(:,this%n-1,k) ) &
+                !                        + b06 * ( f(:,1,k)          + f(:,this%n-2,k) )
+
+
+                !    RHS(:,this%n    ,k) = a06 * ( f(:,1,k)          + f(:,this%n,k) ) &
+                !                        + b06 * ( f(:,2,k)          + f(:,this%n-1,k) )
+
+                 RHS(:,1         ,k) = a06 * ( f(:,2,k)          + f(:,1,k) ) &
+                                        + b06 * ( f(:,3,k)          + f(:,this%n,k) ) &
+                                        + c06 *( f(:,4,k)           +f(:,this%n-1,k) )
 
                  RHS(:,2         ,k) = a06 * ( f(:,3,k)          + f(:,2 ,k) ) &
-                                        + b06 * ( f(:,4,k)       + f(:,1,k) ) &
-                                        + c06 *( f(:,5,k)        + f(:,this%n,k) )
+                                        + b06 * ( f(:,4,k)          + f(:,1,k) ) &
+                                        + c06 *( f(:,5,k)           + f(:,this%n,k) )
 
                  RHS(:,3:this%n-3,k) = a06 * ( f(:,4:this%n-2,k) + f(:,3:this%n-3,k) ) &
                                         + b06 * ( f(:,5:this%n-1,k) + f(:,2:this%n-4,k) ) &
@@ -624,13 +637,12 @@ contains
                                         + c06 * ( f(:,1,k)         + f(:,this%n-4,k) )
 
                  RHS(:,this%n-1,k) = a06 * ( f(:,this%n,k)       + f(:,this%n-1,k) ) &
-                                        + b06 * ( f(:,1,k)       + f(:,this%n-2,k) ) &
-                                        + c06 * ( f(:,2,k)       + f(:,this%n-3,k) )
+                                        + b06 * ( f(:,1,k)         + f(:,this%n-2,k) ) &
+                                        + c06 * ( f(:,2,k)         + f(:,this%n-3,k) )
 
                  RHS(:,this%n    ,k) = a06 * ( f(:,1,k)          + f(:,this%n,k) ) &
                                         + b06 * ( f(:,2,k)       + f(:,this%n-1,k) ) &
                                         + c06 * ( f(:,3,k)       + f(:,this%n-2,k) )
-
 
 
                 !end do 
@@ -655,7 +667,7 @@ contains
 
             a06 = a06d1
             b06 = b06d1
-            c06 = c06d1
+
             RHS = 0.0d0
             select case (dir)
                 case ("N2F")
@@ -706,7 +718,7 @@ contains
 
     subroutine ComputeZD1RHS(this,f, RHS,dir, n1, n2,bc1,bcn) 
          
-        class( ci06 ), intent(in) :: this
+        class( ci08 ), intent(in) :: this
         integer, intent(in) :: n1, n2
         integer,optional, intent(in) ::bc1,bcn
         real(rkind), dimension(n1,n2,this%n), intent(in) :: f
@@ -721,39 +733,50 @@ contains
         select case (this%periodic)
         case (.TRUE.)
             a06 = a06d1 
-            b06 = b06d1
-            c06 = c06d1 / 2
+            b06 = b06d1 
+            c06 = c06d1 / 2._rkind
             RHS = 0.0d0
         select case(dir)
            case("N2F")
 
-               RHS(:,:         ,1) = a06 * ( f(:,:,2)        + f(:,:,1) ) &
+            
+        !    RHS(:,:,        1)   = a06 * ( f(:,:,2)     + f(:,:,    1) ) &
+        !                                + b06 * ( f(:,:,3)    + f(:,:,this%n) )
+
+
+        !    RHS(:,:,2:this%n-2)  = a06 * ( f(:,:,3:this%n-1) + f(:,:,2:this%n-2) ) &
+        !                                + b06 * ( f(:,:,4:this%n) + f(:,:,1:this%n-3) ) 
+
+        !    RHS(:,:,this%n-1)    = a06 * ( f(:,:,this%n)     + f(:,:,this%n-1) ) &
+        !                                + b06 * ( f(:,:,1)  + f(:,:,this%n-2) )
+
+
+        !    RHS(:,:,this%n)      = a06 * ( f(:,:,1)          + f(:,:,this%n) ) &
+        !                                + b06 * ( f(:,:,2)  + f(:,:,this%n-1) )
+
+             RHS(:,:         ,1) = a06 * ( f(:,:,2)          + f(:,:,1) ) &
                                    + b06 * ( f(:,:,3)        + f(:,:,this%n) ) &
                                    + c06 *( f(:,:,4)         +f(:,:,this%n-1) )
 
-               RHS(:,:         ,2) = a06 * ( f(:,:,3)        + f(:,:,2) ) &
+             RHS(:,:         ,2) = a06 * ( f(:,:,3)          + f(:,:,2) ) &
                                    + b06 * ( f(:,:,4)        + f(:,:,1) ) &
                                    + c06 *( f(:,:,5)         + f(:,:,this%n) )
 
-               RHS(:,:,3:this%n-3) = a06 * ( f(:,:,4:this%n-2) + f(:,:,3:this%n-3) ) &
+             RHS(:,:,3:this%n-3) = a06 * ( f(:,:,4:this%n-2) + f(:,:,3:this%n-3) ) &
                                    + b06 * ( f(:,:,5:this%n-1) + f(:,:,2:this%n-4) ) &
                                    + c06 * ( f(:,:,6:this%n )  + f(:,:,1:this%n-5) )
 
-               RHS(:,:,this%n-2) = a06 * ( f(:,:,this%n-1)   + f(:,:,this%n-2) ) &
+             RHS(:,:,this%n-2) = a06 * ( f(:,:,this%n-1)     + f(:,:,this%n-2) ) &
                                   + b06 * ( f(:,:,this%n)    + f(:,:,this%n-3) ) &
                                   + c06 * ( f(:,:,1)         + f(:,:,this%n-4) )
 
-               RHS(:,:,this%n-1) = a06 * ( f(:,:,this%n)    + f(:,:,this%n-1) ) &
+             RHS(:,:,this%n-1) = a06 * ( f(:,:,this%n)       + f(:,:,this%n-1) ) &
                                  + b06 * ( f(:,:,1)         + f(:,:,this%n-2) ) &
                                  + c06 * ( f(:,:,2)         + f(:,:,this%n-3) )
 
-               RHS(:,:,this%n    ) = a06 * ( f(:,:,1)       + f(:,:,this%n) ) &
+             RHS(:,:,this%n    ) = a06 * ( f(:,:,1)          + f(:,:,this%n) ) &
                                    + b06 * ( f(:,:,2)       + f(:,:,this%n-1) ) &
                                    + c06 * ( f(:,:,3)       + f(:,:,this%n-2) )
-            
-
-
-
 
 
            case("F2N")
@@ -817,7 +840,7 @@ contains
    
 
     subroutine iN2F1(this, fN, fF, na, nb,bc1_,bcn_)
-        class( ci06 ), intent(in) :: this
+        class( ci08 ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer, optional, intent(in) :: bc1_, bcn_
         integer :: bc1, bcn
@@ -860,7 +883,7 @@ contains
     end subroutine
 
     subroutine iF2N1(this, fF, fN, na, nb)
-        class( ci06 ), intent(in) :: this
+        class( ci08 ), intent(in) :: this
         integer, intent(in) :: na, nb
         real(rkind), dimension(this%n,na,nb), intent(in)  :: fF
         real(rkind), dimension(this%n,na,nb), intent(out) :: fN
@@ -883,7 +906,7 @@ contains
 
 
     subroutine iN2F2(this, fN, fF, na, nb,bc1_,bcn_)
-        class( ci06 ), intent(in) :: this
+        class( ci08 ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer, optional, intent(in) :: bc1_, bcn_
         integer :: bc1, bcn
@@ -926,7 +949,7 @@ contains
     
 
     subroutine iF2N2(this, fF, fN, na, nb)
-        class( ci06 ), intent(in) :: this
+        class( ci08 ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer :: bc1,bcn
         real(rkind), dimension(na,this%n,nb), intent(in)  :: fF
@@ -950,7 +973,7 @@ contains
 
     
     subroutine iN2F3(this, fN, fF, na, nb,bc1_,bcn_)
-        class( ci06 ), intent(in) :: this
+        class( ci08 ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer, optional, intent(in) :: bc1_, bcn_
         integer :: bc1, bcn
@@ -992,7 +1015,7 @@ contains
     end subroutine
     
     subroutine iF2N3(this, fF, fN, na, nb)
-        class( ci06 ), intent(in) :: this
+        class( ci08 ), intent(in) :: this
         integer, intent(in) :: na, nb
         real(rkind), dimension(na,nb,this%n), intent(in)  :: fF
         real(rkind), dimension(na,nb,this%n), intent(out) :: fN
