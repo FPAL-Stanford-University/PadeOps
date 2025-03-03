@@ -68,7 +68,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 
 end subroutine
 
-subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
+subroutine initfields_wallM(decompC, decompE, inputfile, mesh, meshE, fieldsC, fieldsE)
     use TaylorGreenPeriodic_parameters
     use PadeDerOps, only: Pade6Stagg
     use kind_parameters,    only: rkind
@@ -83,7 +83,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
     character(len=*),                intent(in)    :: inputfile
-    real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh, meshE
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
@@ -324,4 +324,14 @@ subroutine hook_source(gp,tsim,mesh,Re,urhs,vrhs,wrhs)
   real(rkind), dimension(:,:,:),   intent(inout)      :: urhs, vrhs, wrhs
   real(rkind), dimension(:,:,:), pointer              :: x, y, z
 
+end subroutine
+subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
+      use kind_parameters, only: rkind
+      use decomp_2d,       only: decomp_info
+      use fortran_assert,  only: assert
+      type(decomp_info), intent(in) :: gp
+      real(rkind), dimension(:,:,:,:), intent(in) :: mesh 
+      real(rkind), dimension(:,:,:), allocatable, intent(inout) :: mask
+      character(len=*), intent(in) :: inputfile
+      character(len=1), intent(in) :: gridType
 end subroutine

@@ -71,7 +71,7 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 
 end subroutine
 
-subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
+subroutine initfields_wallM(decompC, decompE, inputfile, mesh, meshE, fieldsC, fieldsE)
     use pbl_igrid_parameters
     use kind_parameters,    only: rkind
     use constants,          only: zero, one, two, pi, half
@@ -83,7 +83,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     type(decomp_info),               intent(in)    :: decompC
     type(decomp_info),               intent(in)    :: decompE
     character(len=*),                intent(in)    :: inputfile
-    real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in), target    :: mesh, meshE
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsC
     real(rkind), dimension(:,:,:,:), intent(inout), target :: fieldsE
     integer :: ioUnit
@@ -298,3 +298,27 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
 
     scalarSource = 0.d0
 end subroutine 
+subroutine hook_source(tsim,mesh,Re,w,urhs,vrhs,wrhs,duidxjC,duidxjE)
+    use kind_parameters, only: rkind
+    real(rkind),                        intent(in)    :: tsim, Re
+    real(rkind),    dimension(:,:,:,:), intent(in)    :: mesh
+    complex(rkind), dimension(:,:,:),   intent(in)    :: w
+    complex(rkind), dimension(:,:,:),   intent(inout) :: urhs, vrhs, wrhs
+    complex(rkind), dimension(:,:,:,:), intent(in)    :: duidxjC, duidxjE
+
+    urhs = urhs
+    vrhs = vrhs
+    wrhs = wrhs
+end subroutine
+subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    use fortran_assert, only: assert
+    type(decomp_info), intent(in) :: gp
+    real(rkind), dimension(:,:,:,:), intent(in) :: mesh 
+    real(rkind), dimension(:,:,:), allocatable, intent(inout) :: mask
+    character(len=*), intent(in) :: inputfile
+    character(len=1), intent(in) :: gridType
+
+    
+end subroutine
