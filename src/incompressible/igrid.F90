@@ -120,8 +120,8 @@ module IncompressibleGrid
         complex(rkind), dimension(:,:,:), pointer :: uhat2, vhat2, what2, That2
         complex(rkind), dimension(:,:,:), pointer :: uhat3, vhat3, what3, That3
         complex(rkind), dimension(:,:,:), pointer :: uhat4, vhat4, what4, That4
-        complex(rkind), dimension(:,:,:), pointer :: ustar, vstar, wstar
-        complex(rkind), dimension(:,:,:), pointer :: du, dv, dw
+        complex(rkind), dimension(:,:,:), pointer :: ustar, vstar, wstar, Tstar
+        complex(rkind), dimension(:,:,:), pointer :: du, dv, dw, dpotT
         complex(rkind), dimension(:,:,:,:), allocatable :: SfieldsC2, SfieldsE2
         complex(rkind), dimension(:,:,:,:), allocatable :: uExtra, vExtra, wExtra, TExtra 
         complex(rkind), dimension(:,:,:,:), allocatable :: uRHSExtra, vRHSExtra, wRHSExtra, TRHSExtra 
@@ -1501,22 +1501,27 @@ contains
            call this%spectC%alloc_r2c_out(this%uExtra,2)
            call this%spectC%alloc_r2c_out(this%vExtra,2)
            call this%spectE%alloc_r2c_out(this%wExtra,2)
+           call this%spectC%alloc_r2c_out(this%TExtra,2)
 
            this%ustar => this%uExtra(:,:,:,1)
            this%vstar => this%vExtra(:,:,:,1)
            this%wstar => this%wExtra(:,:,:,1)
+           this%Tstar => this%TExtra(:,:,:,1)
 
            this%du => this%uExtra(:,:,:,2)
            this%dv => this%vExtra(:,:,:,2)
            this%dw => this%wExtra(:,:,:,2)
+           this%dpotT => this%TExtra(:,:,:,2)
 
            this%ustar = im0
            this%vstar = im0
            this%wstar = im0
+           this%Tstar = im0
 
            this%du = im0
            this%dv = im0
            this%dw = im0
+           this%dpotT = im0
       end if 
 
        if ((timeSteppingScheme .ne. 0) .and. &

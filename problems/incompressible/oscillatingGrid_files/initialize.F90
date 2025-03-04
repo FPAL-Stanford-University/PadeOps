@@ -136,16 +136,23 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 
 end subroutine
 
-subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
+subroutine setDirichletBC_Temp(inputfile, Tfield, Tsurf, dTsurf_dt, whichside)
     use kind_parameters,    only: rkind
     use oscillating_grid_parameters
     use constants, only: one, zero 
     implicit none
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
+    real(rkind), dimension(:,:,:), intent(in) :: Tfield
     character(len=*),                intent(in)    :: inputfile
+    character(len=3), intent(in) :: whichside
     integer :: ioUnit 
-    real(rkind)  :: Tref = zero, wTh_surf0 = one, z0init = 1.d-4, Tsurf0 = 290.0d0
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, Tsurf0 
+    real(rkind)  :: Tref = zero, wTh_surf0 = one, z0init = 1.d-4
+    real(rkind)  :: Tbot = 0.d0, Ttop = 1.d0
+    real(rkind)  :: z0fact = 0.d0
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, lxbar, lybar, lzbar, z0fact, omega, &
+      stroke, Nbx, Nby, filterMask, gridType, width1, length1, widthFact, &
+      lengthFact, levels, useGridBreaks, gridBreakDatDir, breakSzY, breakSzX, &
+      dumpMaskFreq, Tref, Tbot, Ttop
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -153,7 +160,12 @@ subroutine setDirichletBC_Temp(inputfile, Tsurf, dTsurf_dt)
     close(ioUnit)    
 
     ! Do nothing here
-    Tsurf = Tsurf0
+    select case (whichside)
+    case ('bot')
+      Tsurf = Tbot
+    case ('top')
+      Tsurf = Ttop
+    end select
     dTsurf_dt = zero
 end subroutine
 
@@ -214,12 +226,13 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     character(len=*),                intent(in)    :: inputfile
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     integer :: nxg, nyg, nzg
-    real(rkind) :: z0fact = 0.5d0
+    real(rkind) :: z0fact = 0.5d0, Tref = 1.d0
+    real(rkind)  :: Tbot = 0.d0, Ttop = 1.d0
     
     namelist /PROBLEM_INPUT/ Lx, Ly, Lz, lxbar, lybar, lzbar, z0fact, omega, &
       stroke, Nbx, Nby, filterMask, gridType, width1, length1, widthFact, &
       lengthFact, levels, useGridBreaks, gridBreakDatDir, breakSzY, breakSzX, &
-      dumpMaskFreq
+      dumpMaskFreq, Tref, Tbot, Ttop
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -264,14 +277,20 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
 end subroutine
 
 subroutine set_Reference_Temperature(inputfile, Thetaref)
+    use oscillating_grid_parameters
     use kind_parameters,    only: rkind
     use constants, only: one, zero 
     implicit none
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Thetaref
     integer :: ioUnit 
-    real(rkind)  :: Lx = one, Ly = one, Lz = one, Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4, Tsurf0 = 290.d0
-    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, Tref, wTh_surf0, z0init, Tsurf0 
+    real(rkind)  :: Tref = zero, wTh_surf0 = one, dTsurf_dt = -0.05d0, z0init = 1.d-4
+    real(rkind)  :: Tbot = 0.d0, Ttop = 1.d0
+    real(rkind)  :: z0fact = 0.d0
+    namelist /PROBLEM_INPUT/ Lx, Ly, Lz, lxbar, lybar, lzbar, z0fact, omega, &
+      stroke, Nbx, Nby, filterMask, gridType, width1, length1, widthFact, &
+      lengthFact, levels, useGridBreaks, gridBreakDatDir, breakSzY, breakSzX, &
+      dumpMaskFreq, Tref, Tbot, Ttop
      
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -327,3 +346,13 @@ subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
     vrhs = vrhs + 0.d0
     wrhs = wrhs + 0.d0
   end subroutine
+subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
+    use kind_parameters, only: rkind
+    use decomp_2d,        only: decomp_info
+    use fortran_assert,  only: assert
+    type(decomp_info), intent(in) :: gp
+    real(rkind), dimension(:,:,:,:), intent(in) :: mesh 
+    real(rkind), dimension(:,:,:), allocatable, intent(inout) :: mask
+    character(len=*), intent(in) :: inputfile
+    character(len=1), intent(in) :: gridType
+end subroutine

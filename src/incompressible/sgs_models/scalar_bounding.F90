@@ -13,7 +13,7 @@ subroutine compute_Tscale(this, u, v, w)
    rb2 = (one/this%dz)*w
    rb2 = abs(rb2)
    rb1 = rb1 + rb2
-   this%Tscale = one/p_maxval(rb1)
+   this%Tscale = one/(p_maxval(rb1) + 1.d-14)
 
 end subroutine 
 

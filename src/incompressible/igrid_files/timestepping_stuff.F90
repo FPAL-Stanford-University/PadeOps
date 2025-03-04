@@ -52,10 +52,6 @@
        else
            call this%populate_rhs()
        end if
-       !print*, sum(abs(this%u_rhs))
-       !print*, sum(abs(this%v_rhs))
-       !print*, sum(abs(this%w_rhs))
-       !print*, sum(abs(this%T_rhs))
      
        this%newTimeStep = .false. 
        this%uhat1 = this%uhat + this%dt*this%u_rhs 
@@ -835,6 +831,7 @@
        this%du = im0
        this%dv = im0
        this%dw = im0
+       this%dpotT = im0
        
        a = [0.d0, 0.5d0, 0.5d0, 1.d0]
        b = [1.d0, 2.d0, 2.d0, 1.d0]/6.d0
@@ -843,11 +840,13 @@
          this%ustar = this%uhat + a(idx)*this%dt*this%u_rhs
          this%vstar = this%vhat + a(idx)*this%dt*this%v_rhs
          this%wstar = this%what + a(idx)*this%dt*this%w_rhs
+         if (this%isStratified) this%Tstar = this%That + a(idx)*this%dt*this%T_rhs
          
          this%uhat => this%ustar
          this%vhat => this%vstar
          this%what => this%wstar
-         
+         if (this%isStratified) this%That => this%Tstar
+
          call this%populate_rhs()
          call this%reset_pointers()
          call this%project_and_prep(.false.)
@@ -855,11 +854,13 @@
          this%du = this%du + b(idx)*this%dt*this%u_rhs
          this%dv = this%dv + b(idx)*this%dt*this%v_rhs
          this%dw = this%dw + b(idx)*this%dt*this%w_rhs
+         if (this%isStratified) this%dpotT = this%dpotT + b(idx)*this%dt*this%T_rhs
        end do
 
        this%uhat = this%uhat + this%du 
        this%vhat = this%vhat + this%dv 
        this%what = this%what + this%dw 
+       if (this%isStratified) this%That = this%That + this%dpotT 
        
        call this%project_and_prep(.false.)
 

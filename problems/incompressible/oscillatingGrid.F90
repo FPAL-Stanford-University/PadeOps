@@ -9,13 +9,14 @@ module gridFuncMod
     use igrid_Operators,    only: igrid_ops
     use constants
     use decomp_2d,          only: decomp_info, transpose_x_to_y, &
-      transpose_y_to_z, transpose_z_to_y, transpose_y_to_x
+      transpose_y_to_z, transpose_z_to_y, transpose_y_to_x, nrank
     use exits,              only: gracefulExit, message
     use reductions,         only: p_maxval, p_minval
     use gaussianstuff, only: gaussian
     use oscillating_grid_parameters, only: widthFact, lengthFact, filterMask, &
       omega, stroke, NbarsTotal
     use fortran_assert,     only: assert 
+    use mpi
     implicit none 
     
     type(gaussian) :: gauss_x, gauss_y, gauss_zC, gauss_zE
@@ -96,12 +97,12 @@ contains
           
         kst = kst - gp%xst(3) + 1
         ken = ken - gp%xst(3) + 1
-        
+
         select case (gridType)
         case (homogeneous)
           ! dxgrid, dygrid: Size of grid gaps + bar width
-          dxgrid = Lx/real(Nbx,rkind) - lxbar 
-          dygrid = Ly/real(Nby,rkind) - lybar
+          if (Nbx > 0) dxgrid = Lx/real(Nbx,rkind) - lxbar 
+          if (Nby > 0) dygrid = Ly/real(Nby,rkind) - lybar
 
           do n = 1,Nbx
             xmin = x(1,1,1) + (n-1)*(dxgrid + lxbar) 

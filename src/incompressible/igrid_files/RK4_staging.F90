@@ -34,6 +34,7 @@ subroutine advance_RK4_Stage(this, stage, dtforced)
     this%du = im0
     this%dv = im0
     this%dw = im0
+    this%dpotT = im0
   end if
   
   a = [0.d0, 0.5d0, 0.5d0, 1.d0]
@@ -42,10 +43,12 @@ subroutine advance_RK4_Stage(this, stage, dtforced)
   this%ustar = this%uhat + a(stage)*this%dt*this%u_rhs
   this%vstar = this%vhat + a(stage)*this%dt*this%v_rhs
   this%wstar = this%what + a(stage)*this%dt*this%w_rhs
+  if (this%isStratified) this%Tstar = this%That + a(stage)*this%dt*this%T_rhs
   
   this%uhat => this%ustar
   this%vhat => this%vstar
   this%what => this%wstar
+  if (this%isStratified) this%That => this%Tstar
   
   call this%project_and_prep(.false.)
   call this%populate_rhs()
@@ -54,11 +57,13 @@ subroutine advance_RK4_Stage(this, stage, dtforced)
   this%du = this%du + b(stage)*this%dt*this%u_rhs
   this%dv = this%dv + b(stage)*this%dt*this%v_rhs
   this%dw = this%dw + b(stage)*this%dt*this%w_rhs
+  if (this%isStratified) this%dpotT = this%dpotT + b(stage)*this%dt*this%T_rhs
 
   if (stage == 4) then
     this%uhat = this%uhat + this%du 
     this%vhat = this%vhat + this%dv 
     this%what = this%what + this%dw 
+    if (this%isStratified) this%That = this%That + this%dpotT 
     
     call this%project_and_prep(.false.)
   end if
