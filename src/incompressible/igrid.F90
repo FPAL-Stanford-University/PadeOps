@@ -455,6 +455,9 @@ contains
         integer :: nstepConstDt = 0 
         real(rkind) :: Pr = 0.7_rkind, Re = 8000._rkind, Ro = 1000._rkind,dpFdx = zero, G_alpha = 0.d0, PrandtlFluid = 1.d0, moistureFactor = 0.61_rkind
         real(rkind) :: SpongeTscale = 50._rkind, zstSponge = 0.8_rkind, Fr = 1000.d0, G_geostrophic = 1.d0
+        real(rkind), dimension(:,:,:), allocatable :: spongeTopC,spongeBotC,spongeTopE,spongeBotE
+        real(rkind) :: dSpongeTop = -1.d0, dSpongeBot = -1.d0
+        logical :: dumpSponge
         logical ::useRestartFile=.false.,isInviscid=.false.,useCoriolis = .true., PreProcessForKS = .false. 
         logical :: restartFromViz = .false.
         logical ::isStratified=.false.,useMoisture=.false.,dumpPlanes = .false.,useExtraForcing = .false.
@@ -525,7 +528,8 @@ contains
           useHITRealSpaceLinearForcing, HITForceTimeScale, addExtraSourceTerm, &
           useImmersedBodies, numberOfImmersedBodies, immersed_taufact, &
           localizedForceLayer !useLocalizedForceLayer
-        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
+        namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, SpongeTScale, sponge_type, botBC_Temp, topBC_Temp,&
+          useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl, dSpongeBot, dSpongeTop, dumpSponge
         namelist /WINDTURBINES/ useWindTurbines, num_turbines, ADM, turbInfoDir, ADM_Type, powerDumpDir, useDynamicYaw, &
                                 yawUpdateInterval, inputDirDyaw 
         namelist /NUMERICS/ AdvectionTerm, ComputeStokesPressure, NumericalSchemeVert, &
@@ -724,8 +728,11 @@ contains
        call message(1,'botWall',botWall)
        call message(1,'useSpongeLayer',useSpongeLayer)
        call message(1,'zstSponge',zstSponge)
+       call message(1,'dSpongeTop',dSpongeTop)
+       call message(1,'dSpongeBot',dSpongeBot)
        call message(1,'SpongeTScale',SpongeTScale)
        call message(1,'sponge_type',sponge_type)
+       call message(1,'dumpSponge',dumpSponge)
        call message(1,'botBC_Temp',botBC_Temp)
        call message(1,'topBC_Temp',topBC_Temp)
        call message(1,'useTopAndBottomSymmetricSponge',useTopAndBottomSymmetricSponge)
@@ -1269,7 +1276,40 @@ contains
             select case(sponge_type)
             case(1)
 
-                if (useTopAndBottomSymmetricSponge) then
+                if ((dSpongeTop > 0.d0) .or. (dSpongeBot > 0.d0)) then ! If specifying top and/or bottom sponge thicknesses (can handle assymetric sponges)
+                    allocate(spongeTopC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+                    allocate(spongeTopE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
+                    allocate(spongeBotC(this%sp_gpC%ysz(1),this%sp_gpC%ysz(2),this%sp_gpC%ysz(3)))
+                    allocate(spongeBotE(this%sp_gpE%ysz(1),this%sp_gpE%ysz(2),this%sp_gpE%ysz(3)))
+                    spongeTopC = 0.d0
+                    spongeTopE = 0.d0
+                    spongeBotC = 0.d0
+                    spongeBotE = 0.d0
+                    if (dSpongeTop > 0.d0) then
+                        spongeTopC = 0.5d0*(1.d0 - cos(pi*(zinY -(this%zTop-dSpongeTop))/dSpongeTop));
+                        spongeTopE = 0.5d0*(1.d0 - cos(pi*(zEinY-(this%zTop-dSpongeTop))/dSpongeTop));
+                        where (zinY < (this%zTop-dSpongeTop))
+                            spongeTopC = 0.d0
+                        end where
+                        where (zEinY < (this%zTop-dSpongeTop))
+                            spongeTopE = 0.d0
+                        end where
+                    end if
+                    if (dSpongeBot > 0.d0) then
+                        spongeBotC = 0.5d0*(1.d0 - cos(pi*(zinY -(this%zBot+dSpongeBot))/dSpongeBot));
+                        spongeBotE = 0.5d0*(1.d0 - cos(pi*(zEinY-(this%zBot+dSpongeBot))/dSpongeBot));
+                        where (zinY > (this%zBot+dSpongeBot)) 
+                            spongeBotC = 0.d0
+                        end where
+                        where (zEinY > (this%zBot+dSpongeBot)) 
+                            spongeBotE = 0.d0
+                        end where
+                    end if
+
+                    this%RdampC = spongeTopC + spongeBotC
+                    this%RdampE = spongeTopE + spongeBotE
+                    deallocate(spongeTopC,spongeBotC,spongeTopE,spongeBotE)
+                elseif (useTopAndBottomSymmetricSponge) then
                     ! Ensure zinY and zEinY are centered at 0 irrespective of this%zBot
                     zinY  = zinY  - this%zMid
                     zEinY = zEinY - this%zMid
@@ -1314,6 +1354,10 @@ contains
             deallocate(tmpyC, tmpyE)
             call message(0,"Sponge Layer initialized successfully")
             call message(1,"Sponge Layer active above z = ",zstSponge)
+
+            if (dumpSponge) then
+                call this%dumpFullField(this%RdampC,'spng',this%sp_gpC,pencil='y')
+            end if
 
         end if 
 
