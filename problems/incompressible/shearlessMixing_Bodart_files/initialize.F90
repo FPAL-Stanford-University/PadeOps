@@ -281,12 +281,24 @@ subroutine setDirichletBC_Temp(inputfile, Tfield, Tsurf, dTsurf_dt, whichSide)
     real(rkind), intent(out) :: Tsurf, dTsurf_dt
     character(len=3), intent(in) :: whichSide
     integer :: iounit
+    real(rkind) :: Ttop = 1.d0, Tbot = 0.d0, Tref = 1.d0
+    real(rkind) :: Lx, Ly, Lz, zmin
+    integer :: num_stats_instances
+    logical :: symmetricDomain
+    character(len=clen) :: stats_info_dir
+
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
+
+    ioUnit = 11
+    open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+    read(unit=ioUnit, NML=SMinput)
+    close(ioUnit)    
     
     dTsurf_dt = zero
     if (whichSide == 'top') then
-        Tsurf = p_maxval(maxval(Tfield))
+        Tsurf = Ttop 
     elseif (whichSide == 'bot') then
-        Tsurf = p_minval(minval(Tfield))
+        Tsurf = Tbot 
     end if
 
 end subroutine
