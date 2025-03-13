@@ -4727,14 +4727,18 @@ contains
         use operators, only: interpolateFV
         use constants, only: one
         class(solid),                                       intent(inout)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)   :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)                 :: rhom
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
 
+         call this%getSpeciesDensity(rho,rhom)
          call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,this%rhoYs_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV(this%decomp,this%interpMid,this%VF,this%VF_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV(this%decomp,this%interpMid,rho,this%rho_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV(this%decomp,this%interpMid,this%Ys,this%Ys_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+      !   call interpolateFV(this%decomp,this%interpMid,rhom,this%rho_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+      !   this%rhoYs_mid = this%rho_mid*this%VF_mid
+      !   call interpolateFV(this%decomp,this%interpMid,rho,this%rho_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+      !   call interpolateFV(this%decomp,this%interpMid,this%Ys,this%Ys_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
     end subroutine
     subroutine getYsLAD(this,rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -4828,7 +4832,7 @@ contains
         
     end subroutine
 
-    subroutine update_specYs(this,isub,dt,rho,u,v,w,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge,alpha)
+    subroutine update_specYs(this,isub,dt,rho,u,v,w,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,sponge,alpha)
         use decomp_2d,  only: nrank
         use RKCoeffs,   only: RK45_A,RK45_B
         class(solid), intent(inout) :: this
@@ -4846,18 +4850,18 @@ contains
         dy = y(1,2,1) - y(1,1,1)
 
 
-       call this%getRHS_specYs(rho,u,v,w,rhsYs,dy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
+        call this%getRHS_specYs(rho,u,v,w,rhsYs,dy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
 
 
         ! advance sub-step
-        if(isub==1) this%QtmpYs = zero                   ! not really needed,since RK45_A(1) = 0
+        if(isub==1) this%QtmpspecYs = zero                   ! not really needed,since RK45_A(1) = 0
         this%QtmpspecYs  = dt*rhsYs + RK45_A(isub)*this%QtmpspecYs
         this%spec_consrv(:,:,:,1) = this%spec_consrv(:,:,:,1)  + RK45_B(isub)*this%QtmpspecYs
-        this%consrv(:,:,:,1) = 1 / this%spec_consrv(:,:,:,1)
+
     end subroutine
 
      subroutine getRHS_specYs(this,rho,u,v,w,rhsYs,dy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
-        use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z
+        use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x,gradFV_y,gradFV_z
         class(solid),                                         intent(inout)  :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)     :: rho,u,v,w
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out)    :: rhsYs
@@ -4866,11 +4870,21 @@ contains
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: vcon,tmp,tmp1,tmp2,tmp3,u_int,v_int, w_int,flux, dYdx, dYdy, dYdz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x,dYdy_y,dYdz_z,drYdx,drYdy,drYdz,divu_node
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rho_int,Ys_int,rhoYs_int, rhodiff_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x,dYdy_y,dYdz_z,drYdx,drYdy,drYdz,divu_node,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: spec_int
 
+        call gradFV_x(this%decomp,this%derStagg,this%spec_consrv(:,:,:,1),dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_y(this%decomp,this%derStagg,this%spec_consrv(:,:,:,1),dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call gradFV_z(this%decomp,this%derStagg,this%spec_consrv(:,:,:,1),dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-        
+        call interpolateFV(this%decomp,this%interpMid,this%spec_consrv(:,:,:,1),spec_int,periodicx, periodicy, periodicz, x_bc,y_bc, z_bc)
+           !divergenceFV(this%decomp,this%derStagg,-u_int*rho_int(:,:,:,1)*Ys_int(:,:,:,1),-v_int*rho_int(:,:,:,2)*Ys_int(:,:,:,2),-w_int*rho_int(:,:,:,3)*Ys_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+        call divergenceFV(this%decomp,this%derStagg,-u*spec_int(:,:,:,1),-v*spec_int(:,:,:,2),-w*spec_int(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call divergenceFV(this%decomp,this%derStagg,u,v,w,divu,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+        rhsYs = tmp + this%spec_consrv(:,:,:,1)*divu
+      
 
 
     end subroutine
@@ -5200,6 +5214,7 @@ contains
 
     subroutine update_VF(this,other,isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge,alpha)
         use RKCoeffs,   only: RK45_A,RK45_B
+         use operators, only: filter3D
         class(solid), intent(inout) :: this
         class(solid), intent(in)    :: other
         integer, intent(in) :: isub
@@ -5211,7 +5226,7 @@ contains
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsVF  ! RHS for mass fraction equation
-        integer :: i
+        integer :: i,iflag = one
         rhsVF = 0
 
         if(this%PTeqb) then
@@ -5236,7 +5251,7 @@ contains
         this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
         this%VF = this%VF  + RK45_B(isub)*this%QtmpVF
 
-
+ !       call filter3D(this%decomp, this%fil, this%VF, iflag,x_bc,y_bc, z_bc)
 
     end subroutine
 
@@ -5313,9 +5328,9 @@ contains
 
           call divergence(this%decomp,this%der,u,v,w,divu_node,x_bc,y_bc,z_bc)
 
-          VF_fil = this%VF
-          call filter3D(this%decomp, this%fil, VF_fil, iflag,x_bc,y_bc, z_bc) 
-          rhsVF = VF_fil*div_u + div_uVF + this%vfLAD ! - (1-alpha)*(this%VF*divu_node + u*dVFdx + v*dVFdy + w*dVFdz)
+          VF_fil = this%VF*div_u
+          !call filter3D(this%decomp, this%fil, VF_fil, iflag,x_bc,y_bc, z_bc) 
+          rhsVF = this%VF*div_u + div_uVF + this%vfLAD !this%VF*div_u + div_uVF + this%vfLAD ! - (1-alpha)*(this%VF*divu_node + u*dVFdx + v*dVFdy + w*dVFdz)
 
         endif
 
@@ -5506,7 +5521,7 @@ contains
 
         if(this%pEqb) then
             ! filter VF
-        !    call filter3D(this%decomp, fil_, this%VF, iflag, x_bc, y_bc,z_bc)
+            call filter3D(this%decomp, fil_, this%VF, iflag, x_bc, y_bc,z_bc)
         endif
 
         if(this%pRelax) then

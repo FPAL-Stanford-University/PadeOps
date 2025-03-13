@@ -13,7 +13,7 @@ module ci06stuff
     public :: ci06, alpha06d1, a06d1, b06d1
     
     ! 6th order first derivative coefficients (See Lele (1992) for explanation)
-    real(rkind), parameter :: alpha06d1= 0.35_rkind ! 3.0_rkind / 10.0_rkind
+    real(rkind), parameter :: alpha06d1= 0.366_rkind ! 3.0_rkind / 10.0_rkind
     real(rkind), parameter :: c06d1    = (-10_rkind*alpha06d1 + 3_rkind) /128_rkind
     real(rkind), parameter :: a06d1    = (70_rkind*alpha06d1 + 75_rkind) / 64_rkind / 2.0_rkind !(3.0_rkind / 2.0_rkind) / 2.0_rkind
     real(rkind), parameter :: b06d1    = (126_rkind*alpha06d1 -25_rkind) / 128_rkind / 2.0_rkind   !( 1.0_rkind / 10.0_rkind) / 2.0_rkind
@@ -476,39 +476,36 @@ contains
         case (.TRUE.)
             a06 = a06d1 
             b06 = b06d1 
-            c06 = c06d1/2
+            c06 = c06d1/2_rkind
             RHS = 0.0d0
          select case(dir)
            case("N2F")
    
             do k = 1,n3
-                do j = 1,n2
-                    RHS(1         ,j,k) = a06 * ( f(2,j,k)          + f(1,j,k) ) &
-                                        + b06 * ( f(3,j,k)         + f(this%n,j,k) ) &
-                                        + c06 *( f(4,j,k)          + f(this%n-1,j,k) )
+                    RHS(1         ,:,k) = a06 * ( f(2,:,k)          + f(1,:,k) ) &
+                                        + b06 * ( f(3,:,k)         + f(this%n,:,k) ) &
+                                        + c06 *( f(4,:,k)          + f(this%n-1,:,k) )
 
-                    RHS(2         ,j,k) = a06 * ( f(3,j,k)          + f(2 ,j,k) ) &
-                                        + b06 * ( f(4,j,k)          + f(1 ,j,k) ) &
-                                        + c06 *( f(5,j,k)           + f(this%n,j,k) )
+                    RHS(2         ,:,k) = a06 * ( f(3,:,k)          + f(2 ,:,k) ) &
+                                        + b06 * ( f(4,:,k)          + f(1 ,:,k) ) &
+                                        + c06 *( f(5,:,k)           + f(this%n,:,k) )
 
-                    RHS(3:this%n-3,j,k) = a06 * ( f(4:this%n-2,j,k) + f(3:this%n-3,j,k) ) &
-                                        + b06 * ( f(5:this%n-1  ,j,k)  + f(2:this%n-4,j,k) ) &
-                                        + c06 * ( f(6:this%n, j, k )  + f(1:this%n-5,j,k) )
+                    RHS(3:this%n-3,:,k) = a06 * ( f(4:this%n-2,:,k) + f(3:this%n-3,:,k) ) &
+                                        + b06 * ( f(5:this%n-1  ,:,k)  + f(2:this%n-4,:,k) ) &
+                                        + c06 * ( f(6:this%n, :, k )  + f(1:this%n-5,:,k) )
 
-                    RHS(this%n-2  ,j,k) = a06 * ( f(this%n-1,j,k)     + f(this%n-2,j,k) ) &
-                                        + b06 * ( f(this%n,j,k)       + f(this%n-3,j,k) ) &
-                                        + c06 * ( f(1,j,k)            + f(this%n-4,j,k) )
+                    RHS(this%n-2  ,:,k) = a06 * ( f(this%n-1,:,k)     + f(this%n-2,:,k) ) &
+                                        + b06 * ( f(this%n,:,k)       + f(this%n-3,:,k) ) &
+                                        + c06 * ( f(1,:,k)            + f(this%n-4,:,k) )
 
-                    RHS(this%n-1  ,j,k) = a06 * ( f(this%n,j,k)      + f(this%n-1,j,k) ) &
-                                        + b06 * ( f(1,j,k)          + f(this%n-2,j,k) ) &
-                                        + c06 * ( f(2,j,k)          + f(this%n-3,j,k) )
+                    RHS(this%n-1  ,:,k) = a06 * ( f(this%n,:,k)      + f(this%n-1,:,k) ) &
+                                        + b06 * ( f(1,:,k)          + f(this%n-2,:,k) ) &
+                                        + c06 * ( f(2,:,k)          + f(this%n-3,:,k) )
 
-                    RHS(this%n    ,j,k) = a06 * ( f(1,j,k)          + f(this%n,j,k) ) &
-                                        + b06 * ( f(2,j,k)          + f(this%n-1,j,k) ) &
-                                        + c06 * ( f(3,j,k)          + f(this%n-2,j,k) )
+                    RHS(this%n    ,:,k) = a06 * ( f(1,:,k)          + f(this%n,:,k) ) &
+                                        + b06 * ( f(2,:,k)          + f(this%n-1,:,k) ) &
+                                        + c06 * ( f(3,:,k)          + f(this%n-2,:,k) )
 
-
-            end do 
          enddo  
         case("F2N")
     
@@ -600,7 +597,7 @@ contains
         case (.TRUE.)
             a06 = a06d1 
             b06 = b06d1 
-            c06 = c06d1/2
+            c06 = c06d1/2_rkind
             RHS = 0.0d0
            
           select case(dir)

@@ -13,8 +13,8 @@ module ci04stuff
     public :: ci04, alpha06d1, a06d1, b06d1
     
     ! 6th order first derivative coefficients (See Lele (1992) for explanation)
-    real(rkind), parameter :: alpha06d1=  0.10_rkind !1.0_rkind / 3.0_rkind
-    real(rkind), parameter :: c06d1    =  0.0 ! (-12._rkind + 8.0_rkind*alpha06d1)/128_rkind 
+    real(rkind), parameter :: alpha06d1=  0.35_rkind !1.0_rkind / 3.0_rkind
+    real(rkind), parameter :: c06d1    = (-12._rkind + 8.0_rkind*alpha06d1)/128_rkind 
     real(rkind), parameter :: a06d1    = (1.0_rkind / 8.0_rkind) * (9._rkind + 10._rkind*alpha06d1 + 16.0*c06d1 ) / 2.0_rkind
     real(rkind), parameter :: b06d1    = 1._rkind/8._rkind*(6._rkind*alpha06d1 - 1._rkind - 24._rkind*c06d1) / 2.0_rkind !1.0_rkind / 10.0_rkind) / 2.0_rkind
     

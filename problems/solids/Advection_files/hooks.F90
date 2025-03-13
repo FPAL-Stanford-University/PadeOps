@@ -20,7 +20,7 @@ module Advection_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 2d0, Lx = 2d0, interface_init = 0.5, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 2, Lx = 2, interface_init = 0.5, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -165,7 +165,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - 1.0 
+                    x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - 1.0
                     y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy - 1.0
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
@@ -281,7 +281,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
    !    tmpeta = atanh( 2.0*y / ( 1.0 + 1.0 / STRETCH_RATIO) )
    !    Lr =  Ly /( tmpeta(1, ny,1) - tmpeta(1,1,1))
 
-        eta = x !tmpeta ! - interface_init
+        eta = y !tmpeta ! - interface_init
         !eta =(x-interface_init)
         !eta = x-interface_init
         !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
@@ -291,7 +291,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
 !        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (y-0.5)*(y-0.5))/(thick*dx) ) )
 
-        tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf((eta-width)/(thick*dx)))
+        tmp = (half)*(erf( (eta+width)/(thick*dy) ) - erf((eta-width)/(thick*dy)))
         !tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
@@ -299,12 +299,12 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(2)%VF =  1 - mix%material(1)%VF
 
         !Set density profile and mass fraction based on volume fraction
-        rho = rho_0*mix%material(1)%VF + rho_0_2*mix%material(2)%VF
+        rho = rho_0*tmp + rho_0_2*(1-tmp) !mix%material(1)%VF + rho_0_2*mix%material(2)%VF
         mix%material(1)%Ys =  mix%material(1)%VF * rho_0 / rho
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
-        u = v0
-        v = 0
+        u = 0
+        v = v0
         w = 0
 
         !tmp2 = half*(erf( (y-0.8+0.1_rkind)/(thick*dy) ) - erf((y-0.8-0.1_rkind)/(thick*dy)))
