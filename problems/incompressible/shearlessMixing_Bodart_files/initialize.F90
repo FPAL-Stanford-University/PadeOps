@@ -42,11 +42,11 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     integer :: ix1, ixn, iy1, iyn, iz1, izn
     real(rkind)  :: Lx = one, Ly = one, Lz = one
     logical :: symmetricDomain = .true.
-    real(rkind) :: zmin = -one, Tref
+    real(rkind) :: zmin = -one, Tref, Ttop, Tbot
     character(len=clen) :: stats_info_dir
     integer :: num_stats_instances = 1
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -127,7 +127,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind)  :: Lx = one, Ly = one, Lz = one
 !    real(rkind)  :: zTop_cell, zBot_cell, zMid
     type(cd06stagg), allocatable :: der
-    real(rkind) :: dz, zmin, Tref
+    real(rkind) :: dz, zmin, Tref, Tbot, Ttop
     integer :: ioUnit, ierr
     integer :: i, j
     logical :: symmetricDomain
@@ -154,7 +154,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     character(len=clen) :: stats_info_dir
     integer :: num_stats_instances = 1
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
     namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                     useRestartFile, restartFile_TID, restartFile_RID, CviscDT, &
                     nstepConstDt, restartFromDifferentGrid, nxS, nyS, nzS
@@ -251,13 +251,13 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: wTh_surf
-    real(rkind) :: Lx, Ly, Lz, zmin, Tref
+    real(rkind) :: Lx, Ly, Lz, zmin, Tref, Tbot, Ttop
     logical :: symmetricDomain
     integer :: iounit
     character(len=clen) :: stats_info_dir
     integer :: num_stats_instances = 1
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
     
     wTh_surf = zero
     
@@ -309,13 +309,13 @@ subroutine set_Reference_Temperature(inputfile, Trefout)
     implicit none 
     character(len=*),                intent(in)    :: inputfile
     real(rkind), intent(out) :: Trefout
-    real(rkind) :: Tref = 1.d0, Lx, Ly, Lz, zmin
+    real(rkind) :: Tref = 1.d0, Lx, Ly, Lz, zmin, Ttop, Tbot
     logical :: symmetricDomain
     integer :: iounit
     character(len=clen) :: stats_info_dir
     integer :: num_stats_instances = 1
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

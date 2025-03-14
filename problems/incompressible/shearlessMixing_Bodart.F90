@@ -30,14 +30,14 @@ program shearlessMixing
     !END DEBUG
 
     ! Required for reading the namelist, but not used directly in the main program
-    real(rkind) :: Lx, Ly, Lz, zmin, Tref
+    real(rkind) :: Lx, Ly, Lz, zmin, Tref, Tbot, Ttop
     logical :: symmetricDomain 
     
     call MPI_Init(ierr)
 
     call GETARG(1,inputfile)                                            
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
