@@ -1286,8 +1286,8 @@ contains
                     spongeBotC = 0.d0
                     spongeBotE = 0.d0
                     if (dSpongeTop > 0.d0) then
-                        spongeTopC = 0.5d0*(1.d0 - cos(pi*(zinY -(this%zTop-dSpongeTop))/dSpongeTop));
-                        spongeTopE = 0.5d0*(1.d0 - cos(pi*(zEinY-(this%zTop-dSpongeTop))/dSpongeTop));
+                        spongeTopC = (1.d0/SpongeTscale)*0.5d0*(1.d0 - cos(pi*(zinY -(this%zTop-dSpongeTop))/dSpongeTop));
+                        spongeTopE = (1.d0/SpongeTscale)*0.5d0*(1.d0 - cos(pi*(zEinY-(this%zTop-dSpongeTop))/dSpongeTop));
                         where (zinY < (this%zTop-dSpongeTop))
                             spongeTopC = 0.d0
                         end where
@@ -1296,8 +1296,8 @@ contains
                         end where
                     end if
                     if (dSpongeBot > 0.d0) then
-                        spongeBotC = 0.5d0*(1.d0 - cos(pi*(zinY -(this%zBot+dSpongeBot))/dSpongeBot));
-                        spongeBotE = 0.5d0*(1.d0 - cos(pi*(zEinY-(this%zBot+dSpongeBot))/dSpongeBot));
+                        spongeBotC = (1.d0/SpongeTscale)*0.5d0*(1.d0 - cos(pi*(zinY -(this%zBot+dSpongeBot))/dSpongeBot));
+                        spongeBotE = (1.d0/SpongeTscale)*0.5d0*(1.d0 - cos(pi*(zEinY-(this%zBot+dSpongeBot))/dSpongeBot));
                         where (zinY > (this%zBot+dSpongeBot)) 
                             spongeBotC = 0.d0
                         end where
