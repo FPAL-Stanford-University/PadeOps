@@ -295,7 +295,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         !tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
-        mix%material(1)%VF = minVF + (one-two*minVF)*tmp ! + (noise-0.5)*1d-7
+        mix%material(1)%VF =  minVF + (one-two*minVF)*tmp ! + (noise-0.5)*1d-7
         mix%material(2)%VF =  1 - mix%material(1)%VF
 
         !Set density profile and mass fraction based on volume fraction

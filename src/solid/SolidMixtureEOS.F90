@@ -959,7 +959,7 @@ stop
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix,rhom, e_species, delta_max, delta_min, del_e, delta_e1, delta_e2, rhom2, rhom1,denom
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rho1gambyone, rho2gambyone, diffPInf,  tmp
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: VF1, VF2,mixrhoE,fac
-        integer :: imat, i,j,k,a(3), s = 2
+        integer :: imat, i,j,k,a(3), s = 2, iflag = 1
         real(rkind) :: gamfac,eps2=1d-8,  eps1 = 1D-8, minVF = 1D-8, e = 1d-100,thresh, cutoff
 
         ! print *, '---'
@@ -972,7 +972,7 @@ stop
         tmp = zero
 
         thresh = 1d-16
-
+     
 
         do imat = 1, this%ns
         
@@ -980,8 +980,8 @@ stop
 !       ehmix = ehmix - this%material(imat)%Ys * this%material(imat)%eel
            call this%material(imat)%getSpeciesDensity(mixRho,rhom)
            gamfac =  this%material(imat)%hydro%gam * this%material(imat)%hydro%onebygam_m1*this%material(imat)%hydro%PInf
-
-
+           !VF1 = this%material(imat)%VF
+           !call filter3D(this%decomp, this%fil, VF1,iflag,this%x_bc,this%y_bc,this%z_bc)
            ehmix = ehmix - gamfac*this%material(imat)%VF
            ! tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
            tmp = tmp + this%material(imat)%hydro%onebygam_m1 * this%material(imat)%VF
@@ -1005,9 +1005,9 @@ stop
 
        enddo
 
-
+!       call filter3D(this%decomp, this%fil, mixP,iflag,this%x_bc,this%y_bc,this%z_bc)
        mixP = ehmix/tmp
-       
+!       call filter3D(this%decomp, this%fil, mixP, iflag,this%x_bc,this%y_bc,this%z_bc)       
 
          do imat = 1, this%ns
 
@@ -5843,10 +5843,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
             call this%material(i)%getSpeciesDensity(rho,rhom)
 
             call this%material(i)%hydro%get_sos2(rhom,p,sosm)
-            !i:qf(.not. this%pEqb) then
+            if(.not. this%pEqb) then
                 call this%material(i)%elastic%get_sos2(rhom,sosm)
                 !print *, 'mat  dens', i, rhom(89,1,1), p(89,1,1), this%material(i)%Ys(89,1,1), sosm(89,1,1)
-            !endif
+            endif
             if(this%SOSmodel) then
                 ! equilibrium model
                 sos = sos + this%material(i)%VF/(rhom*sosm)
@@ -5870,7 +5870,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            do i = 1, this%ns
               gam = gam + this%material(i)%VF*this%material(i)%hydro%onebygam_m1
               pgam = pgam +this%material(i)%VF*this%material(i)%hydro%onebygam_m1*this%material(i)%hydro%gam*this%material(i)%hydro%PInf
-           !   sos = sos + this%material(i)%Ys*sosm
+            !  sos = sos + this%material(i)%Ys*sosm
            enddo
 
            !sos = sqrt(abs(sos)) 

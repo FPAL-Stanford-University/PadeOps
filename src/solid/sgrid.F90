@@ -1645,12 +1645,12 @@ contains
          if( .NOT. this%intSharp) then
    
             !rhsP = tmp1*this%u + tmp2*this%v + tmp3*this%w + (1/Gam)*((this%rho*this%e +this%p)*divu +tauSum)
-            rhsP = divup - this%p*divu + (1/Gam)*((this%rho*this%e +this%p)*divu + tauSum ) ! - this%tauRho) !+ EtaSum*divu) !+ this%rho*this%qDiv ) !+ EtaSum*divu )
+            rhsP = divup - this%p*divu + (1/Gam)*( (this%rho*this%e +this%p)*divu + tauSum ) ! - this%tauRho) !+ EtaSum*divu) !+ this%rho*this%qDiv ) !+ EtaSum*divu )
             !rhsP = divup - this%p*divu + rhoSos2*divu + (1/Gam)*(tauSum + EtaSum*divu )
          else
             !rhsP = divup - this%p*divu +  (1/Gam)*((this%rho*this%e + this%p)*divu + this%mix%intSharp_pFV + tauSum) 
             !rhsP = tmp1*this%u + tmp2*this%v + tmp3*this%w + (1/Gam)*((this%rho*this%e +this%p)*divu + this%mix%intSharp_hFV - esum + tauSum)
-            rhsP = divup - this%p*divu +  (1/Gam)*((this%rho*this%e +this%p)*divu + this%mix%intSharp_hFV + tauSum - esum ) ! - this%tauRho )! EtaSum*divu) !+ this%rho*this%qDiv) !+ EtaSum*divu )
+            rhsP = divup - this%p*divu +  (1/Gam)*( (this%rho*this%e +this%p)*divu + this%mix%intSharp_hFV + tauSum - esum ) ! - this%tauRho )! EtaSum*divu) !+ this%rho*this%qDiv) !+ EtaSum*divu )
             !rhsP = divup - this%p*divu +  rhoSos2*divu + (1/Gam)*( this%mix%intSharp_hFV - esum + tauSum + EtaSum*divu )
          endif
 
@@ -1956,6 +1956,7 @@ contains
 
         Qtmp  = zero
         Qtmpt = zero
+        Qtmpp = zero
         pmix  = zero
       
 
@@ -2128,16 +2129,20 @@ contains
                else  
                   call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
                endif
-             !  call this%update_P(Qtmpp,isub,this%dt,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
+
+          !     call this%update_P(Qtmpp,isub,this%dt,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
+          !     call this%mix%updateP_VF(this%rho,this%e,this%p)
+
             elseif(this%pRelax) then
                 call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)                        ! Volume Fraction
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
             end if
 
-!           this%mix%material(1)%VF = 1
-!            this%mix%material(2)%VF = 0
-!            this%mix%material(1)%Ys = 1
-!            this%mix%material(2)%Ys = 0
+          ! this%mix%material(1)%VF = 1
+          ! this%mix%material(2)%VF = 0
+          ! this%mix%material(1)%Ys = 1
+          ! this%mix%material(2)%Ys = 0
+
 !           this%u = 0.7
 !            this%p = 1
            ! this%mix%material(1)%p = 1
@@ -2244,10 +2249,10 @@ contains
      !       call message(5, " get prim umax ", u_max)
      !       call message(5, " get prim umin ", u_min)
 
-!            this%mix%material(1)%VF = 1
-!            this%mix%material(2)%VF = 0
-!            this%mix%material(1)%Ys = 1
-!            this%mix%material(2)%Ys = 0
+          !  this%mix%material(1)%VF = 1
+          !  this%mix%material(2)%VF = 0
+          !  this%mix%material(1)%Ys = 1
+          !  this%mix%material(2)%Ys = 0
 !            this%u = 0.7
 !            this%p = 1
            ! this%mix%material(1)%p = 1
@@ -2284,8 +2289,11 @@ contains
 
             elseif (this%pEqb) then
                call this%mix%equilibratePressure(this%rho, this%e, this%p)
-               !call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc,this%z_bc)
+            !   call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc,this%z_bc)
                !call this%mix%updateP_VF(this%rho,this%e,this%p)
+            !   this%p = this%e*this%rho*(this%mix%material(1)%hydro%gam - 1)
+            !   this%mix%material(1)%p = this%e*this%rho*(this%mix%material(1)%hydro%gam - 1)
+            !   this%mix%material(2)%p = this%e*this%rho*(this%mix%material(1)%hydro%gam - 1)
             elseif (this%pRelax) then
                 call this%mix%relaxPressure(this%rho, this%e, this%p)
                 !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
@@ -2311,55 +2319,16 @@ contains
             call this%post_bc()
             endif
 
+!            this%p = this%e*this%rho*this%mix%material(1)%hydro%onebygam_m1
 !            tmp2 = half*( erf( ( this%x - MOD(0.4*this%tsim,5.0)+0.5) / (6.0*this%dx )) - erf( (this%x - MOD(0.4*this%tsim, 5.0)-0.5 ) / (6.0*this%dx ) )  )
-
-!            this%mix%material(1)%VF = tmp2
-!            this%mix%material(2)%VF = 1 - tmp2
-!            this%rho                = this%mix%material(1)%elastic%rho0*tmp2 + this%mix%material(2)%elastic%rho0*(1.0 - tmp2 )
-!            this%mix%material(1)%Ys = this%mix%material(1)%elastic%rho0*tmp2/this%rho
-!            this%mix%material(2)%Ys = 1 - this%mix%material(2)%Ys
-
-            !this%u = 0.7
-            !this%p = 1
-            !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)     
-
-         end do
-        
-          
-
-        this%step = this%step + 1
-        nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
-        deallocate( duidxj )
- 
-    end subroutine
-
-    subroutine getFaces( this)
-        use operators, only: interpolateFV
-        class(sgrid), target, intent(inout) :: this
-        integer :: i,j,k
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom1_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: rhom
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf, tmp
-
-        call interpolateFV(this%decomp,this%interpMid,this%u,this%u_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid,this%v,this%v_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid,this%w,this%w_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid,this%p,this%p_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid,this%rho,this%rho_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-
-        do i = 1,2
-
          call this%mix%material(i)%getFaces(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
         enddo
 
-        !xhalf = this%x + this%dx*half
-        !tmp = (half)*(erf( (xhalf-MOD(0.4*this%tsim,5.0) +0.5)/(6.0*this%dx) ) - erf((xhalf-MOD(0.4*this%tsim,5.0)-0.5)/(6.0*this%dx)))
+        xhalf = this%x + this%dx*half
+        !tmp = (half)*(erf( (xhalf+0.5)/(6.0*this%dx) ) - erf((xhalf-0.5)/(6.0*this%dx)))
 
         !this%mix%material(1)%VF_mid(:,:,:,1) = tmp
-        !this%mix%material(1)%rhoYs_mid(:,:,:,1) = this%mix%material(1)%elastic%rho0*tmp
-        !this%mix%material(2)%rhoYs_mid(:,:,:,1) = this%mix%material(2)%elastic%rho0*(1-tmp)
         this%mix%material(2)%Ys_mid = 1.0 - this%mix%material(1)%Ys_mid 
         this%mix%material(2)%VF_mid = 1.0 - this%mix%material(1)%VF_mid
 
@@ -2367,6 +2336,7 @@ contains
         this%u_int = this%u - this%u_mid(:,:,:,1)
         this%p_int = this%p_mid(:,:,:,1)
     end subroutine
+
 
     subroutine get_dt(this,stability)
         use reductions, only : P_MAXVAL, P_MINVAL
@@ -2386,6 +2356,47 @@ contains
           delta = min(this%dx,deltay,this%dz)
         else 
           delta = min(this%dx, this%dy, this%dz)
+	endif
+	phys_mu = min(this%phys_mu1, this%phys_mu2)
+
+        sigma_max = P_MAXVAL(this%sponge(:,:,:,1))
+        dtSponge  = this%CFL / sigma_max
+        ! continuum
+!        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz   &
+!               + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) + one/(this%dz**2) ))
+
+
+        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy +  &
+               + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2)  ))
+        !print *, "u maxval"
+        !print *, P_MAXVAL( ABS(this%u)/this%dx )
+        !print *, "v maxval"
+        !print *, P_MAXVAL( ABS(this%v)/this%dy )
+        !print *, "w maxval"
+        !print *, P_MAXVAL( ABS(this%w)/this%dz )        
+        !print *, "sos"
+        !print *, P_MAXVAL( this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) +one/(this%dz**2) ) )
+        !print *, "dy"
+        !print *, this%dy
+        !print *, "dx"
+        !print *, this%dx
+        !print *, "dz"
+        !print *, this%dz
+        !print *, "sosmax"
+        !print *, P_MAXVAL( this%sos)
+        dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu/this%rho   ) + eps)! * this%CFL
+        dtYs1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%rhodiff   ) + eps) 
+        dtYs2 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff  ) + eps)
+        dtVF1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff  ) + eps)
+        dtVF2 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff  ) + eps)
+
+        !dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
+        dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
+	
+	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
+              !  if ( phys_mu > eps) then
+          ! filter3D(this%decomp,this%fil,gradphi(:,:,:,3),iflag,x_bc,y_bc,z_bc)  
+                  uk = ABS(this%u*this%mix%norm(:,:,:,1)) + ABS(this%v*this%mix%norm(:,:,:,2)) + ABS(this%w*this%mix%norm(:,:,:,3))
 	endif
 	phys_mu = min(this%phys_mu1, this%phys_mu2)
 
@@ -2787,7 +2798,7 @@ contains
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get specieselastic energies, and mixture and species devstress
         ! Get specieshydrodynamic energy, temperature; and mixture pressure, temperature
         call this%mix%get_ehydro_from_p(this%rho) 
-!        call this%mix%get_pmix(this%p)                         ! Get mixturepressure
+    !    call this%mix%get_pmix(this%p)                         ! Get mixturepressure
 
       !   if( this%useRestartFile ) then
 
@@ -3749,12 +3760,12 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
            rhow_int = rhow_int + this%mix%material(i)%rhoYs_mid(:,:,:,1)*w_int
        enddo
 
-       do i = 1,2
-          rhoe_prim = rhoe_prim + u_int * VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*(p_int+ this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
-       enddo
+      do i = 1,2
+         rhoe_prim = rhoe_prim + u_int * VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*(p_int+ this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
+      enddo
 
        ! p_int = (rhoe_prim - gam) / num
-
+       ! rhoe_prim = u_int*(p_int*this%mix%material(1)%hydro%onebygam_m1)
         flux = 0.0
         buff = rhou_int*u_int + p_int ! - tauxx  !x-momentum
         
@@ -3807,44 +3818,67 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE,u_int,v_int, w_int, p_int, tauxy_int, tauyy_int,tauyz_int, qy_int, e_int,rho_int, gam, num, rhoe_prim, KE, e_prim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int,rhow_int, rhoe_int, spe_int, rhoYs_int, den,ke_int, p4
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int,rhow_int, rhoe_int, spe_int, rhoYs_int, den,ke_int, p4,Eint
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         real(rkind) :: g = 0.1
         integer :: i
 
-        call interpolateFV_y(this%decomp,this%interpMid,this%rho*this%e,rhoe_prim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-       
-        p_int = this%p_mid(:,:,:,2)
-        u_int = this%u_mid(:,:,:,2)
-        v_int = this%v_mid(:,:,:,2)
-        w_int = this%w_mid(:,:,:,2)
+        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,TE_index),Eint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index ),rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
+
+        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index+1),rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)        
+        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index+2),rhow_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+!        p_int = this%p_mid(:,:,:,2)
+!        u_int = this%u_mid(:,:,:,2)
+!        v_int = this%v_mid(:,:,:,2)
+!        w_int = this%w_mid(:,:,:,2)
 
 
         rho_int = 0.0
-        rhou_int = 0.0
-        rhov_int = 0.0
-        rhow_int = 0.0
+!        rhou_int = 0.0
+!        rhov_int = 0.0
+!        rhow_int = 0.0
 
-        rhoe_prim = 0.0
+!        rhoe_prim = 0.0
         num = 0.0
         gam = 0.0
+
         do i = 1,2
        
            VF_int(:,:,:,i) = this%mix%material(i)%VF_mid(:,:,:,2)
            rho_int = rho_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)
+
+        enddo 
+
+        u_int = rhou_int/rho_int
+        v_int = rhov_int/rho_int
+        w_int = rhow_int/rho_int
+
+        rhoe_prim = Eint - 0.5*rho_int*(u_int*u_int + v_int*v_int + w_int*w_int)
+
+
+        rhou_int = 0.0
+        rhov_int = 0.0
+        rhow_int = 0.0
+
+        do i = 1,2
            rhou_int = rhou_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)*u_int
            rhov_int = rhov_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)*v_int
            rhow_int = rhow_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)*w_int
-        enddo
 
+        enddo
+   
         do i = 1,2
-          rhoe_prim = rhoe_prim +v_int*VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*(p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
-         !  gam = gam + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf
-         !  num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
+         ! rhoe_prim = rhoe_prim +v_int*VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*(p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
+           gam = gam + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf
+           num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
         enddo
 
-       ! p_int = (rhoe_prim - gam) / num
+        p_int = (rhoe_prim - gam) / num
 
+       !rhoe_prim = v_int*(p_int*this%mix%material(1)%hydro%onebygam_m1)
         flux = 0.0
         buff = rhov_int*u_int !  - tauxy !x-momentum
         
@@ -3872,7 +3906,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
         KE = half*(u_int*u_int + v_int*v_int + w_int*w_int)*rhov_int 
         !TE = rhoe_int + half*(rhou_int*u_int + v_int*rhov_int + w_int*rhow_int)
-        buff = rhoe_prim + ( p_int )*v_int + KE  ! rhoe_prim + ( p_int  - tauyy )*v_int + KE  - u_int*tauxy -w_int*tauyz!+v_int*rho_int*this%ke_mid(:,:,:,2) + this%pu_mid(:,:,:,2) ! + qy !+! v_int*rho_int*g
+        buff = (rhoe_prim +  p_int )*v_int + KE  ! rhoe_prim + ( p_int  - tauyy )*v_int + KE  - u_int*tauxy -w_int*tauyz!+v_int*rho_int*this%ke_mid(:,:,:,2) + this%pu_mid(:,:,:,2) ! + qy !+! v_int*rho_int*g
 
         !endif
 
@@ -4540,82 +4574,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
     end subroutine
 
     subroutine dumpRestartFile(this)
-        use decomp_2d,  only: nrank
-        use decomp_2d_io
-        use mpi
-        use exits, only: message
-        class(sgrid), intent(inout) :: this
-        character(len=clen) :: tempname, fname
-        integer :: ierr, rank
-
-        call MPI_COMM_RANK(mpi_comm_world,rank,ierr)
-     !   this%v = rank
-     !   this%w = this%y
-     !   this%p = this%x
-
-     !   if(nrank == 0) then
-     !     print *, " y ", this%w(1,:,1)
-     !   endif
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
-        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%u,fname, this%decomp)
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_v.",this%step
-        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%v,fname, this%decomp)
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_w.",this%step
-        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%w,fname, this%decomp)
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_VF.",this%step
-        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%mix%material(1)%VF,fname, this%decomp)
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_Ys.",this%step
-        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%mix%material(1)%Ys,fname, this%decomp)
-
-        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_rho.",this%step
-        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%rho,fname, this%decomp)
-        if (nrank == 0) then
-            fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-            OPEN(UNIT=10, FILE=trim(fname))
-            write(10,"(100g15.5)") this%tsim
-            close(10)
-        end if
-
-        call mpi_barrier(mpi_comm_world, ierr)
-        call message(1, "Just Dumped a RESTART file")
-
-    end subroutine
-
-
-    ! NOTE: If you want to dump an edge field, you need to call in dumpFullField
-    ! routine with this%gpE passed in as the 3rd argument. If it's a cell field,
-    ! then you don't need to pass in any gp since the default gp is this%gpC
-!   subroutine dumpFullField(this,arr,label,gp2use)
-!       use decomp_2d_io
-!       use mpi
-!       use exits, only: message
-!       class(igrid), intent(in) :: this
-!       character(len=clen) :: tempname, fname
-!       real(rkind), dimension(:,:,:), intent(in) :: arr
-!       character(len=4), intent(in) :: label
-!       type(decomp_info), intent(in), optional :: gp2use
-
-!        write(tempname,"(A3,I2.2,A1,A4,A2,I6.6,A4)") "Run",this%runID, "_",label,"_t",this%step,".out"
-!        fname = this%outputdir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-!        if (present(gp2use)) then
-!           call decomp_2d_write_one(1,arr,fname,gp2use)
-!        else
-!           call decomp_2d_write_one(1,arr,fname,this%gpC)
-!        end if
-
-!   end subroutine
-
-
 !   subroutine dumpVisualizationInfo(this)
 !       class(sgrid), intent(in) :: this
 !       character(len=clen) :: tempname, fname
