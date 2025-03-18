@@ -149,7 +149,7 @@ module SolidGrid
         type(ladobject),        allocatable :: LAD
         type(derivativesStagg), allocatable :: derStagg,derStagg_stretch
         type(derivativesStagg), allocatable :: derStaggd02
-        type(interpolators),    allocatable ::interpMid
+        type(interpolators),    allocatable ::interpMid,interpMide06
         type(interpolators),    allocatable ::interpMid02, interpMid04,interpMid08
         type( IOsgrid ),        allocatable :: viz
 
@@ -371,7 +371,7 @@ contains
         logical :: skew_Ys = .false., skew_VF = .false.,skew_mass = .false.
         real(rkind) :: intSharp_gam = 0.0d0, intSharp_eps = 0.0d0, intSharp_cut = 1.0d-2, intSharp_dif = 1.0d1, intSharp_tnh = 1.0D-2, intSharp_pfloor = 0.0D0, intSharp_tfloor = 0.0D0, XiLS_eps = 0.0, alpha_skew
 
-        real(rkind) :: filter_alpha = 0.499
+        real(rkind) :: filter_alpha = 0.475
 
         namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
                              inputdir, outputdir, vizprefix, tviz, &
@@ -654,6 +654,17 @@ contains
                            this%dx,       this%dy,        this%dz, &
                          periodicx,     periodicy,      periodicz, &
                                            "ci08", "ci08", "ci08", &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        if ( allocated(this%interpMide06) ) deallocate(this%interpMide06)
+        allocate(this%interpMide06)
+
+        ! Initialize Interpolator
+        call this%interpMide06%init(                     this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                           "ei06", "ei06", "ei06", &
                            .false.,       .false.,        .false., &
                            .false.)
 
@@ -1350,6 +1361,9 @@ contains
 
         call this%interpMid08%destroy()
         if (allocated(this%interpMid08)) deallocate(this%interpMid08)
+
+        call this%interpMide06%destroy()
+        if (allocated(this%interpMide06)) deallocate(this%interpMide06)
 
         call this%derStagg_stretch%destroy()
         if (allocated(this%derStagg_stretch)) deallocate(this%derStagg_stretch)
@@ -3806,24 +3820,27 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE,u_int,v_int, w_int, p_int, tauxy_int, tauyy_int,tauyz_int, qy_int, e_int,rho_int, gam, num, rhoe_prim, KE, e_prim
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int,rhow_int, rhoe_int, spe_int, rhoYs_int, den,ke_int, p4
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE,u_int,v_int, w_int, p_int, tauxy_int, tauyy_int,tauyz_int, qy_int, e_int,rho_int, gam, num, rhoe_prim, KE, e_prim,gradp,gradu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int,rhow_int, rhoe_int, spe_int, rhoYs_int, den,ke_int, p4,Eint, up_int
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         real(rkind) :: g = 0.1
-        integer :: i
+        integer :: i,j,k
 
-        call interpolateFV_y(this%decomp,this%interpMid,this%rho*this%e,rhoe_prim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-       
-        p_int = this%p_mid(:,:,:,2)
-        u_int = this%u_mid(:,:,:,2)
-        v_int = this%v_mid(:,:,:,2)
-        w_int = this%w_mid(:,:,:,2)
+!        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,TE_index),   Eint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index),  rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+!        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index+1),rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+!        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index+2),rhow_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+     
+       p_int = this%p_mid(:,:,:,2)
+       u_int = this%u_mid(:,:,:,2)
+       v_int = this%v_mid(:,:,:,2)
+       w_int = this%w_mid(:,:,:,2)
 
 
         rho_int = 0.0
-        rhou_int = 0.0
-        rhov_int = 0.0
-        rhow_int = 0.0
 
         rhoe_prim = 0.0
         num = 0.0
@@ -3832,15 +3849,31 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        
            VF_int(:,:,:,i) = this%mix%material(i)%VF_mid(:,:,:,2)
            rho_int = rho_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)
+        enddo
+
+
+
+
+
+!        u_int = rhou_int/rho_int
+!        v_int = rhov_int/rho_int
+!        w_int = rhow_int/rho_int
+
+!        rhoe_prim = Eint - 0.5*rho_int*(u_int*u_int  + v_int*v_int + w_int*w_int)
+        rhou_int = 0.0
+        rhov_int = 0.0
+        rhow_int = 0.0
+
+        do i = 1,2
            rhou_int = rhou_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)*u_int
            rhov_int = rhov_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)*v_int
            rhow_int = rhow_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)*w_int
         enddo
 
         do i = 1,2
-          rhoe_prim = rhoe_prim +v_int*VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*(p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
-         !  gam = gam + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf
-         !  num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
+          rhoe_prim = rhoe_prim + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*(p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
+        !  gam = gam + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf
+        !  num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
         enddo
 
        ! p_int = (rhoe_prim - gam) / num
@@ -3872,12 +3905,14 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
         KE = half*(u_int*u_int + v_int*v_int + w_int*w_int)*rhov_int 
         !TE = rhoe_int + half*(rhou_int*u_int + v_int*rhov_int + w_int*rhow_int)
-        buff = rhoe_prim + ( p_int )*v_int + KE  ! rhoe_prim + ( p_int  - tauyy )*v_int + KE  - u_int*tauxy -w_int*tauyz!+v_int*rho_int*this%ke_mid(:,:,:,2) + this%pu_mid(:,:,:,2) ! + qy !+! v_int*rho_int*g
+        buff = (rhoe_prim + p_int)*v_int  + KE  ! rhoe_prim + ( p_int  - tauyy )*v_int + KE  - u_int*tauxy -w_int*tauyz!+v_int*rho_int*this%ke_mid(:,:,:,2) + this%pu_mid(:,:,:,2) ! + qy !+! v_int*rho_int*g
 
         !endif
 
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
+        !call gradFV_y(this%decomp,this%derStagg,p_int,gradp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        !call gradFV_y(this%decomp,this%derStagg,v_int,gradu,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux !- gradu*this%p - this%v*gradp
         this%yflux_e = flux
 
 

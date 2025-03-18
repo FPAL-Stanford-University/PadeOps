@@ -970,7 +970,7 @@ stop
         mixrhoE = ehmix
      !   ehmix = ehmix*mixRho
         tmp = zero
-
+     !   call filter3D(this%decomp, this%fil, ehmix, 1,this%x_bc,this%y_bc,this%z_bc)
         thresh = 1d-16
 
 
@@ -990,7 +990,7 @@ stop
 
             
  
-!             do k=1,this%nzp
+!             do k=1,thi
 !                do j = 1,this%nyp
 !                    do i = 1,this%nxp
 !                        if ( this%material(imat)%Ys(i,j,k) * this%material(imat)%VF(i,j,k) < zero ) then
@@ -1007,7 +1007,7 @@ stop
 
 
        mixP = ehmix/tmp
-       
+     !  call filter3D(this%decomp, this%fil, mixP,1,this%x_bc,this%y_bc,this%z_bc)       
 
          do imat = 1, this%ns
 
