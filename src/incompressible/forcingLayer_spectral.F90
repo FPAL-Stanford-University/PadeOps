@@ -35,8 +35,8 @@ module spectralForcingLayerMod
       type(decomp_info), pointer :: gpC => null(), gpE => null(), &
         sp_gpC => null(), sp_gpE => null()
       integer :: nz
-      complex(rkind), dimension(:,:,:), allocatable :: fxhat, fyhat, fzhat, fThat
-      real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz, fT
+      complex(rkind), dimension(:,:,:), allocatable :: fxhat, fyhat, fzhat, fThat, uhat, vhat, cbuffyC_extra
+      real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz, fT, u, v, dudx, dudy, dudz, dvdx, dvdy, dvdz
       logical :: dumpForce, projectDivergenceFree, isStratified
       type(Pade6Stagg), pointer :: Pade6opZ
       real(rkind) :: maxDiv, maxDivAllTime, avgFact, Re, Pr, oneOnRe, oneOnRePr
@@ -71,6 +71,10 @@ module spectralForcingLayerMod
         procedure, private :: ddz
         procedure, private :: covariance
         procedure, private :: get_time_ampfact
+        procedure, private :: remove_mean_cmplx
+        procedure, private :: remove_mean_real
+        generic            :: remove_mean => remove_mean_cmplx, remove_mean_real
+
     end type
 
     contains
@@ -263,6 +267,21 @@ module spectralForcingLayerMod
           allocate(this%fz(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3)))
           allocate(this%fT(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
 
+          allocate(this%uhat(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3) ))
+          allocate(this%vhat(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3) ))
+          allocate(this%u(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+          allocate(this%v(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+
+          allocate(this%cbuffyC_extra(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3) ))
+
+          allocate(this%dudx(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+          allocate(this%dudy(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+          allocate(this%dudz(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+
+          allocate(this%dvdx(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+          allocate(this%dvdy(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+          allocate(this%dvdz(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+
           allocate(this%zbuff(this%nz,2))
           allocate(this%covBuff(this%nz,2))
           allocate(this%meanT(this%nz),this%dTdz(this%nz))
@@ -333,11 +352,11 @@ module spectralForcingLayerMod
           call message(2,'Gain divided by time scale',this%relax_fact)!this%gain/this%integralTime)
       end subroutine
 
-      subroutine updateRHS(this,uhat,vhat,what,u,v,wC,ThatE,T,duidxjC,nSGS,tsim,dt,&
+      subroutine updateRHS(this,uhat,vhat,what,wC,ThatE,T,duidxjC,nSGS,tsim,dt,&
           poiss,urhs,vrhs,wrhs,Trhs)
           class(spectForcingLayer), intent(inout) :: this
           complex(rkind), dimension(:,:,:), intent(in) :: uhat, vhat, what
-          real(rkind), dimension(:,:,:), intent(in) :: u, v, wC
+          real(rkind), dimension(:,:,:), intent(in) :: wC
           complex(rkind), dimension(:,:,:), intent(in) :: ThatE
           type(PadePoisson), intent(inout) :: poiss
           complex(rkind), dimension(:,:,:), intent(inout) :: urhs, vrhs, wrhs, Trhs
@@ -352,10 +371,18 @@ module spectralForcingLayerMod
             dvdz, dwdx, dwdy, dwdz
           integer :: sca_id
           
-          ! Step 1: Construct the force
-          this%fxhat = uhat*this%cmaskC*this%jC
-          this%fyhat = vhat*this%cmaskC*this%jC
-          this%fzhat = what*this%cmaskE*this%jE
+          ! Step 1: Copy velocity data
+          this%uhat = uhat
+          this%vhat = vhat
+
+          ! Step 2: Remove mean component of the velocity
+          call this%remove_mean(this%uhat)
+          call this%remove_mean(this%vhat)
+          
+          ! Step 3: Construct the force
+          this%fxhat = this%uhat*this%cmaskC*this%jC
+          this%fyhat = this%vhat*this%cmaskC*this%jC
+          this%fzhat =      what*this%cmaskE*this%jE
           
           ! Step 2: Project out divergence
           call poiss%divergenceCheck(this%fxhat, this%fyhat, this%fzhat, &
@@ -363,33 +390,43 @@ module spectralForcingLayerMod
           this%maxDiv = p_maxval(maxval(abs(this%rbuffxC)))
           this%maxDivAllTime = max(this%maxDivAllTime,this%maxDiv)
 
-          ! Step 3: Remove mean component of the force
-          if (this%spectC%carryingZeroK) then
-              this%fxhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
-              this%fyhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
-              this%fzhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
-          end if
-          
           ! Step 4: Get physical space forcing
           call this%spectC%ifft(this%fxhat,this%fx)
           call this%spectC%ifft(this%fyhat,this%fy)
           call this%spectE%ifft(this%fzhat,this%fz)
+
+          ! Step 5: Get physical space velocity
+          call this%spectC%ifft(this%uhat,this%u)
+          call this%spectC%ifft(this%vhat,this%v)
          
-          ! Step 5: Compute the amplitude
-          associate( &
-              dudx => duidxjC(:,:,:,1), dudy => duidxjC(:,:,:,2), dudz => duidxjC(:,:,:,3), &
-              dvdx => duidxjC(:,:,:,4), dvdy => duidxjC(:,:,:,5), dvdz => duidxjC(:,:,:,6), &
+          ! Step 6: Compute the amplitude
+          associate(&
+              dudx => this%dudx,        dudy => this%dvdy,        dudz => this%dudz, &
+              dvdx => this%dvdx,        dvdy => this%dvdy,        dvdz => this%dvdz, &
               dwdx => duidxjC(:,:,:,7), dwdy => duidxjC(:,:,:,8), dwdz => duidxjC(:,:,:,9))
+
+              ! Copy u and v gradients to remove mean components
+              dudx = duidxjC(:,:,:,1); dudy = duidxjC(:,:,:,2); dudz = duidxjC(:,:,:,3)
+              dvdx = duidxjC(:,:,:,4); dvdy = duidxjC(:,:,:,5); dvdz = duidxjC(:,:,:,6)
+
+              ! Subtract the mean
+              call this%remove_mean(dudx,this%cbuffyC_extra)
+              call this%remove_mean(dudy,this%cbuffyC_extra)
+              call this%remove_mean(dudz,this%cbuffyC_extra)
          
+              call this%remove_mean(dvdx,this%cbuffyC_extra)
+              call this%remove_mean(dvdy,this%cbuffyC_extra)
+              call this%remove_mean(dvdz,this%cbuffyC_extra)
+
               ! Volume-averaged kinetic energy 
-              KE_x = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*u *u )))
-              KE_y = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*v *v )))
-              KE_z = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*wC*wC)))
+              KE_x = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*this%u *this%u )))
+              KE_y = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*this%v *this%v )))
+              KE_z = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*     wC*     wC)))
 
               ! Volume-averaged force work 
-              forceWork_x = this%meanFact*p_sum(sum(this%integralMask*(u *this%fx)))
-              forceWork_y = this%meanFact*p_sum(sum(this%integralMask*(v *this%fy)))
-              forceWork_z = this%meanFact*p_sum(sum(this%integralMask*(wC*this%fz)))
+              forceWork_x = this%meanFact*p_sum(sum(this%integralMask*(this%u *this%fx)))
+              forceWork_y = this%meanFact*p_sum(sum(this%integralMask*(this%v *this%fy)))
+              forceWork_z = this%meanFact*p_sum(sum(this%integralMask*(     wC*this%fz)))
 
               ! NOTE: This assumes an eddy-viscosity SGS closure
               ! Volume-averaged disspation
@@ -415,9 +452,6 @@ module spectralForcingLayerMod
               end if
 
               ! Compute the amplifiation factor
-              !this%ampFact_x = (eps_x - this%gain*(KE_x - this%tgtKEon3)/this%integralTime     )/(forceWork_x + 1.d-14)
-              !this%ampFact_y = (eps_y - this%gain*(KE_y - this%tgtKEon3)/this%integralTime     )/(forceWork_y + 1.d-14)
-              !this%ampFact_z = (eps_z - this%gain*(KE_z - this%tgtKEon3)/this%integralTime - BV)/(forceWork_z + 1.d-14)
               this%ampFact_x = (eps_x - this%relax_fact*(KE_x - this%tgtKEon3)     )/(forceWork_x + 1.d-14)
               this%ampFact_y = (eps_y - this%relax_fact*(KE_y - this%tgtKEon3)     )/(forceWork_y + 1.d-14)
               this%ampFact_z = (eps_z - this%relax_fact*(KE_z - this%tgtKEon3) - BV)/(forceWork_z + 1.d-14)
@@ -646,5 +680,22 @@ module spectralForcingLayerMod
           ddz_f = this%zbuff(:,2)
 
       end subroutine 
+
+      subroutine remove_mean_cmplx(this,fhat)
+          class(spectForcingLayer), intent(inout) :: this
+          complex(rkind), dimension(:,:,:), intent(inout) :: fhat
+          if (this%spectC%carryingZeroK) fhat(this%spectC%zeroK_i,this%spectC%zeroK_j,:) = im0
+      end subroutine
+      
+      subroutine remove_mean_real(this,f,fhat)
+          class(spectForcingLayer), intent(inout) :: this
+          real(rkind), dimension(:,:,:), intent(inout) :: f
+          complex(rkind), dimension(:,:,:), intent(inout) :: fhat
+
+          call this%spectC%fft(f,fhat)
+          call this%remove_mean_cmplx(fhat)
+          call this%spectC%ifft(fhat,f)
+      end subroutine
+
          
 end module spectralForcingLayerMod
