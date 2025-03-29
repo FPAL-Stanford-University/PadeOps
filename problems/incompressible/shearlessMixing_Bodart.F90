@@ -32,12 +32,15 @@ program shearlessMixing
     ! Required for reading the namelist, but not used directly in the main program
     real(rkind) :: Lx, Ly, Lz, zmin, Tref, Tbot, Ttop
     logical :: symmetricDomain 
+    logical :: use_SGS_mask_top = .false., use_SGS_mask_bot = .false.
+    real(rkind) :: SGS_mask_top_coord, SGS_mask_bot_coord
     
     call MPI_Init(ierr)
 
     call GETARG(1,inputfile)                                            
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot, &
+      use_SGS_mask_top, use_SGS_mask_bot, SGS_mask_top_coord, SGS_mask_bot_coord
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')

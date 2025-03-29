@@ -29,8 +29,8 @@ end module
 subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     use shearlessMixing_interact_parameters    
     use kind_parameters,  only: rkind
-    use constants,        only: one,two, pi
     use decomp_2d,        only: decomp_info
+    use constants,        only: one,two, pi
     implicit none
 
     type(decomp_info),                                          intent(in)    :: decomp
@@ -45,8 +45,11 @@ subroutine meshgen_wallM(decomp, dx, dy, dz, mesh, inputfile)
     real(rkind) :: zmin = -one, Tref, Ttop, Tbot
     character(len=clen) :: stats_info_dir
     integer :: num_stats_instances = 1
+    logical :: use_SGS_mask_top, use_SGS_mask_bot
+    real(rkind) :: SGS_mask_top_coord, SGS_mask_bot_coord
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot, &
+      use_SGS_mask_top, use_SGS_mask_bot, SGS_mask_top_coord, SGS_mask_bot_coord
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -153,8 +156,11 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     logical :: isStratified = .false., removeMean = .false.
     character(len=clen) :: stats_info_dir
     integer :: num_stats_instances = 1
+    logical :: use_SGS_mask_top, use_SGS_mask_bot
+    real(rkind) :: SGS_mask_top_coord, SGS_mask_bot_coord
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot, &
+      use_SGS_mask_top, use_SGS_mask_bot, SGS_mask_top_coord, SGS_mask_bot_coord
     namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, outputdir, prow, pcol, &
                     useRestartFile, restartFile_TID, restartFile_RID, CviscDT, &
                     nstepConstDt, restartFromDifferentGrid, nxS, nyS, nzS
@@ -256,8 +262,11 @@ subroutine setInhomogeneousNeumannBC_Temp(inputfile, wTh_surf)
     integer :: iounit
     character(len=clen) :: stats_info_dir
     integer :: num_stats_instances = 1
+    logical :: use_SGS_mask_top, use_SGS_mask_bot
+    real(rkind) :: SGS_mask_top_coord, SGS_mask_bot_coord
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot, &
+      use_SGS_mask_top, use_SGS_mask_bot, SGS_mask_top_coord, SGS_mask_bot_coord
     
     wTh_surf = zero
     
@@ -286,8 +295,11 @@ subroutine setDirichletBC_Temp(inputfile, Tfield, Tsurf, dTsurf_dt, whichSide)
     integer :: num_stats_instances
     logical :: symmetricDomain
     character(len=clen) :: stats_info_dir
+    logical :: use_SGS_mask_top, use_SGS_mask_bot
+    real(rkind) :: SGS_mask_top_coord, SGS_mask_bot_coord
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot, &
+      use_SGS_mask_top, use_SGS_mask_bot, SGS_mask_top_coord, SGS_mask_bot_coord
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -314,8 +326,11 @@ subroutine set_Reference_Temperature(inputfile, Trefout)
     integer :: iounit
     character(len=clen) :: stats_info_dir
     integer :: num_stats_instances = 1
+    logical :: use_SGS_mask_top, use_SGS_mask_bot
+    real(rkind) :: SGS_mask_top_coord, SGS_mask_bot_coord
 
-    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot,& 
+      use_SGS_mask_top, use_SGS_mask_bot, SGS_mask_top_coord, SGS_mask_bot_coord
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -454,11 +469,11 @@ subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
 end subroutine
 
 subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
-    use kind_parameters, only: rkind
+    use kind_parameters, only: rkind, clen
     use decomp_2d,       only: decomp_info
     use fortran_assert,  only: assert
     use reductions,      only: p_maxval, p_minval
-    use constants,       only: pi
+    use constants,       only: pi, one, two
     type(decomp_info), intent(in) :: gp
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:), allocatable, intent(out) :: mask
@@ -468,23 +483,24 @@ subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
     real(rkind) :: zTop, zBot, zMid, dz
     real(rkind), dimension(:,:,:), allocatable :: Rdamp, z
     ! Namelist variables
-    logical :: PeriodicInZ, useSpongeLayer, useTopAndBottomSymmetricSponge
-    logical :: useFringe, usedoublefringex, useControl
-    integer :: topWall, botWall, sponge_type, botBC_Temp, topBC_Temp
-    real(rkind) :: SpongeTScale
-    namelist /BCs/ PeriodicInZ, topWall, botWall, useSpongeLayer, zstSponge, &
-      SpongeTScale, sponge_type, botBC_Temp, topBC_Temp, &
-      useTopAndBottomSymmetricSponge, useFringe, usedoublefringex, useControl
+    real(rkind)  :: Lx = one, Ly = one, Lz = one
+    logical :: symmetricDomain = .true.
+    real(rkind) :: zmin = -one, Tref, Ttop, Tbot
+    character(len=clen) :: stats_info_dir
+    integer :: num_stats_instances = 1
+    logical :: use_SGS_mask_top = .false., use_SGS_mask_bot = .false.
+    real(rkind) :: SGS_mask_top_coord, SGS_mask_bot_coord
+
+    namelist /SMinput/ Lx, Ly, Lz, symmetricDomain, zmin, Tref, stats_info_dir, num_stats_instances, Ttop, Tbot, &
+      use_SGS_mask_top, use_SGS_mask_bot, SGS_mask_top_coord, SGS_mask_bot_coord
 
     iounit = 11
     open(unit=iounit, file=trim(inputfile), form='FORMATTED', iostat=ierr)
-    read(unit=iounit, NML=BCs)
+    read(unit=iounit, NML=SMinput)
     close(iounit)
 
     if (allocated(mask)) deallocate(mask)
     allocate(mask( gp%xsz(1),gp%xsz(2),gp%xsz(3)))
-    allocate(Rdamp(gp%xsz(1),gp%xsz(2),gp%xsz(3)))
-    allocate(z(    gp%xsz(1),gp%xsz(2),gp%xsz(3)))
 
     z = mesh(:,:,:,3)
     dz = z(1,1,2) - z(1,1,1)
@@ -496,39 +512,14 @@ subroutine set_SGS_scalar_mask(mask,mesh,gp,inputfile,gridType)
         zTop = p_maxval(maxval(z))
         zBot = p_minval(minval(z))
     end select
-    zMid = 0.5d0*(zTop + zBot)
 
-    zstSponge = zstSponge*(zTop - zBot) + zBot  !! <PERCENTAGE OF THE DOMAIN>
-    select case(sponge_type)
-    case(1)
-        if (useTopAndBottomSymmetricSponge) then
-            ! Ensure z starts -Lx/2
-            z  = z  - zMid
-
-            Rdamp = (1.d0/SpongeTscale) * (1.d0 - cos(pi*(abs(z) - zstSponge + zMid)/(zTop - zstSponge)))/2.d0
-
-            where (abs(z) < (zstSponge-zMid)) 
-                Rdamp = 0.d0
-            end where
-        else
-            ! Ensure z starts at 0 irrespective of zBot
-            z  = z  - zBot
-
-            Rdamp = (1.d0/SpongeTscale) * (1.d0 - cos(pi*(z - zstSponge) /(zTop - zstSponge)))/2.d0
-
-           where (z < (zstSponge - zBot)) 
-               Rdamp = 0.d0
-           end where
-        end if 
-    case(2)
-        z = (z - zstSponge)/(2*(zTop - zstSponge))
-        !call S_sponge_smooth(zinY,RdampC)
-        call assert(.false.,'Need to implement this -- initialize.F90')
-        Rdamp = (2.5d0/SpongeTscale)*Rdamp
-    end select 
-
-    mask = -1.d0*(SpongeTscale*Rdamp - 1.d0)
-    deallocate(Rdamp,z)
+    mask = 1.d0
+    if (use_SGS_mask_bot) then
+        where(z < SGS_mask_bot_coord) mask = 0.d0
+    endif
+    if (use_SGS_mask_top) then
+        where(z > SGS_mask_top_coord) mask = 0.d0
+    end if
      
 end subroutine
 
