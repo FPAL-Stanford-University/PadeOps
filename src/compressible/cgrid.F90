@@ -11,6 +11,7 @@ module CompressibleGrid
     use io_hdf5_stuff,         only: io_hdf5
     use IdealGasEOS,           only: idealgas
     use MixtureEOSMod,         only: mixture
+    use MultiBlockTopology,    only: multiblocktopol
     use ShearViscosityMod,     only: shearViscosity
     use TKEBudgetMod,          only: tkeBudget
     use ScaleDecompositionMod, only: scaleDecomposition
@@ -105,6 +106,10 @@ module CompressibleGrid
         logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
         real(rkind), dimension(:,:,:), allocatable :: xi, eta, zeta
         real(rkind), dimension(:,:,:),     allocatable :: dxs, dys, dzs
+
+        ! multiblock topology
+        logical :: useMultiBlock
+        type(multiblocktopol), allocatable :: mbtopology
 
         contains
             procedure          :: init
@@ -371,6 +376,11 @@ contains
             call message("Note: Filtering turned off")
         end if
 
+        if(this%useMultiBlock) then
+            allocate(this%mbtopology)
+            call this%mbtopology%init()
+        end if
+
         ! Allocate der
         if ( allocated(this%der) ) deallocate(this%der)
         allocate(this%der)
@@ -546,6 +556,11 @@ contains
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         
+        if (this%useMultiBlock) then
+          call this%mbtopology%destroy()
+          deallocate(this%mbtopology)
+        end if
+
         if (this%useSGS) then
           call this%sgsmodel%destroy()
           deallocate(this%sgsmodel)

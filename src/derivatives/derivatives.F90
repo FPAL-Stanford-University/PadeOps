@@ -20,7 +20,7 @@ module DerivativesMod
         ! 1: "CD10", 2: "CD06", 3: "FOUR", 4: "CHEB"
         integer                :: xmethod, ymethod, zmethod 
 
-        type(cd10), allocatable :: xcd10, ycd10, zcd10 
+        type(cd10), allocatable, dimension(:) :: xcd10, ycd10, zcd10 
         type(cd06), allocatable :: xcd06, ycd06, zcd06 
         type(ffts), allocatable :: xfour, yfour, zfour
         type(dcts), allocatable :: xcheb, ycheb, zcheb 
@@ -37,6 +37,9 @@ module DerivativesMod
 
         integer                        :: nxg, nyg, nzg ! Global sizes
         integer, dimension(3)          :: xsz, ysz, zsz ! Local decomposition sizes
+
+        integer :: num_blocks
+        integer, allocatable, dimension(:,:) :: mbtopo
         
         logical                        :: initialized = .false. 
         contains
@@ -242,7 +245,8 @@ contains
                           method_x,   method_y,   method_z, &
                                  x,          y,          z, &
                            xmetric,    ymetric,    zmetric, &
-                       curvilinear, inputfile, xi, eta, zeta, xbuf, zbuf)
+                       curvilinear,  inputfile, xi, eta,    &
+                              zeta,       xbuf, zbuf, mbtopo)
                        
         
         class(derivatives), intent(inout)          :: this
@@ -260,7 +264,10 @@ contains
         real(rkind), intent(in), dimension(:,:,:), optional :: x, y, z
         real(rkind), intent(in), optional, dimension(:,:,:) :: xi, eta, zeta
         real(rkind), target,intent(in), optional, dimension(:,:,:,:) :: xbuf, zbuf
+        integer,     intent(in), dimension(:,:), optional :: mbtopo
         real(rkind), dimension(:,:,:), pointer :: xtmp1, xtmp2, ztmp1, ztmp2
+
+        integer :: imb
 
         if (present(xbuf) .and. present(zbuf)) then
             xtmp1 => xbuf(:,:,:,1)
@@ -286,6 +293,32 @@ contains
         this%xsz = gp%xsz
         this%ysz = gp%ysz
         this%zsz = gp%zsz
+
+        if(present(mbtopo)) then
+            this%num_blocks = size(mbtopo, 2)
+            allocate(this%mbtopo(6, this%num_blocks))
+            do imb = 1, this%num_blocks
+                this%mbtopo(1:6, imb) = mbtopo(1:6, imb)
+            enddo
+        else
+            this%num_blocks = 1
+            allocate(this%mbtopo(6, this%num_blocks))
+            this%mbtopo(1, 1) = 1;      this%mbtopo(2, 1) = this%nxg
+            this%mbtopo(3, 1) = 1;      this%mbtopo(4, 1) = this%nyg
+            this%mbtopo(5, 1) = 1;      this%mbtopo(6, 1) = this%nzg
+        endif
+
+        if( (this%num_blocks > 1) .and. (.not. (method_x=='cd10')) ) then
+            call GracefulExit("Only cd10 is supported in x with multi-block currently", 11)
+        endif
+
+        if( (this%num_blocks > 1) .and. (.not. (method_y=='cd10')) ) then
+            call GracefulExit("Only cd10 is supported in y with multi-block currently", 11)
+        endif
+
+        if( (this%num_blocks > 1) .and. (.not. (method_z=='cd10')) ) then
+            call GracefulExit("Only cd10 is supported in z with multi-block currently", 11)
+        endif
 
         call this%init_procedures (dx, dy, dz, periodic_x, periodic_y, periodic_z,&
                                             method_x,method_y,method_z)
@@ -313,7 +346,6 @@ contains
         end if
 
     end subroutine
-
 
     subroutine init_curvilinear(this, xmetric, ymetric, zmetric, x, y, z, curvilinear, inputfile, xi, eta, zeta)
         class(derivatives), intent(inout) :: this
@@ -431,15 +463,18 @@ contains
         character(len=*)  , intent(in)             :: method_x
         character(len=*)  , intent(in)             :: method_y
         character(len=*)  , intent(in)             :: method_z
-        integer :: ierr
+        integer :: ierr, imb
 
         select case (method_x)
         case ("cd10")
-            allocate(this%xcd10)
-            ierr = this % xcd10%init( this%xsz(1), dx, periodic_x, 0, 0)
-            if (ierr .ne. 0) then
-                call GracefulExit("Initializing cd10 failed in X ",11)
-            end if
+            allocate(this%xcd10(this%num_blocks))
+            do imb = 1, this%num_blocks
+                ierr = this % xcd10(imb)%init(this%mbtopo(2,imb)-this%mbtopo(1,imb)+1, dx, periodic_x, 0, 0)
+                if (ierr .ne. 0) then
+                    call message("Initializing xcd10 block number ", imb)
+                    call GracefulExit("Initializing cd10 failed in X ",11)
+                end if
+            enddo
             this%xmethod = 1 
         case ("cd06")
             allocate(this%xcd06)
@@ -469,11 +504,14 @@ contains
         ! Y direction
         select case (method_y)
         case ("cd10")
-            allocate(this%ycd10)
-            ierr = this % ycd10%init( this%ysz(2), dy, periodic_y, 0, 0)
-            if (ierr .ne. 0) then
-                call GracefulExit("Initializing cd10 failed in Y ",11)
-            end if 
+            allocate(this%ycd10(this%num_blocks))
+            do imb = 1, this%num_blocks
+                ierr = this % ycd10(imb)%init(this%mbtopo(4,imb)-this%mbtopo(3,imb)+1, dy, periodic_y, 0, 0)
+                if (ierr .ne. 0) then
+                    call message("Initializing ycd10 block number ", imb)
+                    call GracefulExit("Initializing cd10 failed in Y ",11)
+                end if
+            enddo
             this%ymethod = 1 
         case ("cd06")
             allocate(this%ycd06)
@@ -504,11 +542,14 @@ contains
         ! Z direction
         select case (method_z)
         case ("cd10")
-            allocate(this%zcd10)
-            ierr = this % zcd10%init( this%zsz(3), dz, periodic_z, 0, 0)
-            if (ierr .ne. 0) then
-                call GracefulExit("Initializing cd10 failed in Z ",11)
-            end if 
+            allocate(this%zcd10(this%num_blocks))
+            do imb = 1, this%num_blocks
+                ierr = this % zcd10(imb)%init(this%mbtopo(6,imb)-this%mbtopo(5,imb)+1, dz, periodic_z, 0, 0)
+                if (ierr .ne. 0) then
+                    call message("Initializing zcd10 block number ", imb)
+                    call GracefulExit("Initializing cd10 failed in Z ",11)
+                end if
+            enddo
             this%zmethod = 1 
         case ("cd06")
             allocate(this%zcd06)
@@ -540,10 +581,13 @@ contains
 
     subroutine destroy(this)
         class(derivatives), intent(inout) :: this
+        integer :: imb
 
         select case (this%xmethod) 
         case (1)
-            call this%xcd10%destroy
+            do imb = 1, this%num_blocks
+              call this%xcd10(imb)%destroy
+            enddo
             deallocate(this%xcd10)
         case (2)
             call this%xcd06%destroy
@@ -558,7 +602,9 @@ contains
         
         select case (this%ymethod) 
         case (1)
-            call this%ycd10%destroy
+            do imb = 1, this%num_blocks
+                call this%ycd10(imb)%destroy
+            enddo
             deallocate(this%ycd10)
         case (2)
             call this%ycd06%destroy
@@ -573,7 +619,9 @@ contains
 
         select case (this%zmethod) 
         case (1)
-            call this%zcd10%destroy
+            do imb = 1, this%num_blocks
+                call this%zcd10(imb)%destroy
+            enddo
             deallocate(this%zcd10)
         case (2)
             call this%zcd06%destroy
@@ -591,6 +639,7 @@ contains
         this%zmetric = .false. 
         this%curvilinear = .false. 
 
+        if(allocated(this%mbtopo))     deallocate(this%mbtopo)
         if(allocated(this%dxidx))      deallocate(this%dxidx)
         if(allocated(this%dxidx_sq))   deallocate(this%dxidx_sq)
         if(allocated(this%d2xidx2))    deallocate(this%d2xidx2)
@@ -615,9 +664,9 @@ contains
         select case (this%xmethod)
         case (1)
             if (present(bc1) .AND. present(bcn)) then
-                call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+                call this%xcd10(1) % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
             else
-                call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+                call this%xcd10(1) % dd1(f,dfdx,this%xsz(2),this%xsz(3))
             end if
         case (2)
             call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
@@ -638,9 +687,9 @@ contains
         select case (this%ymethod)
         case (1)
             if (present(bc1) .AND. present(bcn)) then
-                call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+                call this%ycd10(1) % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
             else
-                call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+                call this%ycd10(1) % dd2(f,dfdx,this%ysz(1),this%ysz(3))
             end if
         case (2)
             call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
@@ -661,9 +710,9 @@ contains
         select case (this%zmethod)
         case (1)
             if (present(bc1) .AND. present(bcn)) then
-                call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+                call this%zcd10(1) % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
             else
-                call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+                call this%zcd10(1) % dd3(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         case (2)
             call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
@@ -681,12 +730,18 @@ contains
         real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: dfdx
         integer, optional, intent(in) :: bc1, bcn
 
+       integer imb
+
         select case (this%xmethod)
         case (1)
             if (present(bc1) .AND. present(bcn)) then
-                call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+              do imb = 1, this%num_blocks
+                call this%xcd10(imb) % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+              enddo
             else
-                call this%xcd10 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+              do imb = 1, this%num_blocks
+                call this%xcd10(imb) % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+              enddo
             end if
         case (2)
             call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
@@ -716,9 +771,9 @@ contains
         select case (this%ymethod)
         case (1)
             if (present(bc1) .AND. present(bcn)) then
-                call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+                call this%ycd10(1) % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
             else
-                call this%ycd10 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
+                call this%ycd10(1) % dd2(f,dfdx,this%ysz(1),this%ysz(3))
             end if
         case (2)
             call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
@@ -748,9 +803,9 @@ contains
         select case (this%zmethod)
         case (1)
             if (present(bc1) .AND. present(bcn)) then
-                call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+                call this%zcd10(1) % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
             else
-                call this%zcd10 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
+                call this%zcd10(1) % dd3(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         case (2)
             call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
@@ -779,7 +834,7 @@ contains
 
         select case (this%xmethod)
         case (1)
-            call this%xcd10 % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3),bc1,bcn)
+            call this%xcd10(1) % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3),bc1,bcn)
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
@@ -795,7 +850,7 @@ contains
           else
               select case (this%xmethod)
               case (1)
-                  call this%xcd10 % dd1(f,this%dfdxbuf,this%xsz(2),this%xsz(3),bc1,bcn)
+                  call this%xcd10(1) % dd1(f,this%dfdxbuf,this%xsz(2),this%xsz(3),bc1,bcn)
               case (2)
                   call this%xcd06 % dd1(f,this%dfdxbuf,this%xsz(2),this%xsz(3))
               case (3)
@@ -817,7 +872,7 @@ contains
 
         select case (this%ymethod)
         case (1)
-            call this%ycd10 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
+            call this%ycd10(1) % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
@@ -833,7 +888,7 @@ contains
           else
               select case (this%ymethod)
               case (1)
-                  call this%ycd10 % dd2(f,this%dfdybuf,this%ysz(1),this%ysz(3),bc1,bcn)
+                  call this%ycd10(1) % dd2(f,this%dfdybuf,this%ysz(1),this%ysz(3),bc1,bcn)
               case (2)
                   call this%ycd06 % dd2(f,this%dfdybuf,this%ysz(1),this%ysz(3))
               case (3)
@@ -855,7 +910,7 @@ contains
 
         select case (this%zmethod)
         case (1)
-            call this%zcd10 % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2),bc1,bcn)
+            call this%zcd10(1) % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2),bc1,bcn)
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
@@ -871,7 +926,7 @@ contains
           else
               select case (this%zmethod)
               case (1)
-                  call this%zcd10 % dd3(f,this%dfdzbuf,this%zsz(1),this%zsz(2),bc1,bcn)
+                  call this%zcd10(1) % dd3(f,this%dfdzbuf,this%zsz(1),this%zsz(2),bc1,bcn)
               case (2)
                   call this%zcd06 % dd3(f,this%dfdzbuf,this%zsz(1),this%zsz(2))
               case (3)
@@ -893,7 +948,7 @@ contains
 
         select case (this%xmethod)
         case (1)
-            call this%xcd10 % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3),bc1,bcn)
+            call this%xcd10(1) % d2d1(f,d2fdx2,this%xsz(2),this%xsz(3),bc1,bcn)
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
@@ -912,7 +967,7 @@ contains
 
         select case (this%ymethod)
         case (1)
-            call this%ycd10 % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
+            call this%ycd10(1) % d2d2(f,d2fdx2,this%ysz(1),this%ysz(3),bc1,bcn)
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
@@ -931,7 +986,7 @@ contains
 
         select case (this%zmethod)
         case (1)
-            call this%zcd10 % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2),bc1,bcn)
+            call this%zcd10(1) % d2d3(f,d2fdx2,this%zsz(1),this%zsz(2),bc1,bcn)
         case (2)
             call GracefulExit("CD06 is incomplete right now",21)
         case (3)
