@@ -12,10 +12,10 @@ module cd06Staggerstuff
     public :: cd06Stagger, alpha06d1, a06d1, b06d1
     
     ! 6th order first derivative coefficients (See Lele (1992) for explanation)
-    real(rkind), parameter :: alpha06d1= 89_rkind/400_rkind !9.0_rkind/62.0_rkind ! 0.2225 !  9.0_rkind / 62.0_rkind
-    real(rkind), parameter :: c06d1    = (9.0_rkind - 62.0_rkind*alpha06d1)/384.0_rkind / 5.0_rkind
-    real(rkind), parameter :: a06d1    = (225.0_rkind - 206.0_rkind*alpha06d1)/192.0_rkind !(63.0_rkind / 62.0_rkind) 
-    real(rkind), parameter :: b06d1    = (414.0_rkind*alpha06d1 - 25.0_rkind) / 128.0_rkind / 3.0_rkind !( 17.0_rkind / 62.0_rkind) / 3.0_rkind
+    real(rkind), parameter :: alpha06d1= 89_rkind/ 400.0_rkind ! 75_rkind / 354_rkind !89_rkind/400_rkind !9.0_rkind/62.0_rkind ! 0.2225 !  9.0_rkind / 62.0_rkind
+    real(rkind), parameter :: c06d1    = (9.0_rkind - 62.0_rkind*alpha06d1)/384.0_rkind / 5.0_rkind ! (25669_rkind*alpha06d1 - 6114_rkind) / 62736_rkind /5_rkind !(9.0_rkind - 62.0_rkind*alpha06d1)/384.0_rkind / 5.0_rkind
+    real(rkind), parameter :: a06d1    = (225.0_rkind - 206.0_rkind*alpha06d1)/192.0_rkind !1.0_rkind/8.0_rkind*(9.0_rkind -6.0_rkind*alpha06d1) ! (37950_rkind - 39275_rkind*alpha06d1) / 31368_rkind !(225.0_rkind - 206.0_rkind*alpha06d1)/192.0_rkind !(63.0_rkind / 62.0_rkind) 
+    real(rkind), parameter :: b06d1    = (414.0_rkind*alpha06d1 - 25.0_rkind) / 128.0_rkind / 3.0_rkind  !1.0_rkind/8.0_rkind*(22.0_rkind*alpha06d1-1.0_rkind*alpha06d1)/3.0_rkind ! (65115_rkind*alpha06d1 - 3550_rkind) / 20912_rkind / 3_rkind !(414.0_rkind*alpha06d1 - 25.0_rkind) / 128.0_rkind / 3.0_rkind !( 17.0_rkind / 62.0_rkind) / 3.0_rkind
 
     ! 6th order first derivative explicit centeral difference coefficients
     real(rkind), parameter :: aD06d1     = 3.0_rkind / 4.0_rkind
@@ -919,6 +919,7 @@ contains
             b06 = b06d1 * this%onebydx
             c06 = c06d1 * this%onebydx
             RHS = 0.0D0
+
          select case (dir)
            case("F2N")        
    

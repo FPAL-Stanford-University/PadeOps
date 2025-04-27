@@ -1306,7 +1306,14 @@ contains
           diffstar = diffstar + ytmp4 * ( this%dy ) !  * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
           dely = ( (this%dy*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(tmp1 + tmp2 + tmp3)+ real(1.0D-32,rkind)) )
         endif
-    
+   
+        call transpose_y_to_x(Ys,xtmp1,this%decomp)
+        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
+        ytmp4 = ytmp5*this%dx**2 * this%dy**2
+        diffstar = diffstar + ytmp4 * ( this%dy) 
+ 
         dely = (this%dx*this%dy*this%dz)**(1.0/3.0)
         outb = 0.0
         outb = this%Cy*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*dely*sos
@@ -1365,6 +1372,13 @@ contains
           adiffstar = adiffstar + ytmp6 * ( this%dy ) ! * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
           delphi = ( (this%dy*abs(dphidy) + this%dx*abs(dphidx) + this%dz*abs(dphidz)) / (sqrt(tmp1 + tmp2 + tmp3)+ real(1.0D-32,rkind)) )
         endif
+
+        call transpose_y_to_x(VF,xtmp1,this%decomp)
+        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
+        ytmp4 = ytmp5*this%dx**2 * this%dy**2
+        adiffstar = adiffstar + ytmp4 * ( this%dy)
 
         delphi = (this%dx*this%dy*this%dz)**(1.0/3.0)
         adiffstar = this%Cvf1*umag*abs(adiffstar)/rho

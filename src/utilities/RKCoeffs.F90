@@ -3,7 +3,7 @@ module RKCoeffs
     use kind_parameters, only: rkind
     implicit none
 
-    integer,                   parameter :: RK45_steps = 5
+    integer,                   parameter :: RK45_steps = 5, RK3_steps = 3
     real(rkind), dimension(5), parameter :: RK45_A = [0.0_rkind, &
                                                       -6234157559845.0_rkind/12983515589748.0_rkind, &
                                                       -6194124222391.0_rkind/4410992767914.0_rkind,  &
@@ -15,4 +15,13 @@ module RKCoeffs
                                                       9795748752853.0_rkind/13190207949281.0_rkind, &
                                                       4009051133189.0_rkind/8539092990294.0_rkind,  &
                                                       1348533437543.0_rkind/7166442652324.0_rkind   ]
+
+    real(rkind), dimension(3), parameter :: RK3_A = [0.0_rkind, &
+                                                     3.0_rkind/4.0_rkind,&
+                                                     1.0_rkind/3.0_rkind ] 
+
+    real(rkind), dimension(3), parameter :: RK3_B = [1.0_rkind,  &
+                                                     1.0_rkind / 4.0_rkind,&
+                                                     2.0_rkind / 3.0_rkind ]
+
 end module

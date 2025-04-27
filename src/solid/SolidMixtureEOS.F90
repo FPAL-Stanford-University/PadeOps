@@ -434,9 +434,6 @@ contains
         if(allocated(this%intY_error)) deallocate(this%intY_error)
         allocate(this%intY_error(this%nxp, this%nyp, this%nzp))
 
-        if(allocated(this%intY_error)) deallocate(this%intY_error)
-        allocate(this%intY_error(this%nxp, this%nyp, this%nzp))
-
         if(allocated(this%derX_error)) deallocate(this%derX_error)
         allocate(this%derX_error(this%nxp, this%nyp, this%nzp))
 
@@ -622,7 +619,8 @@ contains
         if(allocated(this%DerX)) deallocate(this%DerX)
         if(allocated(this%derY_error)) deallocate(this%derY_error)
         if(allocated(this%derX_error)) deallocate(this%derX_error)
-        if(allocated(this%intX_error)) deallocate(this%intY_error)
+        if(allocated(this%intX_error)) deallocate(this%intX_error)
+        if(allocated(this%intY_error)) deallocate(this%intY_error)
 	if(allocated(this%buffer_send_1)) deallocate(this%buffer_send_1)
         if(allocated(this%buffer_send_2)) deallocate(this%buffer_send_2)
         if(allocated(this%buffer_recieve_1)) deallocate(this%buffer_recieve_1)
@@ -652,7 +650,7 @@ contains
         nullify(this%decomp)
         nullify(this%derStagg)
         nullify(this%interpMid)
-
+        nullify(this%interpMid02)
     end subroutine
   
     subroutine set_material(this, imat, hydro, elastic)
@@ -2214,7 +2212,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
     subroutine getLAD_5eqn(this,rho,p,e,Frho,Fenergy,Fp,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
-        use operators, only: divergence,gradient,filter3D, interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz, interpolateMax
+        use operators, only: divergence,gradient,filter3D, interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz, interpolateMax,interpolateFV_x,interpolateFV_F2Ny
         use constants,       only: zero,epssmall,eps,one,two,third,half
         use exits,           only: GracefulExit
         use reductions, only : P_MAXVAL
@@ -2225,7 +2223,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), intent(in) :: dx,dy,dz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,p,e
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradRYs, gradVF,gradRYs_int, gradVF_int, rhodiff_int, p_int,adiff_int, hi_int, rhom_int,rho_int,gradYs_int,outdiff_int, Ysdiff_int, VF_int, esum, gamsum, e_int, Ys_int, gradH
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: dRYdx_x,dRYdy_y,dRdz_z,dVFdx_x,dVFdy_y,dVFdz_z, rhom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: dRYdx_x,dRYdy_y,dRdz_z,dVFdx_x,dVFdy_y,dVFdz_z, rhom,tmp
          
         integer :: i, imat
         logical :: periodicx,periodicy,periodicz
@@ -2291,21 +2289,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
             call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%material(i)%Ys,gradRYs_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
             call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%material(i)%Ys,gradRYs_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           ! call gradFV_N2Fx(this%decomp,this%derStagg,this%material(i)%Ys,gradYs_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           ! call gradFV_N2Fy(this%decomp,this%derStagg,this%material(i)%Ys,gradYs_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           ! call gradFV_N2Fz(this%decomp,this%derStagg,this%material(i)%Ys,gradYs_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           ! call interpolateFV(this%decomp,this%interpMid,this%material(i)%Ysdiff,Ysdiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
             call interpolateFV(this%decomp,this%interpMid02,this%material(i)%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
             call interpolateFV(this%decomp,this%interpMid02,this%material(i)%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           ! call interpolateFV(this%decomp,this%interpMid,this%material(i)%outdiff,outdiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
             call interpolateFV(this%decomp,this%interpMid,p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           ! call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           ! call interpolateFV(this%decomp,this%interpMid,e,e_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           ! call interpolateFV(this%decomp,this%interpMid,rhom,rhom_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
             call interpolateFV(this%decomp,this%interpMid,hi,hi_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           ! call interpolateFV(this%decomp,this%interpMid,this%material(i)%VF,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           ! call interpolateFV(this%decomp,this%interpMid,this%material(i)%Ys,Ys_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
+
             do imat = 1,3
            
              if( .NOT. this%LADMass_Consv) then
@@ -5162,7 +5151,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xbuf,xint
-        real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: zbuf,zint
+        real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: zbuf,zint,tmp
         integer :: i,j,k
         
         faces = 0.0
@@ -5175,8 +5164,19 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         ! j+1/2 faces
         if(this%decomp%ysz(2).gt.one) then
+!        tmp = faces(:,:,:,1)
         call this%interpMid02 % iN2Fy(nodes,faces(:,:,:,2),y_bc(1),y_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
+!        call this%interpMid02 % iF2Ny(tmp,faces(:,:,:,2),y_bc(1),y_bc(2))
         endif
+
+!        if(this%decomp%xsz(1).gt.one) then
+!        call transpose_y_to_x(faces(:,:,:,2),xbuf,this%decomp)
+!        call this%interpMid % iN2Fx(xbuf,xint,x_bc(1),x_bc(2)) !TODO: add BCs(only correct if interface is away from boundary)
+!        call transpose_x_to_y(xint,tmp,this%decomp)
+!        call this%interpMid % iF2Ny(tmp,faces(:,:,:,1),y_bc(1),y_bc(2))
+!        endif
+
+
 
         ! k+1/2 faces
         if(this%decomp%zsz(3).gt.one) then
@@ -5198,7 +5198,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         logical, intent(in) :: periodicx,periodicy,periodicz
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xbuf,xint
-        real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: zbuf,zint
+        real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: zbuf,zint,tmp
         integer :: i,j,k
         faces  = 0.0
         ! i+1/2 faces
@@ -5211,6 +5211,14 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         ! j+1/2 faces
         if(this%decomp%ysz(2).gt.one) then
         call this%interpMid % iN2Fy(nodes,faces(:,:,:,2),y_bc(1),y_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
+
+        endif
+
+        if(this%decomp%xsz(1).gt.one) then
+        call transpose_y_to_x(faces(:,:,:,2),xbuf,this%decomp)
+        call this%interpMid % iN2Fx(xbuf,xint,x_bc(1),x_bc(2)) !TODO: addBCs(only correct if interface is away from boundary)
+        call transpose_x_to_y(xint,tmp,this%decomp)
+        call this%interpMid % iF2Ny(tmp,faces(:,:,:,1),y_bc(1),y_bc(2))
         endif
 
         ! k+1/2 faces
@@ -5578,7 +5586,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
     subroutine Test_Der(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z,transpose_z_to_y
-        use operators, only: gradFV_x, gradFV_y,gradFV_z, interpolateFV_x,interpolateFV_y, interpolateFV_z, divergenceFV, laplacian, interpolateFV
+        use operators, only: gradFV_x, gradFV_y,gradFV_z, interpolateFV_x,interpolateFV_y, interpolateFV_z, divergenceFV, laplacian, interpolateFV, interpolateFV_F2Nx,interpolateFV_F2Ny
         use constants,       only: zero,epssmall,eps,one,two,third,half, pi
         use exits,           only: GracefulExit
         use reductions, only : P_MAXVAL
@@ -5586,7 +5594,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::x_half,y_half,ddx,ddy
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::x_half,y_half,ddx,ddy,tmp,tmp2,tmp4
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int
         integer :: imat
         real(rkind) :: dx, dy
@@ -5601,33 +5609,39 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
        !call interpolateFV_x(this%decomp,this%interpMid,this%material(1)%VF,this%VF_intx,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
        !call interpolateFV_y(this%decomp,this%interpMid,this%material(1)%VF,this%VF_inty,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
        !call interpolateFV_z(this%decomp,this%interpMid,this%material(1)%VF,this%VF_intz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        this%material(1)%VF = cos(x) + cos(y)       
-        call interpolateFV(this%decomp,this%interpMid,this%material(1)%VF,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-        this%VF_intx = VF_int(:,:,:,1)
-        this%VF_inty = VF_int(:,:,:,2)
+        tmp = cos(x_half) + cos(y_half)      
+        tmp2 = 0.0
+        tmp4 = 0.0 
+        call interpolateFV_F2Nx(this%decomp,this%interpMid,tmp,tmp2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        call interpolateFV_F2Ny(this%decomp,this%interpMid,tmp,tmp4,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        print *, "int"
+        this%VF_intx = tmp2
+        this%VF_inty = tmp4
         this%VF_intz = VF_int(:,:,:,3)
- 
-        this%ddx_exact  =   -sin(x)              !-2*sin(2.0*y)*cos(2.0*x) ! ( 2.0) * cos(2.0*x) *cos(4.0*y) - 3*sin(x)
-        this%ddy_exact  =   -sin(y)              !-2*sin(2.0*x)*cos(2.0*y) !(-4.0) * sin(2.0*x) *sin(4.0*y) + 5*cos(y)
-        this%intx_exact =   cos(x_half) + cos(y) !cos(2.0*x_half)*cos(2.0*y) !sin(2.0*x_half)*cos(4.0*y) + 5*sin(y) + 3*cos(x_half)
-        this%inty_exact =   cos(x) + cos(y_half) !cos(2.0*x)*cos(2.0*y_half) !sin(2.0*x)*cos(4.0*y_half) +5*sin(y_half) + 3*cos(x)
-        this%intX_error =   abs(this%intx_exact - this%VF_intx) !abs( sin(2.0*x_half)*cos(4.0*y) +  5*sin(y) + 3*cos(x_half) - this%VF_intx)
-        this%intY_error =   abs(this%inty_exact - this%VF_inty) !abs( sin(2.0*x)*cos(4.0*y_half) +5*sin(y_half) + 3*cos(x) - this%VF_intY) 
+        print *, " VF"
+!        this%ddx_exact  =   -sin(x)              !-2*sin(2.0*y)*cos(2.0*x) ! ( 2.0) * cos(2.0*x) *cos(4.0*y) - 3*sin(x)
+!        this%ddy_exact  =   -sin(y)              !-2*sin(2.0*x)*cos(2.0*y) !(-4.0) * sin(2.0*x) *sin(4.0*y) + 5*cos(y)
+        this%intx_exact =   cos(x) + cos(y_half) !cos(2.0*x_half)*cos(2.0*y) !sin(2.0*x_half)*cos(4.0*y) + 5*sin(y) + 3*cos(x_half)
+        print *, "e x"
+        this%inty_exact =   cos(x_half) + cos(y) !cos(2.0*x)*cos(2.0*y_half) !sin(2.0*x)*cos(4.0*y_half) +5*sin(y_half) + 3*cos(x)
+        print *, " e y"
+        this%intX_error =   abs(this%intx_exact - tmp2)!abs( sin(2.0*x_half)*cos(4.0*y) +  5*sin(y) + 3*cos(x_half) - this%VF_intx)
+        print *, " x error "
+        this%intY_error =   abs(this%inty_exact - tmp4) !abs( sin(2.0*x)*cos(4.0*y_half) +5*sin(y_half) + 3*cos(x) - this%VF_intY) 
+        print *, "error"
+!        call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!        call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!        call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!        print *, this%DerZ(1,1,1)
 
-        call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        call gradFV_z(this%decomp,this%derStagg,this%VF_intz,this%DerZ,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        print *, this%DerZ(1,1,1)
-
-        call divergenceFV(this%decomp,this%derStagg,this%VF_intx, this%VF_inty, this%VF_intz,this%DivTest,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-        print *, this%DivTest(1,1,1)
-        call laplacian(this%decomp,this%derCD06, this%material(1)%VF, this%lapTest, x_bc,y_bc, z_bc)
+!        call divergenceFV(this%decomp,this%derStagg,this%VF_intx, this%VF_inty, this%VF_intz,this%DivTest,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!        print *, this%DivTest(1,1,1)
+!        call laplacian(this%decomp,this%derCD06, this%material(1)%VF, this%lapTest, x_bc,y_bc, z_bc)
         
-        this%lap_error = abs( -20*sin(2*x)*cos(4*y)-3*cos(x) - 5*sin(y) - this%lapTest)
-        this%div_error  = abs((this%ddx_exact + this%ddy_exact) - this%DivTest)
-        this%derX_error = abs(this%DerX - this%ddx_exact)
-        this%derY_error = abs(this%DerY - this%ddy_exact)
+!        this%lap_error = abs( -20*sin(2*x)*cos(4*y)-3*cos(x) - 5*sin(y) - this%lapTest)
+!        this%div_error  = abs((this%ddx_exact + this%ddy_exact) - this%DivTest)
+!        this%derX_error = abs(this%DerX - this%ddx_exact)
+!        this%derY_error = abs(this%DerY - this%ddy_exact)
     end subroutine
 
     subroutine Test_Der_N2F(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -5907,9 +5921,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !end do
         call this%material(1)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge,alpha)
         !call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc)
-
+!        this%material(1)%VF = this%material(1)%consrv(:,:,:,1)/this%material(1)%elastic%rho0
         this%material(2)%VF = one - this%material(1)%VF
-
+       
     end subroutine
 
     subroutine checkNaN(this)

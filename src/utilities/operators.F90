@@ -144,6 +144,48 @@ contains
     end subroutine interpolateFV
 
 
+    subroutine interpolateFV_F2N(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !interpolates from Nodes to faces for fnite volume treatment of terms
+        !in interface advection
+        type(decomp_info), intent(in) :: decomp
+        type(interpolators), intent(in) :: interpMid
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)), intent(in) :: nodes
+        real(rkind), dimension(size(nodes,1),size(nodes,2),size(nodes,3), 3),intent(out) :: faces
+        logical, intent(in) :: periodicx,periodicy,periodicz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
+        integer :: i,j,k, one = 1,nx,ny,nz
+
+        faces = 0.0
+        xbuf = 0.0
+        zbuf = 0.0
+        xint = 0.0
+        zint = 0.0
+
+        ! i+1/2 faces
+        if(decomp%xsz(1).gt. one) then
+        call transpose_y_to_x(nodes,xbuf,decomp)
+        call interpMid % iF2Nx(xbuf,xint,x_bc(1),x_bc(2)) !TODO: add BCs (only correct if interface is away from boundary)
+        call transpose_x_to_y(xint,faces(:,:,:,1),decomp)
+        endif
+
+        ! j+1/2 faces
+        if(decomp%ysz(2).gt.one) then
+        call interpMid % iF2Ny(nodes,faces(:,:,:,2),y_bc(1),y_bc(2)) !TODO:add BCs (only correct if interface is away from boundary)
+        endif
+
+        print *, " Y"
+        ! k+1/2 faces
+        if(decomp%zsz(3).gt.one) then
+        call transpose_y_to_z(nodes,zbuf,decomp)
+        call interpMid % iF2Nz(zbuf,zint,z_bc(1),z_bc(2)) !TODO: add BCs onlycorrect if interface is away from boundary)
+        call transpose_z_to_y(zint,faces(:,:,:,3),decomp)
+        endif
+
+        print *, " Z"
+    end subroutine interpolateFV_F2N
+
     subroutine interpolateFV_x(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         !interpolates from Nodes to faces for finite volume treatment of terms
         !in interface advection
@@ -168,6 +210,29 @@ contains
         endif
     end subroutine interpolateFV_x
 
+    subroutine interpolateFV_F2Nx(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !interpolates from Nodes to faces for finite volume treatment of terms
+        !in interface advection
+        type(decomp_info), intent(in) :: decomp
+        type(interpolators), intent(in) :: interpMid
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)),intent(in) :: nodes
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)), intent(out) :: faces
+        logical, intent(in) :: periodicx,periodicy,periodicz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
+        integer :: i,j,k, one = 1
+
+        faces = 0.0
+        xbuf = 0.0
+        xint = 0.0
+        ! i+1/2 faces
+   !    if(decomp%xsz(1).gt. one) then
+        call transpose_y_to_x(nodes,xbuf,decomp)
+        call interpMid % iF2Nx(xbuf,xint,x_bc(1),x_bc(2)) !TODO: add BCs (onlycorrect if interface is away from boundary)
+        call transpose_x_to_y(xint,faces,decomp)
+   !    endif
+    end subroutine interpolateFV_F2Nx
+
 
     subroutine interpolateFV_y(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         !interpolates from Nodes to faces for finite volume treatment of terms
@@ -188,6 +253,26 @@ contains
         call interpMid % iN2Fy(nodes,faces,y_bc(1),y_bc(2)) !TODO:addBCs (only correct if interface is away from boundary)
         endif
     end subroutine interpolateFV_y
+
+    subroutine interpolateFV_F2Ny(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !interpolates from Nodes to faces for finite volume treatment of terms
+        !in interface advection
+        type(decomp_info), intent(in) :: decomp
+        type(interpolators), intent(in) :: interpMid
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)),intent(in) :: nodes
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)),intent(out) :: faces
+        logical, intent(in) :: periodicx,periodicy,periodicz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
+        integer :: i,j,k, one = 1
+
+        faces = 0.0
+        ! j+1/2 faces
+    !   if(decomp%ysz(2).gt.one) then
+        call interpMid % iF2Ny(nodes,faces,y_bc(1),y_bc(2)) !TODO:addBCs (only correct if interface is away from boundary)
+    !   endif
+    end subroutine interpolateFV_F2Ny
 
 
     subroutine interpolateFV_z(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -214,6 +299,32 @@ contains
         call transpose_z_to_y(zint,faces,decomp)
         endif
     end subroutine interpolateFV_z
+
+    
+    subroutine interpolateFV_F2Nz(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        !interpolates from Nodes to faces for finite volume treatment of terms
+        !in interface advection
+        type(decomp_info), intent(in) :: decomp
+        type(interpolators), intent(in) :: interpMid
+        real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)),intent(in) :: nodes
+        real(rkind), dimension(size(nodes,1), size(nodes,2),size(nodes,3)),intent(out) :: faces
+        logical, intent(in) :: periodicx,periodicy,periodicz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
+        real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
+        integer :: i,j,k, one = 1
+
+        faces = 0.0
+        zbuf = 0.0
+        zint = 0.0
+
+        ! k+1/2 faces
+        if(decomp%zsz(3).gt.one) then
+        call transpose_y_to_z(nodes,zbuf,decomp)
+        call interpMid % iF2Nz(zbuf,zint,z_bc(1),z_bc(2)) !TODO: add BCs onlycorrect if interface is away from boundary)
+        call transpose_z_to_y(zint,faces,decomp)
+        endif
+    end subroutine interpolateFV_F2Nz
 
  
 

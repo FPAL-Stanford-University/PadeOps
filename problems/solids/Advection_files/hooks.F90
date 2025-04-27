@@ -20,7 +20,7 @@ module Advection_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 2, Lx = 2, interface_init = 0.5, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 2, Lx = 2.0, interface_init = 0.5, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -166,7 +166,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - 1.0
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy - 1.0
+                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy - 1
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -206,7 +206,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
     integer :: ioUnit
     logical :: periodicx,periodicy,periodicz
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, tmp2,tmpeta, noise
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, tmp2,tmpeta, noise,noise2,noise3
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac, Lr, STRETCH_RATIO = 1.5
     integer, dimension(2) :: iparams
@@ -264,6 +264,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         end if
 
         CALL RANDOM_NUMBER(noise)
+        CALL RANDOM_NUMBER(noise2)
+        CALL RANDOM_NUMBER(noise3)
         ! Set materials
         !call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,tau0))
         !TODO: delete call mix%set_material(1,stiffgas(gamma  ,Rgas  ,p_infty  ),sep1solid(rho_0  ,mu  ,yield,tau0,eta_det_ge,eta_det_gp,eta_det_gt,diff_c_ge,diff_c_gp,diff_c_gt,melt_t,melt_c,kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e,kos_sh,nx,ny,nz)) !mca: see Sep1SolidEOS.F90 "init"
@@ -295,7 +297,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         !tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
-        mix%material(1)%VF = minVF + (one-two*minVF)*tmp ! + (noise-0.5)*1d-7
+        mix%material(1)%VF = minVF + (one-two*minVF)*tmp !  + 1d-9*(noise2-0.5) ! + (noise-0.5)*1d-7
         mix%material(2)%VF =  1 - mix%material(1)%VF
 
         !Set density profile and mass fraction based on volume fraction
@@ -304,7 +306,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
         u = 0
-        v = v0
+        v = v0 !+ 1d-9*(noise-0.5)
         w = 0
 
         !tmp2 = half*(erf( (y-0.8+0.1_rkind)/(thick*dy) ) - erf((y-0.8-0.1_rkind)/(thick*dy)))
@@ -313,8 +315,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 !	mix%material(1)%p  =p_amb+10*exp(-((y-0.8)**2)/(2*(0.05)**2))
         !mix%material(1)%p  = (p_amb +p_disturb)*tmp2+p_amb
 
-        p = p_amb
-        mix%material(1)%p = p_amb
+        p = p_amb ! + 1d-9*(noise3-0.5)
+        mix%material(1)%p = p_amb !+ 1d-9*(noise3-0.5)
         mix%material(2)%p  = mix%material(1)%p
 !        mix%material(1)%T = 298
 !        mix%material(2)%T = 298
