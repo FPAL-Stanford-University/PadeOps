@@ -466,7 +466,7 @@
                    call decomp_2d_write_plane(1,this%oz,dirid, pid, fname, this%gpC)
                    if (this%isStratified) then ! Compute potential vorticity
                        call this%compute_potential_vorticity(this%rbuffxC(:,:,:,1))
-                       write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A8)") "Run", this%RunID,"_t",&
+                       write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",&
                          tid,"_y",pid,".pPV"
                        fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                        call decomp_2d_write_plane(1,this%rbuffxC(:,:,:,1),dirid, pid, fname, this%gpC)
