@@ -333,7 +333,7 @@
                end if 
 
 
-               if (this%computevorticity) then
+               if (this%dumpvorticityPlanes) then
                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pox"
                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname, this%gpC)
@@ -451,7 +451,7 @@
                    call decomp_2d_write_plane(1,this%Pressure_fringe,dirid, pid, fname, this%gpC)
                end if 
                
-               if (this%computevorticity) then
+               if (this%dumpvorticityPlanes) then
                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_y",pid,".pox"
                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname, this%gpC)
@@ -568,7 +568,7 @@
                    call decomp_2d_write_plane(1,this%Pressure_fringe,dirid, pid, fname, this%gpC)
                end if 
                
-               if (this%computevorticity) then
+               if (this%dumpvorticityPlanes) then
                    write(tempname,"(A3,I2.2,A2,I6.6,A2,I5.5,A4)") "Run", this%RunID,"_t",tid,"_x",pid,".pox"
                    fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
                    call decomp_2d_write_plane(1,this%ox,dirid, pid, fname, this%gpC)
@@ -902,7 +902,7 @@
                    call this%dumpFullField(this%prapid,'prap')
                    call this%dumpFullField(this%pslow,'pslo')
                end if 
-               if (this%computevorticity) then
+               if (this%dumpvorticityVolume) then
                    call this%dumpFullField(this%ox,'omgX')
                    call this%dumpFullField(this%oy,'omgY')
                    call this%dumpFullField(this%oz,'omgZ')
@@ -984,7 +984,7 @@
            !    call this%viz_hdf5%write_variable(this%prapid,'prap')
            !    call this%viz_hdf5%write_variable(this%pslow,'pslo')
            !end if 
-           !if (this%computevorticity) then
+           !if (this%dumpvorticityVolume) then
            !    call this%viz_hdf5%write_variable(this%ox,'omgX')
            !    call this%viz_hdf5%write_variable(this%oy,'omgY')
            !    call this%viz_hdf5%write_variable(this%oz,'omgZ')
