@@ -477,7 +477,7 @@ contains
         integer :: localizedForceLayer = 0
         integer :: tSystemInteractions = 100, ierr, KSinitType = 0, nKSvertFilt = 1, ADM_Type = 1
         logical :: computeSpectra = .false., timeAvgFullFields = .false., fastCalcPressure = .true., usedoublefringex = .false.  
-        logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true., computeVorticity = .false.  
+        logical :: assume_fplane = .true., periodicbcs(3), useProbes = .false., KSdoZfilter = .true.
         logical :: dumpvorticityPlanes = .false., dumpvorticityVolume = .false.
         real(rkind), dimension(:,:), allocatable :: probe_locs
         real(rkind), dimension(:), allocatable :: temp
@@ -522,7 +522,6 @@ contains
                     & dump_NU_SGS, dump_KAPPA_SGS, t_planeDump, t_stop_planeDump, t_start_planeDump, t_start_pointProbe,&
                     & t_stop_pointProbe, t_pointProbe, dump_ddt_terms, dump_primitives_for_ddt, &
                     dumpvorticityPlanes, dumpvorticityVolume
-        !namelist /STATS/tid_StatsDump,tid_compStats,tSimStartStats,normStatsByUstar,computeSpectra,timeAvgFullFields, computeVorticity
         namelist /PHYSICS/isInviscid,useCoriolis,useExtraForcing,isStratified,&
           useMoisture,Re,Ro,Pr,Fr, Ra, useSGS, use_SGS_scalar_mask, PrandtlFluid, BulkRichardson, &
           BuoyancyTermType,useforcedStratification, useGeostrophicForcing, &
@@ -587,9 +586,10 @@ contains
         this%useHITForcing = useHITForcing; this%BuoyancyTermType = BuoyancyTermType; this%CviscDT = CviscDT 
         !this%useLocalizedForceLayer = useLocalizedForceLayer
         this%localizedForceLayer = localizedForceLayer
-        this%frameAngle = frameAngle; this%computeVorticity = computeVorticity 
+        this%frameAngle = frameAngle
         this%dumpvorticityPlanes = dumpvorticityPlanes
         this%dumpvorticityVolume = dumpvorticityVolume
+        if (this%dumpVorticityPlanes .or. dumpvorticityVolume) this%computeVorticity=.true.
         this%deleteInstructions = deleteInstructions; this%TopBC_Temp = TopBC_temp
         this%dump_NU_SGS = dump_NU_SGS; this%dump_KAPPA_SGS = dump_KAPPA_SGS; this%n_scalars = num_scalars
         this%dump_ddt_terms = dump_ddt_terms
