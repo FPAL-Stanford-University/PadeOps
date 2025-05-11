@@ -36,7 +36,7 @@ module spectralForcingLayerMod
         sp_gpC => null(), sp_gpE => null()
       integer :: nz
       complex(rkind), dimension(:,:,:), allocatable :: fxhat, fyhat, fzhat, fThat, uhat, vhat, cbuffyC_extra
-      real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz, fT, u, v, dudx, dudy, dudz, dvdx, dvdy, dvdz
+      real(rkind), dimension(:,:,:), allocatable :: fx, fy, fz, fzC, fT, u, v, dudx, dudy, dudz, dvdx, dvdy, dvdz
       logical :: dumpForce, projectDivergenceFree, isStratified
       type(Pade6Stagg), pointer :: Pade6opZ
       real(rkind) :: maxDiv, maxDivAllTime, avgFact, Re, Pr, oneOnRe, oneOnRePr
@@ -262,10 +262,11 @@ module spectralForcingLayerMod
           allocate(this%fzhat(this%sp_gpE%ysz(1), this%sp_gpE%ysz(2), this%sp_gpE%ysz(3) ))
           allocate(this%fThat(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3) ))
 
-          allocate(this%fx(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
-          allocate(this%fy(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
-          allocate(this%fz(gpE%xsz(1), gpE%xsz(2), gpE%xsz(3)))
-          allocate(this%fT(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+          allocate(this%fx (gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+          allocate(this%fy (gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+          allocate(this%fz (gpE%xsz(1), gpE%xsz(2), gpE%xsz(3)))
+          allocate(this%fzC(gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
+          allocate(this%fT (gpC%xsz(1), gpC%xsz(2), gpC%xsz(3)))
 
           allocate(this%uhat(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3) ))
           allocate(this%vhat(this%sp_gpC%ysz(1), this%sp_gpC%ysz(2), this%sp_gpC%ysz(3) ))
@@ -394,6 +395,7 @@ module spectralForcingLayerMod
           call this%spectC%ifft(this%fxhat,this%fx)
           call this%spectC%ifft(this%fyhat,this%fy)
           call this%spectE%ifft(this%fzhat,this%fz)
+          call this%interpE2C(this%fz,this%fzC,this%rbuffyC,this%rbuffzC,this%rbuffyE,this%rbuffzE)
 
           ! Step 5: Get physical space velocity
           call this%spectC%ifft(this%uhat,this%u)
@@ -424,9 +426,9 @@ module spectralForcingLayerMod
               KE_z = this%meanFact*0.5d0*(p_sum(sum(this%integralMask*     wC*     wC)))
 
               ! Volume-averaged force work 
-              forceWork_x = this%meanFact*p_sum(sum(this%integralMask*(this%u *this%fx)))
-              forceWork_y = this%meanFact*p_sum(sum(this%integralMask*(this%v *this%fy)))
-              forceWork_z = this%meanFact*p_sum(sum(this%integralMask*(     wC*this%fz)))
+              forceWork_x = this%meanFact*p_sum(sum(this%integralMask*(this%u *this%fx )))
+              forceWork_y = this%meanFact*p_sum(sum(this%integralMask*(this%v *this%fy )))
+              forceWork_z = this%meanFact*p_sum(sum(this%integralMask*(     wC*this%fzC)))
 
               ! NOTE: This assumes an eddy-viscosity SGS closure
               ! Volume-averaged disspation
