@@ -241,7 +241,7 @@
                this%cbuffxC, this%cbuffxE, this%cbuffyC, this%cbuffyE, this%cbuffzC, this%cbuffzE, &
                this%rbuffxC, this%rbuffxE, this%rbuffyC, this%rbuffyE, this%rbuffzC, &
                this%rbuffzE, this%newTimeStep, this%dt)
-       elseif (this%localizedForceLayer == 2) then
+       elseif (this%localizedForceLayer == 2 .and. allocated(this%spectForceLayer)) then
            Re = this%Re
            if (this%isInviscid) Re = huge(1.0_rkind)
            if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)

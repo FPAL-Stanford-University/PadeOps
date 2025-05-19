@@ -1682,14 +1682,14 @@ contains
                        call this%spectC%fft(this%spectForceLayer%fy,this%spectForceLayer%fyhat)
                        call this%spectE%fft(this%spectForceLayer%fz,this%spectForceLayer%fzhat)
                    else
-                       if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
+                       !if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
                        call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
                          this%wC,this%TEhat,this%T, &
                          this%duidxjC, this%nu_SGS, this%tsim, this%dt,this%padepoiss, this%u_rhs, &
                          this%v_rhs, this%w_rhs, this%T_rhs)!, this%scalars)
                    end if
                else
-                   if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
+                   !if (this%isStratified) call this%pade6OpZ%interpz_E2C(this%q3_T,this%rbuffxC(:,:,:,2),Tbc_bottom,Tbc_top)
                    call this%spectForceLayer%updateRHS(this%uhat,this%vhat,this%what,&
                      this%wC,this%TEhat,this%T, &
                      this%duidxjC, this%nu_SGS, this%tsim, this%dt,this%padepoiss, this%u_rhs, &
