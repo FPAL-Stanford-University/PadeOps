@@ -1,6 +1,6 @@
 module MultiphaseAdvection_data
     use kind_parameters,  only: rkind
-    use constants,        only: one,two,eight,three,six,sixth,zero,four
+    use constants,        only: one,two,eight,three,six,sixth,zero,four,pi
     use FiltersMod,       only: filters
     use DerivativesStaggeredMod, only: derivativesStagg
     implicit none
@@ -153,7 +153,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     associate( x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         dx = Lx/real(nx,rkind)
-        dy = Ly/real(ny-1,rkind)
+        dy = Ly/real(ny,rkind)
         dz = dx
 
         if(abs(dx-dy)>1.0d-13) then
@@ -164,7 +164,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1  + i - 1, rkind ) * dx - 0.5 !- two  ! x \in (-2,4]
-                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
+                    y(i,j,k) = real( iy1  + j - 1, rkind ) * dy - 0.5
                     z(i,j,k) = real( iz1  + k - 1, rkind ) * dz
                 end do
             end do
@@ -177,7 +177,7 @@ end subroutine
 subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz, x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
-    use SolidGrid,        only: u_index,v_index,w_index,rho_index
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index, p_index
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use StiffGasEOS,      only: stiffgas
@@ -238,7 +238,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                   "gaussian", "gaussian", "gaussian" )
 
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
-                rho => fields(:,:,:,rho_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+                rho => fields(:,:,:,rho_index), p => fields(:,:,:,p_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
 
 
@@ -246,24 +246,22 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
         end if
 
-!        if(rhoRatio > 0) then
+ !       if(rhoRatio > 0) then
           ! if rhoRatio is positive, only rho_0 is different. Rgas is set such
           ! that Temperature equilibrium condition is satisfied
-!          gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
-!          rho_0_2 = rho_0*rhoRatio; mu_2 = mu
-!        else
+ !         gamma_2 = gamma; Rgas_2 = Rgas/rhoRatio; p_infty_2 = p_infty; 
+ !         rho_0_2 = rho_0*rhoRatio; mu_2 = mu
+ !       else
           ! if rhoRatio is negative, all quantities except Rgas need to be
           ! specified in input file. Rgas is then set such
           ! that Temperature equilibrium condition is satisfied
-!          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
+          if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
 
-          ! determine p_amb that guarantees T equilibrium
-         ! if(adjustPamb) then
-         !   fac = Rgas_2*rho_0_2/Rgas/rho_0
-         !   p_amb = (fac*p_infty - p_infty_2)/(one - fac)
-         ! endif
+!            fac = Rgas_2*rho_0_2/Rgas/rho_0
+!            p_amb = (fac*p_infty - p_infty_2)/(one - fac)
+!          endif
 !        endif
-
+!
         ! write material properties
         if (nrank == 0) then
             print *, '---Material 1---'
@@ -380,7 +378,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         ! shock_init = interface_init - 0.3_rkind  ! (10*thick) grid points away from the interface
         ! dum = half * ( one - erf( (x-shock_init)/(two*dx) ) )
 
-        u   = v0 + (noise-0.5)*1d-6 !(u2-u1)*dum
+        u   = v0 !+ (noise-0.5)*1d-6 !(u2-u1)*dum
         v   = 0
         w   = zero
 
@@ -392,6 +390,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         print *, "tmp"
         tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - x*x -(y)*(y))/(thick*dx) ) ) 
+        !tmp = half * ( one + tanh((sqrt(x*x  + y*y) - 0.25_rkind) /(3_rkind*thick*dx/16_rkind) ))
         ! tmp = half * ( one - erf((0.25_rkind**2 - (x-0.5)*(x-0.5)-(y-0.5)*(y-0.5))/(thick*dx) ) )
         ! tmp = half * ( one - erf((0.35**2 - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
 
@@ -411,7 +410,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         !mix%material(2)%g11 = mix%material(1)%g11
-
+        p = p_amb
         mix%material(1)%p  = p_amb ! + (noise-0.5)*1d-7   !66666dum + p1*(one-dum)
         mix%material(2)%p  = mix%material(1)%p
 
@@ -505,7 +504,7 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
     use DerivativesStaggeredMod, only: derivativesStagg
     use InterpolatorsMod,        only: interpolators
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
-    use ShearLayerComp_data
+    use MultiphaseAdvection_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile

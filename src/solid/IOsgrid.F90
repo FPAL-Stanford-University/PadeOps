@@ -518,29 +518,29 @@ contains
           E_IO=VTK_VAR_XML(NC_NN=nn,varname='intY_exact',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
           if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%VF_intz,tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='VFintz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%VF_intz,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='VFintz',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%DerZ,tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='DerZ',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%DerZ,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='DerZ',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%DivTest,tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='DivTest',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%DivTest,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='DivTest',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%lapTest,tmp1,1,gp,.FALSE.)
-!          E_IO =  VTK_VAR_XML(NC_NN=nn,varname='lapTest',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%lapTest,tmp1,1,gp,.FALSE.)
+          E_IO =  VTK_VAR_XML(NC_NN=nn,varname='lapTest',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%lap_error,tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='lap_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%lap_error,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='lap_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%div_error,tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='div_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%div_error,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='div_error',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
           call update_halo(mix%intSharp_fFV(:,:,:,1),tmp1,1,gp,.FALSE.)
           E_IO = VTK_VAR_XML(NC_NN=nn,varname='intSharp_uFV',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
@@ -582,9 +582,9 @@ contains
 !          E_IO = VTK_VAR_XML(NC_NN=nn,varname='gradp_y',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
 !          if( allocated(tmp1) ) deallocate(tmp1)
 
-!          call update_halo(mix%gradp(:,:,:,1),tmp1,1,gp,.FALSE.)
-!          E_IO = VTK_VAR_XML(NC_NN=nn,varname='gradp_z',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
-!          if( allocated(tmp1) ) deallocate(tmp1)
+          call update_halo(mix%entropy,tmp1,1,gp,.FALSE.)
+          E_IO = VTK_VAR_XML(NC_NN=nn,varname='entropy',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
+          if( allocated(tmp1) ) deallocate(tmp1)
 
 
 
@@ -850,7 +850,7 @@ contains
 
             E_IO = PVTK_VAR_XML(varname='DerX', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='DerY', tp='Float64')
-     !       E_IO = PVTK_VAR_XML(varname='DerYstagg', tp='Float64')
+    !       E_IO = PVTK_VAR_XML(varname='DerYstagg', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='intX_error', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='intY_error', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='VF_intx', tp='Float64')
@@ -872,13 +872,13 @@ contains
             E_IO = PVTK_VAR_XML(varname='intSharp_vFV', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='intSharp_wFV', tp='Float64')
             E_IO = PVTK_VAR_XML(varname='intSharp_hFV', tp='Float64')
-            E_IO = PVTK_VAR_XML(varname='intSharp_diff', tp='Float64')
-            E_IO = PVTK_VAR_XML(varname='intSharp_antidiff', tp='Float64')
-            E_IO = PVTK_VAR_XML(varname='Pmix', tp='Float64')
-            E_IO = PVTK_VAR_XML(varname='normFV_z', tp='Float64')
-            E_IO = PVTK_VAR_XML(varname='gradp_x', tp='Float64')
-            E_IO = PVTK_VAR_XML(varname='gradp_y', tp='Float64')
-            E_IO = PVTK_VAR_XML(varname='gradp_z', tp='Float64')
+!            E_IO = PVTK_VAR_XML(varname='intSharp_diff', tp='Float64')
+!            E_IO = PVTK_VAR_XML(varname='intSharp_antidiff', tp='Float64')
+!            E_IO = PVTK_VAR_XML(varname='Pmix', tp='Float64')
+!            E_IO = PVTK_VAR_XML(varname='normFV_z', tp='Float64')
+!            E_IO = PVTK_VAR_XML(varname='gradp_x', tp='Float64')
+!            E_IO = PVTK_VAR_XML(varname='gradp_y', tp='Float64')
+            E_IO = PVTK_VAR_XML(varname='entropy', tp='Float64')
 
 
 

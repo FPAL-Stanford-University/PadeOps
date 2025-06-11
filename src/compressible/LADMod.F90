@@ -1256,9 +1256,9 @@ contains
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2, ztmp3,ztmp4,rhom
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: tmp1,tmp2, tmp3, delphi, dely, num, den, tot, umag,umax,dt_inv,outrhom
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: outbx,outby,outbz,outVFx,outVFy,outVFz
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: outbx,outby,outbz,outVFx,outVFy,outVFz,VF_bound
         real(rkind) :: nmask = 40d0, e = 1d-15, msos, len_scale
-        
+        real(rkind) :: md1 = (1d-6)**2
         umag =sqrt( u*u + v*v + w*w )
         umax = P_MAXVAL(umag)
         msos = P_MINVAL(sos)
@@ -1272,7 +1272,7 @@ contains
         tmp3 = drYsdz*drYsdz
         Ys = rhoYs/rho
         rhom = rhoYs / (VF + 1d-16)
-        where( rhom .LT. 0)
+        where( ( VF .LT. 1d-3) .OR. (VF .GT. (1_rkind-1d-3)))
            H1 = 1
         elsewhere
            H1 = 0
@@ -1282,6 +1282,8 @@ contains
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
+!        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+!        call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         xtmp2 = xtmp1*this%dx**4 
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         diffstar = ytmp4 * ( this%dx) !  * tmp1 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) ! ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
@@ -1290,6 +1292,8 @@ contains
         call transpose_y_to_z(Ys,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
+!        call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
+!        call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
         ztmp2 = ztmp1*this%dz**4
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         diffstar = diffstar + ytmp4 * ( this%dz ) !* tmp3 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) ) !* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
@@ -1297,6 +1301,8 @@ contains
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
+!        call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
+!        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
         if(this%yMetric) then
           ytmp4 = (detady**4)*ytmp5*dy_stretch**4
           diffstar = diffstar + ytmp4 * ( dy_stretch ) ! * tmp2 / (tmp1 + tmp2 + tmp3 + real(1.0D-32,rkind)) )
@@ -1307,18 +1313,18 @@ contains
           dely = ( (this%dy*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(tmp1 + tmp2 + tmp3)+ real(1.0D-32,rkind)) )
         endif
    
-        call transpose_y_to_x(Ys,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
-        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
-        ytmp4 = ytmp5*this%dx**2 * this%dy**2
-        diffstar = diffstar + ytmp4 * ( this%dy) 
+  !      call transpose_y_to_x(Ys,xtmp1,this%decomp)
+  !      call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+  !      call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+  !      call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
+  !      ytmp4 = ytmp5*this%dx**2 * this%dy**2
+  !      diffstar = diffstar + ytmp4 * ( this%dy) 
  
         dely = (this%dx*this%dy*this%dz)**(1.0/3.0)
         outb = 0.0
-        outb = this%Cy*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*dely*sos
-        diffstar = this%Crho*umag*abs(diffstar) !*fd !/rho ! CD part of diff
-        outrhom = this%Cdiff*H1*umag*dely
+        outb = this%Cy*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*dely*abs(sos)
+        diffstar = this%Crho*abs(sos)*abs(diffstar) !*fd !/rho ! CD part of diff
+!        outrhom = this%Cdiff*H1*sos*dely
 
         outbx = this%Cy*dt_inv*dt_inv*dely*abs(drYsdx) / sqrt( drYsdx*drYsdx + drYsdy*drYsdy +drYsdz*drYsdz )*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )
         outby = this%Cy*dt_inv*dt_inv*dely*abs(drYsdy) / sqrt( drYsdx*drYsdx + drYsdy*drYsdy +drYsdz*drYsdz )*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )
@@ -1344,6 +1350,8 @@ contains
         call transpose_y_to_x(VF,xtmp3,this%decomp)
         call this%der%d2dx2(xtmp3,xtmp4,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp4,xtmp3,x_bc(1),x_bc(2))
+!        call this%der%d2dx2(xtmp3,xtmp4,x_bc(1),x_bc(2))
+!        call this%der%d2dx2(xtmp4,xtmp3,x_bc(1),x_bc(2))
         xtmp4 = xtmp3*this%dx**4
         call transpose_x_to_y(xtmp4,ytmp6,this%decomp)
         adiffstar = ytmp6 *( this%dx) ! * tmp1 / (tmp1 + tmp2 + tmp3 +real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
@@ -1352,6 +1360,8 @@ contains
         call transpose_y_to_z(VF,ztmp3,this%decomp)
         call this%der%d2dz2(ztmp3,ztmp4,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp4,ztmp3,z_bc(1),z_bc(2))
+!        call this%der%d2dz2(ztmp3,ztmp4,z_bc(1),z_bc(2))
+!        call this%der%d2dz2(ztmp4,ztmp3,z_bc(1),z_bc(2))
         ztmp4 = ztmp3*this%dz**4
         call transpose_z_to_y(ztmp4,ytmp6,this%decomp)
         adiffstar = adiffstar + ytmp6*( this%dz ) ! * tmp3 / (tmp1 + tmp2 +tmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
@@ -1359,6 +1369,9 @@ contains
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(VF,ytmp6,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp6,ytmp7,y_bc(1),y_bc(2))
+!        call this%der%d2dy2(VF,ytmp6,y_bc(1),y_bc(2))
+!        call this%der%d2dy2(ytmp6,ytmp7,y_bc(1),y_bc(2))
+
        if(this%yMetric) then
           ytmp6 = (detady**4)*ytmp7*dy_stretch**4
           !print *, "ytmp6 = ",ytmp6
@@ -1373,16 +1386,16 @@ contains
           delphi = ( (this%dy*abs(dphidy) + this%dx*abs(dphidx) + this%dz*abs(dphidz)) / (sqrt(tmp1 + tmp2 + tmp3)+ real(1.0D-32,rkind)) )
         endif
 
-        call transpose_y_to_x(VF,xtmp1,this%decomp)
-        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
-        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
-        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
-        ytmp4 = ytmp5*this%dx**2 * this%dy**2
-        adiffstar = adiffstar + ytmp4 * ( this%dy)
+!        call transpose_y_to_x(VF,xtmp1,this%decomp)
+!        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+!        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+!        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
+!        ytmp4 = ytmp5*this%dx**2 * this%dy**2
+!        adiffstar = adiffstar + ytmp4 * ( this%dy)
 
         delphi = (this%dx*this%dy*this%dz)**(1.0/3.0)
-        adiffstar = this%Cvf1*umag*abs(adiffstar)/rho
-        outVF = this%Cvf2*( half*(abs(VF)-(one) + abs((VF)-(one))))*delphi*sos
+        adiffstar = this%Cvf1*abs(adiffstar*sos)
+        outVF = this%Cvf2*( half*(abs(VF)-(one) + abs((VF)-(one))))*delphi*abs(sos)
         outVFx = this%Cvf2*dt_inv*dt_inv*dely*abs(dphidx) / sqrt( dphidx*dphidx + dphidy*dphidy +dphidz*dphidz )*( half*(abs(VF)-(one) + abs((VF)-(one))) )
         outVFy = this%Cvf2*dt_inv*dt_inv*dely*abs(dphidy) / sqrt( dphidx*dphidx + dphidy*dphidy +dphidz*dphidz )*( half*(abs(VF)-(one) + abs((VF)-(one))) )
         outVFz = this%Cvf2*dt_inv*dt_inv*dely*abs(dphidz) / sqrt( dphidx*dphidx + dphidy*dphidy +dphidz*dphidz )*( half*(abs(VF)-(one) + abs((VF)-(one))) )
@@ -1393,10 +1406,31 @@ contains
         call this%filter(outVFy, x_bc, y_bc, z_bc)
         call this%filter(outVFz, x_bc, y_bc, z_bc)
 
-        adiff = max(outVF,adiffstar,outrhom)
+!        adiff = max(outVF,adiffstar,outdiff)
         ! Fydiffstar)ilter each part
-        
-        rhodiff = max(outVF,adiffstar,diffstar,outb,outrhom) ! + max(outb,ytmp5) ! max(rhodiff,adiffstar,outb,ytmp5) !max(rhodiff,adiffstar) + max(outb,ytmp5)
+
+
+        VF_bound = 0.0
+
+        VF_bound = max(VF_bound, (md1 - VF)/md1 )
+        VF_bound = max(VF_bound, (VF - (one - md1) ) / md1 )
+
+        VF_bound = VF_bound*P_MAXVAL(sos)*(this%dx*this%dy*this%dy)**(1.0/3.0)
+
+ 
+        where((VF .GE. 1d-6 ) .AND. (VF .LE. (1-1d-6) ) )
+
+            VF_bound = 0.0
+
+
+        endwhere
+
+        call this%filter(VF_bound, x_bc, y_bc, z_bc)
+        call this%filter(VF_bound, x_bc, y_bc, z_bc)
+ 
+        VF_bound = this%Cdiff*VF_bound
+        rhodiff = max(outVF,outb,VF_bound) + max(adiffstar,diffstar) ! + max(outb,ytmp5) ! max(rhodiff,adiffstar,outb,ytmp5) !max(rhodiff,adiffstar) + max(outb,ytmp5)
+        adiff = outVF+adiffstar
         adiff_I(:,:,:,1) = outVFx
         adiff_I(:,:,:,2) = outVFy
         adiff_I(:,:,:,3) = outVFz

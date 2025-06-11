@@ -2,6 +2,7 @@ module Multiphase_shock_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,eight,three,six,sixth,zero
     use FiltersMod,       only: filters
+    use DerivativesStaggeredMod, only: derivativesStagg
     implicit none
 
     real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
@@ -173,27 +174,36 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
-    use SolidGrid,        only: u_index,v_index,w_index
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index, p_index
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
-    
+    use DerivativesMod,   only: derivatives
+    use DerivativesStaggeredMod, only: derivativesStagg
+    use InterpolatorsMod,        only: interpolators
+
+
     use Multiphase_shock_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
     type(decomp_info),               intent(in)    :: decomp
+    type(derivatives),               intent(in)    :: der
+    type(derivatives),               intent(in)    :: derStagg
+    type(interpolators),             intent(in)    :: interpMid
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
+    logical :: periodicx,periodicy,periodicz
     integer :: ioUnit
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum
     real(rkind), dimension(8) :: fparams
@@ -203,7 +213,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 
     integer :: nx,ny,nz
-    nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
 
     namelist /PROBINPUT/  p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, rhoRatio, pRatio, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, plastic, explPlast, yield,   &
@@ -224,8 +233,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
                      .FALSE.,     .TRUE.,    .TRUE., &
                   "gaussian", "gaussian", "gaussian" )
 
-    associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
-                 x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+    associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), rho => fields(:,:,:,rho_index), &
+                 p => fields(:,:,:,p_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
         
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
@@ -389,6 +400,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
 
         mix%material(1)%p  = p2*dum + p1*(one-dum)
         mix%material(2)%p  = mix%material(1)%p
+        p = mix%material(2)%p
 
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp
         mix%material(2)%VF = one - mix%material(1)%VF
@@ -437,6 +449,87 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
         
     end associate
 
+end subroutine
+subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index, uref_index
+    use decomp_2d,        only: decomp_info, nrank
+    use exits,            only: GracefulExit
+    use StiffGasEOS,      only: stiffgas
+    use Sep1SolidEOS,     only: sep1solid
+    use SolidMixtureMod,  only: solid_mixture
+    use operators,        only: grady,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x,gradFV_y,gradFV_z
+    use DerivativesMod,   only: derivatives
+    use DerivativesStaggeredMod, only: derivativesStagg
+    use InterpolatorsMod,        only: interpolators
+    use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
+    use Multiphase_shock_data
+
+    implicit none
+    character(len=*),                intent(in)    :: inputfile
+    type(decomp_info),               intent(in)    :: decomp
+    type(derivatives),               intent(in)    :: der
+    type(derivativesStagg),          intent(in)    :: derStagg
+    type(interpolators),             intent(in)    :: interpMid
+    real(rkind),                     intent(in)    :: dx,dy,dz
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    type(solid_mixture),             intent(inout) :: mix
+    real(rkind),                     intent(inout) :: tstop, dt, tviz
+    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+
+    logical :: periodicx,periodicy,periodicz
+
+    integer :: ioUnit,i,iy
+    real(rkind), dimension(8) :: fparams
+    real(rkind), dimension(4) :: alphai, phase
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys, u_perturb, KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
+    integer, dimension(2) :: iparams
+    real(rkind) :: a0, a0_2,dx1
+    logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted toensure p-T equilibrium
+    logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
+
+    integer :: nx,ny,nz,k,ix,j
+    integer :: ierr, rank,fh, filesize, chunksize, offset, offset2,totalproc
+    integer, allocatable :: data(:), recvbuf(:)
+    character(len=50) :: filename,phiIname,phiRname, DphiIname, DphiRname
+    character(len=50) :: rhoRname, rhoIname, pIname,pRname
+    !nteger(kind=MPI_OFFSET_KIND) :: disp
+    !nteger(kind=MPI_STATUS_SIZE) :: status(MPI_STATUS_SIZE)
+    logical :: flag
+
+end
+
+
+subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index,e_index
+    use decomp_2d,        only: decomp_info, nrank
+    use exits,            only: GracefulExit
+    use SolidMixtureMod,  only: solid_mixture
+    use Multiphase_shock_data
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(in)    :: dx,dy,dz
+    type(solid_mixture),             intent(inout) :: mix
+    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(inout):: sponge
+    real(rkind), dimension(2), intent(inout) :: rhou, rhov,rhow,rhoe
+    integer :: ioUnit,i,iy
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
+    integer, dimension(2) :: iparams
+    real(rkind) :: a0, a0_2, sigma1, sigma2
+    integer :: nx,ny,nz,k,ix,j
+    integer :: ierr, rank,fh, filesize, chunksize, offset, offset2,totalproc
+    integer, allocatable :: data(:), recvbuf(:)
+
+    sponge = 0.0
 end subroutine
 
 subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)

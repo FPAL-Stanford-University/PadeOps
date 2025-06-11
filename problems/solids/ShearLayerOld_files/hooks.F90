@@ -182,7 +182,7 @@ end subroutine
 subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz, x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
-    use SolidGrid,        only: u_index,v_index,w_index,rho_index, uref_index
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index, uref_index,p_index
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use StiffGasEOS,      only: stiffgas
@@ -260,7 +260,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                   "gaussian", "gaussian", "gaussian" )
 
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
-                 uref => fields(:,:,:,uref_index),                                                    &
+                 uref => fields(:,:,:,uref_index), p => fields(:,:,:,p_index),                        &
                  rho => fields(:,:,:,rho_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
         if (mix%ns /= 2) then
@@ -399,7 +399,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
        ! mix%material(2)%Ys = one - mix%material(1)%Ys 
 
-
+        p = mix%material(1)%p
         mix%material(2)%p  = mix%material(1)%p 
         mix%material(2)%VF = 1 - mix%material(1)%VF
         mix%material(2)%Ys = one - mix%material(1)%Ys

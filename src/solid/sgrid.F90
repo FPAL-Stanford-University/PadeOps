@@ -912,8 +912,9 @@ contains
 
 
   ! Initialize derivatives
-        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derStaggd02,this%derD06,this%derCD06,this%derD04,this%interpMid,this%interpMid02,this%use_Stagg,this%LADN2F,this%LADInt,this%LADMass_Consv,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%twoPhaseLAD,this%LAD5eqn,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension,this%use_normFV,this%use_normInt, this%use_gradXi,this%energy_surfTen, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV,this%use_XiLS, this%XiLS_eps, this%use_D04, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc,this%SpongeLayer,this%skew_mass,this%skew_Ys,this%skew_VF)
+        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derStaggd02,this%derD06,this%derCD06,this%derD04,this%interpMid,this%interpMid02,this%interpMid04,this%use_Stagg,this%LADN2F,this%LADInt,this%LADMass_Consv,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%twoPhaseLAD,this%LAD5eqn,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension,this%use_normFV,this%use_normInt, this%use_gradXi,this%energy_surfTen, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV,this%use_XiLS, this%XiLS_eps, this%use_D04, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc,this%SpongeLayer,this%skew_mass,this%skew_Ys,this%skew_VF)
 
+        
         !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
 
         ! Allocate fields
@@ -949,9 +950,6 @@ contains
 
         if ( allocated(this%rho_mid) ) deallocate(this%rho_mid)
         allocate(this%rho_mid(this%nxp,this%nyp,this%nzp,3) )
-
-        if ( allocated(this%pu_mid) ) deallocate(this%pu_mid)
-        allocate(this%pu_mid(this%nxp,this%nyp,this%nzp,3) )
 
         if ( allocated(this%pu_mid) ) deallocate(this%pu_mid)
         allocate(this%pu_mid(this%nxp,this%nyp,this%nzp,3) )
@@ -1322,6 +1320,10 @@ contains
         nullify(this%divgrad)
         nullify(this%eLAD)
         nullify(this%rhoe)
+        nullify(this%VF_int)
+        nullify(this%m1_int)
+        nullify(this%m2_int)
+
         if (allocated(this%mesh)) deallocate(this%mesh) 
         if (allocated(this%fields)) deallocate(this%fields) 
         if (allocated(this%mesh)) deallocate(this%meshstretch)
@@ -1590,7 +1592,7 @@ contains
 
     subroutine update_P(this,Qtmpp,isub,dt,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         use decomp_2d,  only: nrank
-        use RKCoeffs,   only: RK45_A,RK45_B
+        use RKCoeffs,   only: RK45_A,RK45_B,RK3_A,RK3_B
         class(sgrid), intent(inout) :: this
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
@@ -1600,15 +1602,24 @@ contains
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsP ! for mass fraction equation
         real(rkind)  :: dx,dy
+        integer      :: i
 
         dy = y(1,2,1) - y(1,1,1)
 
         call this%getRHS_P(rhsP,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         ! advance sub-step
-        if(isub==1) Qtmpp = zero                   ! not really needed since RK45_A(1) = 0
-        Qtmpp = dt*rhsP + RK45_A(isub)*Qtmpp
-        this%p =  this%p  + RK45_B(isub)*Qtmpp
+        if(isub==1) Qtmpp = this%p                   ! not really needed since RK45_A(1) = 0
+        this%p = RK3_B(isub)*(this%p + dt*rhsP) + RK3_A(isub)*Qtmpp
+ 
+        do i = 1,2
+
+         this%mix%material(i)%p = this%p
+
+        enddo
+  !      this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
+!        Qtmpp = dt*rhsP + RK45_A(isub)*Qtmpp
+!        this%p =  this%p  + RK45_B(isub)*Qtmpp
     end subroutine
 
     subroutine getRHS_P(this,rhsP,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -1628,7 +1639,7 @@ contains
          rhoSos = zero
          rhoSos2 = zero
          do i = 1,2
-           call this%mix%material(i)%getLAD_VF(this%rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call this%mix%material(i)%getLAD_VF(this%rho,this%sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,this%dx,this%dy)
            call this%mix%material(i)%getSpeciesDensity(this%rho,rhom(:,:,:,i))
            call this%mix%material(i)%hydro%get_sos2(rhom(:,:,:,i),this%p,sosm(:,:,:,i))
            rhoSos = rhoSos + rhom(:,:,:,i)*sosm(:,:,:,i)/this%mix%material(i)%VF
@@ -1659,10 +1670,10 @@ contains
        
        else
 
-         call interpolateFV_x(this%decomp,this%interpMid,this%u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV_y(this%decomp,this%interpMid,this%v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV_z(this%decomp,this%interpMid,this%w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV(this%decomp,this%interpMid,this%p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV_x(this%decomp,this%interpMid,this%u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV_y(this%decomp,this%interpMid,this%v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV_z(this%decomp,this%interpMid,this%w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV(this%decomp,this%interpMid,this%p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
          !this%u_int = u_int
          !this%v_int = v_int
@@ -1670,11 +1681,11 @@ contains
          !this%tauxy_int  = p_int(:,:,:,1)
          !this%tauyy_int = p_int(:,:,:,2)
          !this%tauyz_int = p_int(:,:,:,3)
-         call gradFV_x(this%decomp,this%derStagg,-p_int(:,:,:,1),tmp1,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call gradFV_y(this%decomp,this%derStagg,-p_int(:,:,:,2),tmp2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call gradFV_z(this%decomp,this%derStagg,-p_int(:,:,:,3),tmp3,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call divergenceFV(this%decomp,this%derStagg,-u_int*p_int(:,:,:,1),-v_int*p_int(:,:,:,2),-w_int*p_int(:,:,:,3),divup,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call divergenceFV(this%decomp,this%derStagg,-u_int,-v_int,-w_int,divu,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call gradFV_x(this%decomp,this%derStagg,-this%p_mid(:,:,:,1),tmp1,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call gradFV_y(this%decomp,this%derStagg,-this%p_mid(:,:,:,2),tmp2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call gradFV_z(this%decomp,this%derStagg,-this%p_mid(:,:,:,3),tmp3,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call divergenceFV(this%decomp,this%derStagg,-this%u_mid(:,:,:,1)*this%p_mid(:,:,:,1),-this%v_mid(:,:,:,2)*this%p_mid(:,:,:,2),-this%w_mid(:,:,:,3)*this%p_mid(:,:,:,3),divup,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call divergenceFV(this%decomp,this%derStagg,-this%u_mid(:,:,:,1),-this%v_mid(:,:,:,2),-this%w_mid(:,:,:,3),divu,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
        endif
 
@@ -1697,7 +1708,7 @@ contains
             esumJ = 0
             do i = 1,2
                 
-                call this%mix%material(i)%getLAD_VF(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
+                call this%mix%material(i)%getLAD_VF(this%rho,this%sos,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy) 
                 esumJ = esumJ + this%mix%material(i)%eh*this%mix%material(i)%rhom*this%mix%material(i)%vfLAD 
 
             enddo
@@ -1777,6 +1788,11 @@ contains
         call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         ! compute species artificial conductivities and diffusivities
         call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w, duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+        do imat = 1,2
+               call this%mix%material(imat)%getLAD_VF(this%rho,this%sos,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy)
+               call this%mix%material(imat)%getYsLAD(this%rho,this%sos,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        enddo
+
         nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
         deallocate( duidxj )
         
@@ -1974,11 +1990,12 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp             ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: divu,Qtmpp, pmix ! Velocity divergence for species energy eq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork         ! Viscous work term for species energy eq
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource, tmp, eta, tmp2   ! Source term for possible use in VF, g eh eqns
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource, tmp, eta, tmp2,rhoe   ! Source term for possible use in VF, g eh eqns
         integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind) :: Ystime, VFtime, consvTime, intsharp, u_max, u_min,rhoYs_min, rhoYs_max,tmod
+        real(rkind) :: Ystime, VFtime, consvTime, intsharp, u_max, u_min,rhoYs_min, rhoYs_max,tmod,Ut
+        
         character(len=clen) :: charout
 
 
@@ -1996,6 +2013,25 @@ contains
      
 
        do isub = 1,  RK3_steps
+
+!           Ut =mod(0.6*this%tsim,2.0)
+!           eta = mod(this%y - Ut, 2.0)
+!           tmp = (half)*(erf( (eta+0.5_rkind)/(6.0*this%dy) ) - erf((eta-0.5_rkind)/(6.0*this%dy)))
+
+!                 this%mix%material(1)%VF = 1d-12 + (one-two*1d-12)*tmp !  + 1d-9*(noise2-0.5)
+!                 this%mix%material(2)%VF =  1 - this%mix%material(1)%VF
+
+!            do i = 1,3
+!                call this%filter(this%pu_mid(:,:,:,i), this%fil, 1,-this%x_bc,this%y_bc,this%z_bc)
+!               call this%filter(this%v_mid(:,:,:,i), this%fil, 1,this%x_bc,-this%y_bc,this%z_bc)
+!               call this%filter(this%w_mid(:,:,:,i), this%fil, 1,this%x_bc,this%y_bc,-this%z_bc)
+!                call this%filter(this%p_mid(:,:,:,i), this%fil, 1,this%x_bc,this%y_bc,-this%z_bc)
+!                call this%filter(this%p_mid(:,:,:,i), this%fil,1,this%x_bc,this%y_bc,-this%z_bc) 
+!                do imat = 1,2
+!                   call this%filter(this%mix%material(imat)%VF_mid(:,:,:,i),this%fil, 1,this%x_bc,this%y_bc,-this%z_bc)
+!                   call this%filter(this%mix%material(imat)%rhoYs_mid(:,:,:,i),this%fil,1,this%x_bc,this%y_bc,-this%z_bc)
+!                enddo
+!            enddo
 
 
             if(this%use_CnsrvSurfaceTension) then
@@ -2023,8 +2059,9 @@ contains
 
         !    call this%viz%WriteViz(this%decomp, this%mesh, this%fields,this%mix, this%tsim)
             call this%get_conserved()
+!            call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
             call this%getFaces()
-
+            call this%mix%get_entropy()
 
             !!!!!!!!!!!!!!!!!!!!!! COMMENTED OUT G STUFF !!!!!!!!!!!!!!!!!!!!!!
             !call this%get_conserved_g()
@@ -2057,7 +2094,6 @@ contains
                if(this%mix%ns.ne.2) then
                   call GracefulExit("Problem if ns=1, should work for ns>2 but not tested",4634)
                endif
-
                !endif
                do imat=1,this%mix%ns
                    this%mix%material(imat)%intSharp_a = zero
@@ -2067,6 +2103,7 @@ contains
                    this%mix%material(imat)%intSharp_RDiff = zero
                    this%mix%material(imat)%intSharp_RFV = zero
                enddo
+
                this%mix%intSharp_f = zero
                this%mix%intSharp_fDiff = zero
                this%mix%intSharp_fFV = zero
@@ -2074,8 +2111,8 @@ contains
                this%mix%intSharp_hDiff = zero
                this%mix%intSharp_hFV = zero
                this%mix%intSharp_kFV = zero
-              
-               call this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
+             
+               call this%mix%get_intSharp_clean2(this%rho_mid,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
        else      
                   ! !debug
                    do imat=1,this%mix%ns
@@ -2146,7 +2183,10 @@ contains
 
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             if(this%use_Stagg) then
+                
                call this%mix%update_Ys(isub,this%dt,this%rho,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%sos,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)               ! Volume Fraction
+
+             
             !   call this%mix%material(1)%update_specYs(isub,this%dt,this%rho,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)  
             else
                call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%sos,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
@@ -2157,15 +2197,24 @@ contains
             if(this%pEqb) then
 
                if(this%use_Stagg) then
-                  call this%mix%update_VF(isub,this%dt,this%rho,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
+                  call divergence(this%decomp,this%der,this%u,this%v,this%w,divu,this%x_bc,this%y_bc,this%z_bc)
+!                  call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%sos,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
 !                  call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
+             
+!                  Ut =mod(0.6*this%tsim+this%dt,2.0)
+!                  eta = mod(this%y - Ut, 2.0)
+!                  tmp = (half)*(erf( (eta+0.5_rkind)/(6.0*this%dy) ) - erf((eta-0.5_rkind)/(6.0*this%dy)))
+
+!                  this%mix%material(1)%VF = 1d-12 + (one-two*1d-12)*tmp !  + 1d-9*(noise2-0.5)
+!                  this%mix%material(2)%VF =  1 - this%mix%material(1)%VF
 
                else  
-                  call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
+             !     call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%sos,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
                endif
-             !  call this%update_P(Qtmpp,isub,this%dt,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
+!               call this%update_P(Qtmpp,isub,this%dt,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+               call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%sos,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew) 
             elseif(this%pRelax) then
-                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)                        ! Volume Fraction
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%sos,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)                        ! Volume Fraction
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc) ! Hydrodynamic energy
             end if
 
@@ -2236,23 +2285,25 @@ contains
             !    endif
             ! else
             
-
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!            if((MOD(this%step,10) )  .LE. 1d-10) then
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !              if(.NOT. this%use_Stagg) then
                   ! Filter the conserved variables
-               !   call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-               !   call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
-               !   call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
-               !   call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-                  !call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+!               call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
              
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                   ! Filter the individual species variables
-                !  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
+!                  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
 !              end if 
            !  endif
+!          print *, "Filter"
+!         endif
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             if(this%use_CnsrvSurfaceTension) then
 
@@ -2310,16 +2361,37 @@ contains
                ! do i=1,2
 
                !    call this%mix%equilibrateTemperature(this%rho, this%e, this%p, this%T, isub, RK45_steps) 
-               !  call this%mix%equilibratePressureTemperature_new(this%rho, this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
+                 call this%mix%equilibratePressureTemperature_new(this%rho, this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
                !     call this%mix%pressureLiquidGas(this%rho, this%e, this%p)
-               !    call this%mix%get_pmix(this%p)                         ! Get mixture pressure
-               !    call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
+               !call this%mix%get_pmix(this%p)                         ! Get mixture pressure
+               !call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
                ! enddo
 
             elseif (this%pEqb) then
                call this%mix%equilibratePressure(this%rho, this%e, this%p)
                !call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc,this%z_bc)
-               !call this%mix%updateP_VF(this%rho,this%e,this%p)
+              ! call this%mix%updateP_VF(this%rho,this%e,this%p)
+
+
+
+!            rhoe = 0
+!            do i = 1,2
+
+!              rhoe = rhoe + this%mix%material(i)%VF*this%mix%material(i)%hydro%onebygam_m1*( this%p + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
+
+
+!            enddo
+
+!            where( this%mix%material(1)%VF .GE. 0.1_rkind .AND.( this%mix%material(2)%VF .LE.
+!            this%e = rhoe/this%rho             
+
+!            do i = 1,2
+
+!              this%mix%material(i)%p = this%p
+!              call this%mix%material(i)%get_ehydroT_from_p(this%rho)
+
+!            enddo
+
             elseif (this%pRelax) then
                 call this%mix%relaxPressure(this%rho, this%e, this%p)
                 !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
@@ -2371,71 +2443,125 @@ contains
     subroutine getFaces( this)
         use operators, only: interpolateFV,interpolateFV_x,interpolateFV_F2Ny,interpolateFV_y,interpolateFV_F2Nx,filter3D
         class(sgrid), target, intent(inout) :: this
-        integer :: i,j,k
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,gam,pgam
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: psi_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2, tmpFil, tmp3,psi
-        real(rkind) :: e = 1d-8
-        !call this%filter(tmpFil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+        integer :: i,j,k,iflag = one
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: psi_int,e1_int, Gam_int,pVF_int,num,denom
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2, tmpFil, tmp3,psi,Gam,psi_safe
+        real(rkind) :: e = 1d-10
 
-        call interpolateFV(this%decomp,this%interpMid04,this%u,this%u_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid04,this%v,this%v_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid04,this%w,this%w_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid04,this%p,this%p_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid,this%rho,this%rho_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call interpolateFV(this%decomp,this%interpMid,this%u,this%u_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call interpolateFV(this%decomp,this%interpMid,this%v,this%v_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call interpolateFV(this%decomp,this%interpMid,this%w,this%w_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call interpolateFV(this%decomp,this%interpMid,this%p,this%p_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call interpolateFV(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call interpolateFV(this%decomp,this%interpMid,this%rho*this%u,rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)                
+        call interpolateFV(this%decomp,this%interpMid,this%rho*this%v,rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        this%pu_mid(:,:,:,1) = this%p_mid(:,:,:,1)*this%u_mid(:,:,:,1)
+        this%pu_mid(:,:,:,2) = this%p_mid(:,:,:,2)*this%v_mid(:,:,:,2)
 
-!        call interpolateFV_y(this%decomp,this%interpMid,this%u,this%u_mid(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_x(this%decomp,this%interpMid,this%v,this%v_mid(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_y(this%decomp,this%interpMid04,this%u_mid(:,:,:,1),tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_F2Ny(this%decomp,this%interpMid04,tmp,this%u_mid(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call interpolateFV_x(this%decomp,this%interpMid,tmp2,this%u_mid(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_x(this%decomp,this%interpMid04,this%u_mid(:,:,:,2),tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_F2Nx(this%decomp,this%interpMid04,tmp,this%u_mid(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!        call interpolateFV_y(this%decomp,this%interpMid04,this%v_mid(:,:,:,1),tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_F2Ny(this%decomp,this%interpMid04,tmp,this%v_mid(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call interpolateFV_x(this%decomp,this%interpMid,tmp2,this%v_mid(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!        call interpolateFV_x(this%decomp,this%interpMid04,this%v_mid(:,:,:,2),tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_F2Nx(this%decomp,this%interpMid04,tmp,this%v_mid(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!        call interpolateFV_y(this%decomp,this%interpMid04,this%w_mid(:,:,:,1),tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_F2Ny(this%decomp,this%interpMid04,tmp,this%w_mid(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call interpolateFV_x(this%decomp,this%interpMid,tmp2,this%w_mid(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!        call interpolateFV_x(this%decomp,this%interpMid04,this%w_mid(:,:,:,2),tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_F2Nx(this%decomp,this%interpMid04,tmp,this%w_mid(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        
-!        call interpolateFV_y(this%decomp,this%interpMid04,this%p_mid(:,:,:,1),tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_F2Ny(this%decomp,this%interpMid04,tmp,this%p_mid(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call interpolateFV_x(this%decomp,this%interpMid,tmp2,this%p_mid(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!        call interpolateFV_x(this%decomp,this%interpMid04,this%p_mid(:,:,:,2),tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_F2Nx(this%decomp,this%interpMid04,tmp,this%p_mid(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
+      this%rho_mid = 0
       do i = 1,2
          
         call this%mix%material(i)%getFaces(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        this%rho_mid = this%rho_mid + this%mix%material(i)%rhoYs_mid
+
       end do 
 
-!       psi =  this%mix%intSharp_eps*log( ( abs(this%mix%material(1)%VF) + e )/ (abs(1 -  this%mix%material(1)%VF) + e) )
-!       call interpolateFV(this%decomp,this%interpMid,psi,psi_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call this%filter(psi_int(:,:,:,1), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-!       call this%filter(psi_int(:,:,:,2), this%fil, 1,-this%x_bc, this%y_bc,this%z_bc) 
-!       this%mix%material(1)%VF_mid = 0.5*(1.0 + tanh(psi_int/(2.0*this%mix%intSharp_eps ) ) )
+!      do i = 1,3
+!       where( this%mix%material(1)%VF_mid(:,:,:,i) .LE. 1d-6 )
+!             this%mix%material(1)%VF_mid(:,:,:,i) = 0.0
+!             this%mix%material(1)%rhoYs_mid(:,:,:,i) = 0.0
+!       elsewhere( this%mix%material(1)%VF_mid(:,:,:,i) .GE. 1-1d-6)
 
+!             this%mix%material(1)%VF_mid(:,:,:,i) = 1.0 
+!             this%mix%material(2)%rhoYs_mid(:,:,:,i) = 0.0 !M_int(:,:,:,2) = 0.0
+
+!       endwhere
+!      enddo
+
+
+
+
+!       do i = 1,3
+
+!        call this%filter(this%mix%material(1)%VF_mid(:,:,:, i ), this%fil, 1,this%x_bc,this%y_bc, this%z_bc)
+!        call this%filter(this%mix%material(1)%rhoYs_mid(:,:,:, i ), this%fil,1,this%x_bc,this%y_bc, this%z_bc)
+!        call this%filter(this%mix%material(2)%rhoYs_mid(:,:,:, i ), this%fil,1,this%x_bc,this%y_bc, this%z_bc)
+!        call this%filter(this%u_mid(:,:,:, i ),this%fil,1,this%x_bc,this%y_bc, this%z_bc)
+!        call this%filter(this%v_mid(:,:,:, i ),this%fil,1,this%x_bc,this%y_bc,this%z_bc)
+!        call this%filter(this%w_mid(:,:,:, i ),this%fil,1,this%x_bc,this%y_bc,this%z_bc)
+!        call this%filter(this%p_mid(:,:,:, i ),this%fil,1,this%x_bc,this%y_bc,this%z_bc)
+
+!       enddo
+!       psi =  this%mix%intSharp_eps*log( ( (this%mix%material(1)%VF) + e )/ ((1 -  this%mix%material(1)%VF) + e) )
+!        psi = (this%mix%material(1)%VF)**0.1_rkind / ( this%mix%material(1)%VF**0.1_rkind + max(eps,(1.0_rkind - this%mix%material(1)%VF))**0.1_rkind)
+!       call interpolateFV(this%decomp,this%interpMid,psi,psi_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+
+!       do i = 1,3
+!       where(( this%mix%material(1)%VF .GE. 1D-3 ) .OR. ( this%mix%material(1)%VF .LE. (1_rkind - 1d-3 ) ) )
+
+!          psi_safe = max(eps, min(1.0_rkind - eps, psi_int(:,:,:,i)))
+!         this%mix%material(1)%VF_mid(:,:,:,i) = 0.5_rkind*(1.0_rkind + tanh(psi_int(:,:,:,i)/(2.0_rkind*this%mix%intSharp_eps ) ) )
+!          this%mix%material(1)%VF_mid(:,:,:,i) = 1.0_rkind / ( 1.0_rkind + ((1.0_rkind - psi_safe )/(psi_safe) )**(1.0_rkind/0.1_rkind) )
+!       endwhere
+!       enddo
+
+!       this%mix%material(1)%VF_mid =  this%mix%material(1)%VF_mid / (this%mix%material(1)%VF_mid +  this%mix%material(2)%VF_mid )
        this%mix%material(2)%Ys_mid = 1.0 - this%mix%material(1)%Ys_mid
        this%mix%material(2)%VF_mid = 1.0 - this%mix%material(1)%VF_mid
 
-!       this%mix%material(1)%rhoYs_mid = this%mix%material(1)%Ys_mid*this%rho_mid
-!       this%mix%material(2)%rhoYs_mid = this%mix%material(2)%Ys_mid*this%rho_mid
-!       call this%mix%material(1)%getSpeciesDensity(this%rho,rhom)
-!       call interpolateFV(this%decomp,this%interpMid04,rhom,rhom_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
-!       this%mix%material(1)%rhoYs_mid = rhom_int*this%mix%material(1)%VF_mid
+!       this%u_mid = rhou_int/this%rho_mid
+!       this%v_mid = rhov_int/this%rho_mid
 
-!       call this%mix%material(2)%getSpeciesDensity(this%rho,rhom)
-!       call interpolateFV(this%decomp,this%interpMid04,rhom,rhom_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)       
-!       this%mix%material(2)%rhoYs_mid = rhom_int*this%mix%material(2)%VF_mid 
+!       num = 0
+!       denom = 0
+!       do i = 1,2
+
+
+!          num = num + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%VF_mid
+!          denom = denom + this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%VF_mid 
+
+!       enddo
+  
+!       this%p_mid = (rhoe_int - num ) / denom
+!       this%rho_mid = this%mix%material(2)%rhoYs_mid / this%mix%material(2)%Ys_mid
+!       this%mix%material(1)%rhoYs_mid = this%rho_mid * this%mix%material(1)%Ys_mid
+!       rhom_int =  this%mix%material(2)%rhoYs_mid/this%mix%material(2)%Ys_mid 
+!       this%mix%material(1)%rhoYs_mid = rhom_int*this%mix%material(1)%Ys_mid      
+!       this%mix%material(2)%VF_mid = this%mix%material(2)%rhoYs_mid/this%mix%material(2)%rho_mid
+!       this%mix%material(1)%VF_mid = 1-this%mix%material(2)%VF_mid
+!       call this%mix%material(1)%getSpeciesDensity(this%rho,rhom)
+!      call interpolateFV(this%decomp,this%interpMid04,this%mix%material(2)%T,T2_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
+!       rhom_int = this%mix%material(2)%rhoYs_mid /(this%mix%material(2)%VF_mid + 1d-15)
+!       T2_int = (this%p_mid + this%mix%material(2)%hydro%Pinf) / (rhom_int * this%mix%material(2)%hydro%Cv * (this%mix%material(2)%hydro%gam - 1 ) )
+!       T1_int = (T_int - this%mix%material(2)%VF_mid*T2_int) / this%mix%material(1)%VF_mid
+       
+
+!       this%mix%material(1)%rhoYs_mid = this%mix%material(1)%VF_mid*(this%p_mid + this%mix%material(1)%hydro%Pinf) &
+!                                        / (T1_int * this%mix%material(1)%hydro%Cv * (this%mix%material(1)%hydro%gam - 1 ) )
+
+!      this%mix%material(2)%rhoYs_mid = this%mix%material(2)%VF_mid*(this%p_mid + this%mix%material(2)%hydro%Pinf) & 
+!                                       / (T2_int * this%mix%material(2)%hydro%Cv * (this%mix%material(2)%hydro%gam - 1 ) )
+
+!       rhom_int = (this%p_mid + this%mix%material(1)%hydro%Pinf)/(this%mix%material(1)%hydro%Cv*e1_int*(this%mix%material(1)%hydro%gam-1))
+
+!       this%mix%material(1)%rhoYs_mid = this%mix%material(1)%Ys_mid*this%rho_mid
+
+!       call interpolateFV(this%decomp,this%interpMid,this%mix%material(2)%T,e1_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       rhom_int =  (this%p_mid + this%mix%material(2)%hydro%Pinf)/(this%mix%material(2)%hydro%Cv*e1_int*(this%mix%material(2)%hydro%gam-1))
+
+!       this%mix%material(2)%rhoYs_mid = this%mix%material(2)%Ys_mid*this%rho_mid
+
+      
+      
+!       this%mix%material(2)%Ys_mid = 1.0 - this%mix%material(1)%Ys_mid
+!       this%mix%material(2)%VF_mid = 1.0 - this%mix%material(1)%VF_mid 
+
+!      call this%mix%material(2)%getSpeciesDensity(this%rho,rhom)
+!      call interpolateFV(this%decomp,this%interpMid04,rhom,rhom_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)       
+!      this%mix%material(2)%rhoYs_mid = this%mix%material(2)%VF_mid/rhom_int!*this%mix%material(2)%VF_mid 
+!       this%mix%material(1)%VF_mid = 1.0 - this%mix%material(2)%VF_mid
 
        this%pError = this%p  - this%p_mid(:,:,:,2)
        this%u_int = this%u_mid(:,:,:,2)
@@ -3777,67 +3903,100 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
     end subroutine
 
     subroutine getRHS_xStagg( this,  rhs, tauxx,tauxy,tauxz, qx)
-        use operators, only: gradFV_x, interpolateFV_x, gradFV_N2Fx
+        use operators, only: gradFV_x, interpolateFV_x, gradFV_N2Fx,filter3D
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv),intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE, u_int,v_int, w_int, p_int, tauxx_int, tauxy_int,tauxz_int, qx_int, e_int, rho_int, rhodiff_int, rhoe_prim, gam, num, t_int, KE,e_prim,p4, Eint
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE, u_int,v_int, w_int, p_int, tauxx_int, tauxy_int,tauxz_int, qx_int, e_int, rho_int, rhodiff_int, rhoe_prim, gam, num, t_int, KE,e_prim,p4, Eint,gradu,gradp,gradup
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int,spe_int, rhoYs_int, den, gradRYs, tauRho_mid, rhom, rhom_int,ke_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: u_int6, rho_int6, t_int6, u_int8, t_int8, rho_int8,spec_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int 
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int, M_int
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         integer :: i
         
 
-!        call interpolateFV_x(this%decomp,this%interpMid06,this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!        call interpolateFV_x(this%decomp,this%interpMid,this%rho*this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
 
         p_int = this%p_mid(:,:,:,1)
         u_int = this%u_mid(:,:,:,1) !this%u_mid(:,:,:,1) !spec_int*rhou_int ! this%u_mid(:,:,:,1)
         v_int = this%v_mid(:,:,:,1)
         w_int = this%w_mid(:,:,:,1)
+
         rho_int =0.0 ! this%rho_mid(:,:,:,1)
         num = 0
         gam = 0
         KE = 0
+        den = 0.0
 
         rhou_int = 0.0
         rhov_int = 0.0
         rhow_int = 0.0
         rhoe_prim = 0.0
 
+        
+
+
+!        call this%filter(p_int, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         do i = 1,2
             
            VF_int(:,:,:,i) = this%mix%material(i)%VF_mid(:,:,:,1)
-           rhou_int = rhou_int + this%mix%material(i)%rhoYs_mid(:,:,:,1)*u_int*u_int
-           rhov_int = rhov_int + this%mix%material(i)%rhoYs_mid(:,:,:,1)*v_int*u_int
-           rhow_int = rhow_int + this%mix%material(i)%rhoYs_mid(:,:,:,1)*w_int*u_int
-           KE       = KE + half*(u_int*u_int + v_int*v_int + w_int*w_int)*u_int*this%mix%material(i)%rhoYs_mid(:,:,:,1)
-           rho_int  = rho_int + this%mix%material(i)%rhoYs_mid(:,:,:,1)
+           M_int(:,:,:,i)  = this%mix%material(i)%rhoYs_mid(:,:,:,1)
+
+        enddo
+
+
+!        call this%filter(VF_int(:,:,:,1),this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!        VF_int(:,:,:,2) = 1 - VF_int(:,:,:,1)
+
+!        where( VF_int(:,:,:,1) .LE. 1d-6 )
+
+!             M_int(:,:,:,1) = 0.0
+
+!        elsewhere( VF_int(:,:,:,2) .LE. 1d-6)
+
+!             M_int(:,:,:,2) = 0.0
+!        endwhere
+      
+
+        do i = 1,2
+           rhou_int = rhou_int + M_int(:,:,:,i)*u_int*u_int !this%mix%material(i)%rhoYs_mid(:,:,:,1)*u_int*u_int
+           rhov_int = rhov_int + M_int(:,:,:,i)*v_int*u_int !this%mix%material(i)%rhoYs_mid(:,:,:,1)*v_int*u_int
+           rhow_int = rhow_int + M_int(:,:,:,i)*w_int*u_int !this%mix%material(i)%rhoYs_mid(:,:,:,1)*w_int*u_int
+           KE       = KE + half*(u_int*u_int + v_int*v_int + w_int*w_int)*u_int*M_int(:,:,:,i) !this%mix%material(i)%rhoYs_mid(:,:,:,1)
+           rho_int  = rho_int + M_int(:,:,:,i) !this%mix%material(i)%rhoYs_mid(:,:,:,1)
        enddo
 
-!       rhoe_prim = Eint - rho_int*0.5*(u_int*u_int + v_int*v_int + w_int*w_int)
 
        do i = 1,2
-!        call interpolateFV_x(this%decomp,this%interpMid04,this%mix%material(i)%eh,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        rhoe_prim = rhoe_prim + this%mix%material(i)%rhoYs_mid(:,:,:,1)*e_int
 
-        rhoe_prim = rhoe_prim +  VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*( p_int + this%mix%material(i)%hydro%Pinf)*u_int
+       rhoe_prim = rhoe_prim +  VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*( p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
 !        num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf
 !        den = den + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
        enddo
 
-!       p_int = (e_int - num) /den !(this%mix%material(2)%hydro%gam - 1)*e_int*this%mix%material(2)%rhoYs_mid(:,:,:,1)/VF_int(:,:,:,2) - this%mix%material(2)%hydro%Pinf*this%mix%material(2)%hydro%gam ! (rho_int*e_int - num) /den
-!       rhoe_prim = u_int*(p_int + (p_int*den + num) )
+       rhoe_prim = rhoe_prim*u_int
 
-!       rhoe_prim =(p_int + rho_int*e_int)*u_int
+!       where( VF_int(:,:,:,1) .LE. 1d-6 )
+
+!           rhoe_prim = this%mix%material(2)%hydro%onebygam_m1*( p_int + this%mix%material(2)%hydro%gam*this%mix%material(2)%hydro%Pinf)*u_int
+
+!       elsewhere( VF_int(:,:,:,2) .LE. 1d-6 )
+
+!           rhoe_prim = this%mix%material(1)%hydro%onebygam_m1*( p_int + this%mix%material(1)%hydro%gam*this%mix%material(1)%hydro%Pinf)*u_int
+
+!       endwhere
+    
+    
+
+       
        flux = 0.0
-       buff = rhou_int + p_int  - tauxx  !x-momentum
-        
-        
+        buff = rhou_int + p_int - tauxx  !x-momentum
+!       call this%filter(gradp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)        
         !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
+        rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux 
         this%xflux_x = flux
 
         flux =0.0
@@ -3854,16 +4013,19 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+ 
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
         this%xflux_z = flux
         flux = 0.0
 
-        buff = (rhoe_prim + KE  ) -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz) !+ u_int*rho_int*this%ke_mid(:,:,:,1) + this%pu_mid(:,:,:,1) !  + qx !+ tauRho_mid
-
+        buff = (rhoe_prim + KE + p_int*u_int ) -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz) !+ u_int*rho_int*this%ke_mid(:,:,:,1) + this%pu_mid(:,:,:,1) !  + qx !+ tauRho_mid
+!        call gradFV_x(this%decomp,this%derStagg,this%pu_mid(:,:,:,1),gradup,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!        call this%filter(gradup, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         !endif       
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux
-        this%xflux_e = flux
+        call gradFV_x(this%decomp,this%derStagg,u_int,gradu,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux ! - gradup ! -0.5*( gradu*this%p + this%v*gradp)    
+       this%xflux_e = flux
 
     end subroutine
 
@@ -3873,15 +4035,15 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv),intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxy,tauyy,tauyz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int,M_int
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE,u_int,v_int, w_int, p_int, tauxy_int, tauyy_int,tauyz_int, qy_int, e_int,rho_int, gam, num, rhoe_prim, KE, e_prim,gradu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE,u_int,v_int, w_int, p_int, tauxy_int, tauyy_int,tauyz_int, qy_int, e_int,rho_int, gam, num, rhoe_prim, KE, e_prim,gradu,gradup
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int,rhow_int, rhoe_int, spe_int, rhoYs_int, den,ke_int, p4,Eint, up_int, cpressure, gradcpressure, gradp
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         real(rkind) :: g = 0.1, c = 1d4
         integer :: i,j,k
 
-!        call interpolateFV_y(this%decomp,this%interpMid06,this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!        call interpolateFV_y(this%decomp,this%interpMid,this%rho*this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 !        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index),  rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
 !        call interpolateFV_y(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index+1),rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3894,61 +4056,76 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        v_int = this%v_mid(:,:,:,2)
        w_int = this%w_mid(:,:,:,2)
       
-
-
        rho_int = 0.0
        rhoe_prim = 0.0
        num = 0.0
        gam = 0.0
+       den = 0.0
+
 
         do i = 1,2
-       
+
            VF_int(:,:,:,i) = this%mix%material(i)%VF_mid(:,:,:,2)
-           rho_int = rho_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)
+           M_int(:,:,:,i)  = this%mix%material(i)%rhoYs_mid(:,:,:,2)
+!           call this%filter(VF_int(:,:,:,i), this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+           
         enddo
+
+        
 
         rhou_int = 0.0
         rhov_int = 0.0
         rhow_int = 0.0
         KE       = 0.0
- 
-        do i = 1,2
-           rhou_int = rhou_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)*u_int*v_int
-           rhov_int = rhov_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)*v_int*v_int
-           rhow_int = rhow_int + this%mix%material(i)%rhoYs_mid(:,:,:,2)*w_int*v_int
-           KE       = KE + half*(u_int*u_int + v_int*v_int + w_int*w_int)*this%mix%material(i)%rhoYs_mid(:,:,:,2)*v_int
-        enddo
 
- !       rhoe_prim = Eint - rho_int*0.5*(u_int*u_int + v_int*v_int + w_int*w_int)
+        do i = 1,2
+           rhou_int = rhou_int +M_int(:,:,:,i)*u_int*v_int  !this%mix%material(i)%rhoYs_mid(:,:,:,2)*u_int*v_int
+           rhov_int = rhov_int +M_int(:,:,:,i)*v_int*v_int  !this%mix%material(i)%rhoYs_mid(:,:,:,2)*v_int*v_int
+           rhow_int = rhow_int +M_int(:,:,:,i)*w_int*v_int  ! this%mix%material(i)%rhoYs_mid(:,:,:,2)*w_int*v_int
+           KE       = KE + half*(u_int*u_int + v_int*v_int + w_int*w_int)*v_int*M_int(:,:,:,i) !this%mix%material(i)%rhoYs_mid(:,:,:,2)*v_int
+        enddo
 
        
         do i = 1,2
-!         call interpolateFV_y(this%decomp,this%interpMid04,this%mix%material(i)%eh,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!         rhoe_prim = rhoe_prim + this%mix%material(i)%rhoYs_mid(:,:,:,2)*e_int
 
-          rhoe_prim = rhoe_prim + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1* this%mix%material(i)%hydro%gam*(p_int +this%mix%material(i)%hydro%Pinf)*v_int
-!         num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf
-!         den = den + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
-        enddo
+         rhoe_prim = rhoe_prim + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*(p_int +this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
+!          num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf
+!          den = den + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
+       enddo
+
+       rhoe_prim = rhoe_prim*v_int
+
+
+
+!       where( VF_int(:,:,:,1) .LE. 1d-6 )
+
+!           rhoe_prim = this%mix%material(2)%hydro%onebygam_m1*( p_int + this%mix%material(2)%hydro%gam*this%mix%material(2)%hydro%Pinf)*v_int
+
+!       elsewhere( VF_int(:,:,:,2) .LE. 1d-6 )
+
+!           rhoe_prim = this%mix%material(1)%hydro%onebygam_m1*( p_int + this%mix%material(1)%hydro%gam*this%mix%material(1)%hydro%Pinf)*v_int
+
+!       endwhere
+
 
 
         flux = 0.0
-        buff = rhou_int + p_int  - tauxy !x-momentum
+        buff = rhou_int  - tauxy !x-momentum
         
-       call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux 
         this%yflux_x = flux
 
         flux = 0.0
-        buff = rhov_int - tauyy !+ rho_int*g !y-momentum
-
-        !endif
+        buff = rhov_int - tauyy + p_int !+ rho_int*g !y-momentum
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1)  - flux
+!        call this%filter(gradp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+        !endif
+        rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1)  - flux 
         this%yflux_y = flux
 
         flux = 0.0
-        buff = rhow_int   - tauyz !z-momentum
+        buff = rhow_int  - tauyz !z-momentum
 
         !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3958,14 +4135,17 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
 !       KE = half*(u_int*u_int + v_int*v_int + w_int*w_int)*rho_int 
         !TE = rhoe_int + half*(rhou_int*u_int + v_int*rhov_int + w_int*rhow_int)
-        buff = (rhoe_prim  + KE) - (tauyy)*v_int - u_int*tauxy -w_int*tauyz !+v_int*rho_int*this%ke_mid(:,:,:,2) + this%pu_mid(:,:,:,2) ! + qy !+! v_int*rho_int*g
+        buff = (rhoe_prim  + KE + p_int*v_int ) - (tauyy)*v_int - u_int*tauxy -w_int*tauyz !+v_int*rho_int*this%ke_mid(:,:,:,2) + this%pu_mid(:,:,:,2) ! + qy !+! v_int*rho_int*g
 
         !endif
 
+!        call gradFV_y(this%decomp,this%derStagg,this%pu_mid(:,:,:,2),gradup,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!        call this%filter(gradup, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !call gradFV_y(this%decomp,this%derStagg,p_int,gradp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        !call gradFV_y(this%decomp,this%derStagg,v_int,gradu,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux !- gradu*this%p - this%v*gradp
+!        call gradFV_y(this%decomp,this%derStagg,p_int,gradp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call gradFV_y(this%decomp,this%derStagg,v_int,gradu,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux  ! -0.5*( gradu*this%p + this%v*gradp)
         this%yflux_e = flux
 
 
