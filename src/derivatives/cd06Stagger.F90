@@ -12,8 +12,8 @@ module cd06Staggerstuff
     public :: cd06Stagger, alpha06d1, a06d1, b06d1
     
     ! 6th order first derivative coefficients (See Lele (1992) for explanation)
-    real(rkind), parameter :: alpha06d1= 89_rkind/ 400.0_rkind ! 75_rkind / 354_rkind !89_rkind/400_rkind !9.0_rkind/62.0_rkind ! 0.2225 !  9.0_rkind / 62.0_rkind
-    real(rkind), parameter :: c06d1    = (9.0_rkind - 62.0_rkind*alpha06d1)/384.0_rkind / 5.0_rkind ! (25669_rkind*alpha06d1 - 6114_rkind) / 62736_rkind /5_rkind !(9.0_rkind - 62.0_rkind*alpha06d1)/384.0_rkind / 5.0_rkind
+    real(rkind), parameter :: alpha06d1= 9.0_rkind/62.0_rkind !89_rkind/ 400.0_rkind ! 75_rkind / 354_rkind !89_rkind/400_rkind !9.0_rkind/62.0_rkind ! 0.2225 !  9.0_rkind / 62.0_rkind
+    real(rkind), parameter :: c06d1    =  (9.0_rkind - 62.0_rkind*alpha06d1)/384.0_rkind / 5.0_rkind ! (25669_rkind*alpha06d1 - 6114_rkind) / 62736_rkind /5_rkind !(9.0_rkind - 62.0_rkind*alpha06d1)/384.0_rkind / 5.0_rkind
     real(rkind), parameter :: a06d1    = (225.0_rkind - 206.0_rkind*alpha06d1)/192.0_rkind !1.0_rkind/8.0_rkind*(9.0_rkind -6.0_rkind*alpha06d1) ! (37950_rkind - 39275_rkind*alpha06d1) / 31368_rkind !(225.0_rkind - 206.0_rkind*alpha06d1)/192.0_rkind !(63.0_rkind / 62.0_rkind) 
     real(rkind), parameter :: b06d1    = (414.0_rkind*alpha06d1 - 25.0_rkind) / 128.0_rkind / 3.0_rkind  !1.0_rkind/8.0_rkind*(22.0_rkind*alpha06d1-1.0_rkind*alpha06d1)/3.0_rkind ! (65115_rkind*alpha06d1 - 3550_rkind) / 20912_rkind / 3_rkind !(414.0_rkind*alpha06d1 - 25.0_rkind) / 128.0_rkind / 3.0_rkind !( 17.0_rkind / 62.0_rkind) / 3.0_rkind
 
@@ -86,7 +86,7 @@ module cd06Staggerstuff
     !! NOTE : The following variables are used for non-periodic 2nd derivative evaluation !!
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
     ! Incomplete
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     
     
     type cd06Stagger
@@ -781,19 +781,22 @@ contains
                select case(bc1)
                         ! left boundary (1:3)
                         case(1)
-                         !o k = 1,n3
-                         !  do j = 1, n2
+                         do k = 1,n3
+                           do j = 1, n2
 
-                         !      RHS(1,j,k) = zero
+                               RHS(1,j,k) = zero
                                 
-                         !      RHS(2,j,k) = a06*( f(2,j,k) - f(1,j,k) ) &
-                         !                 + b06*(f(3,j,k) - f(2,j,k) )
+                               RHS(2,j,k) = a06*( f(2,j,k) - f(1,j,k) ) &
+                                          + b06*(f(3,j,k) - f(2,j,k) )
 
-                         !      RHS(3,j,k) = a06*( f(3,j,k) - f(2,j,k) ) &
+                               RHS(3,j,k) = a06*( f(3,j,k) - f(2,j,k) ) &
+                                          + b06*( f(4,j,k) - f(1,j,k) )
                 
-                         !  enddo
-                        !enddo
+                           enddo
+                        enddo
+
                         
+                
                         !!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
 
@@ -803,12 +806,12 @@ contains
                            do k = 1, n3
                              do j = 1, n2
                                 RHS(1,j,k) =   a_np_1* f(1,j,k) + b_np_1*f(2,j,k)   &
-                                        +   c_np_1* f(3,j,k) + d_np_1*f(4,j,k)
+                                           +   c_np_1* f(3,j,k) + d_np_1*f(4,j,k)
 
                                 RHS(2,j,k) =   a_np_2*(f(2,j,k) - f(1,j,k))
 
                                 RHS(3,j,k) =   a_np_3*(f(3,j,k) - f(2,j,k)) &
-                                        +   b_np_3*(f(4,j,k) - f(1,j,k))
+                                           +   b_np_3*(f(4,j,k) - f(1,j,k))
                               end do
                            end do
                 end select
@@ -818,6 +821,20 @@ contains
                         case(1)
 
                         !!!!!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!
+                         do k = 1,n3
+                           do j = 1, n2
+
+                               RHS(this%n,j,k) = zero
+
+                               RHS(this%n-1,j,k) = a06*( f(this%n-1,j,k) - f(this%n-2,j,k) ) &
+                                                 + b06*(f(this%n,j,k) - f(this%n-3,j,k) )
+
+                               RHS(this%n-2,j,k) = a06*( f(this%n-2,j,k) - f(this%n-1,j,k) ) &
+                                                 + b06*( f(this%n-1,j,k) - f(this%n-2,j,k) )
+
+                           enddo
+                        enddo
+
  
                         case(-1)
 
@@ -906,7 +923,7 @@ contains
         real(rkind), dimension(n1,this%n,n3), intent(in) :: f
         real(rkind), dimension(n1,this%n,n3), intent(out) :: RHS
         character(len=*)  , intent(in)             :: dir
-        integer ::  k
+        integer ::  k,i
         real(rkind) :: a06, b06,a10,a102,a104,b10,b104,b102,c10,c102,c104,a101,c06
         ! Non-periodic boundary a, b and c
         real(rkind) :: a_np_3, b_np_3   
@@ -1053,6 +1070,21 @@ contains
                         ! left boundary (1:3)
                         case(1)
  
+                               do k = 1,n3
+                                  do i = 1, n1
+
+                                     RHS(i,1,k) = zero
+
+                                     RHS(i,2,k) = a06*( f(i,2,k) - f(i,1,k) ) &
+                                                + b06*(f(i,3,k) - f(i,2,k) )
+
+                                     RHS(i,3,k) = a06*( f(i,3,k) - f(i,2,k) ) &
+                                                + b06*( f(i,4,k) - f(i,1,k) )
+
+                                enddo
+                             enddo
+
+
                         !!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
                         !!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!
@@ -1073,6 +1105,21 @@ contains
                         !right boundary (n-2:n)
                         case(1)
                         !!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!
+                          do k = 1,n3
+                              do i = 1, n1
+
+                               RHS(i,this%n,k) = zero
+
+                               RHS(i,this%n-1,k) = a06*( f(i,this%n-1,k) - f(i,this%n-2,k) ) &
+                                                 + b06*(f(i,this%n,k) - f(i,this%n-3,k) )
+
+                               RHS(i,this%n-2,k) = a06*( f(i,this%n-2,k) - f(i,this%n-1,k) ) &
+                                                 + b06*( f(i,this%n-1,k) - f(i,this%n-2,k) )
+
+                           enddo
+                        enddo
+
+
                         case(-1)
                         !!!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!
                         case(0)
@@ -1109,7 +1156,7 @@ contains
         real(rkind) :: a_np_3, b_np_3   
         real(rkind) :: a_np_2, b_np_2
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
-
+        integer     :: i,j,k
         select case (this%periodic)
         case (.TRUE.)
             a06 = a06d1 * this%onebydx
@@ -1213,6 +1260,22 @@ contains
                     select case(bc1)
                         ! left boundary (1:3)
                         case(1)
+
+                           do j = 1,n2
+                             do i = 1,n1
+
+                                 RHS(i,j,1) = zero
+
+                                 RHS(i,j,2) = a06*( f(i,j,2) - f(j,j,1) ) &
+                                            + b06*(f(i,j,3) - f(i,j,2) )
+
+                                 RHS(i,j,3) = a06*( f(i,j,3) - f(i,j,2) ) &
+                                            +  b06*( f(i,j,4) - f(i,j,1) )
+
+                             enddo
+                           enddo
+
+
                         !!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
                         !!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1230,6 +1293,25 @@ contains
                     select case(bcn)
                         !right boundary (n-2:n)
                         case(1)
+
+                        do j = 1,n2
+                           do i = 1, n1
+
+                               RHS(i,j,this%n) = zero
+
+                               RHS(i,j,this%n-1) = a06*( f(i,j,this%n-1) - f(i,j,this%n-2) ) &
+                                                 + b06*(f(i,j,this%n) - f(i,j,this%n-3) )
+
+                               RHS(i,j,this%n-2) = a06*( f(i,j,this%n-2) - f(i,j,this%n-1) ) &
+                                                 + b06*( f(i,j,this%n-1) - f(i,j,this%n-2) )
+
+                           enddo
+                        enddo
+
+
+                         
+
+
                         !!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!
                         case(-1)
                         !!!!!!!!!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
