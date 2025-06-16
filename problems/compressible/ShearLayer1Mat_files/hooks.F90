@@ -11,8 +11,8 @@ module ShearLayer_data
     integer, parameter :: ns = 1
 
     ! Problem parameters
-    real(rkind) :: Mc = 0.6_rkind           ! Convective Mach
-    real(rkind) :: Re = 50.0_rkind          ! Reynolds number
+    real(rkind) :: Mc = 0.2_rkind           ! Convective Mach
+    real(rkind) :: Re = 1000.0_rkind          ! Reynolds number
     real(rkind) :: Sc = 1._rkind            ! Schmidt number
     real(rkind) :: p_ref = one              ! reference press
     real(rkind) :: T_ref = one              ! reference temp
@@ -30,7 +30,7 @@ module ShearLayer_data
     real(rkind):: Rgas=one
 
     ! Domain size data
-    real(rkind) :: Ly = 59._rkind, Lx=68._rkind, Lz=68._rkind
+    real(rkind) :: Ly = 200._rkind, Lx=150._rkind, Lz=75._rkind
     real(rkind) :: x1, y1, z1
     logical :: periodicx = .true., periodicy = .false., periodicz = .true.
 
@@ -255,8 +255,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind), dimension(:,:,:,:), intent(inout) :: mesh
     character(len=*),                intent(in)    :: inputfile
     logical,                         intent(in   ) :: xmetric, ymetric, zmetric
-    real(rkind), dimension(:,:,:  ), intent(inout) :: xi, eta, zeta
-    real(rkind), dimension(:      ), intent(inout) :: dxs, dys, dzs
+    real(rkind), dimension(:,:,:), intent(inout) :: xi, eta, zeta
+    real(rkind), dimension(:,:,:), intent(inout) :: dxs, dys, dzs
     real(rkind), dimension(:,:,:,:), target,intent(in):: xbuf, zbuf
     integer :: i,j,k,ioUnit, nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
     real(rkind) :: xfocus, xtau, xh, xstart
@@ -347,18 +347,25 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
 
     ! Grid width on stretched/uniform mesh
     call transpose_y_to_x(x,xtmp1,decomp)   ! Decomposition in x
-    xtmp2(1,:,:) = xtmp1(1,:,:) - x1
-    do i = 2, nx
-       xtmp2(i,:,:) =  xtmp1(i,:,:) - xtmp1(i-1,:,:)
+    do k = 1, decomp%xsz(3)
+     do j = 1, decomp%xsz(2)
+      xtmp2(1,j,k) = xtmp1(1,j,k) - x1
+      do i = 2, nx
+       xtmp2(i,j,k) =  xtmp1(i,j,k) - xtmp1(i-1,j,k)
+      end do
+     end do
     end do
    
-    do i = 1, decomp%ysz(1)
-       dxs(i) = xtmp2(ix1 + i -1, 1, 1)
-    end do
+    call transpose_x_to_y(xtmp2,dxs,decomp)   ! Decomposition in x
+    !do i = 1, decomp%ysz(1)
+    !   dxs(i) = xtmp2(ix1 + i -1, 1, 1)
+    !end do
 
-    dys(1) = y(1,1,1) - y1  ! Base decomposition in Y
-    do j=2, decomp%ysz(2)
-       dys(j) =  y(1,j,1) - y(1,j-1,1)
+    do k=1, decomp%ysz(3)
+     dys(:,1,k) = y(1,1,k) - y1  ! Base decomposition in Y
+     do j=2, decomp%ysz(2)
+       dys(:,j,k) =  y(1,j,1) - y(1,j-1,1)
+     end do
     end do
 
     call transpose_y_to_z(z,ztmp1,decomp)   ! Decomposition in z
@@ -367,15 +374,16 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
        ztmp2(:,:,k) =  ztmp1(:,:,k) - ztmp1(:,:,k-1)
     end do
    
-    do k = 1, decomp%ysz(3)
-       dzs(k) = ztmp2(1, 1, iz1 + k -1)
-    end do
+    call transpose_z_to_y(ztmp2,dzs,decomp)   ! Decomposition in x
+    !do k = 1, decomp%ysz(3)
+    !   dzs(k) = ztmp2(1, 1, iz1 + k -1)
+    !end do
 
     !!! Write grid width to a file
     write(outputfile, '(a,i0,a)') 'grid_x_', nrank, '.dat'
     open(11,file=outputfile,status='unknown')
     do i=1,decomp%ysz(1)
-       write(11,'(2(e19.12),1x)') x(i,1,1), dxs(i)
+       write(11,'(2(e19.12),1x)') x(i,1,1), dxs(i,1,1)
     enddo
     close(11)
 
@@ -383,7 +391,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
       write(outputfile, '(a)') 'grid_y.dat'
       open(10,file=outputfile,status='unknown')
       do j=1,decomp%ysz(2)
-         write(10,'(2(e19.12),1x)') y(1,j,1), dys(j)
+         write(10,'(2(e19.12),1x)') y(1,j,1), dys(1,j,1)
       enddo
       close(10)
     endif
@@ -391,7 +399,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     write(outputfile, '(a,i0,a)') 'grid_z_', nrank, '.dat'
     open(13,file=outputfile,status='unknown')
     do k=1,decomp%ysz(3)
-       write(13,'(2(e19.12),1x)') z(1,1,k), dzs(k)
+       write(13,'(2(e19.12),1x)') z(1,1,k), dzs(1,1,k)
     enddo
     close(13)
     end associate

@@ -52,7 +52,7 @@ module sgsmod_cgrid
         
         !! Metric terms
         logical :: xmetric, ymetric, zmetric
-        real(rkind), dimension(:,:,:), allocatable :: dxs, dys, dzs
+        real(rkind), dimension(:,:,:), pointer     :: dxs, dys, dzs
         !! model constant values/properties
         !real(rkind) :: camd_x, camd_y, camd_z, cmgm_x, cmgm_y, cmgm_z, c1_mgm , c2_mgm, PrCpfac
         real(rkind)                   :: PrCpfac
@@ -137,7 +137,7 @@ subroutine init(this, der, decomp, Cp, Pr, dx, dy, dz, inputfile, xbuf, ybuf, zb
   integer, intent(in) :: y_bc1, y_bcn
   integer, intent(in) :: z_bc1, z_bcn
   logical, intent(in) :: xmetric, ymetric, zmetric
-  real(rkind), dimension(:,:,:), intent(in) :: dxs, dys, dzs
+  real(rkind), dimension(:,:,:), intent(in), target :: dxs, dys, dzs
 
   integer :: SGSmodelID = 0, DynProcFreq = 1, DynamicProcedureType = 0, ierr, i, j, k
   real(rkind) :: Csgs = 1.0_rkind, Ctke = 0.003_rkind, ncWall = 1.0_rkind, PrSGS = 1.0_rkind, deltaRatio = 2.0_rkind
@@ -184,12 +184,12 @@ subroutine init(this, der, decomp, Cp, Pr, dx, dy, dz, inputfile, xbuf, ybuf, zb
    this%xmetric = xmetric
    this%ymetric = ymetric
    this%zmetric = zmetric
-   allocate( this%dxs(this%nxL,this%nyL,this%nzL))
-   allocate( this%dys(this%nxL,this%nyL,this%nzL))
-   allocate( this%dzs(this%nxL,this%nyL,this%nzL))
-   this%dxs = dxs
-   this%dys = dys
-   this%dzs = dzs
+   !allocate( this%dxs(this%nxL,this%nyL,this%nzL))
+   !allocate( this%dys(this%nxL,this%nyL,this%nzL))
+   !allocate( this%dzs(this%nxL,this%nyL,this%nzL))
+   this%dxs => dxs
+   this%dys => dys
+   this%dzs => dzs
    this%filter_in_x = filter_in_x;   this%filter_in_y = filter_in_y;   this%filter_in_z = filter_in_z
 
    allocate( this%deltaLES(this%nxL, this%nyL, this%nzL))
@@ -294,10 +294,13 @@ subroutine destroy(this)
    if(allocated(this%c2_mgm)  ) deallocate(this%c2_mgm)
    if(allocated(this%c1_mgm)  ) deallocate(this%c1_mgm)
    if(allocated(this%deltaLES)) deallocate(this%deltaLES)
-   if(allocated(this%dzs)  )    deallocate(this%dzs)
-   if(allocated(this%dys)  )    deallocate(this%dys)
-   if(allocated(this%dxs)  )    deallocate(this%dxs)
+   !if(allocated(this%dzs)  )    deallocate(this%dzs)
+   !if(allocated(this%dys)  )    deallocate(this%dys)
+   !if(allocated(this%dxs)  )    deallocate(this%dxs)
 
+   nullify(this%dzs)
+   nullify(this%dys)
+   nullify(this%dxs)
    nullify(this%zbuf)
    nullify(this%ybuf)
    nullify(this%xbuf)

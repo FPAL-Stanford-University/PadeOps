@@ -11,8 +11,8 @@ module Vortex_advection_cvl_data
     implicit none
     !!!! NOTE: Make sure to update this data according to the problem !!!!
     integer     :: ns     = 1
-    real(rkind) :: Lx     = 15.0_rkind
-    real(rkind) :: Ly     = 15.0_rkind
+    real(rkind) :: Lx     = 12.0_rkind
+    real(rkind) :: Ly     = 12.0_rkind
     real(rkind) :: p_inf  = 1.0_rkind
     real(rkind) :: rho_inf= 1.0_rkind
     real(rkind) :: M_inf  = 0.1_rkind
@@ -97,7 +97,7 @@ end module
 
 subroutine meshgen(decomp, dxi, deta, dzeta, mesh, inputfile, meshcvl, dxs, dys, dzs, xbuf, zbuf)
     use kind_parameters,  only: rkind
-    use constants,        only: half,one
+    use constants,        only: half,one,four,pi
     use decomp_2d,        only: decomp_info, nrank, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use Vortex_advection_cvl_data
 
@@ -156,9 +156,10 @@ subroutine meshgen(decomp, dxi, deta, dzeta, mesh, inputfile, meshcvl, dxs, dys,
         deta  = Ly/real(ny-0,rkind)   !periodic
         dzeta = dxi  !2D 
 
-        x1 = -Lx/2._rkind; xn = Lx/2._rkind
-        y1 = -Ly/2._rkind; yn = Ly/2._rkind
-        z1 = zero;         zn = zero
+        !x1 = -5.0_rkind;    xn = 15.0_rkind   
+        x1 = -Lx/2._rkind;  xn = Lx/2._rkind
+        y1 = -Ly/2._rkind;  yn = Ly/2._rkind
+        z1 = zero;          zn = zero
 
 
         do k=1,size(mesh,3)
@@ -177,27 +178,23 @@ subroutine meshgen(decomp, dxi, deta, dzeta, mesh, inputfile, meshcvl, dxs, dys,
           print*, '>>xfocus=',xfocus, '>>xtau=',xtau, '>>xstart=',xstart, '>>xh=',xh, '>>xflag=',xmetric_flag
           print*, '>>yfocus=',yfocus, '>>ytau=',ytau, '>>ystart=',ystart, '>>yh=',yh, '>>yflag=',ymetric_flag
        endif
-    
-        !!! ==== Uniform in x-y ==== !!!
-        x = xi
-        y = eta
-        z = zeta
-        !!!! ==== Stretching in x-y ==== !!!
+        
+        !!!! ==== Uniform in x-y ==== !!!
+        !x = xi
+        !y = eta
         !z = zeta
-        !call stretched_coordinates(decomp,x,xi,xmetric_flag,metric_params(1,1),&
-        !                            metric_params(1,2),metric_params(1,3),metric_params(1,4))
-        !call stretched_coordinates(decomp,y,eta,ymetric_flag,metric_params(2,1),&
-        !                            metric_params(2,2),metric_params(2,3),metric_params(2,4))
+        !!! ==== Stretching in x-y ==== !!!
+        z = zeta
+        call stretched_coordinates(decomp,x,xi,xmetric_flag,metric_params(1,1),&
+                                    metric_params(1,2),metric_params(1,3),metric_params(1,4))
+        call stretched_coordinates(decomp,y,eta,ymetric_flag,metric_params(2,1),&
+                                    metric_params(2,2),metric_params(2,3),metric_params(2,4))
         !! ==== Wavy mesh in x-y ==== !!!
         !do k=1,size(mesh,3)
         !   do j=1,size(mesh,2)
         !        do i=1,size(mesh,1)
-        !            x(i,j,k)   = x1 + (real( ix1 -1 + i - 1, rkind ) +
-        !            Ampx*sin(num*pi*real(iy1 -1 + j - 1, rkind)*deta/Ly +
-        !            real(iy1 -1 + i, rkind)*phi/(decomp%xsz(1)-1)) )* dxi
-        !            y(i,j,k)   = y1 + (real( iy1 -1 + j - 1, rkind ) +
-        !            Ampy*sin(num*pi*real( ix1 -1 + i - 1, rkind )*dxi/Lx +
-        !            real(iy1 -1 + j, rkind)*phi/(decomp%ysz(2)-1)) )* deta
+        !            x(i,j,k)   = x1 + (real( ix1 -1 + i - 1, rkind ) + Ampx*sin(num*pi*real(iy1 -1 + j - 1, rkind)*deta/Ly + real(iy1 -1 + i, rkind)*phi/(decomp%xsz(1)-1)) )* dxi
+        !            y(i,j,k)   = y1 + (real( iy1 -1 + j - 1, rkind ) + Ampy*sin(num*pi*real( ix1 -1 + i - 1, rkind )*dxi/Lx + real(iy1 -1 + j, rkind)*phi/(decomp%ysz(2)-1)) )* deta
         !            z(i,j,k)   = z1 + real( iz1 -1 + k - 1, rkind ) * dzeta
         !        end do
         !    end do
@@ -206,13 +203,12 @@ subroutine meshgen(decomp, dxi, deta, dzeta, mesh, inputfile, meshcvl, dxs, dys,
         !do k=1,size(mesh,3)
         !    do j=1,size(mesh,2)
         !        do i=1,size(mesh,1)
-        !            x(i,j,k)   = xi(i,j,k)
+        !            x(i,j,k)   = xi(i,j,k) 
         !            if (x(i,j,k) .le. four) then
         !               y(i,j,k) = eta(i,j,k)
         !            else
-        !               y(i,j,k) = tan(25.0_rkind * pi / 180.0_rkind) *
-        !               (x(i,j,k) - four) + eta(i,j,k)
-        !            end if
+        !               y(i,j,k) = tan(25.0_rkind * pi / 180.0_rkind) * (x(i,j,k) - four) + eta(i,j,k) 
+        !            end if 
         !            z(i,j,k)   = zeta(i,j,k)
         !        end do
         !    end do

@@ -1,18 +1,18 @@
 &INPUT
 
-inputdir   =  "/home/vsj/Codes/vortex_adv/test"      ! Directory for input files
-outputdir  = "/home/vsj/Codes/vortex_adv/test"      ! Directory for output files
+inputdir   =  "/home/anagha/Codes/vortex_advection/inclined"      ! Directory for input files
+outputdir  = "/home/anagha/Codes/vortex_advection/inclined"      ! Directory for output files
 
-nx = 32                 ! Number of points in X
-ny = 32                 ! Number of points in Y
-nz = 1                 ! Number of points in Z
+nx = 33                 ! Number of points in X (make change)
+ny = 33                 ! Number of points in Y (make change)
+nz = 1                  ! Number of points in Z
 
 dt = -1.0D-7              ! Fixed time step value (Set to negative to disable)
-tstop = 0.00188D0        ! Physical time to stop the simulation
+tstop = 100.0D0           ! Physical time to stop the simulation
 CFL = 0.7D0               ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
 
-tviz = 100.0D-0             ! Time between visualization dumps (Set to negative to disable)
+tviz = 1.0D-0             ! Time between visualization dumps (Set to negative to disable)
 vizprefix = "vortex_adv"   ! Prefix for the visualization files
 reduce_precision  = .false.
 
@@ -48,7 +48,7 @@ Ckap  = 0.0D0             ! LAD coeff
 Cdiff = 0.0D0             ! LAD coeff 
 Cy    = 0.0D0             ! LAD coeff 
 inviscid = .true.
-nrestart = 500           ! Number of steps between restart dumps
+nrestart = 5000           ! Number of steps between restart dumps
 compute_tke_budget = .false.
 compute_scale_decomposition = .false.
 forcing_cha = .false.
@@ -82,8 +82,8 @@ PrSGS                    =   0.7D0
 /
 &PROBINPUT
 ns     = 1
-Lx     = 15.0D0
-Ly     = 15.0D0
+Lx     = 20.0D0 !12-stretch,wavy,uniform  !20-incline plane
+Ly     = 16.0D0   !12-stretch,wavy,uniform  !16-inclined plane
 p_inf  = 1.0D0
 rho_inf= 1.0D0
 M_inf  = 0.1D0
@@ -93,6 +93,17 @@ R_v    = 1.0D0
 /
 
 &METRICS
-curvil_flag = 0
+xmetric_flag = 0   !0-Uniform,wavy,incline,    1-stretch
+ymetric_flag = 0   !0-Uniform,wavy,incline,    1-stretch
+zmetric_flag = 0
+metric_params(1,1) = 0.0D0          !! Include it only for stretching>> xmetric_flag=1
+metric_params(1,2) = 3.0D0 
+metric_params(1,3) = -6.0D0 
+metric_params(1,4) = 6.0D0           !1=focus, 2=tau, 3=start, 4=end
+metric_params(2,1) = 0.0D0
+metric_params(2,2) = 3.0D0 
+metric_params(2,3) = -6.0D0 
+metric_params(2,4) = 6.0D0           !1=focus, 2=tau, 3=start, 4=end
+curvil_flag = 2    !0-Uniform , 2-Rest of the cases
 /
 
