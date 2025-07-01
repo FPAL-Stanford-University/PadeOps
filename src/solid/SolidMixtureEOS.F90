@@ -1746,10 +1746,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                this%material(i)%outdiff = 0
                 call gradient(this%decomp,this%der,this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3))
                 call gradient(this%decomp,this%der,this%material(i)%VF,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3))
-                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,u,v,w,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),minYs(i),this%intSharp_cut,cVF,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%outdiff,this%material(i)%rhodiff_stagg,this%material(i)%adiff_stagg,x_bc,y_bc, z_bc,detady,dy_stretch)
-!               call this%LAD%get_diffusivity_Steve(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
-        
-                     
+!                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,u,v,w,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),minYs(i),this%intSharp_cut,cVF,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%outdiff,this%material(i)%rhodiff_stagg,this%material(i)%adiff_stagg,x_bc,y_bc, z_bc,detady,dy_stretch)
+!               call this%LAD%get_diffusivity_Aslani(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
+                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch)
 
                 this%material(i)%Ysdiff = 0.0
            endif
@@ -4688,18 +4687,16 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            call interpolateFV_z(this%decomp,this%interpMid,this%material(1)%VF,VF_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call gradFV_x(this%decomp,this%derStagg,VF_int(:,:,:,1),gradVF(:,:,:,1),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
            call gradFV_y(this%decomp,this%derStagg,VF_int(:,:,:,2),gradVF(:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-           call interpolateFV_x(this%decomp,this%interpMid,this%material(1)%p,p_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV_y(this%decomp,this%interpMid,this%material(1)%p,p_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV_z(this%decomp,this%interpMid,this%material(1)%p,p_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call gradFV_x(this%decomp,this%derStagg,p_int(:,:,:,1),this%gradp(:,:,:,1),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-           call gradFV_y(this%decomp,this%derStagg,p_int(:,:,:,2),this%gradp(:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!           call interpolateFV_x(this%decomp,this%interpMid,this%material(1)%p,p_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!           call interpolateFV_y(this%decomp,this%interpMid,this%material(1)%p,p_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!           call interpolateFV_z(this%decomp,this%interpMid,this%material(1)%p,p_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!           call gradFV_x(this%decomp,this%derStagg,p_int(:,:,:,1),this%gradp(:,:,:,1),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!           call gradFV_y(this%decomp,this%derStagg,p_int(:,:,:,2),this%gradp(:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-!           call
-!           gradFV_z(this%decomp,this%derStagg,VF_int(:,:,:,3),gradVF(:,:,:,3),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%
-           call gradFV_z(this%decomp,this%derStagg,VF_int(:,:,:,3),gradVF(:,:,:,3),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+          call gradFV_z(this%decomp,this%derStagg,VF_int(:,:,:,3),gradVF(:,:,:,3),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
        else
-           call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
+!           call gradient(this%decomp,this%der,this%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3)) !high order derivative
        endif
        this%gradVF = gradVF
    !   call gradient(this%decomp,this%der,this%material(1)%p,this%gradp(:,:,:,1),this%gradp(:,:,:,2),this%gradp(:,:,:,3))

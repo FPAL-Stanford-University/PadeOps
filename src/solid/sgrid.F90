@@ -2285,21 +2285,21 @@ contains
             !    endif
             ! else
             
-!            if((MOD(this%step,10) )  .LE. 1d-10) then
+!            if((MOD(this%step,50) )  .LE. 1d-10) then
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !              if(.NOT. this%use_Stagg) then
                   ! Filter the conserved variables
-!                 call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
-!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
-!                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-!               call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+                 call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+                 call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+                 call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+               call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
              
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                   ! Filter the individual species variables
-!                  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
+                  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
 !              end if 
            !  endif
 !          print *, "Filter"
@@ -3916,7 +3916,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         integer :: i
         
 
-!        call interpolateFV_x(this%decomp,this%interpMid,this%rho*this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!      call interpolateFV_x(this%decomp,this%interpMid,this%rho*this%e,e_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
 
         p_int = this%p_mid(:,:,:,1)
@@ -3971,7 +3971,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
        do i = 1,2
 
-       rhoe_prim = rhoe_prim +  VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*( p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
+         rhoe_prim = rhoe_prim +  VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*( p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
 !        num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf
 !        den = den + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
        enddo
