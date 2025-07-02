@@ -513,16 +513,23 @@ contains
         real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ydiv
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
-        integer :: i,j,k, one = 1
+        integer :: i,j,k, one = 1, bc1x,bcnx
 
         faces = 0.0
         xbuf  = 0.0
         xdiv  = 0.0
+        bc1x = 0
+        bcnx = 0
+
+        if (present(x_bc)) then
+            bc1x = x_bc(1)
+            bcnx = x_bc(2)
+        endif
 
         ! i nodes
         if(decomp%xsz(1).gt. one) then
            call transpose_y_to_x(nodes,xbuf,decomp)
-           call derStagg % ddxN2F(xbuf,xdiv,x_bc(1),x_bc(2)) !TODO: add BCs(onlycorrect if interface is away from boundary)
+           call derStagg % ddxN2F(xbuf,xdiv,bc1x,bcnx) !TODO: add BCs(onlycorrect if interface is away from boundary)
            call transpose_x_to_y(xdiv,faces,decomp)
         endif
 
@@ -543,13 +550,21 @@ contains
         real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ydiv
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
-        integer :: i,j,k, one = 1
+        integer :: i,j,k, one = 1,bc1x,bcnx
 
         faces = 0.0
 
+        bc1x = 0
+        bcnx = 0
+
+        if (present(y_bc)) then
+          bc1x = y_bc(1)
+          bcnx = y_bc(2)
+        endif
+
         ! j nodes
         if(decomp%ysz(2).gt.one) then
-           call derStagg % ddyN2F(nodes,faces,y_bc(1),y_bc(2)) !TODO: add BCs(only correct if interface is away from boundary)
+           call derStagg % ddyN2F(nodes,faces,bc1x,bcnx) !TODO: add BCs(only correct if interface is away from boundary)
         endif
 
 
@@ -569,14 +584,24 @@ contains
         real(rkind),dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: ydiv
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zdiv
-        integer :: i,j,k, one = 1
+        integer :: i,j,k, one = 1,bc1x,bcnx
 
         faces = 0.0
         zbuf  = 0.0
         zdiv = 0.0
+
+        bc1x = 0
+        bcnx = 0
+
+        if (present(x_bc)) then
+           bc1x = z_bc(1)
+           bcnx = z_bc(2)
+        endif
+
+
         if(decomp%zsz(3).gt.one) then
            call transpose_y_to_z(nodes,zbuf,decomp)
-           call derStagg % ddzN2F(zbuf,zdiv,z_bc(1),z_bc(2)) !TODO: add BCs(onlycorrect if interface is away from boundary)
+           call derStagg % ddzN2F(zbuf,zdiv,bc1x,bcnx) !TODO: add BCs(onlycorrect if interface is away from boundary)
            call transpose_z_to_y(zdiv,faces,decomp)
         endif
 

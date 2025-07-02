@@ -330,6 +330,19 @@ contains
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
             ! Incomplete
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            a (1) = zero
+            a (2) = alpha_hat
+            a (3) = alpha_hat
+
+            b (1) = one
+            b (2) = one
+            b (3) = one
+
+            c (1) = zero
+            c (2) = alpha_hat
+            c (3) = alpha_hat
+
+
 
         end select
 
@@ -350,7 +363,12 @@ contains
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
             ! Incomplete
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            c (this%n  ) = zero
 
+            b (this%n  ) = one
+
+            a (this%n  ) = zero
+ 
         end select
 
         cp(1) = c(1)/b(1)
@@ -787,7 +805,7 @@ contains
                                RHS(1,j,k) = zero
                                 
                                RHS(2,j,k) = a06*( f(2,j,k) - f(1,j,k) ) &
-                                          + b06*(f(3,j,k) - f(2,j,k) )
+                                          + b06*(f(3,j,k) - f(1,j,k) )
 
                                RHS(3,j,k) = a06*( f(3,j,k) - f(2,j,k) ) &
                                           + b06*( f(4,j,k) - f(1,j,k) )
@@ -827,10 +845,10 @@ contains
                                RHS(this%n,j,k) = zero
 
                                RHS(this%n-1,j,k) = a06*( f(this%n-1,j,k) - f(this%n-2,j,k) ) &
-                                                 + b06*(f(this%n,j,k) - f(this%n-3,j,k) )
+                                                 + b06*( f(this%n-1,j,k) - f(this%n-3,j,k) )
 
-                               RHS(this%n-2,j,k) = a06*( f(this%n-2,j,k) - f(this%n-1,j,k) ) &
-                                                 + b06*( f(this%n-1,j,k) - f(this%n-2,j,k) )
+                               RHS(this%n-2,j,k) = a06*( f(this%n-2,j,k) - f(this%n-3,j,k) ) &
+                                                 + b06*( f(this%n-1,j,k) - f(this%n-4,j,k) )
 
                            enddo
                         enddo
@@ -1070,13 +1088,13 @@ contains
                         ! left boundary (1:3)
                         case(1)
  
-                               do k = 1,n3
-                                  do i = 1, n1
+                            do k = 1,n3
+                               do i = 1, n1
 
                                      RHS(i,1,k) = zero
 
                                      RHS(i,2,k) = a06*( f(i,2,k) - f(i,1,k) ) &
-                                                + b06*(f(i,3,k) - f(i,2,k) )
+                                                + b06*( f(i,3,k) - f(i,1,k) )
 
                                      RHS(i,3,k) = a06*( f(i,3,k) - f(i,2,k) ) &
                                                 + b06*( f(i,4,k) - f(i,1,k) )
@@ -1111,10 +1129,10 @@ contains
                                RHS(i,this%n,k) = zero
 
                                RHS(i,this%n-1,k) = a06*( f(i,this%n-1,k) - f(i,this%n-2,k) ) &
-                                                 + b06*(f(i,this%n,k) - f(i,this%n-3,k) )
+                                                 + b06*(f(i,this%n-1,k) - f(i,this%n-3,k) )
 
-                               RHS(i,this%n-2,k) = a06*( f(i,this%n-2,k) - f(i,this%n-1,k) ) &
-                                                 + b06*( f(i,this%n-1,k) - f(i,this%n-2,k) )
+                               RHS(i,this%n-2,k) = a06*( f(i,this%n-2,k) - f(i,this%n-3,k) ) &
+                                                 + b06*( f(i,this%n-1,k) - f(i,this%n-4,k) )
 
                            enddo
                         enddo
@@ -1267,7 +1285,7 @@ contains
                                  RHS(i,j,1) = zero
 
                                  RHS(i,j,2) = a06*( f(i,j,2) - f(j,j,1) ) &
-                                            + b06*(f(i,j,3) - f(i,j,2) )
+                                            + b06*(f(i,j,3) - f(i,j,1) )
 
                                  RHS(i,j,3) = a06*( f(i,j,3) - f(i,j,2) ) &
                                             +  b06*( f(i,j,4) - f(i,j,1) )
@@ -1300,10 +1318,10 @@ contains
                                RHS(i,j,this%n) = zero
 
                                RHS(i,j,this%n-1) = a06*( f(i,j,this%n-1) - f(i,j,this%n-2) ) &
-                                                 + b06*(f(i,j,this%n) - f(i,j,this%n-3) )
+                                                 + b06*(f(i,j,this%n-1) - f(i,j,this%n-3) )
 
-                               RHS(i,j,this%n-2) = a06*( f(i,j,this%n-2) - f(i,j,this%n-1) ) &
-                                                 + b06*( f(i,j,this%n-1) - f(i,j,this%n-2) )
+                               RHS(i,j,this%n-2) = a06*( f(i,j,this%n-2) - f(i,j,this%n-3) ) &
+                                                 + b06*( f(i,j,this%n-1) - f(i,j,this%n-4) )
 
                            enddo
                         enddo
