@@ -2004,12 +2004,12 @@ contains
 
 
         call this%get_conserved()
-        Qtmp  = this%Wcnsrv
-        Qtmpt = this%tsim
+        Qtmp  = zero !this%Wcnsrv
+        Qtmpt = zero !this%tsim
         pmix  = zero
      
 
-       do isub = 1,  RK3_steps
+       do isub = 1,  RK45_steps
 
 !           Ut =mod(0.6*this%tsim,2.0)
 !           eta = mod(this%y - Ut, 2.0)
@@ -2164,7 +2164,9 @@ contains
 
 
             !!!!!!!!!!!!!! UNCOMMENT            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-           this%Wcnsrv = RK3_B(isub)*(this%Wcnsrv + this%dt*rhs) + RK3_A(isub)*Qtmp
+!          this%Wcnsrv = RK3_B(isub)*(this%Wcnsrv + this%dt*rhs) + RK3_A(isub)*Qtmp
+            Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
+            this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
            !!!!!!!!!!!!!!!!!!! UNCOMMENT       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             ! calculate sources if they are needed
@@ -2227,8 +2229,11 @@ contains
            ! this%mix%material(1)%eh = 1
            ! this%mix%material(2)%eh = 1
 
-            this%tsim = RK3_B(isub)*( this%tsim + this%dt)  + RK3_A(isub)*Qtmpt
+!            this%tsim = RK3_B(isub)*( this%tsim + this%dt)  + RK3_A(isub)*Qtmpt
 
+            
+            Qtmpt = this%dt + RK45_A(isub)*Qtmpt
+            this%tsim = this%tsim + RK45_B(isub)*Qtmpt
             !this%p = 1
             !this%w = 0
             !this%e = 2.941
