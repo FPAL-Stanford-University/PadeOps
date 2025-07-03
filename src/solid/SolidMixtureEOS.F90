@@ -5131,7 +5131,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
      !  enddo
 
         !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
-     this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
+     this%surfaceTension_e = -6*this%surfaceTension_coeff*this%fmask*this%kappa*(this%material(1)%advectVF)  !u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
      ! call divergence(this%decomp,this%der,u,v,w,divu,x_bc,y_bc,z_bc)
      ! call divergence(this%decomp,this%der,u*this%material(1)%VF,v*this%material(1)%VF,w*this%material(1)%VF,divphiu,x_bc,y_bc,z_bc)
     

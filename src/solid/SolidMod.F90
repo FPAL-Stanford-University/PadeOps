@@ -39,7 +39,7 @@ module SolidMod
         real(rkind), dimension(:,:,:), allocatable :: eh
         real(rkind), dimension(:,:,:), allocatable :: eel
         real(rkind), dimension(:,:,:), allocatable ::  u_int,v_int,fluxYs, w_int
-        real(rkind), dimension(:,:,:), allocatable ::  YsLAD, vfLAD,YsDiffLAD
+        real(rkind), dimension(:,:,:), allocatable ::  YsLAD, vfLAD,YsDiffLAD,advectVF
         real(rkind), dimension(:,:,:,:), allocatable :: g,g_t,g_p,rg,rg_t,rg_p,VF_int,Ys_int, rho_int, rhoYs_mid, VF_mid,Ys_mid,rho_mid
         real(rkind), dimension(:,:,:),   allocatable :: e_p,e_pp,pe,rpe
         real(rkind), dimension(:,:,:),   allocatable :: curl_e,curl_t,curl_p,det_e,det_t,det_p
@@ -595,6 +595,10 @@ contains
         if( allocated( this%YsLAD ) ) deallocate( this%YsLAD )
         allocate( this%YsLAD(this%nxp,this%nyp,this%nzp) )
 
+         ! Allocate material diffusive flux
+        if( allocated( this%advectVF ) ) deallocate( this%advectVF )
+        allocate( this%advectVF(this%nxp,this%nyp,this%nzp) )
+
         ! Allocate material diffusive flux
         if( allocated( this%YsDiffLAD ) ) deallocate( this%YsDiffLAD )
         allocate( this%YsDiffLAD(this%nxp,this%nyp,this%nzp) )
@@ -770,6 +774,7 @@ contains
 
         if( allocated( this%YsDiffLAD )   ) deallocate( this%YsDiffLAD )
         if( allocated( this%YsLAD )   ) deallocate( this%YsLAD )
+        if( allocated( this%advectVF )   ) deallocate( this%advectVF )
         if( allocated( this%vfLAD )   ) deallocate( this%vfLAD )
         if( allocated( this%Ji )   ) deallocate( this%Ji )
         if( allocated( this%Ji_phi )   ) deallocate( this%Ji_phi )
@@ -5336,7 +5341,7 @@ contains
 !          call gradient(this%decomp,this%der,this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
 
            rhsVF = 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx + v*dVFdy + w*dVFdz) + this%vfLAD !+ src*div_u ! - (1-alpha)*(this%VF*divu_node + u*dVFdx + v*dVFdy + w*dVFdz)di
-
+           this%advectVF =  ( 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx +v*dVFdy + w*dVFdz) )
 !           rhsVF = div_uVF + this%vfLAD + this%VF*div_u 
         endif
 
@@ -5498,6 +5503,7 @@ contains
 !          gradient(this%decomp,this%der,this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
 
           rhsVF = 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx + v*dVFdy + w*dVFdz) + this%vfLAD + this%intSharp_aFV
+          this%advectVF =  ( 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx +v*dVFdy + w*dVFdz) )
 !          rhsVF = div_uVF + this%vfLAD + this%VF*div_u  + this%intSharp_aFV ! + this%intSharp_aDiffFV
       endif
 
