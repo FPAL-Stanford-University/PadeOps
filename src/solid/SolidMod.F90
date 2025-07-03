@@ -5340,9 +5340,11 @@ contains
            call gradFV_z(this%decomp,this%derStagg,this%VF_mid(:,:,:,3),dVFdz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 !          call gradient(this%decomp,this%der,this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
 
-           rhsVF = 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx + v*dVFdy + w*dVFdz) + this%vfLAD !+ src*div_u ! - (1-alpha)*(this%VF*divu_node + u*dVFdx + v*dVFdy + w*dVFdz)di
-           this%advectVF =  ( 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx +v*dVFdy + w*dVFdz) )
+!           rhsVF = 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx + v*dVFdy + w*dVFdz) + this%vfLAD !+ src*div_u ! - (1-alpha)*(this%VF*divu_node + u*dVFdx + v*dVFdy + w*dVFdz)di
+!           this%advectVF =  ( 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx +v*dVFdy + w*dVFdz) )
 !           rhsVF = div_uVF + this%vfLAD + this%VF*div_u 
+            rhsVF = div_uVF + this%vfLAD + this%VF*div_u  ! + this%intSharp_aDiffFV
+            this%advectVF = div_uVF + this%VF*div_u
         endif
 
 
@@ -5502,9 +5504,11 @@ contains
 !          call
 !          gradient(this%decomp,this%der,this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
 
-          rhsVF = 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx + v*dVFdy + w*dVFdz) + this%vfLAD + this%intSharp_aFV
-          this%advectVF =  ( 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx +v*dVFdy + w*dVFdz) )
-!          rhsVF = div_uVF + this%vfLAD + this%VF*div_u  + this%intSharp_aFV ! + this%intSharp_aDiffFV
+!          rhsVF = 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx + v*dVFdy + w*dVFdz) + this%vfLAD + this%intSharp_aFV
+!          this%advectVF =  ( 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx +v*dVFdy + w*dVFdz) )
+
+           rhsVF = div_uVF + this%vfLAD + this%VF*div_u  + this%intSharp_aFV ! + this%intSharp_aDiffFV
+           this%advectVF = div_uVF + this%VF*div_u
       endif
 
     end subroutine

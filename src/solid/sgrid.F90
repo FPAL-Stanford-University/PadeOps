@@ -4846,7 +4846,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_rho.",this%step
         fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
         call decomp_2d_write_one(2,this%rho,fname, this%decomp)
+
         if (nrank == 0) then
+            write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
             fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
             OPEN(UNIT=10, FILE=trim(fname))
             write(10,"(100g15.5)") this%tsim

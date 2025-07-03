@@ -4648,7 +4648,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
         logical,                                            intent(in) :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,udiv, divuphi,VFmag,tanhmask, GVFmag, GPHImag, mask2, updatedKappa, weight, kappaSum, phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2,divu,divphiu,dirac,H,tmp1,tmp2,tmp3
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi, gradxi, gradVFk, p_int, VF_int, gradH,u_int, uphi_int, gradFV
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi, gradxi, gradVFk, p_int, VF_int, gradH,u_int, uphi_int, gradFV,gradVF_l
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
         real(rkind)   :: cut_off = 1d-6
 	integer :: iflag = one
@@ -5112,16 +5112,22 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
           ! else if(this%use_D04) then
           !    call laplacian(this%decomp,this%derD04,this%material(1)%VF, lapVF,[0,0],[0,0],[0,0])
      !      else
-              call laplacian(this%decomp,this%derCD06,this%material(1)%VF, lapVF, [0,0],[0,0],[0,0]) 
+     !        call laplacian(this%decomp,this%derCD06,this%material(1)%VF, lapVF, [0,0],[0,0],[0,0]) 
      !      end if
-           mu =6*this%surfaceTension_coeff/this%intSharp_eps*this%material(1)%VF*(1-this%material(1)%VF)*(1-2*this%material(1)%VF) &
-            - 6*this%surfaceTension_coeff*this%intSharp_eps*lapVF
 
-           this%surfaceTension_f(:,:,:,1) = mu*gradVF(:,:,:,1)
-           this%surfaceTension_f(:,:,:,2) = mu*gradVF(:,:,:,2)
-           this%surfaceTension_f(:,:,:,3) = mu*gradVF(:,:,:,3)
-           this%fmask = lapVF
-           this%kappa = mu
+           call gradFV_N2Fx(this%decomp,this%derStaggd02,this%material(1)%VF,gradVF_l(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call gradFV_N2Fy(this%decomp,this%derStaggd02,this%material(1)%VF,gradVF_l(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call gradFV_N2Fz(this%decomp,this%derStaggd02,this%material(1)%VF,gradVF_l(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call divergenceFV(this,gradVF_l,lapVF,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)   
+
+           mu =1_rkind/this%intSharp_eps*this%material(1)%VF*(1-this%material(1)%VF)*(1-2*this%material(1)%VF) &
+            - this%intSharp_eps*lapVF
+
+           this%surfaceTension_f(:,:,:,1) = 6*this%surfaceTension_coeff*mu*gradVF(:,:,:,1)
+           this%surfaceTension_f(:,:,:,2) = 6*this%surfaceTension_coeff*mu*gradVF(:,:,:,2)
+           this%surfaceTension_f(:,:,:,3) = 6*this%surfaceTension_coeff*mu*gradVF(:,:,:,3)
+           this%fmask = 1.0
+           this%kappa = -mu
         endif
 
      !  do i = 1, 3
@@ -5131,7 +5137,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
      !  enddo
 
         !TODO: Use this%surfaceTension_f to compute this%surfaceTension_e
-     this%surfaceTension_e = -6*this%surfaceTension_coeff*this%fmask*this%kappa*(this%material(1)%advectVF)  !u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
+     this%surfaceTension_e = u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) !-6*this%surfaceTension_coeff*this%fmask*this%kappa*(this%material(1)%advectVF)  !u*this%surfaceTension_f(:,:,:,1) +v*this%surfaceTension_f(:,:,:,2) +w*this%surfaceTension_f(:,:,:,3) 
      ! call divergence(this%decomp,this%der,u,v,w,divu,x_bc,y_bc,z_bc)
      ! call divergence(this%decomp,this%der,u*this%material(1)%VF,v*this%material(1)%VF,w*this%material(1)%VF,divphiu,x_bc,y_bc,z_bc)
     
