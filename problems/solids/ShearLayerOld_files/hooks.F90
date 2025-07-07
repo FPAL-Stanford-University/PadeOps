@@ -469,7 +469,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         yphys = Lr*yphys
       
 
-        sigma1 = -40000 ! -2400 ! -80000
+        sigma1 = -81000 ! -2400 ! -80000
 
         where(yphys .LE. -4.5)
            sponge(:,:,:,1) = sigma1*( (yphys + 4.5)/1.5)**2.0
