@@ -959,34 +959,37 @@ stop
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: mixRho, mixE
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: mixP
-
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: ehmix,rhom, e_species, delta_max, delta_min, del_e, delta_e1, delta_e2, rhom2, rhom1,denom
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rho1gambyone, rho2gambyone, diffPInf,  tmp, num
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rho1gambyone, rho2gambyone, diffPInf,  tmp, num,Ee,Rho
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: VF1, VF2,mixrhoE,fac
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF
         integer :: imat, i,j,k,a(3), s = 2
-        real(rkind) :: gamfac,eps2=1d-8,  eps1 = 1D-8, minVF = 1D-8, e = 1d-100,thresh, cutoff
+        real(rkind) :: gamfac
+        real(rkind) ::eps2=1d-8,  eps1 = 1D-8, minVF = 1D-8, e = 1d-100,thresh, cutoff
 
         ! print *, '---'
         ! subtract elastic energy to determine hydrostatic energy. Temperature
         ! is assumed a function of only hydrostatic energy. Not sure if this is
         ! correct.
-        ehmix = mixE*mixRho
+        Ee = mixE
+        Rho = mixRho
+!        call filter3D(this%decomp,this%fil,Ee,1,this%x_bc,this%y_bc,this%z_bc)
+!        call filter3D(this%decomp,this%fil,Rho,1,this%x_bc,this%y_bc,this%z_bc)
+        ehmix = Ee*Rho !mixE*mixRho
         mixrhoE = ehmix
      !   ehmix = ehmix*mixRho
         tmp = zero
-     !   call filter3D(this%decomp, this%fil, ehmix, 1,this%x_bc,this%y_bc,this%z_bc)
-        thresh = 1d-16
+!        thresh = 1d-16
         denom = zero
 
-!          call filter3D(this%decomp, this%fil,ehmix,1,this%x_bc,this%y_bc,this%z_bc)
+!        call filter3D(this%decomp, this%gfil,ehmix,1,this%x_bc,this%y_bc,this%z_bc)
 
         do imat = 1,2
 
          VF(:,:,:,imat) = this%material(imat)%VF 
-!         call filter3D(this%decomp,this%gfil,VF(:,:,:,imat),1,this%x_bc,this%y_bc,this%z_bc)
+ !        call filter3D(this%decomp,this%fil,VF(:,:,:,imat),1,this%x_bc,this%y_bc,this%z_bc)
         enddo
-           
+        VF(:,:,:,2) = 1_rkind - VF(:,:,:,1)          
 !        where( this%material(1)%VF .GE. 1d-10 .AND. this%material(1)%VF .LE. 1-1d-10 )
 
 !            VF(:,:,:,1) = this%material(1)%VF
@@ -1036,7 +1039,9 @@ stop
 !          mixP = mixE*mixRho*(this%material(2)%hydro%gam - 1 ) - this%material(2)%hydro%gam*this%material(2)%hydro%Pinf
 
 !       elsewhere
-          mixP = mixE*denom/tmp !ehmix/tmp
+! call filter3D(this%decomp, this%fil, ehmix,1,this%x_bc,this%y_bc,this%z_bc)
+! call filter3D(this%decomp, this%fil, tmp,1,this%x_bc,this%y_bc,this%z_bc)
+          mixP = ehmix/tmp !mixE*denom/tmp !ehmix/tmp
 !       endwhere
 !       call filter3D(this%decomp, this%fil, mixP,1,this%x_bc,this%y_bc,this%z_bc)       
 

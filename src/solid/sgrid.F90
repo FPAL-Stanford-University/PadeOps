@@ -1609,9 +1609,11 @@ contains
         call this%getRHS_P(rhsP,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         ! advance sub-step
-        if(isub==1) Qtmpp = this%p                   ! not really needed since RK45_A(1) = 0
-        this%p = RK3_B(isub)*(this%p + dt*rhsP) + RK3_A(isub)*Qtmpp
- 
+        if(isub==1) Qtmpp = 0 !this%p                   ! not really needed since RK45_A(1) = 0
+!       this%p = RK3_B(isub)*(this%p + dt*rhsP) + RK3_A(isub)*Qtmpp
+        Qtmpp = dt*rhsP + RK45_A(isub)*Qtmpp
+        this%p =  this%p  + RK45_B(isub)*Qtmpp
+
         do i = 1,2
 
          this%mix%material(i)%p = this%p
@@ -1987,7 +1989,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp             ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: divu,Qtmpp, pmix ! Velocity divergence for species energy eq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork         ! Viscous work term for species energy eq
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource, tmp, eta, tmp2,rhoe   ! Source term for possible use in VF, g eh eqns
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource, tmp, eta, tmp2,rhofil,efil,m1fil,m2fil,TEfil,rhoufil,rhovfil,rhowfil ! Source term for possible use in VF, g eh eqns
         integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -2204,7 +2206,7 @@ contains
             if(this%use_Stagg) then
                 
                call this%mix%update_Ys(isub,this%dt,this%rho,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%sos,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)               ! Volume Fraction
-
+!               call this%update_P(Qtmpp,isub,this%dt,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
              
             !   call this%mix%material(1)%update_specYs(isub,this%dt,this%rho,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)  
             else
@@ -2284,22 +2286,22 @@ contains
             !    endif
             ! else
             
-            if((MOD(this%step,500) )  .LE. 1d-10) then
+!            if((MOD(this%step,500) )  .LE. 1d-10) then
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !              if(.NOT. this%use_Stagg) then
                   ! Filter the conserved variables
-                 call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-                 call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
-                 call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
-                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
 !               call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
              
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                   ! Filter the individual species variables
-                  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
-            end if 
+!                  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
+!            end if 
            !  endif
 !          print *, "Filter"
 !          endif
@@ -2359,15 +2361,22 @@ contains
                !call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T, isub)
                ! do i=1,2
 
-               !    call this%mix%equilibrateTemperature(this%rho, this%e, this%p, this%T, isub, RK45_steps) 
-                 call this%mix%equilibratePressureTemperature_new(this%rho, this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
+               !    call this%mix%equilibrateTemperature(this%rho, this%e, this%p, this%T, isub, RK45_steps)
+               call this%mix%equilibratePressureTemperature_new(this%rho,this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
                !     call this%mix%pressureLiquidGas(this%rho, this%e, this%p)
                !call this%mix%get_pmix(this%p)                         ! Get mixture pressure
                !call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
                ! enddo
 
             elseif (this%pEqb) then
-               call this%mix%equilibratePressure(this%rho, this%e, this%p)
+
+
+              call this%mix%equilibratePressure(this%rho,this%e, this%p)
+!             do imat = 1, 2
+!               this%mix%material(imat)%p = this%p
+!               call this%mix%material(imat)%get_ehydroT_from_p(this%rho)
+!             enddo
+
                !call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc,this%z_bc)
               ! call this%mix%updateP_VF(this%rho,this%e,this%p)
 
@@ -3997,7 +4006,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux 
         this%xflux_x = flux
-
         flux =0.0
         buff =rhov_int - tauxy !y-momentum
 
