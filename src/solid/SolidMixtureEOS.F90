@@ -2327,8 +2327,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
             call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%material(i)%Ys,gradRYs_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
 
-            call interpolateFV(this%decomp,this%interpMid,this%material(i)%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call interpolateFV(this%decomp,this%interpMid,this%material(i)%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+            call interpolateFV(this%decomp,this%interpMid02,this%material(i)%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+            call interpolateFV(this%decomp,this%interpMid02,this%material(i)%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
             call interpolateFV(this%decomp,this%interpMid,p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
             call interpolateFV(this%decomp,this%interpMid,hi,hi_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 

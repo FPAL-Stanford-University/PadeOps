@@ -846,6 +846,7 @@ contains
         VF_bound = this%Cdiff*VF_bound
         rhodiff = max(rhodiff, adiffstar,outb,ytmp5,VF_bound) ! + max(outb, ytmp5)
         call this%filter(rhodiff, x_bc, y_bc, z_bc)
+!        call this%filter(rhodiff, x_bc, y_bc, z_bc)
         adiff   = rhodiff
 
     end subroutine

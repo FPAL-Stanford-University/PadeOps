@@ -4802,7 +4802,7 @@ contains
    !       call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         !   call interpolateFV(this%decomp,this%interpMid,rhom,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call interpolateFV(this%decomp,this%interpMid02,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,sos,sos_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,this%VF,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
     !       rhodiff_int   = 1d3*sos_int*( half*(abs(VF_int)-(one) + abs((VF_int)-(one))) )*(dx*dy*dx)**(1.0/3.0)
@@ -5397,7 +5397,7 @@ contains
           call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dVFdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dVFdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dVFdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call interpolateFV(this%decomp,this%interpMid02,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call interpolateFV(this%decomp,this%interpMid,sos,sos_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
          

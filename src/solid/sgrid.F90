@@ -1989,7 +1989,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp             ! Temporary variable for RK45
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: divu,Qtmpp, pmix ! Velocity divergence for species energy eq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork         ! Viscous work term for species energy eq
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource, tmp, eta, tmp2,rhofil,efil,m1fil,m2fil,TEfil,rhoufil,rhovfil,rhowfil ! Source term for possible use in VF, g eh eqns
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource, tmp, eta, tmp2,rhofil,efil,m1fil,m2fil,TEfil,rhoufil,rhovfil,rhowfil,VFfil,H1,H2 
         integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -2290,21 +2290,50 @@ contains
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !              if(.NOT. this%use_Stagg) then
                   ! Filter the conserved variables
-!                 call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
-!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
-!                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-!               call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+                 call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+                 call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+                 call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+!              call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
              
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                   ! Filter the individual species variables
-!                  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
+                  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
 !            end if 
            !  endif
 !          print *, "Filter"
 !          endif
+
+!           H1 = 1_rkind / ( 1_rkind + exp((LOG10(abs(this%mix%material(1)%VF) ) - LOG10(1d-6) ) /(4_rkind *this%dx ) )) 
+!           H2 = 1_rkind / ( 1_rkind + exp((LOG10(abs(1_rkind-this%mix%material(1)%VF) ) - LOG10(1d-6) ) /(4_rkind *this%dx ) ))
+
+!           TEfil = this%Wcnsrv(:,:,:, TE_index  )
+!           rhoufil = this%Wcnsrv(:,:,:,mom_index  )
+!           rhovfil = this%Wcnsrv(:,:,:,mom_index+1)
+!           rhowfil = this%Wcnsrv(:,:,:,mom_index+2) 
+           
+!           m1fil = this%mix%material(1)%consrv(:,:,:,1)
+!           m2fil = this%mix%material(2)%consrv(:,:,:,1)
+!           VFfil = this%mix%material(1)%VF
+!           call this%filter(rhoufil, this%fil,1,-this%x_bc, this%y_bc, this%z_bc)
+!           call this%filter(rhovfil, this%fil, 1,this%x_bc,-this%y_bc, this%z_bc)
+!           call this%filter(rhowfil, this%fil, 1,this%x_bc, this%y_bc,-this%z_bc)
+!           call this%filter(TEfil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+!           call this%filter(m1fil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+!           call this%filter(m2fil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+!           call this%filter(VFfil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+          
+!           this%Wcnsrv(:,:,:,mom_index  ) = (H1+H2)*this%Wcnsrv(:,:,:,mom_index  )  + (1-(H1+H2) )*rhoufil
+!           this%Wcnsrv(:,:,:,mom_index+1  ) = (H1+H2)*this%Wcnsrv(:,:,:,mom_index+1)  + (1-(H1+H2) )*rhovfil         
+!           this%Wcnsrv(:,:,:,mom_index+2  ) = (H1+H2)*this%Wcnsrv(:,:,:,mom_index+2)  + (1-(H1+H2) )*rhowfil
+!           this%Wcnsrv(:,:,:,TE_index  ) = (H1+H2)*this%Wcnsrv(:,:,:,TE_index )  + (1-(H1+H2) )*TEfil
+!           this%mix%material(1)%consrv(:,:,:,1) = (H1+H2)*this%mix%material(1)%consrv(:,:,:,1) + (1-(H1+H2))*m1fil
+!           this%mix%material(2)%consrv(:,:,:,1) = (H1+H2)*this%mix%material(2)%consrv(:,:,:,1) + (1-(H1+H2))*m1fil
+!           this%mix%material(1)%VF = (H1+H2)*this%mix%material(1)%VF + (1-(H1+H2))*VFfil
+!           this%mix%material(2)%VF = 1.0 - this%mix%material(1)%VF
+
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             if(this%use_CnsrvSurfaceTension) then
 
