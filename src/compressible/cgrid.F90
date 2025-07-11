@@ -11,7 +11,7 @@ module CompressibleGrid
     use io_hdf5_stuff,         only: io_hdf5
     use IdealGasEOS,           only: idealgas
     use MixtureEOSMod,         only: mixture
-    use MultiBlockTopology,    only: multiblocktopol
+    use MultiBlockTopologyMod, only: multiblocktopol
     use ShearViscosityMod,     only: shearViscosity
     use TKEBudgetMod,          only: tkeBudget
     use ScaleDecompositionMod, only: scaleDecomposition
@@ -378,7 +378,7 @@ contains
 
         if(this%useMultiBlock) then
             allocate(this%mbtopology)
-            call this%mbtopology%init()
+            call this%mbtopology%init(this%decomp, this%mesh, inputfile, this%xbuf, this%zbuf)
         end if
 
         ! Allocate der
@@ -386,14 +386,27 @@ contains
         allocate(this%der)
 
         ! Initialize derivatives 
-        call this%der%init(                           this%decomp, &
+        if(this%useMultiBlock) then
+          call this%der%init(                           this%decomp, &
                            this%dx,       this%dy,        this%dz, &
                          periodicx,     periodicy,      periodicz, &
                       derivative_x,  derivative_y,   derivative_z, &
                             this%x,        this%y,         this%z, &
                            xmetric,       ymetric,        zmetric, &
                            .false.,     inputfile,                 &
-                           this%xi,      this%eta,      this%zeta, this%xbuf, this%zbuf)
+                           this%xi,      this%eta,      this%zeta, &
+                           this%xbuf,   this%zbuf,      this%mbtopology)
+        else
+          call this%der%init(                           this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                      derivative_x,  derivative_y,   derivative_z, &
+                            this%x,        this%y,         this%z, &
+                           xmetric,       ymetric,        zmetric, &
+                           .false.,     inputfile,                 &
+                           this%xi,      this%eta,      this%zeta, &
+                           this%xbuf,   this%zbuf)
+        endif
 
         ! Allocate fil and gfil
         if ( allocated(this%fil) ) deallocate(this%fil)

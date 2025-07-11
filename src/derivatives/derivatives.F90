@@ -7,6 +7,7 @@ module DerivativesMod
     use exits,    only: gracefulExit, message
     use decomp_2d,only: decomp_info, nrank, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use constants, only: zero, one, half
+    use MultiBlockTopologyMod, only: multiblocktopol
 
     implicit none
     private 
@@ -38,8 +39,7 @@ module DerivativesMod
         integer                        :: nxg, nyg, nzg ! Global sizes
         integer, dimension(3)          :: xsz, ysz, zsz ! Local decomposition sizes
 
-        integer :: num_blocks
-        integer, allocatable, dimension(:,:) :: mbtopo
+        class(multiblocktopol), pointer :: mbtopology
         
         logical                        :: initialized = .false. 
         contains
@@ -246,7 +246,7 @@ contains
                                  x,          y,          z, &
                            xmetric,    ymetric,    zmetric, &
                        curvilinear,  inputfile, xi, eta,    &
-                              zeta,       xbuf, zbuf, mbtopo)
+                              zeta,       xbuf, zbuf, mbtopology)
                        
         
         class(derivatives), intent(inout)          :: this
@@ -264,7 +264,7 @@ contains
         real(rkind), intent(in), dimension(:,:,:), optional :: x, y, z
         real(rkind), intent(in), optional, dimension(:,:,:) :: xi, eta, zeta
         real(rkind), target,intent(in), optional, dimension(:,:,:,:) :: xbuf, zbuf
-        integer,     intent(in), dimension(:,:), optional :: mbtopo
+        class(multiblocktopol), intent(in), optional, target :: mbtopology
         real(rkind), dimension(:,:,:), pointer :: xtmp1, xtmp2, ztmp1, ztmp2
 
         integer :: imb
@@ -294,29 +294,31 @@ contains
         this%ysz = gp%ysz
         this%zsz = gp%zsz
 
-        if(present(mbtopo)) then
-            this%num_blocks = size(mbtopo, 2)
-            allocate(this%mbtopo(6, this%num_blocks))
-            do imb = 1, this%num_blocks
-                this%mbtopo(1:6, imb) = mbtopo(1:6, imb)
-            enddo
+        if(present(mbtopology)) then
+            this%mbtopology => mbtopology
+            !this%num_blocks = size(mbtopo, 2)
+            !allocate(this%mbtopo(6, this%num_blocks))
+            !do imb = 1, this%num_blocks
+            !    this%mbtopo(1:6, imb) = mbtopo(1:6, imb)
+            !enddo
         else
-            this%num_blocks = 1
-            allocate(this%mbtopo(6, this%num_blocks))
-            this%mbtopo(1, 1) = 1;      this%mbtopo(2, 1) = this%nxg
-            this%mbtopo(3, 1) = 1;      this%mbtopo(4, 1) = this%nyg
-            this%mbtopo(5, 1) = 1;      this%mbtopo(6, 1) = this%nzg
+            this%mbtopology => null()
+            !this%num_blocks = 1
+            !allocate(this%mbtopo(6, this%num_blocks))
+            !this%mbtopo(1, 1) = 1;      this%mbtopo(2, 1) = this%nxg
+            !this%mbtopo(3, 1) = 1;      this%mbtopo(4, 1) = this%nyg
+            !this%mbtopo(5, 1) = 1;      this%mbtopo(6, 1) = this%nzg
         endif
 
-        if( (this%num_blocks > 1) .and. (.not. (method_x=='cd10')) ) then
+        if( (associated(this%mbtopology)) .and. (.not. (method_x=='cd10')) ) then
             call GracefulExit("Only cd10 is supported in x with multi-block currently", 11)
         endif
 
-        if( (this%num_blocks > 1) .and. (.not. (method_y=='cd10')) ) then
+        if( (associated(this%mbtopology)) .and. (.not. (method_y=='cd10')) ) then
             call GracefulExit("Only cd10 is supported in y with multi-block currently", 11)
         endif
 
-        if( (this%num_blocks > 1) .and. (.not. (method_z=='cd10')) ) then
+        if( (associated(this%mbtopology)) .and. (.not. (method_z=='cd10')) ) then
             call GracefulExit("Only cd10 is supported in z with multi-block currently", 11)
         endif
 
@@ -467,14 +469,22 @@ contains
 
         select case (method_x)
         case ("cd10")
-            allocate(this%xcd10(this%num_blocks))
-            do imb = 1, this%num_blocks
-                ierr = this % xcd10(imb)%init(this%mbtopo(2,imb)-this%mbtopo(1,imb)+1, dx, periodic_x, 0, 0)
+            if(associated(this%mbtopology)) then
+              allocate(this%xcd10(this%mbtopology%x_num_blocks))
+              do imb = 1, this%mbtopology%x_num_blocks
+                ierr = this % xcd10(imb)%init(this%mbtopology%xen(1,imb)-this%mbtopology%xst(1,imb)+1, dx, periodic_x, 0, 0)
                 if (ierr .ne. 0) then
                     call message("Initializing xcd10 block number ", imb)
                     call GracefulExit("Initializing cd10 failed in X ",11)
                 end if
-            enddo
+              enddo
+            else
+              allocate(this%xcd10(1))
+              ierr = this % xcd10(1)%init(this%xsz(1), dx, periodic_x, 0, 0)
+              if (ierr .ne. 0) then
+                  call GracefulExit("Initializing cd10 failed in X ",11)
+              end if
+            endif
             this%xmethod = 1 
         case ("cd06")
             allocate(this%xcd06)
@@ -504,14 +514,22 @@ contains
         ! Y direction
         select case (method_y)
         case ("cd10")
-            allocate(this%ycd10(this%num_blocks))
-            do imb = 1, this%num_blocks
-                ierr = this % ycd10(imb)%init(this%mbtopo(4,imb)-this%mbtopo(3,imb)+1, dy, periodic_y, 0, 0)
+            if(associated(this%mbtopology)) then
+              allocate(this%ycd10(this%mbtopology%y_num_blocks))
+              do imb = 1, this%mbtopology%y_num_blocks
+                ierr = this % ycd10(imb)%init(this%mbtopology%yen(2,imb)-this%mbtopology%yst(2,imb)+1, dy, periodic_y, 0, 0)
                 if (ierr .ne. 0) then
                     call message("Initializing ycd10 block number ", imb)
                     call GracefulExit("Initializing cd10 failed in Y ",11)
                 end if
-            enddo
+              enddo
+            else
+              allocate(this%ycd10(1))
+              ierr = this % ycd10(1)%init(this%ysz(2), dy, periodic_y, 0, 0)
+              if (ierr .ne. 0) then
+                  call GracefulExit("Initializing cd10 failed in Y ",11)
+              end if
+            endif
             this%ymethod = 1 
         case ("cd06")
             allocate(this%ycd06)
@@ -542,14 +560,23 @@ contains
         ! Z direction
         select case (method_z)
         case ("cd10")
-            allocate(this%zcd10(this%num_blocks))
-            do imb = 1, this%num_blocks
-                ierr = this % zcd10(imb)%init(this%mbtopo(6,imb)-this%mbtopo(5,imb)+1, dz, periodic_z, 0, 0)
+            if(associated(this%mbtopology)) then
+              allocate(this%zcd10(this%mbtopology%z_num_blocks))
+              do imb = 1, this%mbtopology%z_num_blocks
+                ierr = this % zcd10(imb)%init(this%mbtopology%zen(3,imb)-this%mbtopology%zst(3,imb)+1, dz, periodic_z, 0, 0)
                 if (ierr .ne. 0) then
                     call message("Initializing zcd10 block number ", imb)
+                    call message("Returned ierr ", ierr)
                     call GracefulExit("Initializing cd10 failed in Z ",11)
                 end if
-            enddo
+              enddo
+            else
+              allocate(this%zcd10(1))
+              ierr = this % zcd10(1)%init(this%zsz(3), dz, periodic_z, 0, 0)
+              if (ierr .ne. 0) then
+                  call GracefulExit("Initializing cd10 failed in Z ",11)
+              end if
+            endif
             this%zmethod = 1 
         case ("cd06")
             allocate(this%zcd06)
@@ -585,52 +612,64 @@ contains
 
         select case (this%xmethod) 
         case (1)
-            do imb = 1, this%num_blocks
-              call this%xcd10(imb)%destroy
-            enddo
+            if(associated(this%mbtopology)) then
+              do imb = 1, this%mbtopology%x_num_blocks
+                call this%xcd10(imb)%destroy()
+              enddo
+            else
+                call this%xcd10(1)%destroy()
+            endif
             deallocate(this%xcd10)
         case (2)
-            call this%xcd06%destroy
+            call this%xcd06%destroy()
             deallocate(this%xcd06)
         case (3)
-            call this%xfour%destroy
+            call this%xfour%destroy()
             deallocate(this%xfour)
         case (4)
-            call this%xcheb%destroy
+            call this%xcheb%destroy()
             deallocate(this%xcheb)
         end select 
         
         select case (this%ymethod) 
         case (1)
-            do imb = 1, this%num_blocks
-                call this%ycd10(imb)%destroy
-            enddo
+            if(associated(this%mbtopology)) then
+              do imb = 1, this%mbtopology%y_num_blocks
+                  call this%ycd10(imb)%destroy()
+              enddo
+            else
+                  call this%ycd10(1)%destroy()
+            endif
             deallocate(this%ycd10)
         case (2)
-            call this%ycd06%destroy
+            call this%ycd06%destroy()
             deallocate(this%ycd06)
         case (3)
-            call this%yfour%destroy
+            call this%yfour%destroy()
             deallocate(this%yfour)
         case (4)
-            call this%ycheb%destroy
+            call this%ycheb%destroy()
             deallocate(this%ycheb)
         end select 
 
         select case (this%zmethod) 
         case (1)
-            do imb = 1, this%num_blocks
-                call this%zcd10(imb)%destroy
-            enddo
+            if(associated(this%mbtopology)) then
+              do imb = 1, this%mbtopology%z_num_blocks
+                  call this%zcd10(imb)%destroy()
+              enddo
+            else
+                  call this%zcd10(1)%destroy()
+            endif
             deallocate(this%zcd10)
         case (2)
-            call this%zcd06%destroy
+            call this%zcd06%destroy()
             deallocate(this%zcd06)
         case (3)
-            call this%zfour%destroy
+            call this%zfour%destroy()
             deallocate(this%zfour)
         case (4)
-            call this%zcheb%destroy
+            call this%zcheb%destroy()
             deallocate(this%zcheb)
         end select
 
@@ -639,7 +678,8 @@ contains
         this%zmetric = .false. 
         this%curvilinear = .false. 
 
-        if(allocated(this%mbtopo))     deallocate(this%mbtopo)
+        if(associated(this%mbtopology)) nullify(this%mbtopology)
+
         if(allocated(this%dxidx))      deallocate(this%dxidx)
         if(allocated(this%dxidx_sq))   deallocate(this%dxidx_sq)
         if(allocated(this%d2xidx2))    deallocate(this%d2xidx2)
@@ -730,19 +770,37 @@ contains
         real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: dfdx
         integer, optional, intent(in) :: bc1, bcn
 
-       integer imb
+        integer imb, nxst, nxen, nyst, nyen, nzst, nzen
 
         select case (this%xmethod)
         case (1)
+          if(associated(this%mbtopology)) then
             if (present(bc1) .AND. present(bcn)) then
-              do imb = 1, this%num_blocks
-                call this%xcd10(imb) % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+              do imb = 1, this%mbtopology%x_num_blocks
+                nxst = this%mbtopology%xst(1, imb);   nxen = this%mbtopology%xen(1, imb)
+                nyst = this%mbtopology%xst(2, imb);   nyen = this%mbtopology%xen(2, imb)
+                nzst = this%mbtopology%xst(3, imb);   nzen = this%mbtopology%xen(3, imb)
+                call this%xcd10(imb) % dd1(f(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        dfdx(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        nyen-nyst+1, nzen-nzst+1,  bc1,bcn)
               enddo
             else
-              do imb = 1, this%num_blocks
-                call this%xcd10(imb) % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+              do imb = 1, this%mbtopology%x_num_blocks
+                nxst = this%mbtopology%xst(1, imb);   nxen = this%mbtopology%xen(1, imb)
+                nyst = this%mbtopology%xst(2, imb);   nyen = this%mbtopology%xen(2, imb)
+                nzst = this%mbtopology%xst(3, imb);   nzen = this%mbtopology%xen(3, imb)
+                call this%xcd10(imb) % dd1(f(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        dfdx(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        nyen-nyst+1, nzen-nzst+1)
               enddo
             end if
+          else
+            if (present(bc1) .AND. present(bcn)) then
+              call this%xcd10(1) % dd1(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
+              call this%xcd10(1) % dd1(f,dfdx,this%xsz(2),this%xsz(3))
+            end if
+          endif
         case (2)
             call this%xcd06 % dd1(f,dfdx,this%xsz(2),this%xsz(3))
         case (3)
@@ -768,13 +826,37 @@ contains
         real(rkind), intent(out),dimension(this%ysz(1),this%ysz(2),this%ysz(3)) :: dfdx
         integer, optional, intent(in) :: bc1, bcn
 
+        integer imb, nxst, nxen, nyst, nyen, nzst, nzen
+
         select case (this%ymethod)
         case (1)
+          if(associated(this%mbtopology)) then
+            if (present(bc1) .AND. present(bcn)) then
+              do imb = 1, this%mbtopology%y_num_blocks
+                nxst = this%mbtopology%yst(1, imb);   nxen = this%mbtopology%yen(1, imb)
+                nyst = this%mbtopology%yst(2, imb);   nyen = this%mbtopology%yen(2, imb)
+                nzst = this%mbtopology%yst(3, imb);   nzen = this%mbtopology%yen(3, imb)
+                call this%ycd10(imb) % dd2(f(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        dfdx(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        nxen-nxst+1, nzen-nzst+1,  bc1,bcn)
+              enddo
+            else
+              do imb = 1, this%mbtopology%y_num_blocks
+                nxst = this%mbtopology%yst(1, imb);   nxen = this%mbtopology%yen(1, imb)
+                nyst = this%mbtopology%yst(2, imb);   nyen = this%mbtopology%yen(2, imb)
+                nzst = this%mbtopology%yst(3, imb);   nzen = this%mbtopology%yen(3, imb)
+                call this%ycd10(imb) % dd2(f(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        dfdx(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        nxen-nxst+1, nzen-nzst+1)
+              enddo
+            end if
+          else
             if (present(bc1) .AND. present(bcn)) then
                 call this%ycd10(1) % dd2(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
             else
                 call this%ycd10(1) % dd2(f,dfdx,this%ysz(1),this%ysz(3))
             end if
+          end if
         case (2)
             call this%ycd06 % dd2(f,dfdx,this%ysz(1),this%ysz(3))
         case (3)
@@ -800,13 +882,37 @@ contains
         real(rkind), intent(out),dimension(this%zsz(1),this%zsz(2),this%zsz(3)) :: dfdx
         integer, optional, intent(in) :: bc1, bcn
 
+        integer imb, nxst, nxen, nyst, nyen, nzst, nzen
+
         select case (this%zmethod)
         case (1)
+          if(associated(this%mbtopology)) then
+            if (present(bc1) .AND. present(bcn)) then
+              do imb = 1, this%mbtopology%z_num_blocks
+                nxst = this%mbtopology%zst(1, imb);   nxen = this%mbtopology%zen(1, imb)
+                nyst = this%mbtopology%zst(2, imb);   nyen = this%mbtopology%zen(2, imb)
+                nzst = this%mbtopology%zst(3, imb);   nzen = this%mbtopology%zen(3, imb)
+                call this%zcd10(imb) % dd2(f(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        dfdx(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        nxen-nxst+1, nyen-nyst+1,  bc1,bcn)
+              enddo
+            else
+              do imb = 1, this%mbtopology%z_num_blocks
+                nxst = this%mbtopology%zst(1, imb);   nxen = this%mbtopology%zen(1, imb)
+                nyst = this%mbtopology%zst(2, imb);   nyen = this%mbtopology%zen(2, imb)
+                nzst = this%mbtopology%zst(3, imb);   nzen = this%mbtopology%zen(3, imb)
+                call this%zcd10(imb) % dd2(f(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        dfdx(nxst:nxen,nyst:nyen,nzst:nzen), &
+                                        nxen-nxst+1, nyen-nyst+1)
+              enddo
+            endif
+          else
             if (present(bc1) .AND. present(bcn)) then
                 call this%zcd10(1) % dd3(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
             else
                 call this%zcd10(1) % dd3(f,dfdx,this%zsz(1),this%zsz(2))
             end if
+          end if
         case (2)
             call this%zcd06 % dd3(f,dfdx,this%zsz(1),this%zsz(2))
         case (3)
