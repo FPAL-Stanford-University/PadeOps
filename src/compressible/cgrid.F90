@@ -415,18 +415,33 @@ contains
         allocate(this%gfil)
         
         ! Initialize filters
-        if ((this%filter_x=='none') .AND. (this%filter_y=='none') .AND. (this%filter_z=='none')) then
-            call this%fil%init( this%decomp, &
-                         periodicx,   periodicy,    periodicz, &
-                         'cf90',      'cf90',       'cf90'  ) 
+        if(this%useMultiBlock) then
+          if ((this%filter_x=='none') .AND. (this%filter_y=='none') .AND. (this%filter_z=='none')) then
+              call this%fil%init( this%decomp, &
+                           periodicx,   periodicy,    periodicz, &
+                           'cf90',      'cf90',       'cf90', this%mbtopology  ) 
+          else
+              call this%fil%init( this%decomp, &
+                           periodicx,     periodicy,      periodicz, &
+                            filter_x,      filter_y,       filter_z, this%mbtopology  ) 
+          end if
+          call this%gfil%init(                          this%decomp, &
+                           periodicx,     periodicy,      periodicz, &
+                          "gaussian",    "gaussian",     "gaussian" , this%mbtopology )      
         else
-            call this%fil%init( this%decomp, &
-                         periodicx,     periodicy,      periodicz, &
-                          filter_x,      filter_y,       filter_z  ) 
-        end if
-        call this%gfil%init(                          this%decomp, &
-                         periodicx,     periodicy,      periodicz, &
-                        "gaussian",    "gaussian",     "gaussian"  )      
+          if ((this%filter_x=='none') .AND. (this%filter_y=='none') .AND. (this%filter_z=='none')) then
+              call this%fil%init( this%decomp, &
+                           periodicx,   periodicy,    periodicz, &
+                           'cf90',      'cf90',       'cf90'  ) 
+          else
+              call this%fil%init( this%decomp, &
+                           periodicx,     periodicy,      periodicz, &
+                            filter_x,      filter_y,       filter_z  ) 
+          end if
+          call this%gfil%init(                          this%decomp, &
+                           periodicx,     periodicy,      periodicz, &
+                          "gaussian",    "gaussian",     "gaussian"  )      
+        endif
 
 
         ! Allocate 2 buffers for each of the three decompositions

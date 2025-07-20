@@ -32,7 +32,7 @@ subroutine write_file_x(fname, x, f, df, dfdx_exact, jj, kk)
 
     open(10,file=fname,status='unknown')
     do i = 1, size(x,1)
-      write(10,'(6(e19.12,1x))') x(i,jj,kk), f(i,jj,kk), df(i,jj,kk), dfdx_exact(i,jj,kk)
+      write(10,'(6(e22.15,1x))') x(i,jj,kk), f(i,jj,kk), df(i,jj,kk), dfdx_exact(i,jj,kk)
     enddo
     close(10)
 end subroutine write_file_x
@@ -159,7 +159,11 @@ program test_multiblock_setup
     call transpose_x_to_y(xtmp2,dfdx,gp)
     ! quantify the error in x-derivative
     if(nrank==rank_debug) then
-      write(outputfile,'(a)') 'dfdx_per.dat'
+      if(periodicx) then
+        write(outputfile,'(a)') 'dfdx_per.dat'
+      else
+        write(outputfile,'(a)') 'dfdx_nonper.dat'
+      endif
       call write_file_x(outputfile, x_in_X, xtmp1, xtmp2, fxex_in_X, gp%xsz(2)/2, gp%xsz(3)/2)
     endif
     linf = P_MAXVAL( MAXVAL(ABS(dfdx - fxex)))
@@ -167,7 +171,12 @@ program test_multiblock_setup
     ii = gp%ysz(1)*3/4; jj = gp%ysz(2)/2; kk = gp%ysz(3)/2
     if(nrank==rank_debug) then
         errcen =  ABS(dfdx(ii,jj,kk) - fxex(ii,jj,kk))
-        open(unit=123, file='xder_err_per.dat', action='write',iostat=ierr,position='append')
+        if(periodicx) then
+          write(outputfile,'(a)') 'xder_err_per.dat'
+        else
+          write(outputfile,'(a)') 'xder_err_nonper.dat'
+        endif
+        open(unit=123, file=outputfile, action='write',iostat=ierr,position='append')
         write(123,'(i5,1x,e19.12,1x,e19.12,1x,e19.12,1x)') nx, linf, l2norm, errcen
         close(123)
     endif
