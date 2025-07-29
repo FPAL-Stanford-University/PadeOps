@@ -119,7 +119,14 @@ module SolidGrid
     integer, parameter  :: VFint_index        = 97
     integer, parameter  :: m1int_index        = 98
     integer, parameter  :: m2int_index        = 99
-    integer, parameter  :: nfields = 99
+    integer, parameter  :: rhouheur_index     = 100
+    integer, parameter  :: rhovheur_index     = 101
+    integer, parameter  :: rhowheur_index     = 102
+    integer, parameter  :: rhoeheur_index     = 103
+    integer, parameter  :: m1heur_index       = 104
+    integer, parameter  :: m2heur_index       = 105
+    integer, parameter  :: VFheur_index       = 106
+    integer, parameter  :: nfields = 106
 
     integer, parameter :: mom_index = 1
     integer, parameter :: TE_index = mom_index+3
@@ -147,11 +154,11 @@ module SolidGrid
     type, extends(grid) :: sgrid
        
         type(filters),          allocatable :: gfil
-        type(derivatives),      allocatable :: derD02, derD06,derD04,derCD06,der_nostretch,derCD06_nostretch
+        type(derivatives),      allocatable :: derD02, derD06,derD04,derCD06,der_nostretch,derCD06_nostretch,derCD04
         type(solid_mixture),    allocatable :: mix
         type(ladobject),        allocatable :: LAD
         type(derivativesStagg), allocatable :: derStagg,derStagg_stretch
-        type(derivativesStagg), allocatable :: derStaggd02
+        type(derivativesStagg), allocatable :: derStaggd02,derStaggd04
         type(interpolators),    allocatable ::interpMid,interpMide06
         type(interpolators),    allocatable ::interpMid02, interpMid04,interpMid08,interpMid06
         type( IOsgrid ),        allocatable :: viz
@@ -175,7 +182,8 @@ module SolidGrid
         logical     :: usePhiForm
         logical     :: twoPhaseLAD                 ! Use dYs/dx instead of the fickian 
         logical     :: LAD5eqn
-        logical     :: useEigenFunction 
+        logical     :: useEigenFunction
+        logical     :: FilteredTimeStep 
         real(rkind) :: intSharp_gam                ! Interface sharpening Gamma parameter
         real(rkind) :: intSharp_eps                ! Interface sharpening epsilon parameter
         real(rkind) :: intSharp_cut                ! Interface sharpening cutoff parameter, for VF approaching 1 or 0
@@ -254,15 +262,17 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: tauyz, tauyze,dwdy,metric_half, metric_N2F
         real(rkind), dimension(:,:,:), pointer :: tauzy, tauzye, dwdz,tauSum,esum, esumJ, metric, metric_exact
         real(rkind), dimension(:,:,:), pointer :: fsw,divgrad
-
+        real(rkind), dimension(:,:,:), pointer :: rhouHeur,rhovHeur,rhowHeur,rhoeHeur,m1heur,m2heur,VFheur
         real(rkind), dimension(:,:,:), pointer :: keJ, uJ, vJ, wJ, eJ, qDiv,pEvolve, VFEvolve, pError, VFerror, pJ, tauRho,uref
         real(rkind) :: phys_mu1, phys_mu2
         real(rkind) :: phys_bulk1, phys_bulk2
         real(rkind) :: phys_kap1, phys_kap2
         real(rkind) :: st_limit, pthick,uthick,rhothick,Ys_wiggle,VF_wiggle,VF_thick,Ys_thick
         real(rkind), dimension(2) :: rhou_ref,rhov_ref,rhow_ref, rhoe_ref
+        real(rkind), dimension(10) :: lamru,lamrv,lamrw,lamre,lamm1,lamm2,lamvf,lamtim
         real(rkind), dimension(:,:,:,:), allocatable :: meshstretch, sponge
         real(rkind), dimension(:,:,:), allocatable :: yMetric,xMetric, zMetric,yMetric_half, xMetric_half, zMetric_half,yLADMetric, yMetric_F2N, dy_stretch
+        integer :: stepfil,numfil
         contains
             procedure          :: init
             procedure          :: destroy
@@ -298,7 +308,14 @@ module SolidGrid
             procedure          :: getFaces
             procedure, private :: dumpRestartFile
             procedure, private :: readRestartFile
-    end type
+            procedure          :: FilteringHeuristic
+            procedure          :: BicubicMetric
+            procedure          :: FilteringHeuristicHighOrder
+            procedure          :: fourthder
+            procedure          :: LocalDiffHeuristic
+            procedure          :: FilDiffHeuristic
+!            procedure          :: sixthder
+end type
 
 contains
     subroutine init(this, inputfile )
@@ -430,6 +447,8 @@ contains
         this%dt = dt
         this%CFL = CFL
 
+        this%stepfil = 0
+        this%numfil  = 0
         this%step = 0
         this%nsteps = nsteps
         
@@ -730,11 +749,14 @@ contains
         if ( allocated(this%derCD06) ) deallocate(this%derCD06)
         allocate(this%derCD06)
         ! Allocate derStagg
+        if ( allocated(this%derCD04) ) deallocate(this%derCD04)
+        allocate(this%derCD04)
         if ( allocated(this%derStagg) ) deallocate(this%derStagg)
         allocate(this%derStagg)
         if ( allocated(this%derStaggd02) ) deallocate(this%derStaggd02)
         allocate(this%derStaggd02)
-
+        if ( allocated(this%derStaggd04) ) deallocate(this%derStaggd04)
+        allocate(this%derStaggd04)
         if( this%Stretch1Dy) then
            call this%der%init(                           this%decomp, &
                            this%dx,       this%dy,        this%dz, &
@@ -784,6 +806,15 @@ contains
                               .false.)
            call this%derCD06%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
 
+            ! Initialize derivatives
+           call this%derCD04%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "cd04",  "cd04",   "cd04", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+           call this%derCD04%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
                 ! Initialize Staggered derivatives
            call this%derStagg%init(                      this%decomp, &
                            this%dx,       this%dy,        this%dz, &
@@ -803,6 +834,15 @@ contains
                            .false.)
 
            call this%derStaggd02%init_gridStretch1D(this%yMetric_F2N,this%yMetric_half,this%yLADMetric)
+
+           call this%derStaggd04%init(this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                              "d02", "d02", "d02", &
+                           .false.,       .true.,        .false., &
+                           .false.)
+
+           call this%derStaggd04%init_gridStretch1D(this%yMetric_F2N,this%yMetric_half,this%yLADMetric)
 
         else 
         ! Initialize derivatives 
@@ -850,6 +890,14 @@ contains
                               .false.,       .false.,        .false., &
                               .false.)
 
+        call this%derCD04%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "cd04",  "cd04",   "cd04", &
+                              .false.,       .false.,        .false., &
+                              .false.)
+
+
 
         ! Initialize Staggered derivatives 
         call this%derStagg%init(                      this%decomp, &
@@ -863,6 +911,13 @@ contains
 
         ! Initialize Staggered derivatives
         call this%derStaggd02%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                              "d02", "d02", "d02", &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        call this%derStaggd04%init(                      this%decomp, &
                            this%dx,       this%dy,        this%dz, &
                          periodicx,     periodicy,      periodicz, &
                                               "d02", "d02", "d02", &
@@ -1060,7 +1115,13 @@ contains
         this%VF_int    => this%fields(:,:,:,VFint_index)
         this%m1_int    => this%fields(:,:,:,m1int_index)
         this%m2_int    => this%fields(:,:,:,m2int_index)
-
+        this%rhouHeur  => this%fields(:,:,:,rhouheur_index)
+        this%rhovHeur  => this%fields(:,:,:,rhovheur_index)
+        this%rhowHeur  => this%fields(:,:,:,rhowheur_index)
+        this%rhoeHeur  => this%fields(:,:,:,rhoeheur_index)
+        this%m1Heur    => this%fields(:,:,:,m1heur_index)
+        this%m2Heur    => this%fields(:,:,:,m2heur_index)
+        this%VFHeur    => this%fields(:,:,:,VFHeur_index)
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
@@ -1079,6 +1140,7 @@ contains
             this%mix%material(1)%p = this%p
             print *, "p"
             this%mix%material(2)%p = this%p
+            this%u = 15 +this%u
 
             print *, "pre restart"
             call initparam_restart(this%decomp,this%der,this%derStagg,this%interpMid, this%dx, this%dy, this%dz, inputfile, this%mesh,this%fields, &
@@ -1205,7 +1267,13 @@ contains
         varnames(97) = 'VFint'
         varnames(98) = 'm1int'
         varnames(99) = 'm2int'
-
+        varnames(100) = 'rhouHeur'
+        varnames(101) = 'rhovHeur'
+        varnames(102) = 'rhowHeur'
+        varnames(103) = 'rhoeHeur'
+        varnames(104) = 'm1Heur'
+        varnames(105) = 'm2Heur'
+        varnames(106) = 'VFHeur'
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
@@ -1360,6 +1428,9 @@ contains
         call this%derCD06%destroy()
         if (allocated(this%derCD06)) deallocate(this%derCD06)
 
+        call this%derCD04%destroy()
+        if (allocated(this%derCD04)) deallocate(this%derCD04)
+
         call this%fil%destroy()
         if (allocated(this%fil)) deallocate(this%fil) 
         
@@ -1374,6 +1445,9 @@ contains
        
         call this%derStaggd02%destroy()
         if (allocated(this%derStaggd02)) deallocate(this%derStaggd02)
+
+        call this%derStaggd04%destroy()
+        if (allocated(this%derStaggd04)) deallocate(this%derStaggd04)
 
         call this%interpMid02%destroy()
         if (allocated(this%interpMid02)) deallocate(this%interpMid02)
@@ -1506,8 +1580,9 @@ contains
 
     
 
-    subroutine secondder(this, f, d2fdx2, d2fdy2, d2fdz2, x_bc, y_bc, z_bc)
+    subroutine secondder(this,derType, f, d2fdx2, d2fdy2, d2fdz2, x_bc, y_bc, z_bc)
         class(sgrid),target, intent(inout) :: this
+        type(derivatives), intent(in) :: derType
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdx2
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdy2
@@ -1518,7 +1593,7 @@ contains
         type(decomp_info), pointer :: decomp
         real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
 
-        der => this%der
+        !der => derType
         decomp => this%decomp
         xtmp => this%xbuf(:,:,:,1)
         xdum => this%xbuf(:,:,:,2)
@@ -1526,20 +1601,59 @@ contains
         zdum => this%zbuf(:,:,:,2)
 
         ! Get Y derivative
-        call this%der%d2dy2(f,d2fdy2,y_bc(1),y_bc(2))
+        call derType%d2dy2(f,d2fdy2,y_bc(1),y_bc(2))
 
         ! Get X derivative
         call transpose_y_to_x(f,xtmp,decomp)
-        call this%der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
+        call derType%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
         call transpose_x_to_y(xdum,d2fdx2,decomp)
 
         ! Get Z derivative
         call transpose_y_to_z(f,ztmp,decomp)
-        call this%der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
+        call derType%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
         call transpose_z_to_y(zdum,d2fdz2,decomp)
 
     end subroutine
-    
+   
+     subroutine fourthder(this,derType, f, d4fdx4, d4fdy4, d4fdz4, x_bc, y_bc, z_bc)
+        class(sgrid),target, intent(inout) :: this
+        type(derivatives), intent(in) :: derType
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f 
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d4fdx4
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d4fdy4
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d4fdz4
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: tmp
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
+
+        !der => derType
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+
+        ! Get Y derivative
+        call derType%d2dy2(f,tmp,y_bc(1),y_bc(2))
+        call derType%d2dy2(tmp,d4fdy4,y_bc(1),y_bc(2))
+
+        ! Get X derivative
+        call transpose_y_to_x(f,xtmp,decomp)
+        call derType%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
+        call derType%d2dx2(xdum,xtmp,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xtmp,d4fdx4,decomp)
+
+        ! Get Z derivative
+        call transpose_y_to_z(f,ztmp,decomp)
+        call derType%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
+        call derType%d2dz2(zdum,ztmp,z_bc(1),z_bc(2))
+        call transpose_z_to_y(ztmp,d4fdz4,decomp)
+
+    end subroutine
+ 
     subroutine coordinateTransform(this,dx,dy,dz) 
        use constants,        only: one, half, pi
        use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x, gradFV_y, gradFV_z, gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz
@@ -1798,7 +1912,14 @@ contains
         deallocate( duidxj )
         
         ! ------------------------------------------------
-        call this%get_dt(stability)
+        if (this%useRestartFile) then
+ 
+          this%dt = 1d-9
+     
+        else
+          call this%get_dt(stability)
+        endif
+        
         !populate surface tension terms at initial condition
         if(this%use_surfaceTension) then
             if(this%mix%ns.ne.2) then
@@ -1918,7 +2039,14 @@ contains
                 if( this%Stretch1Dy) then               
                    call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
                 else
+
+                !   call this%FilteringHeuristicHighOrder()
+                !   call this%LocalDiffHeuristic()
+                !   call this%BicubicMetric()
+                !  call this%FilDiffHeuristic() 
                    call this%viz%WriteViz(this%decomp, this%mesh, this%fields,this%mix, this%tsim)
+                !   call this%FilteringHeuristic()
+                !   call this%BicubicMetric()
                 endif
                 vizcond = .FALSE.
            end if
@@ -1979,7 +2107,7 @@ contains
         use exits,      only: message,nancheck,GracefulExit
         use reductions, only: P_MAXVAL, P_MINVAL
         use decomp_2d,  only: nrank
-        use operators, only: divergence,gradient
+        use operators, only: divergence,gradient,gradFV_x,gradFV_y,gradFV_z,interpolateFV
         use constants,               only: pi
         class(sgrid), target, intent(inout) :: this
 
@@ -1990,6 +2118,9 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: divu,Qtmpp, pmix ! Velocity divergence for species energy eq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork         ! Viscous work term for species energy eq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource, tmp, eta, tmp2,rhofil,efil,m1fil,m2fil,TEfil,rhoufil,rhovfil,rhowfil,VFfil,H1,H2 
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx,drudy,drudz,drvdx,drvdy,drvdz,drwdx,drwdy,drwdz,dredx,dredy,dredz,dVFdx,dVFdy,dVFdz,dm1dx,dm1dy,dm1dz,dm2dx,dm2dy,dm2dz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx4,drudy4,drudz4,drvdx4,drvdy4,drvdz4,drwdx4,drwdy4,drwdz4,dredx4,dredy4,dredz4,dVFdx4,dVFdy4,dVFdz4,dm1dx4,dm1dy4,dm1dz4,dm2dx4,dm2dy4,dm2dz4
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)      :: tmpint
         integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -2233,106 +2364,29 @@ contains
             
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
-            !this%p = 1
-            !this%w = 0
-            !this%e = 2.941
-            !this%T = 10
-            !this%u = 0.7
-            !this%v = 0 !(sin(pi*this%y)**2)*sin(2*pi*this%x)*cos(pi*this%tsim/4)
-            ! !print*,"masking filter"
-            !       this%filt_tmp(:,:,:,1) = this%Wcnsrv(:,:,:,mom_index  )
-            !       this%filt_tmp(:,:,:,2) = this%Wcnsrv(:,:,:,mom_index+1)
-            !       this%filt_tmp(:,:,:,3) = this%Wcnsrv(:,:,:,mom_index+2)
-            !       this%filt_tmp(:,:,:,4) = this%Wcnsrv(:,:,:,TE_index   )
-            !       do imat=1,this%mix%ns
-            !          this%filt_tmp(:,:,:,4+imat) = this%mix%material(imat)%consrv(:,:,:,1)
-            !       enddo
-                  
-            !       call this%filter(this%filt_tmp(:,:,:,1), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-            !       call this%filter(this%filt_tmp(:,:,:,2), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
-            !       call this%filter(this%filt_tmp(:,:,:,3), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
-            !       call this%filter(this%filt_tmp(:,:,:,4), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
-                  
-            !       ! Filter the individual species variables
-            !       do imat=1,this%mix%ns
-            !          call filter3D(this%decomp, this%fil, this%filt_tmp(:,:,:,4+imat),1,this%x_bc,this%y_bc,this%z_bc)
-            !       enddo
-                  
-            !       this%filt_cut = 1.0D10!1.0D-2
-                  
-            !       this%filt_thrs = zero
-            !       call this%gradient(this%rho,this%filt_grad(:,:,:,1),this%filt_grad(:,:,:,2),this%filt_grad(:,:,:,3), this%x_bc,  this%y_bc,  this%z_bc)
-            !       this%filt_thrs = max(this%filt_thrs,sqrt(this%filt_grad(:,:,:,1)**two + this%filt_grad(:,:,:,2)**two + this%filt_grad(:,:,:,3)**two))
-            !       call this%gradient(this%p,this%filt_grad(:,:,:,1),this%filt_grad(:,:,:,2),this%filt_grad(:,:,:,3), this%x_bc,  this%y_bc,  this%z_bc)
-            !       this%filt_thrs = max(this%filt_thrs,sqrt(this%filt_grad(:,:,:,1)**two + this%filt_grad(:,:,:,2)**two + this%filt_grad(:,:,:,3)**two))
-            !       call this%gradient(this%T,this%filt_grad(:,:,:,1),this%filt_grad(:,:,:,2),this%filt_grad(:,:,:,3), this%x_bc,  this%y_bc,  this%z_bc)
-            !       this%filt_thrs = max(this%filt_thrs,sqrt(this%filt_grad(:,:,:,1)**two + this%filt_grad(:,:,:,2)**two + this%filt_grad(:,:,:,3)**two))
-            !       call this%gradient(sqrt(this%u**two+this%v**two+this%w**two),this%filt_grad(:,:,:,1),this%filt_grad(:,:,:,2),this%filt_grad(:,:,:,3), this%x_bc,  this%y_bc,  this%z_bc)
-            !       this%filt_thrs = max(this%filt_thrs,sqrt(this%filt_grad(:,:,:,1)**two + this%filt_grad(:,:,:,2)**two + this%filt_grad(:,:,:,3)**two))
+           
 
-            !       where(this%filt_thrs.lt.this%filt_cut) ! only update where low bulk
-            !          this%Wcnsrv(:,:,:,mom_index  ) = this%filt_tmp(:,:,:,1)
-            !          this%Wcnsrv(:,:,:,mom_index+1) = this%filt_tmp(:,:,:,2)
-            !          this%Wcnsrv(:,:,:,mom_index+2) = this%filt_tmp(:,:,:,3)
-            !          this%Wcnsrv(:,:,:,TE_index   ) = this%filt_tmp(:,:,:,4)
-            !       endwhere
-            !       do imat=1,this%mix%ns
-            !h          where(this%filt_thrs.lt.this%filt_cut) ! only update where low bulk
-            !             this%mix%material(imat)%consrv(:,:,:,1) = this%filt_tmp(:,:,:,4+imat)
-            !          endwhere
-            !       enddo
-               
-            !    endif
-            !    endif
-            ! else
-            
-!            if((MOD(this%step,500) )  .LE. 1d-10) then
+             
+!            if(this%tsim .GE. 0.95) then
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !              if(.NOT. this%use_Stagg) then
                   ! Filter the conserved variables
-                 call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
-                 call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
-                 call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
-                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:,mom_index  ), this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+1), this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:,mom_index+2), this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+!                 call this%filter(this%Wcnsrv(:,:,:, TE_index  ), this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
 !              call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
              
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                   ! Filter the individual species variables
-                  call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
+!                 call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
 !            end if 
            !  endif
 !          print *, "Filter"
 !          endif
 
-!           H1 = 1_rkind / ( 1_rkind + exp((LOG10(abs(this%mix%material(1)%VF) ) - LOG10(1d-6) ) /(4_rkind *this%dx ) )) 
-!           H2 = 1_rkind / ( 1_rkind + exp((LOG10(abs(1_rkind-this%mix%material(1)%VF) ) - LOG10(1d-6) ) /(4_rkind *this%dx ) ))
-
-!           TEfil = this%Wcnsrv(:,:,:, TE_index  )
-!           rhoufil = this%Wcnsrv(:,:,:,mom_index  )
-!           rhovfil = this%Wcnsrv(:,:,:,mom_index+1)
-!           rhowfil = this%Wcnsrv(:,:,:,mom_index+2) 
-           
-!           m1fil = this%mix%material(1)%consrv(:,:,:,1)
-!           m2fil = this%mix%material(2)%consrv(:,:,:,1)
-!           VFfil = this%mix%material(1)%VF
-!           call this%filter(rhoufil, this%fil,1,-this%x_bc, this%y_bc, this%z_bc)
-!           call this%filter(rhovfil, this%fil, 1,this%x_bc,-this%y_bc, this%z_bc)
-!           call this%filter(rhowfil, this%fil, 1,this%x_bc, this%y_bc,-this%z_bc)
-!           call this%filter(TEfil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
-!           call this%filter(m1fil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
-!           call this%filter(m2fil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
-!           call this%filter(VFfil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
-          
-!           this%Wcnsrv(:,:,:,mom_index  ) = (H1+H2)*this%Wcnsrv(:,:,:,mom_index  )  + (1-(H1+H2) )*rhoufil
-!           this%Wcnsrv(:,:,:,mom_index+1  ) = (H1+H2)*this%Wcnsrv(:,:,:,mom_index+1)  + (1-(H1+H2) )*rhovfil         
-!           this%Wcnsrv(:,:,:,mom_index+2  ) = (H1+H2)*this%Wcnsrv(:,:,:,mom_index+2)  + (1-(H1+H2) )*rhowfil
-!           this%Wcnsrv(:,:,:,TE_index  ) = (H1+H2)*this%Wcnsrv(:,:,:,TE_index )  + (1-(H1+H2) )*TEfil
-!           this%mix%material(1)%consrv(:,:,:,1) = (H1+H2)*this%mix%material(1)%consrv(:,:,:,1) + (1-(H1+H2))*m1fil
-!           this%mix%material(2)%consrv(:,:,:,1) = (H1+H2)*this%mix%material(2)%consrv(:,:,:,1) + (1-(H1+H2))*m1fil
-!           this%mix%material(1)%VF = (H1+H2)*this%mix%material(1)%VF + (1-(H1+H2))*VFfil
-!           this%mix%material(2)%VF = 1.0 - this%mix%material(1)%VF
 
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             if(this%use_CnsrvSurfaceTension) then
@@ -2469,12 +2523,11 @@ contains
 
          end do
         
-          
+!        call this%FilDiffHeuristic()  
 
         this%step = this%step + 1
         nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
         deallocate( duidxj )
- 
     end subroutine
 
     subroutine getFaces( this)
@@ -3089,9 +3142,9 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: u_int, v_int,w_int,ke_int
         integer :: imat,i
         !logical :: useNewSPF = .FALSE.
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: ke,tmp,dJ,drhodx,drhody,drhodz, uJ, vJ, wJ, keJ, eJ, Fbody, tmp1,tmp2, tmp3
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: ke,tmp,dJ,drhodx,drhody,drhodz, uJ, vJ, wJ, keJ, eJ, Fbody, tmp1,tmp2, tmp3, rhoeJ
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: drhoedx,drhoedy, drhoedz,dedx,dedz,dedy, eKap,dedx_n, dedy_n, dedz_n
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 3) :: J,Frho,Fenergy, Fp, yMetric_F2N_int, De_int,rho_int
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 3) :: J,Frho,Fenergy, Fp, yMetric_F2N_int, De_int,rho_int, eLADcoef
         real(rkind) :: g = -0.1
 
         !this%u = sin(2*this%y)*sin(4*this%x)
@@ -3191,7 +3244,18 @@ contains
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
         call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad)
       !  call this%LAD%get_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
-      !  call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
+
+!       call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
+!       call gradFV_N2Fx(this%decomp,this%derStagg,this%rho*this%e,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)       
+!       call gradFV_N2Fy(this%decomp,this%derStagg,this%rho*this%e,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       call gradFV_N2Fz(this%decomp,this%derStagg,this%rho*this%e,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+!       call interpolateFV_x(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       call interpolateFV_y(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       call interpolateFV_z(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       call divergenceFV(this%decomp,this%derStagg,eLADcoef(:,:,:,1)*drhoedx,eLADcoef(:,:,:,2)*drhoedy,eLADcoef(:,:,:,3)*drhoedx,rhoeJ,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+
         !call this%LAD%get_P_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy. conductivity 
@@ -3363,7 +3427,7 @@ contains
           rhs(:,:,:, mom_index   ) = rhs(:,:,:,mom_index   ) + this%uJ
           rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + this%vJ
           rhs(:,:,:, mom_index+2 ) = rhs(:,:,:,mom_index+2 ) + this%wJ
-          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%keJ + this%eJ
+          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%keJ + this%eJ ! + rhoeJ
 
         endif
 
@@ -3612,7 +3676,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         dkapdy => NCbuff(:,:,:,2)
         dkapdz => NCbuff(:,:,:,3)
         call this%gradient(this%T,dTdx,dTdy,dTdz, this%x_bc, this%y_bc,this%z_bc)
-        call this%secondder(this%T,d2Tdx2,d2Tdy2,d2Tdz2,[0,0],[0,0],[0,0])
+        call this%secondder(this%der,this%T,d2Tdx2,d2Tdy2,d2Tdz2,[0,0],[0,0],[0,0])
         call this%gradient(this%kap,dkapdx,dkapdy,dkapdz, this%x_bc, this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index) = rhs(:,:,:, TE_index) + dkapdx*dTdx+dkapdy*dTdy+dkapdz*dTdz+this%kap*(d2Tdx2+d2Tdy2+d2Tdz2)
 
@@ -3633,7 +3697,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         d2udx2 => NCbuff(:,:,:,1)
         d2udy2 => NCbuff(:,:,:,2)
         d2udz2 => NCbuff(:,:,:,3)
-        call this%secondder(this%u,d2udx2,d2udy2,d2udz2,[0,0],[0,0],[0,0])
+        call this%secondder(this%der,this%u,d2udx2,d2udy2,d2udz2,[0,0],[0,0],[0,0])
         !tau_xx in x-momentum and energy eq
         flux =(four/three*dmudx+dbulkdx)*dudx+(dbulkdx-two/three*dmudx)*(dvdy+dwdz)+bambda*d2udx2
         tmp = dvdy+dwdz
@@ -3659,7 +3723,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         d2vdx2 => NCbuff(:,:,:,1)
         d2vdy2 => NCbuff(:,:,:,2)
         d2vdz2 => NCbuff(:,:,:,3)
-        call this%secondder(this%v,d2vdx2,d2vdy2,d2vdz2,[0,0],[0,0],[0,0])
+        call this%secondder(this%der,this%v,d2vdx2,d2vdy2,d2vdz2,[0,0],[0,0],[0,0])
         !tau_yy in y-momentum and energy eq
         flux =(four/three*dmudy+dbulkdy)*dvdy+(dbulkdy-two/three*dmudy)*(dudx+dwdz)+bambda*d2vdy2
         call this%der%ddy(dudx+dwdz,tmp,0,0)     !tmp = ddy(dudx+dwdz)
@@ -3684,7 +3748,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         d2wdx2 => NCbuff(:,:,:,1)
         d2wdy2 => NCbuff(:,:,:,2)
         d2wdz2 => NCbuff(:,:,:,3)
-        call this%secondder(this%w,d2wdx2,d2wdy2,d2wdz2,[0,0],[0,0],[0,0])
+        call this%secondder(this%der,this%w,d2wdx2,d2wdy2,d2wdz2,[0,0],[0,0],[0,0])
         !tau_zz in z-momentum and energy eq
         flux = (four/three*dmudz+dbulkdz)*dwdz+(dbulkdz-two/three*dmudz)*(dudx+dvdy)+bambda*d2wdz2
         tmp = dudx+dvdy
@@ -3733,7 +3797,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
             dsumJxdx => this%ybuf(:,:,:,1); dsumJydy => this%ybuf(:,:,:,2);dsumJzdz => this%ybuf(:,:,:,3); 
             dJxdx => this%ybuf(:,:,:,4); dJydy => this%ybuf(:,:,:,5); dJzdz =>this%ybuf(:,:,:,6);
             do i = 1,this%mix%ns
-                call this%secondder(this%mix%material(i)%Ys,d2Ysdx2(:,:,:,i),d2Ysdy2(:,:,:,i),d2Ysdz2(:,:,:,i),[0,0],[0,0],[0,0])
+                call this%secondder(this%der,this%mix%material(i)%Ys,d2Ysdx2(:,:,:,i),d2Ysdy2(:,:,:,i),d2Ysdz2(:,:,:,i),[0,0],[0,0],[0,0])
             end do
             !x-derivatives
             do i = 1,this%mix%ns
@@ -4779,6 +4843,749 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         ! Done
     end subroutine
+
+    subroutine BicubicMetric(this)
+        use timer,      only: tic, toc
+        use exits,      only: message,nancheck,GracefulExit
+        use reductions, only: P_MAXVAL, P_MINVAL,P_SUM
+        use decomp_2d,  only: nrank
+        use operators, only: divergence,gradient,gradFV_x,gradFV_y,gradFV_z,interpolateFV
+        use constants,               only: pi
+        class(sgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx,drudy,drudz,drvdx,drvdy,drvdz,drwdx,drwdy,drwdz,dredx,dredy,dredz,dVFdx,dVFdy,dVFdz,dm1dx,dm1dy,dm1dz,dm2dx,dm2dy,dm2dz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudxy,drvdxy,drwdxy,dredxy,dVFdxy,dm1dxy,dm2dxy,tmp1,tmp2,tmp3,ru,rv,re,m1,m2,vf, mask
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)      :: tmpint
+        real(rkind), dimension(4,4)                               :: acoef,a,b,c
+        real(rkind), dimension(4)                                 :: xvector,yvector,step1
+        integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
+        real(rkind) :: MSETotal,MSEru,MSErv,MSErw,MSEre,MSEm1,MSEm2,MSEVF,dx,dy,sum_t, sum_t2,sum_logH, sum_tlogH
+        real(rkind), dimension(6) :: global_heuristic
+        logical :: file_exists
+        character(len=clen) :: tempname, filename
+ 
+        call this%gradient(this%Wcnsrv(:,:,:,mom_index),   drudx,drudy,drudz, this%x_bc,this%y_bc,this%z_bc) 
+        call this%gradient(this%Wcnsrv(:,:,:,mom_index+1), drvdx,drvdy,drvdz,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(this%Wcnsrv(:,:,:,mom_index+2), drwdx,drwdy,drwdz,this%x_bc,this%y_bc,this%z_bc)  
+        call this%gradient(this%Wcnsrv(:,:,:,TE_index),   dredx,dredy,dredz,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(this%mix%material(1)%VF,dVFdx,dVFdy,dVFdz,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(this%mix%material(1)%consrv(:,:,:,1),dm1dx,dm1dy,dm1dz,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(this%mix%material(2)%consrv(:,:,:,1),dm2dx,dm2dy,dm2dz,this%x_bc,this%y_bc,this%z_bc)
+
+        call this%gradient(drudx,tmp1,drudxy,tmp2,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(drvdx,tmp1,drvdxy,tmp2,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(drwdx,tmp1,drwdxy,tmp2,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(dredx,tmp1,dredxy,tmp2,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(dm1dx,tmp1,dm1dxy,tmp2,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(dm2dx,tmp1,dm2dxy,tmp2,this%x_bc,this%y_bc,this%z_bc)
+        call this%gradient(dVFdx,tmp1,dVFdxy,tmp2,this%x_bc,this%y_bc,this%z_bc)
+
+        a(1,1) =  1.0; a(1,2) =  0.0; a(1,3) =  0.0; a(1,4) =  0.0;
+        a(2,1) =  0.0; a(2,2) =  0.0; a(2,3) =  1.0; a(2,4) =  0.0;
+        a(3,1) = -3.0; a(3,2) =  3.0; a(3,3) = -2.0; a(3,4) = -1.0;
+        a(4,1) =  2.0; a(4,2) = -2.0; a(4,3) =  1.0; a(4,4) =  1.0;
+ 
+        c(1,1) = 1.0; c(1,2) = 0.0; c(1,3) = -3.0; c(1,4) =  2.0;
+        c(2,1) = 0.0; c(2,2) = 0.0; c(2,3) =  3.0; c(2,4) = -2.0;
+        c(3,1) = 0.0; c(3,2) = 1.0; c(3,3) = -2.0; c(3,4) =  1.0;
+        c(4,1) = 0.0; c(4,2) = 0.0; c(4,3) = -1.0; c(4,4) =  1.0;
+        
+        do i = 2,this%nxp-1
+           do j = 2, this%nyp-1
+
+               dx = sqrt( (this%x(i-1,j,1) - this%x(i,j-1,1) )**2 +(this%y(i+1,j,1) -this%y(i,j-1,1) )**2 )
+               dy = dx
+               b(1,1) =  this%Wcnsrv(i,j-1,1,mom_index); b(1,2) =  this%Wcnsrv(i+1,j,1,mom_index); b(1,3) = dy*drudy(i,j-1,1); b(1,4) =  dy*drudy(i+1,j,1);
+               b(2,1) =  this%Wcnsrv(i-1,j,1,mom_index); b(2,2) =  this%Wcnsrv(i,j+1,1,mom_index); b(2,3) = dy*drudy(i-1,j,1); b(2,4) =  dy*drudy(i,j+1,1);
+               b(3,1) =  dx*drudx(i,j-1,1); b(3,2) =  dx*drudx(i+1,j,1); b(3,3) = dx*dy*drudxy(i,j-1,1); b(3,4) = dx*dy*drudxy(i+1,j,1);
+               b(4,1) =  dx*drudx(i-1,j,1); b(4,2) =  dx*drudx(i,j+1,1); b(4,3) = dx*dy*drudxy(i-1,j,1); b(4,4) = dx*dy*drudxy(i,j+1,1);
+
+               acoef = MATMUL(a, MATMUL(b,c) )
+               yvector(1) = 1.0; yvector(2) = (this%y(i,j,1) - this%y(i,j-1,1) ) /dy; ! (this%y(i+1,j) - this%y(i,j-1) );
+               yvector(3) = ( (this%y(i,j,1) - this%y(i,j-1,1) ) / dy)**2.0 ! (this%y(i+1,j) - this%y(i,j-1) ) )**2.0;
+               yvector(4) = ( (this%y(i,j,1) - this%y(i,j-1,1) ) / dy)**3.0 ! (this%y(i+1,j) - this%y(i,j-1) ) )**3.0;
+               
+               xvector(1) = 1.0; xvector(2) = (this%x(i,j,1) - this%x(i,j-1,1) ) /dx ! (this%x(i-1,j) - this%x(i,j-1) );
+               xvector(3) = ( (this%x(i,j,1) - this%x(i,j-1,1) ) / dx)**2.0 ! (this%x(i-1,j) - this%x(i,j-1) ) )**2.0;
+               xvector(4) = ( (this%x(i,j,1) - this%x(i,j-1,1) ) / dx)**3.0 ! (this%x(i-1,j) - this%x(i,j-1) ) )**3.0;
+
+               do jj = 1,4
+
+                   step1(jj) = DOT_PRODUCT(xvector,acoef(:,jj) )
+                
+               enddo               
+               ru(i,j,1) = DOT_PRODUCT(step1,yvector)
+            
+           enddo
+        enddo
+
+        where(abs(this%mix%material(1)%VF) .LE. 1d-3 .OR. abs(this%mix%material(2)%VF) .LE. 1d-3 )
+
+         mask = 1.0
+
+        elsewhere
+
+         mask = 0.0
+
+        endwhere
+
+ 
+
+       this%rhouHeur = ( this%Wcnsrv(:,:,:,mom_index) - ru )*mask
+       this%rhovHeur = ru
+
+  end subroutine
+
+  subroutine FilDiffHeuristic(this)
+        use timer,      only: tic, toc
+        use exits,      only: message,nancheck,GracefulExit
+        use reductions, only: P_MAXVAL, P_MINVAL,P_SUM
+        use decomp_2d,  only: nrank
+        use operators, only: divergence,gradient,gradFV_x,gradFV_y,gradFV_z,interpolateFV
+        use constants,               only: pi
+        class(sgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx,drudy,drudz,drvdx,drvdy,drvdz,drwdx,drwdy,drwdz,dredx,dredy,dredz,dVFdx,dVFdy,dVFdz,dm1dx,dm1dy,dm1dz,dm2dx,dm2dy,dm2dz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx4,drudy4,drudz4,drvdx4,drvdy4,drvdz4,drwdx4,drwdy4,drwdz4,dredx4,dredy4,dredz4,dVFdx4,dVFdy4,dVFdz4,dm1dx4,dm1dy4,dm1dz4,dm2dx4,dm2dy4,dm2dz4, rufil,rvfil,rwfil,refil, m1fil, m2fil, vffil, mask
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)      :: tmpint
+        integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
+        real(rkind) :: MSETotal,MSEru,MSErv,MSErw,MSEre,MSEm1,MSEm2,MSEVF,sum_t,sum_t2,sum_logH,sum_tlogH
+        real(rkind), dimension(7) :: global_heuristic, growthrate
+        logical :: file_exists
+        character(len=clen) :: tempname, filename
+
+        where((abs(this%mix%material(1)%VF) .LE. 1d-4) .OR. abs(this%mix%material(2)%VF) .LE. 1d-4 )
+
+            mask = 1 
+  
+
+        elsewhere
+
+            mask = 0
+        
+        endwhere
+
+        rufil = this%Wcnsrv(:,:,:,mom_index);   rvfil = this%Wcnsrv(:,:,:,mom_index+1);
+        rwfil = this%Wcnsrv(:,:,:,mom_index+2); refil = this%Wcnsrv(:,:,:,TE_index);
+        m1fil = this%mix%material(1)%consrv(:,:,:,1); m2fil = this%mix%material(2)%consrv(:,:,:,1);
+        vffil = this%mix%material(1)%VF
+
+        call this%filter(rufil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+        call this%filter(rvfil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+        call this%filter(rwfil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+        call this%filter(refil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+        call this%filter(m1fil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+        call this%filter(m2fil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+        call this%filter(vffil, this%fil, 1,this%x_bc, this%y_bc, this%z_bc)
+
+        
+        call this%secondder(this%derCD06,rufil - this%Wcnsrv(:,:,:,mom_index),drudx,drudy,drudz,[0,0],[0,0],[0,0])
+        call this%secondder(this%derCD06,rvfil - this%Wcnsrv(:,:,:,mom_index+1),drvdx,drvdy,drvdz,[0,0],[0,0],[0,0])
+        call this%secondder(this%derCD06,rwfil - this%Wcnsrv(:,:,:,mom_index+2),drwdx,drwdy,drwdz,[0,0],[0,0],[0,0])
+        call this%secondder(this%derCD06,refil - this%Wcnsrv(:,:,:,TE_index),dredx,dredy,dredz,[0,0],[0,0],[0,0])
+        call this%secondder(this%derCD06,m1fil - this%mix%material(1)%consrv(:,:,:,1),dm1dx,dm1dy,dm1dz,[0,0],[0,0],[0,0])
+        call this%secondder(this%derCD06,m2fil - this%mix%material(2)%consrv(:,:,:,1),dm2dx,dm2dy,dm2dz,[0,0],[0,0],[0,0])
+        call this%secondder(this%derCD06,vffil - this%mix%material(1)%VF,dVFdx,dVFdy,dVFdz,[0,0],[0,0],[0,0])
+
+        call gradient(this%decomp,this%derCD06,rufil,drudx4,drudy4,drudz4,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD06,rvfil,drvdx4,drvdy4,drvdz4,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD06,rwfil,drwdx4,drwdy4,drwdz4,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD06,refil,dredx4,dredy4,dredz4,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD06,m1fil,dm1dx4,dm1dy4,dm1dz4,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD06,m2fil,dm2dx4,dm2dy4,dm2dz4,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD06,vffil,dVFdx4,dVFdy4,dVFdz4,[0,0],[0,0],[0,0]) 
+ 
+        this%rhouHeur = (rufil - this%Wcnsrv(:,:,:,mom_index))
+        this%rhovHeur = (rvfil - this%Wcnsrv(:,:,:,mom_index+1))
+        this%rhowHeur = (rwfil - this%Wcnsrv(:,:,:,mom_index+2))
+        this%rhoeHeur = (refil - this%Wcnsrv(:,:,:,TE_index))
+        this%m1Heur   = (m1fil - this%mix%material(1)%consrv(:,:,:,1)) 
+        this%m2Heur   = (m2fil- this%mix%material(2)%consrv(:,:,:,1))
+        this%VFHeur   = (vffil - this%mix%material(1)%VF )
+
+        MSEru = P_SUM(mask*(rufil - this%Wcnsrv(:,:,:,mom_index))**2 *this%dx*this%dy*this%dz)  
+        MSErv = P_SUM(mask*(rvfil - this%Wcnsrv(:,:,:,mom_index+1))**2 *this%dx*this%dy*this%dz) 
+        MSErw = P_SUM(mask*(rwfil - this%Wcnsrv(:,:,:,mom_index+2))**2 *this%dx*this%dy*this%dz) 
+        MSEre = P_SUM(mask*(refil - this%Wcnsrv(:,:,:,TE_index))**2 *this%dx*this%dy*this%dz) 
+        MSEm1 = P_SUM(mask*(m1fil - this%mix%material(1)%consrv(:,:,:,1))**2 *this%dx*this%dy*this%dz) 
+        MSEm2 = P_SUM(mask*(m2fil - this%mix%material(2)%consrv(:,:,:,1))**2 *this%dx*this%dy*this%dz) 
+        MSEVF = P_SUM(mask*(vffil - this%mix%material(1)%VF)**2 *this%dx*this%dy*this%dz) 
+
+        do i = 1,9
+        this%lamru(i) = this%lamru(i+1)
+        this%lamrv(i) = this%lamrv(i+1)
+        this%lamrw(i) = this%lamrw(i+1)
+        this%lamre(i) = this%lamre(i+1)
+        this%lamm1(i) = this%lamm1(i+1)
+        this%lamm2(i) = this%lamm2(i+1)
+        this%lamVF(i) = this%lamVF(i+1)
+        this%lamtim(i) = this%lamtim(i+1)
+        enddo
+        this%lamru(10) = MSEru
+        this%lamrv(10) = MSErv
+        this%lamrw(10) = MSErw
+        this%lamre(10) = MSEre
+        this%lamm1(10) = MSEm1
+        this%lamm2(10) = MSEm2
+        this%lamVF(10) = MSEVF
+        this%lamtim(10) = this%tsim
+
+        if(  this%step .GE. 75 ) then
+
+           if(this%lamru(1) .GT. 1d-40 .AND. this%lamru(4) .GT. 1d-40 ) then
+
+             sum_t = 0; sum_t2 = 0; sum_logH = 0; sum_tlogH = 0;
+ 
+             do i = 1,10
+
+               sum_t = sum_t + this%lamtim(i)
+               sum_t2 = sum_t2 + this%lamtim(i)*this%lamtim(i)
+               sum_logH = sum_logH + LOG(this%lamru(i) )
+               sum_tlogH = sum_tlogH + LOG(this%lamru(i) )*this%lamtim(i)
+
+             enddo
+             growthrate(1) = (10*sum_tlogH - sum_t*sum_logH) / (10*sum_t2 - sum_t*sum_t)  ! 1_rkind / (this%lamtim(4) - this%lamtim(1)) * LOG(this%lamru(4)/this%lamru(1))
+         
+           else
+
+             growthrate(1) = 0
+           
+           endif
+
+           if(this%lamrv(1) .GT. 1d-40 .AND. this%lamrv(4) .GT. 1d-40 ) then
+
+               sum_t = 0; sum_t2 = 0; sum_logH = 0; sum_tlogH = 0;
+
+             do i = 1,10
+
+               sum_t = sum_t + this%lamtim(i)
+               sum_t2 = sum_t2 + this%lamtim(i)*this%lamtim(i)
+               sum_logH = sum_logH + LOG(this%lamrv(i) )
+               sum_tlogH = sum_tlogH + LOG(this%lamrv(i) )*this%lamtim(i)
+
+             enddo
+             growthrate(2) = (10*sum_tlogH - sum_t*sum_logH) / (10*sum_t2 - sum_t*sum_t) 
+
+           else
+
+             growthrate(2) = 0
+
+           endif
+
+           if(this%lamrw(1) .GT. 1d-40 .AND. this%lamrw(4) .GT. 1d-40 ) then
+
+               sum_t = 0; sum_t2 = 0; sum_logH = 0; sum_tlogH = 0;
+
+               do i = 1,10
+
+                 sum_t = sum_t + this%lamtim(i)
+                 sum_t2 = sum_t2 + this%lamtim(i)*this%lamtim(i)
+                 sum_logH = sum_logH + LOG(this%lamrw(i) )
+                 sum_tlogH = sum_tlogH + LOG(this%lamrw(i) )*this%lamtim(i)
+
+               enddo
+               growthrate(3) = (10*sum_tlogH - sum_t*sum_logH) / (10*sum_t2 - sum_t*sum_t) 
+
+
+           else
+
+             growthrate(3) = 0
+
+           endif
+
+           if(this%lamre(1) .GT. 1d-32 .AND. this%lamre(4) .GT. 1d-32 ) then
+
+               sum_t = 0; sum_t2 = 0; sum_logH = 0; sum_tlogH = 0;
+
+               do i = 1,10
+
+                 sum_t = sum_t + this%lamtim(i)
+                 sum_t2 = sum_t2 + this%lamtim(i)*this%lamtim(i)
+                 sum_logH = sum_logH + LOG(this%lamre(i) )
+                 sum_tlogH = sum_tlogH + LOG(this%lamre(i) )*this%lamtim(i)
+
+               enddo
+               growthrate(4) = (10*sum_tlogH - sum_t*sum_logH) / (10*sum_t2 - sum_t*sum_t) 
+
+
+           else
+
+             growthrate(4) = 0
+
+           endif
+
+           if(this%lamm1(1) .GT. 1d-20 .AND. this%lamm1(4) .GT. 1d-20 ) then
+
+             sum_t = 0; sum_t2 = 0; sum_logH = 0; sum_tlogH = 0;
+
+             do i = 1,10
+
+               sum_t = sum_t + this%lamtim(i)
+               sum_t2 = sum_t2 + this%lamtim(i)*this%lamtim(i)
+               sum_logH = sum_logH + LOG(this%lamm1(i) )
+               sum_tlogH = sum_tlogH + LOG(this%lamm1(i) )*this%lamtim(i)
+
+             enddo
+             growthrate(5) = (10*sum_tlogH - sum_t*sum_logH) / (10*sum_t2 - sum_t*sum_t) 
+
+
+
+           else
+
+             growthrate(5)= 0
+
+           endif
+
+
+           if(this%lamm2(1) .GT. 1d-20 .AND. this%lamm2(4) .GT. 1d-20 ) then
+
+             sum_t = 0; sum_t2 = 0; sum_logH = 0; sum_tlogH = 0;
+
+             do i = 1,10
+
+               sum_t = sum_t + this%lamtim(i)
+               sum_t2 = sum_t2 + this%lamtim(i)*this%lamtim(i)
+               sum_logH = sum_logH + LOG(this%lamm2(i) )
+               sum_tlogH = sum_tlogH + LOG(this%lamm2(i) )*this%lamtim(i)
+
+             enddo
+             growthrate(6) = (10*sum_tlogH - sum_t*sum_logH) / (10*sum_t2 - sum_t*sum_t) 
+
+
+           else
+
+             growthrate(6) = 0
+
+           endif
+
+           if(this%lamVF(1) .GT. 1d-40 .AND. this%lamVF(4) .GT. 1d-40 ) then
+
+             sum_t = 0; sum_t2 = 0; sum_logH = 0; sum_tlogH = 0;
+
+             do i = 1,10
+
+               sum_t = sum_t + this%lamtim(i)
+               sum_t2 = sum_t2 + this%lamtim(i)*this%lamtim(i)
+               sum_logH = sum_logH + LOG(this%lamVF(i) )
+               sum_tlogH = sum_tlogH + LOG(this%lamVF(i) )*this%lamtim(i)
+
+             enddo
+             growthrate(7) = (10*sum_tlogH - sum_t*sum_logH) / (10*sum_t2 - sum_t*sum_t) 
+
+
+           else
+
+             growthrate(7) = 0
+
+           endif
+
+          
+           MSETotal = 0
+
+           do i = 1,7
+
+
+             if( growthrate(i) .GE. 0 ) then
+
+               MSETotal = MSETotal + growthrate(i)
+               
+ 
+             endif
+
+
+           enddo
+
+           MSETotal = MSETotal / 6_rkind
+
+
+           if(MSEru .GE. 250 .OR. MSErv .GE. 250 .OR. MSEre .GE. 250 .OR. MSEm1 .GE. 250 .OR. MSEm2 .GE. 250 .OR. MSEVF .GE. 250 ) then
+
+              this%Wcnsrv(:,:,:,mom_index) = rufil
+              this%Wcnsrv(:,:,:,mom_index+1) = rvfil
+              this%Wcnsrv(:,:,:,mom_index+2) = rwfil
+              this%Wcnsrv(:,:,:,TE_index) = refil
+              this%mix%material(1)%consrv(:,:,:,1) = m1fil
+              this%mix%material(2)%consrv(:,:,:,1) = m2fil
+              this%mix%material(1)%VF = VFfil
+              this%mix%material(2)%VF = 1_rkind - this%mix%material(1)%VF
+              this%numfil = this%numfil + 1
+              this%stepfil = 0
+
+              call this%get_primitive()
+              call this%mix%equilibratePressure(this%rho,this%e, this%p)
+              call this%post_bc()
+
+              if (nrank == 0) then
+
+               print *, " Filtered Again ", this%numfil
+             
+              endif
+
+           endif
+    
+           
+
+           
+
+
+
+
+        else
+
+!          this%stepfil = this%stepfil + 1
+
+        endif
+
+         this%stepfil = this%stepfil + 1
+
+!        growthrate(1) = this%lamru(4); growthrate(2) = this%lamrv(4); growthrate(3) = this%lamrw(4); growthrate(4) = this%lamre(5);
+!        growthrate(5) = this%lamm1(4); growthrate(6) = this%lamm2(4); growthrate(7) = this%lamVF(4);
+        
+       growthrate(3) = MSETotal 
+       if(MOD(this%stepfil,10) .EQ. 0 ) then
+
+            if (nrank == 0) then
+               filename = 'heuristic_MSET.dat'
+
+               ! Check if file exists to open in append or write mode
+               inquire(file=filename, exist=file_exists)
+
+               if (file_exists) then
+                 open(unit=10, file=filename, status='old', position='append', action='write')
+              else
+                 open(unit=10, file=filename, status='new', action='write') 
+                 write(10, '(A)') '# Timestep          Hru          Hrv           Hrw           Hre           Hm1           Hm2         H_alpha1'
+              end if
+
+              write(10, '(F12.5, 7(2X,E16.8))') this%tsim, (growthrate(i),i=1,7)
+              close(10)
+
+           end if
+
+
+
+
+       endif
+
+
+
+  end subroutine
+
+  subroutine FilteringHeuristic(this)
+        use timer,      only: tic, toc
+        use exits,      only: message,nancheck,GracefulExit
+        use reductions, only: P_MAXVAL, P_MINVAL,P_SUM
+        use decomp_2d,  only: nrank
+        use operators, only: divergence,gradient,gradFV_x,gradFV_y,gradFV_z,interpolateFV
+        use constants,               only: pi
+        class(sgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx,drudy,drudz,drvdx,drvdy,drvdz,drwdx,drwdy,drwdz,dredx,dredy,dredz,dVFdx,dVFdy,dVFdz,dm1dx,dm1dy,dm1dz,dm2dx,dm2dy,dm2dz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx4,drudy4,drudz4,drvdx4,drvdy4,drvdz4,drwdx4,drwdy4,drwdz4,dredx4,dredy4,dredz4,dVFdx4,dVFdy4,dVFdz4,dm1dx4,dm1dy4,dm1dz4,dm2dx4,dm2dy4,dm2dz4       
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)      :: tmpint
+        integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
+        real(rkind) :: MSETotal,MSEru,MSErv,MSErw,MSEre,MSEm1,MSEm2,MSEVF
+        real(rkind), dimension(6) :: global_heuristic
+        logical :: file_exists
+        character(len=clen) :: tempname, filename
+            call interpolateFV(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStagg,tmpint(:,:,:,1),drudx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStagg,tmpint(:,:,:,2),drudy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStagg,tmpint(:,:,:,3),drudz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index+1),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStagg,tmpint(:,:,:,1),drvdx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStagg,tmpint(:,:,:,2),drvdy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStagg,tmpint(:,:,:,3),drvdz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,mom_index+3),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStagg,tmpint(:,:,:,1),drwdx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStagg,tmpint(:,:,:,2),drwdy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStagg,tmpint(:,:,:,3),drwdz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid,this%Wcnsrv(:,:,:,TE_index),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStagg,tmpint(:,:,:,1),dredx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStagg,tmpint(:,:,:,2),dredy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStagg,tmpint(:,:,:,3),dredz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid,this%mix%material(1)%consrv(:,:,:,1),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStagg,tmpint(:,:,:,1),dm1dx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStagg,tmpint(:,:,:,2),dm1dy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStagg,tmpint(:,:,:,3),dm1dz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid,this%mix%material(2)%consrv(:,:,:,1),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStagg,tmpint(:,:,:,1),dm2dx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStagg,tmpint(:,:,:,2),dm2dy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStagg,tmpint(:,:,:,3),dm2dz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid,this%mix%material(1)%VF,tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStagg,tmpint(:,:,:,1),dVFdx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStagg,tmpint(:,:,:,2),dVFdy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)            
+            call gradFV_z(this%decomp,this%derStagg,tmpint(:,:,:,3),dVFdz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            !!!!!!!!!!! 4th Order             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            call interpolateFV(this%decomp,this%interpMid04,this%Wcnsrv(:,:,:,mom_index),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStaggd04,tmpint(:,:,:,1),drudx4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStaggd04,tmpint(:,:,:,2),drudy4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStaggd04,tmpint(:,:,:,3),drudz4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid04,this%Wcnsrv(:,:,:,mom_index+1),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStaggd04,tmpint(:,:,:,1),drvdx4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStaggd04,tmpint(:,:,:,2),drvdy4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStaggd04,tmpint(:,:,:,3),drvdz4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid04,this%Wcnsrv(:,:,:,mom_index+3),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStaggd04,tmpint(:,:,:,1),drwdx4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStaggd04,tmpint(:,:,:,2),drwdy4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStaggd04,tmpint(:,:,:,3),drwdz4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid04,this%Wcnsrv(:,:,:,TE_index),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStaggd04,tmpint(:,:,:,1),dredx4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStaggd04,tmpint(:,:,:,2),dredy4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStaggd04,tmpint(:,:,:,3),dredz4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid04,this%mix%material(1)%consrv(:,:,:,1),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStaggd04,tmpint(:,:,:,1),dm1dx4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStaggd04,tmpint(:,:,:,2),dm1dy4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStaggd04,tmpint(:,:,:,3),dm1dz4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid04,this%mix%material(2)%consrv(:,:,:,1),tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStaggd04,tmpint(:,:,:,1),dm2dx4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStaggd04,tmpint(:,:,:,2),dm2dy4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStaggd04,tmpint(:,:,:,3),dm2dz4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            call interpolateFV(this%decomp,this%interpMid04,this%mix%material(1)%VF,tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_x(this%decomp,this%derStaggd04,tmpint(:,:,:,1),dVFdx4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_y(this%decomp,this%derStaggd04,tmpint(:,:,:,2),dVFdy4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call gradFV_z(this%decomp,this%derStaggd04,tmpint(:,:,:,3),dVFdz4,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Take Difference             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            drudx4 = drudx-drudx4; drudy4 = drudy-drudy4; drudz4 = drudz-drudz4;
+            drvdx4 = drvdx-drvdx4; drvdy4 = drvdy-drvdy4; drvdz4 = drvdz-drvdz4;
+            drwdx4 = drwdx-drwdx4; drwdy4 = drwdy-drwdy4; drwdz4 = drwdz-drwdz4;
+            dredx4 = dredx-dredx4; dredy4 = dredy-dredy4; dredz4 = dredz-dredz4;
+            dm1dx4 = dm1dx-dm1dx4; dm1dy4 = dm1dy-dm1dy4; dm1dz4 = dm1dz-dm1dz4;
+            dm2dx4 = dm2dx-dm2dx4; dm2dy4 = dm2dy-dm2dy4; dm2dz4 = dm2dz-dm2dz4;
+            dVFdx4 = dVFdx-dVFdx4; dVFdy4 = dVFdy-dVFdy4; dVFdz4 = dVFdz-dVFdz4;
+
+           
+            MSEru  =( P_SUM( (this%dx*this%dy*this%dz)*(drudx4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (drudy4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (drudz4)**2 ) ) &
+                   /(1d-20 + P_SUM( this%dx*this%dy*this%dz*( drudx**2 + drudy**2 + drudz**2)*0.015) )                
+
+
+
+! / ( 1d-14 + ((this%dx*this%dy*this%dz)*P_MAXVAL(drudx)**2 + (this%dx*this%dy*this%dz)*P_MAXVAL(drudy)**2 + (this%dx*this%dy*this%dz)*P_MAXVAL(drudx)**2 ) )
+
+            MSErv  =( P_SUM( (this%dx*this%dy*this%dz)*(drvdx4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (drvdy4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (drvdz4)**2 ) ) &
+                   /( 1d-20 + P_SUM( this%dx*this%dy*this%dz*( drvdx**2 + drvdy**2 + drvdz**2)*0.015 ) )
+
+!                     / ( 1d-14 + ((this%dx*this%dy*this%dz)*P_MAXVAL(drvdx)**2 + (this%dx*this%dy*this%dz)*P_MAXVAL(drvdy)**2 + (this%dx*this%dy*this%dz)*P_MAXVAL(drvdx)**2 ) )
+            MSErw  =( P_SUM( (this%dx*this%dy*this%dz)*(drwdx4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (drwdy4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (drwdz4)**2 ) ) &
+                   / ( 1d-20 + P_SUM( this%dx*this%dy*this%dz*( drwdx**2 + drwdy**2 + drwdz**2)*1e-10 ) )
+!                     / ( 1d-14 + ((this%dx*this%dy*this%dz)*P_MAXVAL(drwdx)**2 + (this%dx*this%dy*this%dz)*P_MAXVAL(drwdy)**2 + (this%dx*this%dy*this%dz)*P_MAXVAL(drwdx)**2 ) )
+   
+            MSEre  =( P_SUM( (this%dx*this%dy*this%dz)*(dredx4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (dredy4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)*(dredz4)**2 ) )  &
+                   / (1d-20 + P_SUM( this%dx*this%dy*this%dz*( dredx**2 + dredy**2 + dredz**2)*2.5 ) )
+!                     / ( 1d-14 + ((this%dx*this%dy*this%dz)*P_MAXVAL(dredx)**2 + (this%dx*this%dy*this%dz)*P_MAXVAL(dredy)**2 + (this%dx*this%dy*this%dz)*P_MAXVAL(dredx)**2 ) )
+
+            MSEm1  =( P_SUM( (this%dx*this%dy*this%dz)*(dm1dx4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (dm1dy4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)*(dm1dz4)**2 ) ) &
+                   /(1d-20 + P_SUM( this%dx*this%dy*this%dz*( dm1dx**2 + dm1dy**2 + dm1dz**2) ) )
+
+            MSEm2  =( P_SUM( (this%dx*this%dy*this%dz)*(dm2dx4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (dm2dy4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)*(dm2dz4)**2 ) )  &
+                   /(1d-20 + P_SUM( this%dx*this%dy*this%dz*( dm2dx**2 + dm2dy**2 + dm2dz**2) ) )
+
+            MSEVF  =( P_SUM( (this%dx*this%dy*this%dz)*(dVFdx4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)* (dVFdy4)**2 ) + P_SUM( (this%dx*this%dy*this%dz)*(dVFdz4)**2 ) )  &
+                   /(1d-20 + P_SUM( this%dx*this%dy*this%dz*( dVFdx**2 + dVFdy**2 + dVFdz**2) ) )
+
+            this%rhouHeur = (this%dx*this%dy*this%dz)*(drudx4)**2 + (this%dx*this%dy*this%dz)* (drudy4)**2 
+            this%rhovHeur = (this%dx*this%dy*this%dz)*(drvdx4)**2 + (this%dx*this%dy*this%dz)* (drvdy4)**2
+            this%rhoeHeur = (this%dx*this%dy*this%dz)*(dredx4)**2 + (this%dx*this%dy*this%dz)* (dredy4)**2 
+            this%m1Heur   = (this%dx*this%dy*this%dz)*(dm1dx4)**2 + (this%dx*this%dy*this%dz)* (dm1dy4)**2 
+            this%m2Heur   = (this%dx*this%dy*this%dz)*(dm2dx4)**2 + (this%dx*this%dy*this%dz)* (dm2dy4)**2 
+            this%VFHeur   = (this%dx*this%dy*this%dz)*(dVFdx4)**2 + (this%dx*this%dy*this%dz)* (dVFdy4)**2 
+            MSETotal = MSEru + MSErv  + MSEre + MSEm2 + MSEm1 + MSEVF
+
+            global_heuristic(1) = MSEru; global_heuristic(2) = MSErv; global_heuristic(3) = MSErw;
+            global_heuristic(4) = MSEre; global_heuristic(5) = MSEm1; global_heuristic(6) = MSEm2;
+            global_heuristic(7) = MSEVF; global_heuristic(8) = MSETotal;
+
+            if (nrank == 0) then
+               filename = 'heuristic_logNorm.dat'
+
+               ! Check if file exists to open in append or write mode
+               inquire(file=filename, exist=file_exists)
+    
+               if (file_exists) then
+                 open(unit=10, file=filename, status='old', position='append', action='write')
+              else
+                 open(unit=10, file=filename, status='new', action='write')
+                 write(10, '(A)') '# Timestep          Hru          Hrv          Hrw           Hre           Hm1           Hm2         H_alpha1        H_total'
+              end if
+
+              write(10, '(F12.5, 8(2X,E16.8))') this%tsim, (global_heuristic(i), i=1,8)
+              close(10)
+
+           end if
+     end subroutine
+
+     subroutine FilteringHeuristicHighOrder(this)
+        use timer,      only: tic, toc
+        use exits,      only: message,nancheck,GracefulExit
+        use reductions, only: P_MAXVAL, P_MINVAL,P_SUM
+        use decomp_2d,  only: nrank
+        use operators, only: divergence,gradient,gradFV_x,gradFV_y,gradFV_z,interpolateFV,laplacian
+        use constants,               only: pi
+        class(sgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx,drudy,drudz,drvdx,drvdy,drvdz,drwdx,drwdy,drwdz,dredx,dredy,dredz,dVFdx,dVFdy,dVFdz,dm1dx,dm1dy,dm1dz,dm2dx,dm2dy,dm2dz,tmp1,tmp2,tmp3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx4,drudy4,drudz4,drvdx4,drvdy4,drvdz4,drwdx4,drwdy4,drwdz4,dredx4,dredy4,dredz4,dVFdx4,dVFdy4,dVFdz4,dm1dx4,dm1dy4,dm1dz4,dm2dx4,dm2dy4,dm2dz4, mask
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)      :: tmpint
+        integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
+        real(rkind) :: MSETotal,MSEru,MSErv,MSErw,MSEre,MSEm1,MSEm2,MSEVF
+        real(rkind), dimension(6) :: global_heuristic
+
+        logical :: file_exists
+        character(len=clen) :: tempname, filename
+
+
+        call this%fourthder(this%derCD06,this%Wcnsrv(:,:,:,mom_index),drudx,drudy,drudz,[0,0],[0,0],[0,0])
+        call this%fourthder(this%derCD04,this%Wcnsrv(:,:,:,mom_index),drudx4,drudy4,drudz4,[0,0],[0,0],[0,0])
+       
+        call this%fourthder(this%derCD06,this%Wcnsrv(:,:,:,mom_index+1),drvdx,drvdy,drvdz,[0,0],[0,0],[0,0])
+        call this%fourthder(this%derCD04,this%Wcnsrv(:,:,:,mom_index+1),drvdx4,drvdy4,drvdz4,[0,0],[0,0],[0,0]) 
+ 
+        call this%fourthder(this%derCD06,this%Wcnsrv(:,:,:,mom_index+2),drwdx,drwdy,drwdz,[0,0],[0,0],[0,0])
+        call this%fourthder(this%derCD04,this%Wcnsrv(:,:,:,mom_index+2),drwdx4,drwdy4,drwdz4,[0,0],[0,0],[0,0])
+
+        call this%fourthder(this%derCD06,this%Wcnsrv(:,:,:,TE_index),dredx,dredy,dredz,[0,0],[0,0],[0,0])
+        call this%fourthder(this%derCD04,this%Wcnsrv(:,:,:,TE_index),dredx4,dredy4,dredz4,[0,0],[0,0],[0,0])
+!        call this%fourthder(this%derCD06,this%p,dredx,dredy,dredz,[0,0],[0,0],[0,0])
+!        call this%fourthder(this%derCD04,this%p,dredx4,dredy4,dredz4,[0,0],[0,0],[0,0])
+        call this%fourthder(this%derCD06,this%mix%material(1)%consrv(:,:,:,1),dm1dx,dm1dy,dm1dz,[0,0],[0,0],[0,0])
+        call this%fourthder(this%derCD04,this%mix%material(1)%consrv(:,:,:,1),dm1dx4,dm1dy4,dm1dz4,[0,0],[0,0],[0,0])
+
+        call this%fourthder(this%derCD06,this%mix%material(2)%consrv(:,:,:,1),dm2dx,dm2dy,dm2dz,[0,0],[0,0],[0,0])
+        call this%fourthder(this%derCD04,this%mix%material(2)%consrv(:,:,:,1),dm2dx4,dm2dy4,dm2dz4,[0,0],[0,0],[0,0])
+
+        call this%fourthder(this%derCD06,this%mix%material(1)%VF,dVFdx,dVFdy,dVFdz,[0,0],[0,0],[0,0])
+        call this%fourthder(this%derCD04,this%mix%material(1)%VF,dVFdx4,dVFdy4,dVFdz4,[0,0],[0,0],[0,0])
+
+        drudx4 = drudx-drudx4; drudy4 = drudy-drudy4; drudz4 = drudz-drudz4;
+        drvdx4 = drvdx-drvdx4; drvdy4 = drvdy-drvdy4; drvdz4 = drvdz-drvdz4;
+        drwdx4 = drwdx-drwdx4; drwdy4 = drwdy-drwdy4; drwdz4 = drwdz-drwdz4;
+        dredx4 = dredx-dredx4; dredy4 = dredy-dredy4; dredz4 = dredz-dredz4;
+        dm1dx4 = dm1dx-dm1dx4; dm1dy4 = dm1dy-dm1dy4; dm1dz4 = dm1dz-dm1dz4;
+        dm2dx4 = dm2dx-dm2dx4; dm2dy4 = dm2dy-dm2dy4; dm2dz4 = dm2dz-dm2dz4;
+        dVFdx4 = dVFdx-dVFdx4; dVFdy4 = dVFdy-dVFdy4; dVFdz4 = dVFdz-dVFdz4;
+ 
+        where(abs(this%mix%material(1)%VF) .LE. 1d-3 .OR. abs(this%mix%material(2)%VF) .LE. 1d-3 )
+
+         mask = 1.0
+
+        elsewhere
+
+         mask = 0.0
+
+        endwhere
+
+        this%rhouHeur = 1/(1 + sqrt( drudx**2 + drudy**2) ) * ( (drudx4)**2 + (drudy4)**2 )*mask
+        this%rhovHeur = 1/(1 + sqrt( drvdx**2 + drvdy**2) ) * ( (drvdx4)**2 + (drvdy4)**2 )*mask
+        this%rhoeHeur = 1/(1 + sqrt( dredx**2 + dredy**2) ) * ( (dredx4)**2 + (dredy4)**2 )*mask
+        this%m1Heur   = 1/(1 + sqrt( dm1dx**2 + dm1dy**2) ) * ( (dm1dx4)**2 + (dm1dy4)**2 )*mask
+        this%m2Heur   = 1/(1 + sqrt( dm2dx**2 + dm2dy**2) ) * ( (dm2dx4)**2 + (dm2dy4)**2 )*mask
+        this%VFHeur   = 1/(1 + sqrt( dVFdx**2 + dVFdy**2) ) * ( (dVFdx4)**2 + (dVFdy4)**2 )*mask
+
+
+     end subroutine
+
+     subroutine LocalDiffHeuristic(this)
+        use timer,      only: tic, toc
+        use exits,      only: message,nancheck,GracefulExit
+        use reductions, only: P_MAXVAL, P_MINVAL,P_SUM
+        use decomp_2d,  only: nrank
+        use operators, only: divergence,gradient,gradFV_x,gradFV_y,gradFV_z,interpolateFV,laplacian
+        use constants,               only: pi
+        class(sgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx,drudy,drudz,drvdx,drvdy,drvdz,drwdx,drwdy,drwdz,dredx,dredy,dredz,dVFdx,dVFdy,dVFdz,dm1dx,dm1dy,dm1dz,dm2dx,dm2dy,dm2dz,tmp1,tmp2,tmp3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx4,drudy4,drudz4,drvdx4,drvdy4,drvdz4,drwdx4,drwdy4,drwdz4,dredx4,dredy4,dredz4,dVFdx4,dVFdy4,dVFdz4,dm1dx4,dm1dy4,dm1dz4,dm2dx4,dm2dy4,dm2dz4
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)      :: tmpint
+        integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
+        real(rkind) :: MSETotal,MSEru,MSErv,MSErw,MSEre,MSEm1,MSEm2,MSEVF
+        real(rkind), dimension(6) :: global_heuristic
+
+        logical :: file_exists
+        character(len=clen) :: tempname, filename
+
+
+        call gradient(this%decomp,this%derCD06,this%Wcnsrv(:,:,:,mom_index),drudx,drudy,drudz,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD04,this%Wcnsrv(:,:,:,mom_index),drudx4,drudy4,drudz4,[0,0],[0,0],[0,0])
+
+        call gradient(this%decomp,this%derCD06,this%Wcnsrv(:,:,:,mom_index+1),drvdx,drvdy,drvdz,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD04,this%Wcnsrv(:,:,:,mom_index+1),drvdx4,drvdy4,drvdz4,[0,0],[0,0],[0,0])
+
+        call gradient(this%decomp,this%derCD06,this%Wcnsrv(:,:,:,mom_index+2),drwdx,drwdy,drwdz,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD04,this%Wcnsrv(:,:,:,mom_index+2),drwdx4,drwdy4,drwdz4,[0,0],[0,0],[0,0])
+
+        call gradient(this%decomp,this%derCD06,this%Wcnsrv(:,:,:,TE_index),dredx,dredy,dredz,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD04,this%Wcnsrv(:,:,:,TE_index),dredx4,dredy4,dredz4,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD06,this%mix%material(1)%consrv(:,:,:,1),dm1dx,dm1dy,dm1dz,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD04,this%mix%material(1)%consrv(:,:,:,1),dm1dx4,dm1dy4,dm1dz4,[0,0],[0,0],[0,0])
+
+        call gradient(this%decomp,this%derCD06,this%mix%material(2)%consrv(:,:,:,1),dm2dx,dm2dy,dm2dz,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD04,this%mix%material(2)%consrv(:,:,:,1),dm2dx4,dm2dy4,dm2dz4,[0,0],[0,0],[0,0])
+
+        call gradient(this%decomp,this%derCD06,this%mix%material(1)%VF,dVFdx,dVFdy,dVFdz,[0,0],[0,0],[0,0])
+        call gradient(this%decomp,this%derCD04,this%mix%material(1)%VF,dVFdx4,dVFdy4,dVFdz4,[0,0],[0,0],[0,0])
+
+        this%rhouHeur = 0
+        this%rhovHeur = 0
+        this%rhowHeur = 0
+        this%rhoeHeur = 0
+        this%m1Heur   = 0 
+        this%m2Heur   = 0
+        this%VFHeur   = 0
+
+        do i = 2,this%nxp-1
+           do j = 2, this%nxp-1
+
+
+              this%rhouHeur(i,j,1) = (drudx(i,j,1) - drudx(i,j+1,1) )**2 + (drudx(i,j,1) - drudx(i,j-1,1) )**2  &
+                                       + (drudx(i,j,1) - drudx(i+1,j,1) )**2 + (drudx(i,j,1) - drudx(i-1,j,1) )**2  &
+                                       + (drudy(i,j,1) - drudy(i,j+1,1) )**2 + (drudy(i,j,1) - drudy(i,j-1,1) )**2  &
+                                       + (drudy(i,j,1) - drudy(i+1,j,1) )**2 + (drudy(i,j,1) - drudy(i-1,j,1) )**2   
+
+              this%rhovHeur(i,j,1) = (drvdx(i,j,1) - drvdx(i,j+1,1) )**2 + (drvdx(i,j,1) - drvdx(i,j-1,1) )**2  &
+                                       + (drvdx(i,j,1) - drvdx(i+1,j,1) )**2 + (drvdx(i,j,1) - drvdx(i-1,j,1) )**2  &
+                                       + (drvdy(i,j,1) - drvdy(i,j+1,1) )**2 + (drvdy(i,j,1) - drvdy(i,j-1,1) )**2  &
+                                       + (drvdy(i,j,1) - drvdy(i+1,j,1) )**2 + (drvdy(i,j,1) - drvdy(i-1,j,1) )**2 
+
+              this%rhowHeur(i,j,1) = (drwdx(i,j,1) - drwdx(i,j+1,1) )**2 + (drwdx(i,j,1) - drwdx(i,j-1,1) )**2  &
+                                       + (drwdx(i,j,1) - drwdx(i+1,j,1) )**2 + (drwdx(i,j,1) - drwdx(i-1,j,1) )**2  &
+                                       + (drwdy(i,j,1) - drwdy(i,j+1,1) )**2 + (drwdy(i,j,1) - drwdy(i,j-1,1) )**2  &
+                                       + (drwdy(i,j,1) - drwdy(i+1,j,1) )**2 + (drwdy(i,j,1) - drwdy(i-1,j,1) )**2 
+
+              this%rhoeHeur(i,j,1) =  (dredx(i,j,1) - dredx(i,j+1,1) )**2 + (dredx(i,j,1) - dredx(i,j-1,1) )**2  &
+                                       + (dredx(i,j,1) - dredx(i+1,j,1) )**2 + (dredx(i,j,1) - dredx(i-1,j,1) )**2  &
+                                       + (dredy(i,j,1) - dredy(i,j+1,1) )**2 + (dredy(i,j,1) - dredy(i,j-1,1) )**2  &
+                                       + (dredy(i,j,1) - dredy(i+1,j,1) )**2 + (dredy(i,j,1) - dredy(i-1,j,1) )**2 
+
+              this%m1Heur(i,j,1) =  (dm1dx(i,j,1) - dm1dx(i,j+1,1) )**2 + (dm1dx(i,j,1) - dm1dx(i,j-1,1) )**2  &
+                                       + (dm1dx(i,j,1) - dm1dx(i+1,j,1) )**2 + (dm1dx(i,j,1) - dm1dx(i-1,j,1) )**2  &
+                                       + (dm1dy(i,j,1) - dm1dy(i,j+1,1) )**2 + (dm1dy(i,j,1) - dm1dy(i,j-1,1) )**2  &
+                                       + (dm1dy(i,j,1) - dm1dy(i+1,j,1) )**2 + (dm1dy(i,j,1) - dm1dy(i-1,j,1) )**2 
+
+              this%m2Heur(i,j,1) = (dm2dx(i,j,1) - dm2dx(i,j+1,1) )**2 + (dm2dx(i,j,1) - dm2dx(i,j-1,1) )**2  &
+                                       + (dm2dx(i,j,1) - dm2dx(i+1,j,1) )**2 + (dm2dx(i,j,1) - dm2dx(i-1,j,1) )**2  &
+                                       + (dm2dy(i,j,1) - dm2dy(i,j+1,1) )**2 + (dm2dy(i,j,1) - dm2dy(i,j-1,1) )**2  &
+                                       + (dm2dy(i,j,1) - dm2dy(i+1,j,1) )**2 + (dm2dy(i,j,1) - dm2dy(i-1,j,1) )**2 
+
+              this%VFHeur(i,j,1) = (dVFdx(i,j,1) - dVFdx(i,j+1,1) )**2 + (dVFdx(i,j,1) - dVFdx(i,j-1,1) )**2  &
+                                       + (dVFdx(i,j,1) - dVFdx(i+1,j,1) )**2 + (dVFdx(i,j,1) - dVFdx(i-1,j,1) )**2  &
+                                       + (dVFdy(i,j,1) - dVFdy(i,j+1,1) )**2 + (dVFdy(i,j,1) - dVFdy(i,j-1,1) )**2  &
+                                       + (dVFdy(i,j,1) - dVFdy(i+1,j,1) )**2 + (dVFdy(i,j,1) - dVFdy(i-1,j,1) )**2 
+
+
+           enddo
+        enddo
+
+
+     end subroutine
 
      subroutine readRestartFile(this, tid, rid)
         use decomp_2d,  only: nrank
