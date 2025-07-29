@@ -391,7 +391,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         print *, "tmp"
         where( (x-0.125)**2_rkind + (y-0.125)**2_rkind .LE. 0.20_rkind**2 )
 
-           tmp = half* ( one - erf((0.15_rkind*0.15_rkind - (x-0.125_rkind)*(x-0.125_rkind) -(y-0.125_rkind)*(y-0.125_rkind))/(thick*dx))) 
+           tmp = half* ( one - erf((0.125_rkind*0.125_rkind - (x-0.125_rkind)*(x-0.125_rkind) -(y-0.125_rkind)*(y-0.125_rkind))/(thick*dx))) 
 
         elsewhere
 

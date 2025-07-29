@@ -4820,7 +4820,10 @@ contains
            call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
 
-           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+            call divergenceFV(this%decomp,this%derStagg,rhodiff_fil1*dYdx_x,rhodiff_fil2*dYdy_y,rhodiff_fil3*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
 !            call divergenceFV(this%decomp,this%derStagg,this%rhodiff_stagg(:,:,:,1)*dYdx_x,this%rhodiff_stagg(:,:,:,2)*dYdy_y,this%rhodiff_stagg(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         else
 
@@ -5436,7 +5439,10 @@ contains
 !          enddo
 !          this%rhodiff_stagg = adiff_int
 !          this%adiff_stagg   = adiff_int
-          call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!          call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+           call divergenceFV(this%decomp,this%derStagg,adiff_fil1*dVFdx_x,adiff_fil2*dVFdy_y,adiff_fil3*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
 !          call divergenceFV(this%decomp,this%derStagg,this%adiff_stagg(:,:,:,1)*dVFdx_x,this%adiff_stagg(:,:,:,2)*dVFdy_y,this%adiff_stagg(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         else

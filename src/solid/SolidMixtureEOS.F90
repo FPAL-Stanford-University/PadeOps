@@ -2346,9 +2346,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
-!           adiff_int(:,:,:,1) = adiff_fil1
-!           adiff_int(:,:,:,2) = adiff_fil2
-!           adiff_int(:,:,:,3) = adiff_fil3
+           adiff_int(:,:,:,1) = adiff_fil1
+           adiff_int(:,:,:,2) = adiff_fil2
+           adiff_int(:,:,:,3) = adiff_fil3
             
            rhodiff_fil1 = rhodiff_int(:,:,:,1)
            rhodiff_fil2 = rhodiff_int(:,:,:,2)
@@ -2357,9 +2357,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            call filter3D(this%decomp, this%gfil, rhodiff_fil1, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
-!           rhodiff_int(:,:,:,1) = rhodiff_fil1
-!           rhodiff_int(:,:,:,2) = rhodiff_fil2
-!           rhodiff_int(:,:,:,3) = rhodiff_fil3
+           rhodiff_int(:,:,:,1) = rhodiff_fil1
+           rhodiff_int(:,:,:,2) = rhodiff_fil2
+           rhodiff_int(:,:,:,3) = rhodiff_fil3
 
             call interpolateFV(this%decomp,this%interpMid,p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
             call interpolateFV(this%decomp,this%interpMid,hi,hi_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
