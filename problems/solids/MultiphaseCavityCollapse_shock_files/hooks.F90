@@ -373,7 +373,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         u1 = u1 / rho1
         u2 = u2 / rho2
 
-        shock_init =  1.0_rkind  ! (10*thick) grid points away from the interface
+        shock_init =  0.0_rkind  ! (10*thick) grid points away from the interface
         !dum = half * ( one - erf( (x-shock_init)/(two*dx) ) ) !works with f90/f80
         !dum = half * ( one - erf( (x-shock_init)/(5.0*dx) ) )
         dum = half * ( one - erf( (x-shock_init)/(thick*dx) ) )
@@ -384,7 +384,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         w   = zero
 
     
-        tmp = one !half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick2*dx) ) )
+        tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick2*dx) ) )
         !tmp = half * ( one - erf((0.25 - (x-interface_init)*(x-interface_init) - (y-3.0_rkind)*(y-3.0_rkind))/(thick*dx) ) )
         !tmp = half * ( one - erf((1.0_rkind - (x-2.375_rkind)*(x-2.375_rkind) - (y-2.5_rkind)*(y-2.5_rkind))/(thick2*dx) ) )
 

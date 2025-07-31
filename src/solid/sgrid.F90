@@ -3446,7 +3446,7 @@ contains
           rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + this%vJ
           rhs(:,:,:, mom_index+2 ) = rhs(:,:,:,mom_index+2 ) + this%wJ
           rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%keJ + this%eJ  + rhoeJ
-
+          this%eJ = rhoeJ
         endif
 
 

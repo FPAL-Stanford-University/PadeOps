@@ -5,6 +5,7 @@ module DerivativesStaggeredMod
     use d02Staggstuff, only: d02Stagg
     use d06Staggstuff, only: d06Stagg
     use cd06Staggerstuff, only: cd06Stagger
+    use cd04Staggerstuff, only: cd04Stagger
     use d04stuff, only: d04
     use fftstuff, only: ffts
     use dctstuff, only: dcts
@@ -25,6 +26,7 @@ module DerivativesStaggeredMod
 
         type(cd10), allocatable :: xcd10, ycd10, zcd10 
         type(cd06Stagger), allocatable :: xcd06, ycd06, zcd06
+        type(cd04Stagger), allocatable :: xcd04, ycd04, zcd04
         type(d02Stagg),  allocatable :: xd02, yd02, zd02 
         type(d04),  allocatable :: xd04, yd04, zd04 
         type(d06Stagg),  allocatable :: xd06, yd06, zd06 
@@ -114,6 +116,9 @@ contains
             m = "d04"
         case (7)
             m = "d06"
+        case (8)
+            m = "cd04"
+
         end select 
 
     end function
@@ -136,6 +141,8 @@ contains
             m = "d04"
         case (7)
             m = "d06"
+        case (8)
+           m = "cd04"
         end select 
 
     end function
@@ -158,6 +165,8 @@ contains
             m = "d04"
         case (7)
             m = "d06"
+        case (8)
+            m = "cd04"
         end select 
 
     end function
@@ -402,6 +411,14 @@ contains
                 call GracefulExit("Initializing d06 failed in X ",12)
             end if 
             this%xmethod = 7 
+         case ("cd04")
+            allocate(this%xcd04)
+            ierr = this % xcd04%init( this%xsz(1), dx, periodic_x, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing cd04 failed in X ",12)
+            end if
+            this%xmethod = 8
+
         case default 
             call GracefulExit("Invalid method selected in x direction ",01)
         end select
@@ -457,6 +474,13 @@ contains
                 call GracefulExit("Initializing d06 failed in Y ",12)
             end if 
             this%ymethod = 7 
+        case ("cd04")
+            allocate(this%ycd04)
+            ierr = this % ycd04%init( this%ysz(2), dy, periodic_y, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing cd04 failed in Y",12)
+            end if
+            this%ymethod = 8
         case default 
             call GracefulExit("Invalid method selected in y direction",01)
         end select
@@ -512,7 +536,14 @@ contains
             if (ierr .ne. 0) then
                 call GracefulExit("Initializing d06 failed in Z ",12)
             end if 
-            this%zmethod = 7 
+            this%zmethod = 7
+        case ("cd04")
+            allocate(this%zcd04)
+            ierr = this % zcd04%init( this%zsz(3), dz, periodic_z, 0, 0)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing cd04 failed in Z",12)
+            end if
+            this%zmethod = 8
         case default 
             call GracefulExit("Invalid method selected in z direction",01)
         end select
@@ -545,6 +576,9 @@ contains
         case (7)
             call this%xd06%destroy
             deallocate(this%xd06)
+        case (8)
+            call this%xcd04%destroy
+            deallocate(this%xcd04)
         end select 
         
         select case (this%ymethod) 
@@ -569,6 +603,9 @@ contains
         case (7)
             call this%yd06%destroy
             deallocate(this%yd06)
+        case (8)
+            call this%ycd04%destroy
+            deallocate(this%ycd04)
         end select 
 
         select case (this%zmethod) 
@@ -593,6 +630,9 @@ contains
         case (7)
             call this%zd06%destroy
             deallocate(this%zd06)
+        case (8)
+            call this%zcd04%destroy
+            deallocate(this%zcd04)
         end select
 
         this%xmetric = .false. 
@@ -648,6 +688,12 @@ contains
             else
                 call this%xd06 % dd1N2F(f,dfdx,this%xsz(2),this%xsz(3))
             end if
+        case (8)
+           if (present(bc1) .AND. present(bcn)) then
+               call this%xcd04 % dd1N2F(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
+               call this%xcd04 % dd1N2F(f,dfdx,this%xsz(2),this%xsz(3))
+            end if
         end select 
 
     end subroutine 
@@ -693,6 +739,12 @@ contains
             else
                 call this%yd06 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3))
             end if
+        case (8)
+             if (present(bc1) .AND. present(bcn)) then
+                call this%ycd04 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+             else
+                call this%ycd04 % dd2N2F(f,dfdx,this%ysz(1),this%ysz(3))
+             end if
         end select 
 
         if( this%yMetric) then
@@ -742,6 +794,12 @@ contains
             else
                 call this%zd06 % dd3N2F(f,dfdx,this%zsz(1),this%zsz(2))
             end if
+        case (8)
+            if (present(bc1) .AND. present(bcn)) then
+                call this%zcd04 % dd3N2F(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            else
+                call this%zcd04 % dd3N2F(f,dfdx,this%zsz(1),this%zsz(2))
+            end if
         end select 
     end subroutine 
 
@@ -786,6 +844,12 @@ contains
             else
                 call this%xd06 % dd1F2N(f,dfdx,this%xsz(2),this%xsz(3))
             end if
+        case (8)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%xcd04 % dd1F2N(f,dfdx,this%xsz(2),this%xsz(3),bc1,bcn)
+            else
+            call this%xcd04 % dd1F2N(f,dfdx,this%xsz(2),this%xsz(3))
+            endif
         end select 
 
     end subroutine 
@@ -831,6 +895,13 @@ contains
             else
                 call this%yd06 % dd2F2N(f,dfdx,this%ysz(1),this%ysz(3))
             end if
+        case (8)
+           if (present(bc1) .AND. present(bcn)) then
+            call this%ycd04 % dd2F2N(f,dfdx,this%ysz(1),this%ysz(3),bc1,bcn)
+            else
+            call this%ycd04 % dd2F2N(f,dfdx,this%ysz(1),this%ysz(3))
+            end if
+
         end select 
 
         if( this%yMetric) then
@@ -881,6 +952,12 @@ contains
                 call this%zd06 % dd3F2N(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
             else
                 call this%zd06 % dd3F2N(f,dfdx,this%zsz(1),this%zsz(2))
+            end if
+        case (8)
+            if (present(bc1) .AND. present(bcn)) then
+            call this%zcd04 % dd3F2N(f,dfdx,this%zsz(1),this%zsz(2),bc1,bcn)
+            else
+            call this%zcd04 % dd3F2N(f,dfdx,this%zsz(1),this%zsz(2))
             end if
         end select 
     end subroutine 

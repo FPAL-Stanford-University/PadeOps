@@ -389,7 +389,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         !tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) - (y-0.5)*(y-0.5))/(thick*dx) ) )
 
         print *, "tmp"
-        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - x*x -(y)*(y))/(thick*dx) ) ) 
+        tmp =  half * ( one - erf((625.0_rkind/7921.0_rkind  - x*x -(y)*(y))/(thick*dx) ) ) 
         !tmp = half * ( one + tanh((sqrt(x*x  + y*y) - 0.25_rkind) /(3_rkind*thick*dx/16_rkind) ))
         ! tmp = half * ( one - erf((0.25_rkind**2 - (x-0.5)*(x-0.5)-(y-0.5)*(y-0.5))/(thick*dx) ) )
         ! tmp = half * ( one - erf((0.35**2 - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )

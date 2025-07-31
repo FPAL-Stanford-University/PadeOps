@@ -690,6 +690,7 @@ contains
         real(rkind), intent(in) :: minYs, minVF
         real(rkind), dimension(:,:,:), pointer::dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb,VF_bound,HM,outM
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: HVF_outb,HYs_outb,Ys_bound,HYs, HVF,Hbound
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) ::xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) ::ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
         real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) ::ztmp1,ztmp2, ztmp3,ztmp4
@@ -724,17 +725,25 @@ contains
         endwhere
 
 
-        where( VF - minVF .GT. 0)
-          H3 = 1
+        where( VF  .LT. 1d-18 .OR. Ys .LT. 1d-18)
+          HVF_outb = 1
         elsewhere
-          H3 = 0
+          HVF_outb = 0
         endwhere
 
-        where( rhoYs .LT. rho0*1e-7)
-          HM = 1
+        where( VF  .GT. 1d-18 .AND. VF .LE. 1d-3)
+          HVF = 1
         elsewhere
-          HM = 0
+          HVF = 0
         endwhere
+
+        where( Ys  .GT. 1d-18 .AND. Ys .LE. 1d-4)
+          HYs = 1
+        elsewhere
+          HYs = 0
+        endwhere
+
+
         call this%filter(HM, x_bc, y_bc, z_bc)
 
         mask = ( 1 - 4*Ys*(1-Ys) )**nmask
@@ -779,7 +788,7 @@ contains
 
         endif
 
-        diffstar = sos*abs(diffstar) !*fd !/rho ! CD part of diff
+        diffstar =H1*sos*abs(diffstar) !*fd !/rho ! CD part of diff
 !       call this%filter(diffstar, x_bc, y_bc, z_bc)
 !       call this%filter(outb, x_bc, y_bc, z_bc)
         rhodiff = this%Crho*diffstar 
@@ -824,7 +833,7 @@ contains
 
         endif
 
-        adiffstar = this%Cvf1*sos*abs(adiffstar)
+        adiffstar = H2*this%Cvf1*sos*abs(adiffstar)
         !ytmp5 = this%Cvf2*sos*( (VF - 1 - minVF)*H2 - (VF -
         !minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one +
         !abs(Ys-one)) )*ytmp4 ! CY partof diff
@@ -845,14 +854,26 @@ contains
         ! Filter each part
         VF_bound = 0.0
 
-        VF_bound = max(0.0, (1_rkind-Ys/(minYs*1e-5)) )
-        VF_bound = VF_bound+ max(0.0, (1_rkind-(1_rkind-Ys)/(1/minYs*1e-5)) )
+        VF_bound = max(0.0, (1_rkind-VF/1e-3) )
+        VF_bound = VF_bound+ max(0.0, (1_rkind-(1_rkind-VF)/1e-3)) 
 
         if(this%yMetric) then
             VF_bound = VF_bound*P_MAXVAL(sos)*(this%dx*dy_stretch*this%dy)**(1.0/3.0)
         else
             VF_bound = VF_bound*P_MAXVAL(sos)*(this%dx*this%dy*this%dy)**(1.0/3.0)
         endif
+
+        Ys_bound = 0.0
+
+        Ys_bound = max(0.0, (1_rkind-Ys/1e-4) )
+        Ys_bound = Ys_bound+ max(0.0, (1_rkind-(1_rkind-Ys)/1e-4))
+
+        if(this%yMetric) then
+            Ys_bound = Ys_bound*P_MAXVAL(sos)*(this%dx*dy_stretch*this%dy)**(1.0/3.0)
+        else
+            Ys_bound = Ys_bound*P_MAXVAL(sos)*(this%dx*this%dy*this%dy)**(1.0/3.0)
+        endif
+
 
 !       where((VF .GE. 1d-6 ) .AND. (VF .LE. (1-1d-6) ) )
 
@@ -864,11 +885,12 @@ contains
 !        call this%filter(VF_bound, x_bc, y_bc, z_bc)
 
         VF_bound = this%Cdiff*VF_bound
-        rhodiff = max(rhodiff, adiffstar,outb,ytmp5)+VF_bound ! + max(outb, ytmp5)
+        Ys_bound = this%Cdiff*Ys_bound
+        rhodiff = (1_rkind -HVF_outb)*(1-HVF)*(1-HYs)*max(rhodiff, adiffstar)  + HVF_outb*max(outb, ytmp5) + max( HVF*VF_bound,HYs*Ys_bound)
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 
-        adiff   = max(rhodiff, adiffstar,outb,ytmp5) !,VF_bound) ! max(adiffstar,ytmp5,VF_bound) ! rhodiff
+        adiff   = rhodiff ! max(rhodiff, adiffstar,outb,ytmp5) !,VF_bound) ! max(adiffstar,ytmp5,VF_bound) ! rhodiff
 !        call this%filter(adiff, x_bc, y_bc, z_bc)
 
     end subroutine

@@ -7,6 +7,7 @@ module FiltersMod
     use cfo2D15stuff,    only: cfo2D15
     use gaussianstuff,   only: gaussian
     use lstsqstuff,      only: lstsq
+    use f4stuff,         only: f4
     use exits,           only: gracefulExit, message
     use decomp_2d,       only: decomp_info, nrank
 
@@ -26,6 +27,7 @@ module FiltersMod
         type(cfo2D15)   , allocatable :: xcfo2D15, ycfo2D15, zcfo2D15
         type(gaussian)  , allocatable :: xgauf, ygauf, zgauf
         type(lstsq)     , allocatable :: xlsqf, ylsqf, zlsqf
+        type(f4)      , allocatable :: xf4, yf4, zf4
 
         integer, dimension(3)          :: xsz, ysz, zsz ! Local decomposition sizes
         
@@ -66,6 +68,8 @@ contains
             m = "cfo2Penta"
         case (7)
             m = "cfo2D15"
+        case (8)
+            m = "f4"
         end select 
     end function
 
@@ -87,6 +91,8 @@ contains
             m = "cfo2Penta"
         case (7)
             m = "cfo2D15"
+        case (8)
+            m = "f4"
         end select
     end function 
         
@@ -108,6 +114,8 @@ contains
             m = "cfo2Penta"
         case (7)
             m = "cfo2D15"
+        case (8)
+            m = "f4"
         end select
     end function 
         
@@ -180,7 +188,13 @@ contains
                 call GracefulExit("Initializing cfo2D15 failed in X ",51)
             end if
             this%xmethod = 7
-        
+        case ("f4")
+            allocate (this%xf4)
+            ierr = this%xf4%init( nx, periodicx)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing f4 failed in X ",51)
+            end if
+            this%xmethod = 8
         case default
             call GracefulExit("Incorrect method select in direction X", 52)
         end select 
@@ -243,7 +257,14 @@ contains
                 call GracefulExit("Initializing cfo2D15 failed in Y ",51)
             end if
             this%ymethod = 7
-        
+        case ("f4")
+            allocate (this%yf4)
+            ierr = this%yf4%init( ny, periodicy)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing f4 failed in Y ",51)
+            end if
+            this%ymethod = 8
+
         case default
             call GracefulExit("Incorrect method select in direction Y", 52)
         end select 
@@ -305,7 +326,14 @@ contains
                 call GracefulExit("Initializing cfo2D15 failed in Z ",51)
             end if
             this%zmethod = 7
-        
+        case ("f4")
+            allocate (this%zf4)
+            ierr = this%zf4%init( nz, periodicz)
+            if (ierr .ne. 0) then
+                call GracefulExit("Initializing f4 failed in Z ",51)
+            end if
+            this%zmethod = 8
+
         case default
             call GracefulExit("Incorrect method select in direction Z", 52)
         end select 
@@ -330,6 +358,8 @@ contains
             call this%xcfo2Penta%destroy
         case (7)
             call this%xcfo2D15%destroy
+        case (8)
+            call this%xf4%destroy
         end select
 
         select case (this%ymethod)  
@@ -347,6 +377,8 @@ contains
             call this%ycfo2Penta%destroy
         case (7)
             call this%ycfo2D15%destroy
+        case (8)
+            call this%yf4%destroy
         end select
         
         select case (this%zmethod)  
@@ -364,6 +396,8 @@ contains
             call this%zcfo2Penta%destroy
         case (7)
             call this%zcfo2D15%destroy
+        case (8)
+            call this%zf4%destroy
         end select
 
         this%initialized = .false. 
@@ -391,6 +425,8 @@ contains
             call this%xcfo2Penta%filter1( f, ff, this%xsz(2), this%xsz(3), bc1, bcn)
         case (7)
             call this%xcfo2D15%filter1( f, ff, this%xsz(2), this%xsz(3), bc1, bcn)
+        case (8)
+            call this%xf4%filter1( f, ff, this%xsz(2), this%xsz(3), bc1,bcn)
         end select
 
     end subroutine
@@ -416,6 +452,8 @@ contains
             call this%ycfo2Penta%filter2( f, ff, this%ysz(1), this%ysz(3), bc1, bcn)
         case (7)
             call this%ycfo2D15%filter2( f, ff, this%ysz(1), this%ysz(3), bc1, bcn)
+        case (8)
+            call this%yf4%filter2( f, ff, this%ysz(1), this%ysz(3), bc1, bcn)
         end select
 
     end subroutine
@@ -441,6 +479,8 @@ contains
             call this%zcfo2Penta%filter3( f, ff, this%zsz(1), this%zsz(2), bc1, bcn)
         case (7)
             call this%zcfo2D15%filter3( f, ff, this%zsz(1), this%zsz(2), bc1, bcn)
+        case (8)
+            call this%zf4%filter3( f, ff, this%zsz(1), this%zsz(2), bc1,bcn)
         end select
 
     end subroutine

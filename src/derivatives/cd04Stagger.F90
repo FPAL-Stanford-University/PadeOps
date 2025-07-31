@@ -1,7 +1,7 @@
 ! Routines specific to 6th order Compact Finite Differencing scheme
 ! Periodic LU based on  Neossi Nguetchue, Abelman (Appl. Math. & Comp. 2008)
 
-module cd06Staggerstuff
+module cd04Staggerstuff
 
     use kind_parameters, only: rkind
     use constants,       only : zero,one,two,third,fifth
@@ -9,13 +9,13 @@ module cd06Staggerstuff
     implicit none
 
     private
-    public :: cd06Stagger, alpha06d1, a06d1, b06d1
+    public :: cd04Stagger, alpha06d1, a06d1, b06d1
     
     ! 6th order first derivative coefficients (See Lele (1992) for explanation)
-    real(rkind), parameter :: alpha06d1=  9.0_rkind/62.0_rkind !89_rkind/ 400.0_rkind ! 75_rkind / 354_rkind !89_rkind/400_rkind !9.0_rkind/62.0_rkind ! 0.2225 !  9.0_rkind / 62.0_rkind
-    real(rkind), parameter :: c06d1    =  (9.0_rkind - 62.0_rkind*alpha06d1)/384.0_rkind / 5.0_rkind ! (25669_rkind*alpha06d1 - 6114_rkind) / 62736_rkind /5_rkind !(9.0_rkind - 62.0_rkind*alpha06d1)/384.0_rkind / 5.0_rkind
-    real(rkind), parameter :: a06d1    =  (225.0_rkind - 206.0_rkind*alpha06d1)/192.0_rkind !1.0_rkind/8.0_rkind*(9.0_rkind -6.0_rkind*alpha06d1) ! (37950_rkind - 39275_rkind*alpha06d1) / 31368_rkind !(225.0_rkind - 206.0_rkind*alpha06d1)/192.0_rkind !(63.0_rkind / 62.0_rkind) 
-    real(rkind), parameter :: b06d1    = (414.0_rkind*alpha06d1 - 25.0_rkind) / 128.0_rkind / 3.0_rkind  !1.0_rkind/8.0_rkind*(22.0_rkind*alpha06d1-1.0_rkind*alpha06d1)/3.0_rkind ! (65115_rkind*alpha06d1 - 3550_rkind) / 20912_rkind / 3_rkind !(414.0_rkind*alpha06d1 - 25.0_rkind) / 128.0_rkind / 3.0_rkind !( 17.0_rkind / 62.0_rkind) / 3.0_rkind
+    real(rkind), parameter :: alpha06d1=  1.0_rkind/22.0_rkind 
+    real(rkind), parameter :: c06d1    =  0_rkind / 5.0_rkind
+    real(rkind), parameter :: a06d1    =  1.0_rkind/8.0_rkind*(9.0_rkind -6.0_rkind*alpha06d1) 
+    real(rkind), parameter :: b06d1    =  0_rkind  
 
     ! 6th order first derivative explicit centeral difference coefficients
     real(rkind), parameter :: aD06d1     = 3.0_rkind / 4.0_rkind
@@ -89,7 +89,7 @@ module cd06Staggerstuff
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     
     
-    type cd06Stagger
+    type cd04Stagger
 
         private
 
@@ -145,21 +145,21 @@ module cd06Staggerstuff
         procedure :: dd1N2F
         procedure :: dd2N2F
         procedure :: dd3N2F
-        procedure :: cd06Staggerder2
+        procedure :: cd04Staggerder2
 
     end type
 
 contains
 
     pure function GetSize(this) result(val)
-        class(cd06Stagger), intent(in) :: this
+        class(cd04Stagger), intent(in) :: this
         integer  :: val 
         val = this%n
     end function
     
     function init(this, n_, dx_, periodic_, bc1_, bcn_) result(ierr)
     
-        class( cd06Stagger ), intent(inout) :: this
+        class( cd04Stagger ), intent(inout) :: this
         integer, intent(in) :: n_
         real(rkind), intent(in) :: dx_
         logical, intent(in) :: periodic_
@@ -238,7 +238,7 @@ contains
 
     subroutine destroy(this)
 
-        class( cd06Stagger ), intent(inout) :: this
+        class( cd04Stagger ), intent(inout) :: this
 
         ! Dellocate 1st derivative LU matrix.
         if(allocated( this%LU1 )) deallocate( this%LU1 )
@@ -303,7 +303,7 @@ contains
     end subroutine
     
     subroutine ComputeTri1(this,bc1,bcn)
-        class (cd06Stagger), intent(inout) :: this
+        class (cd04Stagger), intent(inout) :: this
         integer, intent(in) :: bc1, bcn
         integer             :: i
         real(rkind), dimension(this%n) :: a, b, c, cp, den
@@ -386,7 +386,7 @@ contains
     end subroutine
     
    subroutine ComputeTri1_N2F(this,bc1,bcn)
-        class (cd06Stagger), intent(inout) :: this
+        class (cd04Stagger), intent(inout) :: this
         integer, intent(in) :: bc1, bcn
         integer             :: i
         real(rkind), dimension(this%n-1) :: a, b, c, cp, den
@@ -451,7 +451,7 @@ contains
     end subroutine
  
     subroutine ComputeTri2(this,bc1,bcn)
-        class (cd06Stagger), intent(inout) :: this
+        class (cd04Stagger), intent(inout) :: this
         integer, intent(in) :: bc1, bcn
    
         
@@ -467,7 +467,7 @@ contains
     
     subroutine SolveXLU1(this,y,n2,n3)
         
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHS and put solution into it
         integer :: i, j, k
@@ -496,7 +496,7 @@ contains
 
     subroutine SolveYLU1(this,y,n1,n3)
         
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y  ! Take in RHS and put solution into it
         integer ::  j, k
@@ -524,7 +524,7 @@ contains
 
     subroutine SolveZLU1(this,y,n1,n2)
         
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  ! Take in RHS and put solution into it
         integer ::  k
@@ -550,7 +550,7 @@ contains
 
     subroutine SolveXTri1(this,y,n2,n3)
 
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y
         integer :: i, j, k
@@ -572,7 +572,7 @@ contains
 
     subroutine SolveXTri1_N2F(this,y,n2,n3)
     
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  
         integer :: i, j, k
@@ -596,7 +596,7 @@ contains
    
     subroutine SolveYTri1(this,y,n1,n3)
     
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y  
         integer :: j, k
@@ -615,7 +615,7 @@ contains
   
     subroutine SolveYTri1_N2F(this,y,n1,n3)
 
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n1,n3
         real(rkind), dimension(n1,this%n,n3), intent(inout) :: y
         integer :: j, k
@@ -635,7 +635,7 @@ contains
   
     subroutine SolveZTri1(this,y,n1,n2)
     
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y  
         integer :: k
@@ -653,7 +653,7 @@ contains
 
     subroutine SolveZTri1_N2F(this,y,n1,n2)
 
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n1,n2
         real(rkind), dimension(n1,n2,this%n), intent(inout) :: y
         integer :: k
@@ -672,7 +672,7 @@ contains
 
     subroutine SolveLU2(this,y,n2,n3)
         
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  ! Take in RHS and put solution into it
 
@@ -686,7 +686,7 @@ contains
      
     subroutine SolveTri2(this,y,n2,n3)
     
-        class (cd06Stagger), intent(in) :: this
+        class (cd04Stagger), intent(in) :: this
         integer, intent(in) :: n2,n3
         real(rkind), dimension(this%n,n2,n3), intent(inout) :: y  
   
@@ -695,7 +695,7 @@ contains
     
     subroutine ComputeXD1RHS(this,f, RHS, dir,n2, n3,bc1,bcn) 
          
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         integer, intent(in) :: n2, n3,bc1,bcn
         real(rkind), dimension(this%n,n2,n3), intent(in) :: f
         real(rkind), dimension(this%n,n2,n3), intent(out) :: RHS
@@ -936,7 +936,7 @@ contains
 
     subroutine ComputeYD1RHS(this,f, RHS,dir, n1, n3,bc1,bcn) 
          
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         integer, intent(in) :: n1, n3,bc1,bcn
         real(rkind), dimension(n1,this%n,n3), intent(in) :: f
         real(rkind), dimension(n1,this%n,n3), intent(out) :: RHS
@@ -1164,7 +1164,7 @@ contains
 
     subroutine ComputeZD1RHS(this,f, RHS, dir,n1, n2,bc1,bcn) 
          
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         integer, intent(in) :: n1, n2,bc1,bcn
         real(rkind), dimension(n1,n2,this%n), intent(in) :: f
         real(rkind), dimension(n1,n2,this%n), intent(out) :: RHS
@@ -1356,7 +1356,7 @@ contains
                 ! Incomplete / Needs to be updated
                 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         real(rkind), dimension(this%n), intent(in) :: f
         real(rkind), dimension(this%n) :: RHS
         integer :: i
@@ -1382,7 +1382,7 @@ contains
     end function
 
     subroutine dd1F2N(this, f, df, na, nb,bc1_,bcn_)
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer  :: bc1,bcn
         real(rkind), dimension(this%n,na,nb), intent(in)  :: f
@@ -1424,7 +1424,7 @@ contains
     end subroutine
 
      subroutine dd1N2F(this, f, df, na, nb,bc1_,bcn_)
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer  :: bc1,bcn
         real(rkind), dimension(this%n,na,nb), intent(in)  :: f
@@ -1471,7 +1471,7 @@ contains
     end subroutine
 
     subroutine dd2F2N(this, f, df, na, nb,bc1_,bcn_)
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer  :: bc1,bcn
         real(rkind), dimension(na,this%n,nb), intent(in)  :: f
@@ -1519,7 +1519,7 @@ contains
     end subroutine
     
     subroutine dd2N2F(this, f, df, na, nb, bc1_, bcn_)
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer  :: bc1,bcn
         real(rkind), dimension(na,this%n,nb), intent(in)  :: f
@@ -1567,7 +1567,7 @@ contains
     end subroutine
 
     subroutine dd3F2N(this, f, df, na, nb,bc1_,bcn_)
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer  :: bc1,bcn
         real(rkind), dimension(na,nb,this%n), intent(in)  :: f
@@ -1614,7 +1614,7 @@ contains
     end subroutine
 
     subroutine dd3N2F(this, f, df, na, nb,bc1_,bcn_)
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         integer, intent(in) :: na, nb
         integer  :: bc1,bcn
         real(rkind), dimension(na,nb,this%n), intent(in)  :: f
@@ -1662,9 +1662,9 @@ contains
     end subroutine
 
     
-    function cd06Staggerder2(this, f) result(df)
+    function cd04Staggerder2(this, f) result(df)
         
-        class( cd06Stagger ), intent(in) :: this
+        class( cd04Stagger ), intent(in) :: this
         real(rkind), dimension(this%n), intent(in) :: f
         real(rkind), dimension(this%n) :: df
 
