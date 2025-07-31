@@ -126,7 +126,10 @@ module SolidGrid
     integer, parameter  :: m1heur_index       = 104
     integer, parameter  :: m2heur_index       = 105
     integer, parameter  :: VFheur_index       = 106
-    integer, parameter  :: nfields = 106
+    integer, parameter  :: entropy_index      = 107
+    integer, parameter  :: discreteKE_index   = 108 
+    integer, parameter  :: puKE_index         = 109 
+    integer, parameter  :: nfields = 109
 
     integer, parameter :: mom_index = 1
     integer, parameter :: TE_index = mom_index+3
@@ -262,7 +265,7 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: tauyz, tauyze,dwdy,metric_half, metric_N2F
         real(rkind), dimension(:,:,:), pointer :: tauzy, tauzye, dwdz,tauSum,esum, esumJ, metric, metric_exact
         real(rkind), dimension(:,:,:), pointer :: fsw,divgrad
-        real(rkind), dimension(:,:,:), pointer :: rhouHeur,rhovHeur,rhowHeur,rhoeHeur,m1heur,m2heur,VFheur
+        real(rkind), dimension(:,:,:), pointer :: rhouHeur,rhovHeur,rhowHeur,rhoeHeur,m1heur,m2heur,VFheur,entropy,discreteKE,puKE
         real(rkind), dimension(:,:,:), pointer :: keJ, uJ, vJ, wJ, eJ, qDiv,pEvolve, VFEvolve, pError, VFerror, pJ, tauRho,uref
         real(rkind) :: phys_mu1, phys_mu2
         real(rkind) :: phys_bulk1, phys_bulk2
@@ -314,6 +317,7 @@ module SolidGrid
             procedure          :: fourthder
             procedure          :: LocalDiffHeuristic
             procedure          :: FilDiffHeuristic
+            procedure          :: entropy_discreteKE
 !            procedure          :: sixthder
 end type
 
@@ -1121,7 +1125,10 @@ contains
         this%rhoeHeur  => this%fields(:,:,:,rhoeheur_index)
         this%m1Heur    => this%fields(:,:,:,m1heur_index)
         this%m2Heur    => this%fields(:,:,:,m2heur_index)
-        this%VFHeur    => this%fields(:,:,:,VFHeur_index)
+        this%VFHeur    => this%fields(:,:,:,VFheur_index)
+        this%entropy   => this%fields(:,:,:,entropy_index)
+        this%discreteKE => this%fields(:,:,:,discreteKE_index)
+        this%puKE      => this%fields(:,:,:,puKE_index)
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
@@ -1274,6 +1281,9 @@ contains
         varnames(104) = 'm1Heur'
         varnames(105) = 'm2Heur'
         varnames(106) = 'VFHeur'
+        varnames(107) = 'entropy_term'
+        varnames(108) = 'discrete_KE'
+        varnames(109) = 'puKE'
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
@@ -2036,6 +2046,7 @@ contains
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
                 !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
 
+                call this%entropy_discreteKE()
                 if( this%Stretch1Dy) then               
                    call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
                 else
@@ -3144,7 +3155,7 @@ contains
         !logical :: useNewSPF = .FALSE.
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: ke,tmp,dJ,drhodx,drhody,drhodz, uJ, vJ, wJ, keJ, eJ, Fbody, tmp1,tmp2, tmp3, rhoeJ
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: drhoedx,drhoedy, drhoedz,dedx,dedz,dedy, eKap,dedx_n, dedy_n, dedz_n
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 3) :: J,Frho,Fenergy, Fp, yMetric_F2N_int, De_int,rho_int, eLADcoef
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp, 3) :: J,Frho,Fenergy, Fp, yMetric_F2N_int, De_int,rho_int, eLADcoef,gradrhoh,rhoh
         real(rkind) :: g = -0.1
 
         !this%u = sin(2*this%y)*sin(4*this%x)
@@ -3246,15 +3257,22 @@ contains
       !  call this%LAD%get_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
 
 !       call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
-!       call gradFV_N2Fx(this%decomp,this%derStagg,this%rho*this%e,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)       
-!       call gradFV_N2Fy(this%decomp,this%derStagg,this%rho*this%e,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call gradFV_N2Fz(this%decomp,this%derStagg,this%rho*this%e,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-!       call interpolateFV_x(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call interpolateFV_y(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call interpolateFV_z(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call divergenceFV(this%decomp,this%derStagg,eLADcoef(:,:,:,1)*drhoedx,eLADcoef(:,:,:,2)*drhoedy,eLADcoef(:,:,:,3)*drhoedx,rhoeJ,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       rhoeJ = 0
+       do i = 1,2
 
+          rhoh = this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*(this%p_mid + this%mix%material(i)%hydro%Pinf)
+          call gradFV_N2Fx(this%decomp,this%derStagg,rhoh,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)       
+          call gradFV_N2Fy(this%decomp,this%derStagg,rhoh,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+          call gradFV_N2Fz(this%decomp,this%derStagg,rhoh,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+!          call interpolateFV_x(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!          call interpolateFV_y(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!          call interpolateFV_z(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+          call divergenceFV(this%decomp,this%derStagg,this%mix%material(i)%VF_mid(:,:,:,1)*this%mix%material(i)%adiff_stagg(:,:,:,1)*drhoedx,this%mix%material(i)%VF_mid(:,:,:,2)*this%mix%material(i)%adiff_stagg(:,:,:,2)*drhoedy,this%mix%material(i)%VF_mid(:,:,:,3)*this%mix%material(i)%adiff_stagg(:,:,:,3)*drhoedz,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+          rhoeJ = rhoeJ + tmp
+      enddo
 
         !call this%LAD%get_P_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         if (this%PTeqb) then
@@ -3427,7 +3445,7 @@ contains
           rhs(:,:,:, mom_index   ) = rhs(:,:,:,mom_index   ) + this%uJ
           rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + this%vJ
           rhs(:,:,:, mom_index+2 ) = rhs(:,:,:,mom_index+2 ) + this%wJ
-          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%keJ + this%eJ ! + rhoeJ
+          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%keJ + this%eJ  + rhoeJ
 
         endif
 
@@ -4009,7 +4027,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv),intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE, u_int,v_int, w_int, p_int, tauxx_int, tauxy_int,tauxz_int, qx_int, e_int, rho_int, rhodiff_int, rhoe_prim, gam, num, t_int, KE,e_prim,p4, Eint,gradu,gradp,gradup
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE, u_int,v_int, w_int, p_int, tauxx_int, tauxy_int,tauxz_int, qx_int, e_int, rho_int, rhodiff_int, rhoe_prim, gam, num, t_int, KE,e_prim,p4, Eint,gradu,gradp,gradup, UU, kef
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int,spe_int, rhoYs_int, den, gradRYs, tauRho_mid, rhom, rhom_int,ke_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: u_int6, rho_int6, t_int6, u_int8, t_int8, rho_int8,spec_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int, M_int
@@ -4126,7 +4144,12 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call gradFV_x(this%decomp,this%derStagg,u_int,gradu,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux ! - gradup ! -0.5*( gradu*this%p + this%v*gradp)    
        this%xflux_e = flux
-
+ 
+       call gradFV_x(this%decomp,this%derStagg,0.5*rhou_int*u_int,kef,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       call gradFV_x(this%decomp,this%derStagg,rhou_int,UU,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       call gradFV_x(this%decomp,this%derStagg,p_int,gradp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)   
+       this%puKE = - this%u*0.5*gradp 
+       this%discreteKE = ( 0.5*this%u*UU - kef) !- this%u*0.5*gradp)
     end subroutine
 
     subroutine getRHS_yStagg( this,  rhs, tauxy,tauyy,tauyz, qy)
@@ -4621,7 +4644,48 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         ! Finished
     end subroutine
-   
+  
+     subroutine entropy_discreteKE( this)
+        use operators, only: gradFV_x, interpolateFV_x,gradFV_N2Fx,filter3D,gradFV_y,gradFV_N2Fy,interpolateFV_y,interpolateFV,divergenceFV,gradFV_z,gradFV_N2Fz
+        class(sgrid), target, intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff,rhoLAD,adiff_fil,hi
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rhom_int,gradRhom,gradRhomeh,gradRhomFace,rhoe_int,adiff_int,gradVF,VF_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: u_int6, rho_int6,t_int6, u_int8, t_int8, rho_int8,spec_int
+        real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
+        integer :: i
+
+        this%entropy = 0
+
+        do i = 1,2
+
+         rhom_int = this%mix%material(i)%rhoYs_mid/(this%mix%material(i)%VF_mid + 1d-32)
+         VF_int   = this%mix%material(i)%VF_mid 
+         rhoe_int = (this%p_mid + this%mix%material(i)%hydro%gam *this%mix%material(i)%hydro%Pinf) / (this%mix%material(i)%hydro%gam - 1_rkind)
+
+         call  this%mix%material(i)%get_enthalpy(hi)
+  
+         call gradFV_x(this%decomp,this%derStagg,VF_int(:,:,:,1),gradVF(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call gradFV_y(this%decomp,this%derStagg,VF_int(:,:,:,2),gradVF(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call gradFV_z(this%decomp,this%derStagg,VF_int(:,:,:,3),gradVF(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+         call gradFV_x(this%decomp,this%derStagg,rhoe_int(:,:,:,1),gradRhomeh(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call gradFV_y(this%decomp,this%derStagg,rhoe_int(:,:,:,2),gradRhomeh(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call gradFV_z(this%decomp,this%derStagg,rhoe_int(:,:,:,3),gradRhomeh(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)         
+
+         call gradFV_N2Fx(this%decomp,this%derStagg,this%mix%material(i)%rhom,gradRhomFace(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call gradFV_N2Fy(this%decomp,this%derStagg,this%mix%material(i)%rhom,gradRhomFace(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call gradFV_N2Fz(this%decomp,this%derStagg,this%mix%material(i)%rhom,gradRhomFace(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+         call divergenceFV(this%decomp,this%derStagg,this%mix%material(i)%adiff_stagg(:,:,:,1)*gradRhomFace(:,:,:,1),this%mix%material(i)%adiff_stagg(:,:,:,2)*gradRhomFace(:,:,:,2),this%mix%material(i)%adiff_stagg(:,:,:,3)*gradRhomFace(:,:,:,3),rhoLAD,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+         adiff_fil = this%mix%material(i)%adiff
+         call this%filter(adiff_fil,this%fil,1,this%x_bc,this%y_bc,this%z_bc)
+         this%entropy = this%entropy -this%mix%material(i)%VF*hi*rhoLAD + adiff_fil*(gradVF(:,:,:,1)*gradRhomeh(:,:,:,1) + gradVF(:,:,:,2)*gradRhomeh(:,:,:,2) &
+                        + gradVF(:,:,:,3)*gradRhomeh(:,:,:,3) )
+        enddo
+
+ 
+    end subroutine
     subroutine getPhysicalProperties(this)
         use exits,      only: GracefulExit
         class(sgrid), intent(inout) :: this

@@ -1042,6 +1042,7 @@ stop
 ! call filter3D(this%decomp, this%fil, ehmix,1,this%x_bc,this%y_bc,this%z_bc)
 ! call filter3D(this%decomp, this%fil, tmp,1,this%x_bc,this%y_bc,this%z_bc)
           mixP = ehmix/tmp !mixE*denom/tmp !ehmix/tmp
+
 !       endwhere
 !       call filter3D(this%decomp, this%fil, mixP,1,this%x_bc,this%y_bc,this%z_bc)       
 

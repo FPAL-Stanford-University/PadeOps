@@ -5443,6 +5443,9 @@ contains
 
            call divergenceFV(this%decomp,this%derStagg,adiff_fil1*dVFdx_x,adiff_fil2*dVFdy_y,adiff_fil3*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
+           this%adiff_stagg(:,:,:,1) = adiff_fil1
+           this%adiff_stagg(:,:,:,2) = adiff_fil2
+           this%adiff_stagg(:,:,:,3) = adiff_fil3
 !          call divergenceFV(this%decomp,this%derStagg,this%adiff_stagg(:,:,:,1)*dVFdx_x,this%adiff_stagg(:,:,:,2)*dVFdy_y,this%adiff_stagg(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         else
