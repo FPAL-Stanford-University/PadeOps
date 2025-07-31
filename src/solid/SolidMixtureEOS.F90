@@ -2369,8 +2369,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            
              if( .NOT. this%LADMass_Consv) then
 
-!                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + ( this%material(i)%rhodiff_stagg(:,:,:,imat)*gradRYs_int(:,:,:,imat) ) 
-                Frho(:,:,:,imat)    = Frho(:,:,:,imat) + ( rhodiff_int(:,:,:,imat)*gradRYs_int(:,:,:,imat) )  !gradRYs_int(:,:,:,imat)) !rho_int(:,:,:,imat)*Ysdiff_int(:,:,:,imat)*gradYs_int(:,:,:,imat)
+                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + (this%material(i)%elastic%rho0*rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat) ) 
+!                Frho(:,:,:,imat)    = Frho(:,:,:,imat) + ( rhodiff_int(:,:,:,imat)*gradRYs_int(:,:,:,imat) )  !gradRYs_int(:,:,:,imat)) !rho_int(:,:,:,imat)*Ysdiff_int(:,:,:,imat)*gradYs_int(:,:,:,imat)
              else
                 
                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + this%J_phi(:,:,:,imat,i)

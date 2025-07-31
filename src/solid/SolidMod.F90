@@ -4799,12 +4799,12 @@ contains
 !          this%rhodiff =this%rhodiff +VF_bound
 
 
-           call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-   !       call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-   !       call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-   !       call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+   !        call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+   !        call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+   !        call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         !   call interpolateFV(this%decomp,this%interpMid,rhom,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -4822,7 +4822,8 @@ contains
 
 !           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-            call divergenceFV(this%decomp,this%derStagg,rhodiff_fil1*dYdx_x,rhodiff_fil2*dYdy_y,rhodiff_fil3*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!            call divergenceFV(this%decomp,this%derStagg,rhodiff_fil1*dYdx_x,rhodiff_fil2*dYdy_y,rhodiff_fil3*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+            call divergenceFV(this%decomp,this%derStagg,this%elastic%rho0*rhodiff_fil1*dYdx_x,this%elastic%rho0*rhodiff_fil2*dYdy_y,this%elastic%rho0*rhodiff_fil3*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
 !            call divergenceFV(this%decomp,this%derStagg,this%rhodiff_stagg(:,:,:,1)*dYdx_x,this%rhodiff_stagg(:,:,:,2)*dYdy_y,this%rhodiff_stagg(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         else
