@@ -5669,7 +5669,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
     subroutine Test_Der(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         use decomp_2d, only: transpose_y_to_x,transpose_x_to_y,transpose_y_to_z,transpose_z_to_y
-        use operators, only: gradFV_x, gradFV_y,gradFV_z, interpolateFV_x,interpolateFV_y, interpolateFV_z, divergenceFV, laplacian, interpolateFV, interpolateFV_F2Nx,interpolateFV_F2Ny
+        use operators, only: gradFV_x, gradFV_y,gradFV_z, interpolateFV_x,interpolateFV_y, interpolateFV_z, divergenceFV, laplacian, interpolateFV, interpolateFV_F2Nx,interpolateFV_F2Ny,wenoInterpx,wenoInterpy
         use constants,       only: zero,epssmall,eps,one,two,third,half, pi
         use exits,           only: GracefulExit
         use reductions, only : P_MAXVAL
@@ -5677,7 +5677,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::x_half,y_half,ddx,ddy,tmp,tmp2,tmp4
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::x_half,y_half,ddx,ddy,tmp,tmp2,tmp4,Fx,Bx,Fy,By
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int
         integer :: imat
         real(rkind) :: dx, dy
@@ -5693,6 +5693,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
        call interpolateFV_x(this%decomp,this%interpMid,this%material(1)%VF,this%VF_intx,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
        call interpolateFV_y(this%decomp,this%interpMid,this%material(1)%VF,this%VF_inty,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
        call interpolateFV_z(this%decomp,this%interpMid,this%material(1)%VF,this%VF_intz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+       call wenoInterpx(this%decomp,this%material(1)%VF,Fx,Bx,x_bc)
+       call wenoInterpy(this%decomp,this%material(1)%VF,Fy,By,x_bc) 
 !        tmp = cos(x_half) + cos(y_half)      
 !        tmp2 = 0.0
 !        tmp4 = 0.0 
@@ -5709,9 +5711,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         print *, "e x"
         this%inty_exact =   cos(x-pi/7)*cos(y_half-pi/7) !cos(2.0*x)*cos(2.0*y_half) !sin(2.0*x)*cos(4.0*y_half) +5*sin(y_half) + 3*cos(x)
         print *, " e y"
-        this%intX_error =   abs(this%intx_exact - this%VF_intx)!abs( sin(2.0*x_half)*cos(4.0*y) +  5*sin(y) + 3*cos(x_half) - this%VF_intx)
+        this%intX_error =   abs(this%intx_exact - Fx) !abs( sin(2.0*x_half)*cos(4.0*y) +  5*sin(y) + 3*cos(x_half) - this%VF_intx)
         print *, " x error "
-        this%intY_error =   abs(this%inty_exact - this%VF_inty) !abs( sin(2.0*x)*cos(4.0*y_half) +5*sin(y_half) + 3*cos(x) - this%VF_intY) 
+        this%intY_error =   abs(this%inty_exact - Fy) !abs( sin(2.0*x)*cos(4.0*y_half) +5*sin(y_half) + 3*cos(x) - this%VF_intY) 
         print *, "error"
         call gradFV_x(this%decomp,this%derStagg,this%VF_intx,this%DerX,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         call gradFV_y(this%decomp,this%derStagg,this%VF_inty,this%DerY,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -5724,8 +5726,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         
 !        this%lap_error = abs( -20*sin(2*x)*cos(4*y)-3*cos(x) - 5*sin(y) - this%lapTest)
         this%div_error  = abs((this%ddx_exact + this%ddy_exact) - this%DivTest)
-!        this%derX_error = abs(this%DerX - this%ddx_exact)
-!        this%derY_error = abs(this%DerY - this%ddy_exact)
+        this%derX_error = abs(this%intx_exact - Bx)
+        this%derY_error = abs(this%inty_exact - By)
     end subroutine
 
     subroutine Test_Der_N2F(this,x,y,z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
