@@ -5063,11 +5063,11 @@ contains
 
        else
 
-         call interpolateFV_x(this%decomp,this%interpMid,u*rho*this%Ys,tmp1,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV_y(this%decomp,this%interpMid,v*rho*this%Ys,tmp2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV_z(this%decomp,this%interpMid,w*rho*this%Ys,tmp3,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!         call divergenceFV(this%decomp,this%derStagg,-umid*this%rhoYs_mid(:,:,:,1),-vmid*this%rhoYs_mid(:,:,:,2),-wmid*this%rhoYs_mid(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call divergenceFV(this%decomp,this%derStagg,-tmp1,-tmp2,-tmp3,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
+!         call interpolateFV_x(this%decomp,this%interpMid,u*rho*this%Ys,tmp1,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV_y(this%decomp,this%interpMid,v*rho*this%Ys,tmp2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV_z(this%decomp,this%interpMid,w*rho*this%Ys,tmp3,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call divergenceFV(this%decomp,this%derStagg,-umid*this%rhoYs_mid(:,:,:,1),-vmid*this%rhoYs_mid(:,:,:,2),-wmid*this%rhoYs_mid(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call divergenceFV(this%decomp,this%derStagg,-tmp1,-tmp2,-tmp3,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
            if( .NOT. this%twoPhaseLAD) then
 
                call divergence(this%decomp,this%der,-this%Ji(:,:,:,1),-this%Ji(:,:,:,2),-this%Ji(:,:,:,3),this%YsLAD,-x_bc,-y_bc,-z_bc)

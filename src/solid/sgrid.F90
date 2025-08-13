@@ -2593,9 +2593,9 @@ contains
       this%u_int = rhou_int(:,:,:,1) /this%rho_mid(:,:,:,1) - this%u_mid(:,:,:,1)
       this%v_int = rhov_int(:,:,:,2)/this%rho_mid(:,:,:,2) - this%v_mid(:,:,:,2)
 
-      this%u_mid =  rhou_int /this%rho_mid
-      this%v_mid =  rhov_int/this%rho_mid
-      this%w_mid = 0
+!      this%u_mid =  rhou_int /this%rho_mid
+!      this%v_mid =  rhov_int/this%rho_mid
+!      this%w_mid = 0
 !      do i = 1,3
 !       where( this%mix%material(1)%VF_mid(:,:,:,i) .LE. 1d-6 )
 !             this%mix%material(1)%VF_mid(:,:,:,i) = 0.0
@@ -4121,12 +4121,12 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
            M_int(:,:,:,i)  = this%mix%material(i)%rhoYs_mid(:,:,:,1)
            rho_int  = rho_int + M_int(:,:,:,i)
 
-           call interpolateFV_x(this%decomp,this%interpMid,this%u*this%mix%material(i)%consrv(:,:,:,1),tmp1,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-           call interpolateFV_x(this%decomp,this%interpMid,this%v*this%mix%material(i)%consrv(:,:,:,1),tmp2,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-           call interpolateFV_x(this%decomp,this%interpMid,this%w*this%mix%material(i)%consrv(:,:,:,1),tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-           Mu_int = Mu_int + tmp1
-           Mv_int = Mv_int + tmp2
-           Mw_int = Mw_int + tmp3
+!          call interpolateFV_x(this%decomp,this%interpMid,this%u*this%mix%material(i)%consrv(:,:,:,1),tmp1,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!          call interpolateFV_x(this%decomp,this%interpMid,this%v*this%mix%material(i)%consrv(:,:,:,1),tmp2,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!          call interpolateFV_x(this%decomp,this%interpMid,this%w*this%mix%material(i)%consrv(:,:,:,1),tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+           Mu_int = Mu_int + M_int(:,:,:,i)*u_int ! tmp1
+           Mv_int = Mv_int + M_int(:,:,:,i)*v_int ! tmp2
+           Mw_int = Mw_int + M_int(:,:,:,i)*w_int ! tmp3
 
         enddo
 
@@ -4144,7 +4144,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        rhou_int = Mu_int*u_int
        rhov_int = Mu_int*v_int
        rhow_int = Mu_int*w_int
-       KE  = 0.5_rkind* ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int
+       KE  = 0.5_rkind*rho_int*(u_int**2 + v_int**2 + w_int**2) ! ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int
 
       do i = 1,2
 
@@ -4283,12 +4283,13 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
            rho_int  = rho_int + M_int(:,:,:,i)            
 
            
-           call interpolateFV_y(this%decomp,this%interpMid,this%u*this%mix%material(i)%consrv(:,:,:,1),tmp1,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-           call interpolateFV_y(this%decomp,this%interpMid,this%v*this%mix%material(i)%consrv(:,:,:,1),tmp2,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-           call interpolateFV_y(this%decomp,this%interpMid,this%w*this%mix%material(i)%consrv(:,:,:,1),tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-           Mu_int = Mu_int + tmp1
-           Mv_int = Mv_int + tmp2
-           Mw_int = Mw_int + tmp3
+!           call interpolateFV_y(this%decomp,this%interpMid,this%u*this%mix%material(i)%consrv(:,:,:,1),tmp1,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!           call interpolateFV_y(this%decomp,this%interpMid,this%v*this%mix%material(i)%consrv(:,:,:,1),tmp2,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!           call interpolateFV_y(this%decomp,this%interpMid,this%w*this%mix%material(i)%consrv(:,:,:,1),tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+           Mu_int = Mu_int + M_int(:,:,:,i)*u_int !tmp1
+           Mv_int = Mv_int + M_int(:,:,:,i)*v_int !tmp2
+           Mw_int = Mw_int + M_int(:,:,:,i)*w_int !tmp3
 
         enddo
 
@@ -4311,7 +4312,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        rhou_int = Mv_int*u_int
        rhov_int = Mv_int*v_int
        rhow_int = Mv_int*w_int
-       KE  = 0.5_rkind* ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int 
+       KE  = 0.5*rho_int*(u_int**2 + v_int**2 + w_int**2 ) !  0.5_rkind* ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int 
 
     
         do i = 1,2
