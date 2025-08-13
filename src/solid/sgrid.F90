@@ -2553,7 +2553,7 @@ contains
         use operators, only: interpolateFV,interpolateFV_x,interpolateFV_F2Ny,interpolateFV_y,interpolateFV_F2Nx,filter3D
         class(sgrid), target, intent(inout) :: this
         integer :: i,j,k,iflag = one
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,fluxu_int,fluxv_int,fluxw_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: psi_int,e1_int, Gam_int,pVF_int,num,denom
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2, tmpFil, tmp3,psi,Gam,psi_safe
         real(rkind) :: e = 1d-10
@@ -2564,15 +2564,15 @@ contains
         call interpolateFV(this%decomp,this%interpMid,this%p,this%p_mid,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 !        call interpolateFV(this%decomp,this%interpMid,this%sos*this%rho,rhoc_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid,this%rho*this%u,rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)                
-        call interpolateFV(this%decomp,this%interpMid,this%rho*this%v,rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call interpolateFV(this%decomp,this%interpMid,this%rho*this%u,fluxu_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)                
+        call interpolateFV(this%decomp,this%interpMid,this%rho*this%v,fluxv_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
         this%pu_mid(:,:,:,1) = this%p_mid(:,:,:,1)*this%u_mid(:,:,:,1)
         this%pu_mid(:,:,:,2) = this%p_mid(:,:,:,2)*this%v_mid(:,:,:,2)
 
       this%rho_mid = 0
-      rhou_int = 0
-      rhov_int = 0
+      fluxu_int = 0
+      fluxv_int = 0
       rhow_int = 0
       do i = 1,2
          
@@ -2580,21 +2580,21 @@ contains
         call interpolateFV(this%decomp,this%interpMid,this%mix%material(i)%consrv(:,:,:,1)*this%u,mu_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)      
         call interpolateFV(this%decomp,this%interpMid,this%mix%material(i)%consrv(:,:,:,1)*this%v,mv_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV(this%decomp,this%interpMid,this%mix%material(i)%consrv(:,:,:,1)*this%w,mw_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        rhou_int = rhou_int + mu_int
-        rhov_int = rhov_int + mv_int
+        fluxu_int = fluxu_int + mu_int
+        fluxv_int = fluxv_int + mv_int
         rhow_int = rhow_int + mw_int
         this%rho_mid = this%rho_mid + this%mix%material(i)%rhoYs_mid
 
       end do 
 
-!      if (nrank.eq.0) print*,rhou_int(:,:,:,1)-this%u_mid(:,:,:,1)
-!      if (nrank.eq.0) print*,rhov_int(:,:,:,2)-this%v_mid(:,:,:,2)
+!      if (nrank.eq.0) print*,fluxu_int(:,:,:,1)-this%u_mid(:,:,:,1)
+!      if (nrank.eq.0) print*,fluxv_int(:,:,:,2)-this%v_mid(:,:,:,2)
 
-      this%u_int = rhou_int(:,:,:,1) /this%rho_mid(:,:,:,1) - this%u_mid(:,:,:,1)
-      this%v_int = rhov_int(:,:,:,2)/this%rho_mid(:,:,:,2) - this%v_mid(:,:,:,2)
+      this%u_int = fluxu_int(:,:,:,1) /this%rho_mid(:,:,:,1) - this%u_mid(:,:,:,1)
+      this%v_int = fluxv_int(:,:,:,2)/this%rho_mid(:,:,:,2) - this%v_mid(:,:,:,2)
 
-!      this%u_mid =  rhou_int /this%rho_mid
-!      this%v_mid =  rhov_int/this%rho_mid
+!      this%u_mid =  fluxu_int /this%rho_mid
+!      this%v_mid =  fluxv_int/this%rho_mid
 !      this%w_mid = 0
 !      do i = 1,3
 !       where( this%mix%material(1)%VF_mid(:,:,:,i) .LE. 1d-6 )
@@ -2640,8 +2640,8 @@ contains
        this%mix%material(2)%Ys_mid = 1.0 - this%mix%material(1)%Ys_mid
        this%mix%material(2)%VF_mid = 1.0 - this%mix%material(1)%VF_mid
 
-!       this%u_mid = rhou_int/this%rho_mid
-!       this%v_mid = rhov_int/this%rho_mid
+!       this%u_mid = fluxu_int/this%rho_mid
+!       this%v_mid = fluxv_int/this%rho_mid
 
 !       num = 0
 !       denom = 0
@@ -4055,8 +4055,8 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv),intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE, u_int,v_int, w_int, p_int, tauxx_int, tauxy_int,tauxz_int, qx_int, e_int, rho_int, rhodiff_int, rhoe_prim, gam, num, t_int, KE,e_prim,p4, Eint,gradu,gradp,gradup, UU, kef,gradm1,gradm2,gradrhou,clocal, delp,gradVFx,gradVFy, gradVF,UV,umag,soslocal,sos1,sos2
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int,spe_int, rhoYs_int, den, gradRYs, tauRho_mid, rhom, rhom_int,ke_int,sos_int,Mu_int,Mv_int,Mw_int,H_int,delrhou,delrhov
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE, u_int,v_int, w_int, p_int, tauxx_int, tauxy_int,tauxz_int, qx_int, e_int, rho_int, rhodiff_int, e_prim, gam, num, t_int, KE,e_prim,p4, Eint,gradu,gradp,gradup, UU, kef,gradm1,gradm2,gradrhou,clocal, delp,gradVFx,gradVFy, gradVF,UV,umag,soslocal,sos1,sos2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: fluxu_int,fluxv_int, rhow_int, rhoe_int,spe_int, rhoYs_int, den, gradRYs, tauRho_mid, rhom, rhom_int,ke_int,sos_int,rhou_int,rhov_int,rhow_int,H_int,delrhou,delrhov
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: u_int6, rho_int6, t_int6, u_int8, t_int8, rho_int8,spec_int,tmp1,tmp2,tmp3
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: EfluxI, rhouI,rhovI,rhouvI,rhouuI
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux1,flux2,flux3,buff1,buff2,buff3
@@ -4065,7 +4065,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         integer :: i
 
         p_int = this%p_mid(:,:,:,1)
-        u_int = this%u_mid(:,:,:,1) !this%u_mid(:,:,:,1) !spec_int*rhou_int !this%u_mid(:,:,:,1)
+        u_int = this%u_mid(:,:,:,1) !this%u_mid(:,:,:,1) !spec_int*fluxu_int !this%u_mid(:,:,:,1)
         v_int = this%v_mid(:,:,:,1)
         w_int = this%w_mid(:,:,:,1)
  
@@ -4075,14 +4075,14 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         KE = 0
         den = 0.0
 
-        rhou_int = 0.0
-        rhov_int = 0.0
+        fluxu_int = 0.0
+        fluxv_int = 0.0
         rhow_int = 0.0
-        rhoe_prim = 0.0
+        e_prim = 0.0
 
-        Mu_int = 0
-        Mv_int = 0
-        Mw_int = 0
+        rhou_int = 0
+        rhov_int = 0
+        rhow_int = 0
 
         do i = 1,2
             
@@ -4090,31 +4090,31 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
            M_int(:,:,:,i)  = this%mix%material(i)%rhoYs_mid(:,:,:,1)
            rho_int  = rho_int + M_int(:,:,:,i)
 
-           Mu_int = Mu_int + M_int(:,:,:,i)*u_int ! tmp1
-           Mv_int = Mv_int + M_int(:,:,:,i)*v_int ! tmp2
-           Mw_int = Mw_int + M_int(:,:,:,i)*w_int ! tmp3
+           rhou_int = rhou_int + M_int(:,:,:,i)*u_int ! tmp1
+           rhov_int = rhov_int + M_int(:,:,:,i)*v_int ! tmp2
+           rhow_int = rhow_int + M_int(:,:,:,i)*w_int ! tmp3
 
         enddo
 
 
 
-       rhou_int = Mu_int*u_int
-       rhov_int = Mu_int*v_int
-       rhow_int = Mu_int*w_int
-       KE  = 0.5_rkind*rho_int*(u_int**2 + v_int**2 + w_int**2) ! ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int
+       fluxu_int = rhou_int*u_int
+       fluxv_int = rhou_int*v_int
+       rhow_int = rhou_int*w_int
+       KE  = 0.5_rkind*rho_int*(u_int**2 + v_int**2 + w_int**2) ! ( rhou_int**2 + rhov_int**2 + rhow_int**2 ) / rho_int
 
       do i = 1,2
 
-         rhoe_prim = rhoe_prim +  this%mix%material(i)%hydro%onebygam_m1*( p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)/(M_int(:,:,:,i)/VF_int(:,:,:,i) ) *  M_int(:,:,:,i)/rho_int
+         e_prim = e_prim +  this%mix%material(i)%hydro%onebygam_m1*( p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)/(M_int(:,:,:,i)/VF_int(:,:,:,i) ) *  M_int(:,:,:,i)/rho_int
       enddo
 
-        H_int =0.5*KE*u_int + (rhoe_prim) *Mu_int
+!        H_int =0.5*KE*u_int + (e_prim) *rhou_int
 
 
         flux = 0.0
-        buff = 0.25_rkind*rhou_int + p_int - tauxx 
+        buff = 0.25_rkind*fluxu_int + p_int - tauxx 
         buff1 =0.25_rkind*u_int*u_int
-        buff2 = 0.5_rkind*Mu_int
+        buff2 = 0.5_rkind*rhou_int
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call gradFV_x(this%decomp,this%derStagg,buff1,flux1,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call gradFV_x(this%decomp,this%derStagg,buff2,flux2,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -4125,10 +4125,10 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         flux =0.0; flux1 = 0; flux2 = 0; flux3 = 0;
         
-        buff =0.25_rkind*rhov_int - tauxy !y-momentum
+        buff =0.25_rkind*fluxv_int - tauxy !y-momentum
         buff1=0.25_rkind*v_int*u_int
-        buff2 =0.25_rkind*Mu_int
-        buff3=0.25*Mv_int
+        buff2 =0.25_rkind*rhou_int
+        buff3=0.25_rkind*rhov_int
 
         !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -4138,7 +4138,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux -this%rho*flux1 -this%v*flux2 - this%u*flux3
         this%xflux_y = flux
 
-        buff = 0.25_rkind*rhow_int  - tauxz !z-momentum
+        buff = rhow_int  - tauxz !z-momentum
         flux = 0.0
 
         !endif
@@ -4150,9 +4150,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
     
         !!!!!!!!!!!!!! add back in KE         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        buff = H_int -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz)    
+        buff = 0.5*KE*u_int + (e_prim) *rhou_int -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz)    
         buff1 = 0.5_rkind*(u_int**2 + v_int**2 + w_int**2)*0.5_rkind
-        buff2 = 0.5_rkind*Mu_int
+        buff2 = 0.5_rkind*rhou_int
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call gradFV_x(this%decomp,this%derStagg,buff1,flux1,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call gradFV_x(this%decomp,this%derStagg,buff2,flux2,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -4172,8 +4172,8 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int,M_int
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE,u_int,v_int, w_int, p_int, tauxy_int, tauyy_int,tauyz_int, qy_int, e_int,rho_int, gam, num, rhoe_prim, KE, e_prim,gradu,gradup, UU, kef,delp,cl,cr,clocal,gradVF,gradVFx,gradVFy,UV,VV,tmp1,tmp2,tmp3,umag,soslocal,sos1,sos2
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int,rhow_int, rhoe_int, spe_int, rhoYs_int, den,ke_int, p4,Eint, up_int, cpressure, gradcpressure, gradp,sos_int, H_int, Mu_int,delrhou,delrhov,Mv_int,Mw_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE,u_int,v_int, w_int, p_int, tauxy_int, tauyy_int,tauyz_int, qy_int, e_int,rho_int, gam, num, e_prim, KE, e_prim,gradu,gradup, UU, kef,delp,cl,cr,clocal,gradVF,gradVFx,gradVFy,UV,VV,tmp1,tmp2,tmp3,umag,soslocal,sos1,sos2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: fluxu_int,fluxv_int,rhow_int, rhoe_int, spe_int, rhoYs_int, den,ke_int, p4,Eint, up_int, cpressure, gradcpressure, gradp,sos_int, H_int, rhou_int,delrhou,delrhov,rhov_int,rhow_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: EfluxI,rhouI,rhovI,rhovvI,rhouvI
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: flux1,flux2,flux3,buff1,buff2,buff3
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
@@ -4188,14 +4188,14 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        p_int = this%p
 
        rho_int = 0.0
-       rhoe_prim = 0.0
+       e_prim = 0.0
        num = 0.0
        gam = 0.0
        den = 0.0
 
-       Mu_int = 0.0
-       Mv_int = 0.0
-       Mw_int = 0.0
+       rhou_int = 0.0
+       rhov_int = 0.0
+       rhow_int = 0.0
 
         do i = 1,2
 
@@ -4204,33 +4204,33 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
            rho_int  = rho_int + M_int(:,:,:,i)            
 
            
-           Mu_int = Mu_int + M_int(:,:,:,i)*u_int !tmp1
-           Mv_int = Mv_int + M_int(:,:,:,i)*v_int !tmp2
-           Mw_int = Mw_int + M_int(:,:,:,i)*w_int !tmp3
+           rhou_int = rhou_int + M_int(:,:,:,i)*u_int !tmp1
+           rhov_int = rhov_int + M_int(:,:,:,i)*v_int !tmp2
+           rhow_int = rhow_int + M_int(:,:,:,i)*w_int !tmp3
 
         enddo
 
 
-       rhou_int = Mv_int*u_int
-       rhov_int = Mv_int*v_int
-       rhow_int = Mv_int*w_int
-       KE  = 0.5*rho_int*(u_int**2 + v_int**2 + w_int**2 ) !  0.5_rkind* ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int 
+       fluxu_int = rhov_int*u_int
+       fluxv_int = rhov_int*v_int
+       rhow_int = rhov_int*w_int
+       KE  = 0.5*rho_int*(u_int**2 + v_int**2 + w_int**2 ) !  0.5_rkind* ( rhou_int**2 + rhov_int**2 + rhow_int**2 ) / rho_int 
 
     
         do i = 1,2
 
-         rhoe_prim = rhoe_prim + this%mix%material(i)%hydro%onebygam_m1*(p_int +this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)/(M_int(:,:,:,i)/VF_int(:,:,:,i)) *  M_int(:,:,:,i)/rho_int
+         e_prim = e_prim + this%mix%material(i)%hydro%onebygam_m1*(p_int +this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)/(M_int(:,:,:,i)/VF_int(:,:,:,i)) *  M_int(:,:,:,i)/rho_int
        enddo
 
 
-       H_int = 0.5_rkind*KE*v_int +(  rhoe_prim)*Mv_int
+!       rhoe_int = 0.5_rkind*KE*v_int +(  e_prim)*rhov_int
 
 
        flux = 0.0
-       buff = 0.25_rkind*rhou_int  - tauxy   !x-momentum 
+       buff = 0.25_rkind*fluxu_int  - tauxy   !x-momentum 
        buff1 = 0.25_rkind*u_int*v_int
-       buff2 = 0.25_rkind*Mv_int
-       buff3 = 0.25_rkind*Mu_int
+       buff2 = 0.25_rkind*rhov_int
+       buff3 = 0.25_rkind*rhou_int
 
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call gradFV_y(this%decomp,this%derStagg,buff1,flux1,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -4241,9 +4241,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         this%yflux_x = flux
 
         flux = 0.0
-        buff = 0.25_rkind*rhov_int - tauyy + p_int  
+        buff = 0.25_rkind*fluxv_int - tauyy + p_int  
         buff1 = 0.25_rkind*v_int*v_int
-        buff2 = 0.5_rkind*Mv_int
+        buff2 = 0.5_rkind*rhov_int
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call gradFV_y(this%decomp,this%derStagg,buff1,flux1,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call gradFV_y(this%decomp,this%derStagg,buff2,flux2,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -4260,9 +4260,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         flux = 0.0
 
-        buff = H_int - (tauyy)*v_int - u_int*tauxy -w_int*tauyz  
+        buff = 0.5_rkind*KE*v_int +( e_prim)*rhov_int - (tauyy)*v_int - u_int*tauxy -w_int*tauyz  
         buff1 = 0.5_rkind*(u_int**2 + v_int**2 + w_int**2)*0.5_rkind
-        buff2 = 0.5_rkind*Mv_int
+        buff2 = 0.5_rkind*rhov_int
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call gradFV_y(this%decomp,this%derStagg,buff1,flux1,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call gradFV_y(this%decomp,this%derStagg,buff2,flux2,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -4283,7 +4283,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) ::tauxz,tauyz,tauzz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff,flux,TE,u_int,v_int, w_int, p_int, tauxz_int, tauzz_int, tauyz_int, qz_int,e_int,rho_int,KE
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int, spe_int, rhoYs_int, den, num,gam,rhoe_prim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: fluxu_int,fluxv_int, rhow_int, rhoe_int, spe_int, rhoYs_int, den, num,gam,e_prim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         integer :: i
@@ -4294,21 +4294,21 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         v_int = this%v_mid(:,:,:,3)
         w_int = this%w_mid(:,:,:,3)
         rho_int = 0
-        rhou_int = 0.0
-        rhov_int = 0.0
+        fluxu_int = 0.0
+        fluxv_int = 0.0
         rhow_int = 0.0
 
-        rhoe_prim = 0.0
+        e_prim = 0.0
         num = 0
         gam = 0
        do i = 1,2
 
           VF_int(:,:,:,i) = this%mix%material(i)%VF_mid(:,:,:,3)
           rho_int = rho_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)
-          rhou_int = rhou_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*u_int
-          rhov_int = rhov_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*v_int
+          fluxu_int = fluxu_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*u_int
+          fluxv_int = fluxv_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*v_int
           rhow_int = rhow_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*w_int
-          rhoe_prim = rhoe_prim + VF_int(:,:,:,i)*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%onebygam_m1*(p_int + this%mix%material(i)%hydro%Pinf)
+          e_prim = e_prim + VF_int(:,:,:,i)*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%onebygam_m1*(p_int + this%mix%material(i)%hydro%Pinf)
 
 
        enddo
@@ -4318,7 +4318,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux  = 0
         buff  = 0
         buff = rhow_int*u_int  - tauxz !x-momentum
-        !buff = rhou_int*w_int -tauxz_int
+        !buff = fluxu_int*w_int -tauxz_int
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%zflux_x = flux 
@@ -4340,7 +4340,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
 
         KE =  half*(u_int*u_int + v_int*v_int + w_int*w_int)*rhow_int
-        buff = ( rhoe_prim + p_int  - tauzz )*w_int + KE - u_int*tauxz-v_int*tauyz ! + this%pu_mid(:,:,:,3)+w_int*rho_int*this%ke_mid(:,:,:,3) ! + qz
+        buff = ( e_prim + p_int  - tauzz )*w_int + KE - u_int*tauxz-v_int*tauyz ! + this%pu_mid(:,:,:,3)+w_int*rho_int*this%ke_mid(:,:,:,3) ! + qz
         !buff = ( TE + p_int )*w_int
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
