@@ -4058,6 +4058,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE, u_int,v_int, w_int, p_int, tauxx_int, tauxy_int,tauxz_int, qx_int, e_int, rho_int, rhodiff_int, rhoe_prim, gam, num, t_int, KE,e_prim,p4, Eint,gradu,gradp,gradup, UU, kef,gradm1,gradm2,gradrhou,clocal, delp,gradVFx,gradVFy, gradVF,UV,umag,soslocal,sos1,sos2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int,spe_int, rhoYs_int, den, gradRYs, tauRho_mid, rhom, rhom_int,ke_int,sos_int,Mu_int,Mv_int,Mw_int,H_int,delrhou,delrhov
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: u_int6, rho_int6, t_int6, u_int8, t_int8, rho_int8,spec_int,tmp1,tmp2,tmp3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: EfluxI, rhouI,rhovI,rhouvI,rhouuI
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int, M_int
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,delptmp,clocaltmp,rhovtmp,rhoutmp,xtmp4
         integer :: i
@@ -4131,15 +4132,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         enddo
 
 
-!        do i = 1,2
-!           rhou_int = rhou_int + M_int(:,:,:,i)*u_int*u_int !this%mix%material(i)%rhoYs_mid(:,:,:,1)*u_int*u_int
-!           rhov_int = rhov_int + M_int(:,:,:,i)*v_int*u_int !this%mix%material(i)%rhoYs_mid(:,:,:,1)*v_int*u_int
-!           rhow_int = rhow_int + M_int(:,:,:,i)*w_int*u_int !this%mix%material(i)%rhoYs_mid(:,:,:,1)*w_int*u_int
-!           KE       = half*(u_int*u_int + v_int*v_int + w_int*w_int) !this%mix%material(i)%rhoYs_mid(:,:,:,1)
-!           rho_int  = rho_int + M_int(:,:,:,i) !this%mix%material(i)%rhoYs_mid(:,:,:,1)
-!          Mu_int   = M_int(:,:,:,i)*u_int+Mu_int
-!       enddo
-!
 
        rhou_int = Mu_int*u_int
        rhov_int = Mu_int*v_int
@@ -4149,22 +4141,30 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
       do i = 1,2
 
          rhoe_prim = rhoe_prim +  this%mix%material(i)%hydro%onebygam_m1*( p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)/(M_int(:,:,:,i)/VF_int(:,:,:,i) ) *  M_int(:,:,:,i)/rho_int
-!        num = num + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf
-!        den = den + VF_int(:,:,:,i)*this%mix%material(i)%hydro%onebygam_m1
-       enddo
+      enddo
 
        rhoe_prim = rhoe_prim
 
        H_int = KE*u_int +(p_int/rho_int + rhoe_prim ) *Mu_int
 
-       
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Skew Symmetric i+1/2,j Operator      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+      call interpolateFV_x(this%decomp,this%interpMid,this%u*this%rho,rhouI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV_x(this%decomp,this%interpMid,this%v*this%rho,rhovI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV_x(this%decomp,this%interpMid,this%u*this%u*this%rho,rhouuI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV_x(this%decomp,this%interpMid,this%u*this%rho*this%v,rhouvI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV_x(this%decomp,this%interpMid,this%u*this%Wcnsrv(:,:,:,TE_index),EfluxI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+      H_int = 1/2*(EfluxI + (KE*u_int + rhoe_prim*Mu_int) + rhouI*(rhoe_prim + KE/rho_int)) + p_int*u_int
+
+      rhou_int = 1/4*(rhouuI + rhou_int + 2*u_int*rhouI)
+      rhov_int = 1/4*(rhouvI + rhov_int + u_int*rhovI + v_int*rhouI)
+
+
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
         flux = 0.0
         buff = rhou_int + p_int - tauxx - this%CP*gradVF*clocal*this%dx**2*delrhou
 
-
-
-!       call this%filter(gradp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)        
-        !endif
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux  
         this%xflux_x = flux
@@ -4223,6 +4223,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE,u_int,v_int, w_int, p_int, tauxy_int, tauyy_int,tauyz_int, qy_int, e_int,rho_int, gam, num, rhoe_prim, KE, e_prim,gradu,gradup, UU, kef,delp,cl,cr,clocal,gradVF,gradVFx,gradVFy,UV,VV,tmp1,tmp2,tmp3,umag,soslocal,sos1,sos2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int,rhow_int, rhoe_int, spe_int, rhoYs_int, den,ke_int, p4,Eint, up_int, cpressure, gradcpressure, gradp,sos_int, H_int, Mu_int,delrhou,delrhov,Mv_int,Mw_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: EfluxI,rhouI,rhovI,rhovvI,rhouvI
         real(rkind), dimension(:,:,:), pointer :: xtmp1,xtmp2
         real(rkind) :: g = 0.1, c = 1d4
         integer :: i,j,k
@@ -4323,19 +4324,24 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        enddo
 
 
-!       rhoe_prim = rhoe_prim*v_int
        H_int = KE*v_int +( p_int / rho_int + rhoe_prim)*Mv_int
 
 
-!       where( VF_int(:,:,:,1) .LE. 1d-6 )
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Skew Symmetric i+1/2,j Operator           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      call interpolateFV_y(this%decomp,this%interpMid,this%u*this%rho,rhouI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV_y(this%decomp,this%interpMid,this%v*this%rho,rhovI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV_y(this%decomp,this%interpMid,this%v*this%v*this%rho,rhovvI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV_y(this%decomp,this%interpMid,this%u*this%rho*this%v,rhouvI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV_y(this%decomp,this%interpMid,this%v*this%Wcnsrv(:,:,:,TE_index),EfluxI,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-!           rhoe_prim = this%mix%material(2)%hydro%onebygam_m1*( p_int + this%mix%material(2)%hydro%gam*this%mix%material(2)%hydro%Pinf)*v_int
+      H_int = 1/2*(EfluxI + (KE*v_int + rhoe_prim*Mv_int) + rhovI*(rhoe_prim + KE/rho_int)) + p_int*v_int
 
-!       elsewhere( VF_int(:,:,:,2) .LE. 1d-6 )
+      rhov_int = 1/4*(rhovvI + rhov_int + 2*v_int*rhovI)
+      rhou_int = 1/4*(rhouvI + rhou_int + u_int*rhovI + v_int*rhouI)
 
-!           rhoe_prim = this%mix%material(1)%hydro%onebygam_m1*( p_int + this%mix%material(1)%hydro%gam*this%mix%material(1)%hydro%Pinf)*v_int
 
-!       endwhere
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 
 
 
