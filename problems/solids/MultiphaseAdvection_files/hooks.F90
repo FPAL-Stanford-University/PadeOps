@@ -416,7 +416,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp ! +  (noise-0.5)*1d-5
         mix%material(2)%VF = one - mix%material(1)%VF
-
+        mix%material(1)%rhom = rho_0
+        mix%material(2)%rhom = rho_0_2
 
         rho = rho_0*mix%material(1)%VF + rho_0_2*mix%material(2)%VF ! + (noise-0.5)*1d-7
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho !+ (noise2-0.5)*1d-5

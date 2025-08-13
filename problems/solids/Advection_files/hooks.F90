@@ -283,7 +283,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
    !    tmpeta = atanh( 2.0*y / ( 1.0 + 1.0 / STRETCH_RATIO) )
    !    Lr =  Ly /( tmpeta(1, ny,1) - tmpeta(1,1,1))
 
-        eta = y !tmpeta ! - interface_init
+        eta = x !tmpeta ! - interface_init
         !eta =(x-interface_init)
         !eta = x-interface_init
         !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
@@ -293,7 +293,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
 !        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (y-0.5)*(y-0.5))/(thick*dx) ) )
 
-        tmp = (half)*(erf( (eta+width)/(thick*dy) ) - erf((eta-width)/(thick*dy)))
+        tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf((eta-width)/(thick*dx)))
         !tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
@@ -305,8 +305,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%Ys =  mix%material(1)%VF * rho_0 / rho
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
-        u = 0
-        v = v0 !+ 1d-9*(noise-0.5)
+        u = v0
+        v = 0 !+ 1d-9*(noise-0.5)
         w = 0
 
         !tmp2 = half*(erf( (y-0.8+0.1_rkind)/(thick*dy) ) - erf((y-0.8-0.1_rkind)/(thick*dy)))

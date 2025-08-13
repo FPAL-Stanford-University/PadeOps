@@ -5883,6 +5883,16 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         do imat = 1, this%ns
           call this%material(imat)%update_Ys(isub,dt,rho,u,v,w,sos,x,y,z,tsim,periodicx, periodicy, periodicz,x_bc,y_bc,z_bc,sponge,alpha)
         end do
+
+!          call this%material(1)%update_rhom(isub,dt,rho,u,v,w,sos,x,y,z,tsim,periodicx,periodicy, periodicz,x_bc,y_bc,z_bc,sponge,alpha)
+        
+!        do imat = 1,this%ns
+!
+!           this%material(imat)%VF = this%material(imat)%consrv(:,:,:,1) / this%material(imat)%rhom
+!
+!        enddo
+!
+!        this%material(2)%VF = 1 - this%material(1)%VF
     end subroutine
 
     subroutine get_pmix(this,p)

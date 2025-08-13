@@ -4742,8 +4742,9 @@ contains
          call this%getSpeciesDensity(rho,rhom)
          call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,this%rhoYs_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV(this%decomp,this%interpMid,this%VF,this%VF_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV(this%decomp,this%interpMid,rhom,this%rho_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call interpolateFV(this%decomp,this%interpMid,this%rhom,this%rho_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
+!         this%VF_mid = this%rhoYs_mid/this%rho_mid
 !         do i = 1,3
 !          call filter3D(this%decomp, this%fil, this%VF_mid(:,:,:,i), 1, x_bc, y_bc, z_bc)
 !          call filter3D(this%decomp, this%fil, this%rhoYs_mid(:,:,:,i), 1, x_bc,y_bc, z_bc)
@@ -4872,9 +4873,9 @@ contains
         real(rkind),                                          intent(in)     :: alpha
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: vcon,tmp,tmp1,tmp2,tmp3,u_int,v_int, w_int,flux, dYdx, dYdy, dYdz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: vcon,tmp,tmp1,tmp2,tmp3,u_int,v_int, w_int,flux, drdx, drdy, drdz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: drdx_x, drdy_y,drdz_z,drYdx,drYdy,drYdz,divu_node
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: drdx,drdy,drdz,drsdx,drsdy,drsdz,divuY, divur
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: drsdx,drsdy,drsdz,divuY, divur
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: divuVF,divurs,rhom, dVFdx,dVFdy,dVFdz,divuphi,rLAD
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rho_int,Ys_int,rhoYs_int, rhodiff_int
 
@@ -5073,14 +5074,14 @@ contains
                endif
            endif
 
-          call wenoInterpx(this%decomp,rho*this%Ys,mlx,mrx,x_bc)
-          call wenoInterpy(this%decomp,rho*this%Ys,mly,mry,x_bc)
-          call wenoInterpx(this%decomp,u,ulx,urx,x_bc)
-          call wenoInterpy(this%decomp,v,vly,vry,x_bc)
-          tmpx = 0.5*(mlx*ulx+mrx*urx) - 0.5*max(abs(ulx),abs(urx))*(mrx-mlx)
-          tmpy = 0.5*(mly*vly+mry*vry) - 0.5*max(abs(vly),abs(vry))*(mry-mly)
-          call divergenceFV(this%decomp,this%derStagg,-tmpx,-tmpy,-0_rkind*tmpx,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
+!          call wenoInterpx(this%decomp,rho*this%Ys,mlx,mrx,x_bc)
+!          call wenoInterpy(this%decomp,rho*this%Ys,mly,mry,x_bc)
+!          call wenoInterpx(this%decomp,u,ulx,urx,x_bc)
+!          call wenoInterpy(this%decomp,v,vly,vry,x_bc)
+!          tmpx = 0.5*(mlx*ulx+mrx*urx) - 0.5*max(abs(ulx),abs(urx))*(mrx-mlx)
+!          tmpy = 0.5*(mly*vly+mry*vry) - 0.5*max(abs(vly),abs(vry))*(mry-mly)
+!          call divergenceFV(this%decomp,this%derStagg,-tmpx,-tmpy,-0_rkind*tmpx,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!
            rhsYs = tmp + this%intSharp_RFV + this%YsLAD !+ this%intSharp_RDiffFV
 
            this%u_int = u_int
@@ -5535,7 +5536,7 @@ contains
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Compact Scheme          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
          call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!         call divergenceFV(this%decomp,this%derStagg,-umid*this%VF_mid(:,:,:,1),-vmid*this%VF_mid(:,:,:,2),-wmid*this%VF_mid(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call divergenceFV(this%decomp,this%derStagg,-umid*this%VF_mid(:,:,:,1),-vmid*this%VF_mid(:,:,:,2),-wmid*this%VF_mid(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Skew Symmetric          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !           call gradFV_x(this%decomp,this%derStagg,this%VF_mid(:,:,:,1),dVFdx,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -5546,13 +5547,13 @@ contains
 
          
           !!!!!!!!!!!!!!!!!!!!!!!!!! WENO           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   
-          call wenoInterpx(this%decomp,this%VF,vflx,vfrx,x_bc)
-          call wenoInterpy(this%decomp,this%VF,vfly,vfry,x_bc)
-          call wenoInterpx(this%decomp,u,ulx,urx,x_bc)
-          call wenoInterpy(this%decomp,v,vly,vry,x_bc)
-          tmpx = 0.5*(vflx*ulx+vfrx*urx) - 0.5*max(abs(ulx),abs(urx))*(vfrx-vflx)
-          tmpy = 0.5*(vfly*vly+vfry*vry) - 0.5*max(abs(vly),abs(vry))*(vfry-vfly)
-          call divergenceFV(this%decomp,this%derStagg,-tmpx,-tmpy,-0_rkind*tmpx,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
+!          call wenoInterpx(this%decomp,this%VF,vflx,vfrx,x_bc)
+!          call wenoInterpy(this%decomp,this%VF,vfly,vfry,x_bc)
+!          call wenoInterpx(this%decomp,u,ulx,urx,x_bc)
+!          call wenoInterpy(this%decomp,v,vly,vry,x_bc)
+!          tmpx = 0.5*(vflx*ulx+vfrx*urx) - 0.5*max(abs(ulx),abs(urx))*(vfrx-vflx)
+!          tmpy = 0.5*(vfly*vly+vfry*vry) - 0.5*max(abs(vly),abs(vry))*(vfry-vfly)
+!          call divergenceFV(this%decomp,this%derStagg,-tmpx,-tmpy,-0_rkind*tmpx,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
           rhsVF = div_uVF + this%vfLAD + this%VF*div_u  + this%intSharp_aFV ! + this%intSharp_aDiffFV
           this%advectVF = div_uVF + this%VF*div_u
       endif
@@ -5710,7 +5711,7 @@ contains
         VFpsi = 0.5*(1.0 + tanh(psi/(2.0*intSharp_eps ) ) )
 
         rhom =  (rho*this%Ys + this%elastic%rho0*epssmall)/(this%VF + epssmall)
-       
+ 
         this%rhom = rhom  
        
 
