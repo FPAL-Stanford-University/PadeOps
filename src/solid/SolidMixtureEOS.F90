@@ -5869,19 +5869,19 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
     end subroutine
 
 
-    subroutine update_Ys(this,isub,dt,rho,u,v,w,sos,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,sponge,alpha)
+    subroutine update_Ys(this,isub,dt,rho,u,v,w,umid,vmid,wmid,sos,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,sponge,alpha)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,sos
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,sos,umid,vmid,wmid
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2), intent(in) :: sponge
         real(rkind),                                          intent(in) :: alpha
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
         integer :: imat
         do imat = 1, this%ns
-          call this%material(imat)%update_Ys(isub,dt,rho,u,v,w,sos,x,y,z,tsim,periodicx, periodicy, periodicz,x_bc,y_bc,z_bc,sponge,alpha)
+          call this%material(imat)%update_Ys(isub,dt,rho,u,v,w,umid,vmid,wmid,sos,x,y,z,tsim,periodicx, periodicy, periodicz,x_bc,y_bc,z_bc,sponge,alpha)
         end do
 
 !          call this%material(1)%update_rhom(isub,dt,rho,u,v,w,sos,x,y,z,tsim,periodicx,periodicy, periodicz,x_bc,y_bc,z_bc,sponge,alpha)

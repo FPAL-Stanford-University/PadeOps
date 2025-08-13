@@ -17,6 +17,111 @@ module operators
 
 contains
 
+    subroutine wenoInterpx(decomp,f,fIF,fIB,x_bc)
+        type(decomp_info), intent(in) :: decomp
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)),intent(in)  :: f
+        real(rkind), dimension(size(f,1), size(f,2), size(f,3)),intent(out) :: fIF, fIB
+        integer, dimension(2), optional, intent(in) :: x_bc
+        real(rkind) :: fm3,fm2,fm1,fp1,fp2,fp3,f00
+        integer :: i,j,k,nx
+    
+        real(rkind), dimension(decomp%xsz(1), decomp%xsz(2), decomp%xsz(3)) :: xtmp,xduml,xdumr
+
+        nx = decomp%xsz(1)
+        call transpose_y_to_x(f,xtmp,decomp)
+
+        do k = 1,decomp%xsz(3)
+          do j = 1,decomp%xsz(2)
+            xduml(1,j,k) = weno5js(xtmp(nx-1,j,k),xtmp(nx,j,k),xtmp(1,j,k),xtmp(2,j,k),xtmp(3,j,k))
+            xduml(2,j,k) = weno5js(xtmp(nx,j,k),xtmp(1,j,k),xtmp(2,j,k),xtmp(3,j,k),xtmp(4,j,k))
+            xdumr(1,j,k) = weno5js(xtmp(4,j,k),xtmp(3,j,k),xtmp(2,j,k),xtmp(1,j,k),xtmp(nx,j,k))
+            xdumr(2,j,k) = weno5js(xtmp(5,j,k),xtmp(4,j,k),xtmp(3,j,k),xtmp(2,j,k),xtmp(1,j,k))
+            do i = 3,nx-3
+              xduml(i,j,k) = weno5js(xtmp(i-2,j,k),xtmp(i-1,j,k),xtmp(i,j,k),xtmp(i+1,j,k),xtmp(i+2,j,k))
+              xdumr(i,j,k) = weno5js(xtmp(i+3,j,k),xtmp(i+2,j,k),xtmp(i+1,j,k),xtmp(i,j,k),xtmp(i-1,j,k))
+            enddo
+             xduml(nx-2,j,k) = weno5js(xtmp(nx-4,j,k),xtmp(nx-3,j,k),xtmp(nx-2,j,k),xtmp(nx-1,j,k),xtmp(nx,j,k))
+             xduml(nx-1,j,k) = weno5js(xtmp(nx-3,j,k),xtmp(nx-2,j,k),xtmp(nx-1,j,k),xtmp(nx,j,k),xtmp(1,j,k))
+             xduml(nx,j,k) = weno5js(xtmp(nx-2,j,k),xtmp(nx-1,j,k),xtmp(nx,j,k),xtmp(1,j,k),xtmp(2,j,k))
+             xdumr(nx-2,j,k) = weno5js(xtmp(1,j,k),xtmp(nx,j,k),xtmp(nx-1,j,k),xtmp(nx-2,j,k),xtmp(nx-3,j,k))
+             xdumr(nx-1,j,k) = weno5js(xtmp(2,j,k),xtmp(1,j,k),xtmp(nx,j,k),xtmp(nx-1,j,k),xtmp(nx-2,j,k))
+             xdumr(nx,j,k) = weno5js(xtmp(3,j,k),xtmp(2,j,k),xtmp(1,j,k),xtmp(nx,j,k),xtmp(nx-1,j,k))
+          enddo
+        enddo
+        call transpose_x_to_y(xduml,fIF,decomp)
+        call transpose_x_to_y(xdumr,fIB,decomp)
+    end subroutine
+
+   subroutine wenoInterpy(decomp,f,fIF,fIB,y_bc)
+        type(decomp_info), intent(in) :: decomp
+        real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)),intent(in)  :: f
+        real(rkind), dimension(size(f,1), size(f,2), size(f,3)),intent(out) :: fIF, fIB
+        integer, dimension(2), optional, intent(in) :: y_bc
+        real(rkind) :: fm3,fm2,fm1,fp1,fp2,fp3,f00
+        integer :: i,j,k,ny
+        ny = decomp%ysz(2)
+        do k = 1,decomp%ysz(3)
+          do j = 3,ny-3
+             do i = 1, decomp%ysz(1)
+                 fIF(i,j,k) = weno5js(f(i,j-2,k),f(i,j-1,k),f(i,j,k),f(i,j+1,k),f(i,j+2,k))
+                 fIB(i,j,k) = weno5js(f(i,j+3,k),f(i,j+2,k),f(i,j+1,k),f(i,j,k),f(i,j-1,k))
+             enddo
+          enddo
+         enddo
+
+        do k = 1,decomp%ysz(3)
+          do i = 1, decomp%ysz(1)  
+            fIF(i,1,k) = weno5js(f(i,ny-1,k),f(i,ny,k),f(i,1,k),f(i,2,k),f(i,3,k))
+            fIF(i,2,k) = weno5js(f(i,ny,k),f(i,1,k), f(i,2,k),f(i,3,k),f(i,4,k))
+            fIB(i,1,k) = weno5js(f(i,4,k), f(i,3,k), f(i,2,k),f(i,1,k),f(i,ny,k))
+            fIB(i,2,k) = weno5js(f(i,5,k), f(i,4,k), f(i,3,k),f(i,2,k),f(i,1,k))
+
+            fIF(i,ny-2,k) = weno5js(f(i,ny-4,k),f(i,ny-3,k),f(i,ny-2,k),f(i,ny-1,k),  f(i,ny,k)) 
+            fIF(i,ny-1,k) = weno5js(f(i,ny-3,k),f(i,ny-2,k),f(i,ny-1,k),f(i,ny,k),  f(i,1,k))
+            fIF(i,ny,k)   = weno5js(f(i,ny-2,k),f(i,ny-1,k),f(i,ny,k),  f(i,1,k),   f(i,2,k))
+            fIB(i,ny-2,k) = weno5js(f(i,1,k),   f(i,ny,k),   f(i,ny-1,k),f(i,ny-2,k),f(i,ny-3,k))
+            fIB(i,ny-1,k) = weno5js(f(i,2,k),   f(i,1,k),   f(i,ny,k),  f(i,ny-1,k),f(i,ny-2,k))
+            fIB(i,ny,k)   = weno5js(f(i,3,k),   f(i,2,k),   f(i,1,k),   f(i,ny,k),  f(i,ny-1,k))
+          enddo
+        enddo
+    end subroutine
+
+    function weno5js(fm2,fm1,f00,fp1,fp2) result(output)
+       ! Arguments
+       real(rkind), intent(in)  :: fm2, fm1, f00, fp1, fp2
+       real(rkind)              :: output
+
+       ! Local variables
+       real(rkind) :: q0, q1, q2
+       real(rkind) :: d20, d21, d22, d10, d11, d12
+       real(rkind) :: IS0, IS1, IS2
+       real(rkind) :: a0, a1, a2
+
+       ! Calculate ENO stencils. See Eqn (2.8) in Jiang & Shu, JCP (1996)
+       q0 = 0.375 * fm2 - 1.250 * fm1 + 1.875 * f00
+       q1 = -0.125 * fm1 + 0.750 * f00 + 0.375 * fp1
+       q2 = 0.375 * f00 + 0.750 * fp1 - 0.125 * fp2
+
+       ! Calculate smooth indicators. See Eqn (3.2) - Eqn (3.4) in Jiang & Shu, JCP
+       ! (1996)
+       d20 = fm2 - 2.0 * fm1 + f00
+       d21 = fm1 - 2.0 * f00 + fp1
+       d22 = f00 - 2.0 * fp1 + fp2
+       d10 = fm2 - 4.0 * fm1 + 3.0 * f00
+       d11 = fm1 - fp1
+       d12 = fp2 - 4.0 * fp1 + 3.0 * f00
+       IS0 = (13.0 / 12.0) * d20 * d20 + 0.25 * d10 * d10
+       IS1 = (13.0 / 12.0) * d21 * d21 + 0.25 * d11 * d11
+       IS2 = (13.0 / 12.0) * d22 * d22 + 0.25 * d12 * d12
+
+       ! Calculate weights
+       a0 = 0.0625 / ((IS0 + 1e-6) * (IS0 + 1e-6))
+       a1 = 0.6250 / ((IS1 + 1e-6) * (IS1 + 1e-6))
+       a2 = 0.3125 / ((IS2 + 1e-6) * (IS2 + 1e-6))
+
+       output = (a0*q0 + a1*q1 + a2*q2) / (a0 + a1 + a2)
+    end function weno5js      
+ 
     subroutine gradient(decomp, der, f, dfdx, dfdy, dfdz, x_bc_, y_bc_, z_bc_)
         type(decomp_info), intent(in) :: decomp
         type(derivatives), intent(in) :: der
