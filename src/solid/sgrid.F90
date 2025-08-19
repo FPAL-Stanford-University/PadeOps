@@ -1913,7 +1913,7 @@ contains
 
         call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         ! compute species artificial conductivities and diffusivities
-        call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w, duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+        call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w, duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
         do imat = 1,2
                call this%mix%material(imat)%getLAD_VF(this%rho,this%sos,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy)
                call this%mix%material(imat)%getYsLAD(this%rho,this%sos,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -2226,7 +2226,7 @@ contains
             call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc,-this%y_bc,this%z_bc)
             call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,this%y_bc,-this%z_bc)
 
-            call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+            call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
 
             call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
             call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)

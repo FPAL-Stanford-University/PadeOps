@@ -1700,14 +1700,14 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
     end subroutine
 
     ! Subroutine to get species art. conductivities and diffusivities
-    subroutine getLAD(this,rho,p,e,u,v,w,duidxj,sos,detady,dy_stretch,use_gTg,strainHard,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,tfloor)
+    subroutine getLAD(this,rho,p,e,u,v,w,duidxj,sos,detady,dy_stretch,use_gTg,strainHard,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,tfloor,dt)
          use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos,p,u,v,w,detady,dy_stretch  ! Mixture density and speed of sound
         real(rkind),dimension(this%nxp, this%nyp,this%nzp,9), target, intent(in)  :: duidxj
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical, intent(in) :: periodicx, periodicy, periodicz
-        real(rkind), intent(in) :: tfloor
+        real(rkind), intent(in) :: tfloor,dt
         real(rkind), dimension(2) :: minYs
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradrYs,gradphi,tmpYs,rho_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: umag,rhom1,rhom2,c1,c2,cVF,rhom
@@ -1757,7 +1757,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                
 !                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,u,v,w,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),minYs(i),this%intSharp_cut,cVF,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%outdiff,this%material(i)%rhodiff_stagg,this%material(i)%adiff_stagg,x_bc,y_bc, z_bc,detady,dy_stretch)
 !               call this%LAD%get_diffusivity_Aslani(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
-                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0)
+                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt)
 
 !                 do d = 1,3
 !                    call this%LAD%get_diffusivity_5eqnOG(rho_int(:,:,:,d),this%material(i)%VF_mid(:,:,:,d),this%material(i)%rhoYs_mid(:,:,:,d),gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff_stagg(:,:,:,d),this%material(i)%rhodiff_stagg(:,:,:,d),x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0)
@@ -2301,7 +2301,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
  
             do imat = 1,3
 !             Frho(:,:,:,imat)    = Frho(:,:,:,imat) + rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*this%material(i)%elastic%rho0 !gradRYs_int(:,:,:,imat) !   + this%material(i)%rhodiff*gradRYs(:,:,:,imat) !Fenergy(:,:,:,imat)    = Fenergy(:,:,:,imat) + hi*this%material(i)%rhodiff*gradRYs(:,:,:,imat)
-             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*( (p_int(:,:,:,imat) + this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1)
+             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*( (p_int(:,:,:,imat) + this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1) 
              Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )
             enddo
           !this%material(i)%rhodiff*gradVF(:,:,:,imat)*( (p + this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1
@@ -2369,8 +2369,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            
              if( .NOT. this%LADMass_Consv) then
 
-                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + (this%material(i)%elastic%rho0*rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat) ) 
-!                Frho(:,:,:,imat)    = Frho(:,:,:,imat) + ( rhodiff_int(:,:,:,imat)*gradRYs_int(:,:,:,imat) )  !gradRYs_int(:,:,:,imat)) !rho_int(:,:,:,imat)*Ysdiff_int(:,:,:,imat)*gradYs_int(:,:,:,imat)
+                Frho(:,:,:,imat)    = Frho(:,:,:,imat) + ( rhodiff_int(:,:,:,imat)*gradRYs_int(:,:,:,imat) )
              else
                 
                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + this%J_phi(:,:,:,imat,i)
@@ -2378,10 +2377,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
              endif
 
              if( .NOT. this%LADMass_Consv) then
-              Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) +  (adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)) *((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )
+              Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) +  (adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)) *((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 ) 
+             
 
-!             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + (this%material(i)%adiff_stagg(:,:,:,imat)*gradVF_int(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat)  + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1)
-             !   Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + (adiff_int(:,:,:,imat)*gradH(:,:,:,imat))
              else
                 Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + this%J_phi(:,:,:,imat,i)*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )
  

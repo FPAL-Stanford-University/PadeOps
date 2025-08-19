@@ -678,7 +678,7 @@ contains
         kap = kapstar
     end subroutine
 
-    subroutine get_diffusivity_5eqnOG(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dVFdx,dVFdy,dVFdz,umag,duidxj,minYs,minVF, sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,rho0)
+    subroutine get_diffusivity_5eqnOG(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dVFdx,dVFdy,dVFdz,umag,duidxj,minYs,minVF, sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,rho0,dt)
         use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
         class(ladobject),  intent(in) :: this
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz, umag,dy_stretch,detady
@@ -686,10 +686,10 @@ contains
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9),target,intent(in)  :: duidxj
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
-        real(rkind),intent(in)  :: rho0 
+        real(rkind),intent(in)  :: rho0,dt
         real(rkind), intent(in) :: minYs, minVF
         real(rkind), dimension(:,:,:), pointer::dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb,VF_bound,HM,outM
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: HVF_outb,HYs_outb,Ys_bound,HYs, HVF,Hbound
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) ::xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) ::ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
@@ -781,11 +781,11 @@ contains
         if(this%yMetric) then
 
            outb = this%CY*sos*( half*(abs(Ys)-(one) + abs((Ys)-(one))) )*(dy_stretch*this%dx*this%dz)**(1/3) ! * ( (dy_stretch*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(ytmp1 + ytmp2 + ytmp3)+ real(1.0D-32,rkind)) )!*(dy_stretch*this%dx*this%dz)**(1/3)
-
+           delta = min(dy_stretch,this%dx,this%dz)   !(dy_stretch*this%dx*this%dz)**(1/3)
         else
 
            outb = this%CY*sos*( half*(abs(Ys)-(one) + abs((Ys)-(one))) ) *(this%dy*this%dx*this%dz)**(1/3)  ! * ( (this%dy*abs(drYsdy) + this%dx*abs(drYsdx) + this%dz*abs(drYsdz)) / (sqrt(ytmp1 + ytmp2 + ytmp3)+ real(1.0D-32,rkind)) )!*(this%dy*this%dx*this%dz)**(1/3)
-
+           delta = min(this%dy,this%dx,this%dz) ! (this%dy*this%dx*this%dz)**(1/3)
         endif
 
         diffstar =H1*sos*abs(diffstar) !*fd !/rho ! CD part of diff
@@ -890,7 +890,10 @@ contains
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 
+        rhodiff = min(rhodiff, 0.5_rkind*delta**2 / dt )
         adiff   = rhodiff ! max(rhodiff, adiffstar,outb,ytmp5) !,VF_bound) ! max(adiffstar,ytmp5,VF_bound) ! rhodiff
+
+        
 !        call this%filter(adiff, x_bc, y_bc, z_bc)
 
     end subroutine
