@@ -689,8 +689,8 @@ contains
         real(rkind),intent(in)  :: rho0,dt
         real(rkind), intent(in) :: minYs, minVF
         real(rkind), dimension(:,:,:), pointer::dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: HVF_outb,HYs_outb,Ys_bound,HYs, HVF,Hbound
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta,mdiffstar, barrier
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: HVF_outb,HYs_outb,Ys_bound,HYs, HVF,Hbound,Hthresh,Hthresh1
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) ::xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) ::ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
         real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) ::ztmp1,ztmp2, ztmp3,ztmp4
@@ -744,6 +744,38 @@ contains
         endwhere
 
 
+       !!!!!!!!!!!!!!! lower bound mask !!!!!!!!!!!!!!!!!!!!!
+        where( VF .LT. 1d-4 ) 
+
+          Hthresh = 1_rkind
+
+        elsewhere( (VF .LT. 1d-4 .AND. VF .GT. 5d-5))
+
+          Hthresh = (1d-4 - VF)  / 5d-5
+          
+        elsewhere 
+
+          Hthresh = 0_rkind 
+
+        endwhere
+
+
+       !!!!!!!!!! upper bound mask !!!!!!!!!!!!!!!!!!!!!!!!!!!
+        where( (1_rkind-VF) .LT. 1d-4 )
+
+          Hthresh1 = 1_rkind
+
+        elsewhere( VF .GT. (1_rkind-1d-4) .AND. VF .LT. (1_rkind - 5d-5) )
+
+          Hthresh1 = ( 1d-4 -( 1_rkind - VF ) ) / 5d-5
+
+        elsewhere
+
+          Hthresh1 = 0_rkind
+
+        endwhere
+
+
         call this%filter(HM, x_bc, y_bc, z_bc)
 
         mask = ( 1 - 4*Ys*(1-Ys) )**nmask
@@ -788,11 +820,47 @@ contains
            delta = min(this%dy,this%dx,this%dz) ! (this%dy*this%dx*this%dz)**(1/3)
         endif
 
-        diffstar =H1*sos*abs(diffstar) !*fd !/rho ! CD part of diff
+        diffstar =H1*sos*abs(diffstar)  !*fd !/rho ! CD part of diff
 !       call this%filter(diffstar, x_bc, y_bc, z_bc)
 !       call this%filter(outb, x_bc, y_bc, z_bc)
         rhodiff = this%Crho*diffstar 
 
+
+
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !                           MASS                                    !
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         ! Step 2: Get 4th derivative in X
+        call transpose_y_to_x(rhoYs,xtmp1,this%decomp)
+        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+        call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
+        xtmp2 = xtmp1*this%dx**5
+        call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
+        mdiffstar = ytmp4!*  ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+        ! Step 3: Get 4th derivative in Z
+        call transpose_y_to_z(rhoYs,ztmp1,this%decomp)
+        call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
+        call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
+        ztmp2 = ztmp1*this%dz**5
+        call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
+        mdiffstar = diffstar + ytmp4!* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+
+        ! Step 4: Get 4th derivative in Y
+        call this%der%d2dy2(rhoYs,ytmp4,y_bc(1),y_bc(2))
+        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
+
+        if(this%yMetric) then
+          ytmp4 = (detady**4)*ytmp5*dy_stretch**5
+          mdiffstar = diffstar + ytmp4!* ( dy_stretch   * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )
+        else
+          ytmp4 = ytmp5*this%dy**5
+          mdiffstar = diffstar + ytmp4!* ( this%dy * ytmp2 / (ytmp1 + ytmp2 +ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        endif
+
+        mdiffstar = this%Crho*sos*mdiffstar / rho0
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         !                              VF                                   !
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -833,7 +901,7 @@ contains
 
         endif
 
-        adiffstar = H2*this%Cvf1*sos*abs(adiffstar)
+        adiffstar = H2*this%Cvf1*sos*abs(adiffstar)  
         !ytmp5 = this%Cvf2*sos*( (VF - 1 - minVF)*H2 - (VF -
         !minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one +
         !abs(Ys-one)) )*ytmp4 ! CY partof diff
@@ -886,10 +954,15 @@ contains
 
         VF_bound = this%Cdiff*VF_bound
         Ys_bound = this%Cdiff*Ys_bound
-        rhodiff = (1_rkind -HVF_outb)*(1-HVF)*(1-HYs)*max(rhodiff, adiffstar)  + HVF_outb*max(outb, ytmp5) + max( HVF*VF_bound,HYs*Ys_bound)
+        
+        barrier = max(rhodiff,adiffstar,mdiffstar) + max(outb,ytmp5)
+        rhodiff = max(rhodiff, adiffstar) !  + max(outb, ytmp5) + max( HVF*VF_bound,HYs*Ys_bound)
+       
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 
+        rhodiff = (1-max(Hthresh,Hthresh1))*rhodiff + this%Cdiff*Hthresh*barrier*( 1d-4 / ( abs(VF) + 1d-12 ) ) &
+                  + this%Cdiff*Hthresh1*barrier*( 1d-4 / (abs(1 - VF ) + 1d-12 ) ) 
         rhodiff = min(rhodiff, 0.5_rkind*delta**2 / dt )
         adiff   = rhodiff ! max(rhodiff, adiffstar,outb,ytmp5) !,VF_bound) ! max(adiffstar,ytmp5,VF_bound) ! rhodiff
 
