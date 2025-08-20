@@ -2179,28 +2179,20 @@ contains
             if(this%use_CnsrvSurfaceTension) then
                 call this%mix%get_surfaceTensionPE(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
             endif
-        !    this%mix%material(1)%VF = 1
-        !    this%mix%material(2)%VF = 0
-        !    this%mix%material(1)%Ys = 1
-        !    this%mix%material(2)%Ys = 0
-        !    this%u = 0.7
-        !    this%p = 1
-        !    this%mix%material(1)%p = 1
-        !    this%mix%material(2)%p = 1
-        !    this%e = 1
-        !    this%mix%material(1)%eh = 1
-        !    this%mix%material(2)%eh = 1
-        !    tmp2 = 0.5*( erf( ( this%x - MOD(0.4*this%tsim,5.0)+0.5) / (6.0*this%dx )) - erf( (this%x - MOD(0.4*this%tsim, 5.0)-0.5 ) / (6.0*this%dx ) )  )
-  
-        !    print  *, " Mod = ", MOD(0.4*this%tsim,5.0) 
-        !    this%mix%material(1)%VF = tmp2
-        !    this%mix%material(2)%VF = 1 - tmp2
-        !    this%rho                = this%mix%material(1)%elastic%rho0*tmp2 + this%mix%material(2)%elastic%rho0*(1.0 - tmp2 )
-        !    this%mix%material(1)%Ys = this%mix%material(1)%elastic%rho0*tmp2/this%rho
-        !    this%mix%material(2)%Ys = 1 - this%mix%material(2)%Ys
-
-        !    call this%viz%WriteViz(this%decomp, this%mesh, this%fields,this%mix, this%tsim)
             call this%get_conserved()
+
+            if(this%use_surfaceTension) then
+                if(this%mix%ns.ne.2) then
+                    call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
+                endif
+
+                call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
+! Compute surface tension terms for momentum and energy equations
+
+            endif
+
+
+
 !            call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
             call this%getFaces()
             call this%mix%get_entropy()
@@ -2278,16 +2270,6 @@ contains
             endif
 
              call this%mix%checkNaN()
-            !Calculate contributions of surface tension to all equation RHS's
-            if(this%use_surfaceTension) then
-                if(this%mix%ns.ne.2) then
-                    call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
-                endif
-
-                call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)  ! Compute surface tension terms for momentum and energy equations
-
-            endif
-
 
              if(this%use_CnsrvSurfaceTension) then
                 if(this%mix%ns.ne.2) then
@@ -2553,10 +2535,10 @@ contains
         use operators, only: interpolateFV,interpolateFV_x,interpolateFV_F2Ny,interpolateFV_y,interpolateFV_F2Nx,filter3D
         class(sgrid), target, intent(inout) :: this
         integer :: i,j,k,iflag = one, nx
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int,sos_int,VFbar
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int,sos_int,VFbar,kappabar
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: psi_int,e1_int, Gam_int,pVF_int,num,denom,af,c1_int,rhobar
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2, tmpFil, tmp3,psi,Gam,psi_safe,c1,rhom1,tmp1,mask1,mask2
-        real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3
+        real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4,xtmp5
         real(rkind) :: e = 1d-10
           
 
@@ -2570,7 +2552,7 @@ contains
         call interpolateFV(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV(this%decomp,this%interpMid,this%rho*this%u,rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)                
         call interpolateFV(this%decomp,this%interpMid,this%rho*this%v,rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-         
+        call interpolateFV(this%decomp,this%interpMid02,this%mix%kappa,kappabar,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
         this%pu_mid(:,:,:,1) = this%p_mid(:,:,:,1)*this%u_mid(:,:,:,1)
         this%pu_mid(:,:,:,2) = this%p_mid(:,:,:,2)*this%v_mid(:,:,:,2)
 
@@ -2607,38 +2589,43 @@ contains
       this%mix%material(2)%Ys_mid = 1.0 - this%mix%material(1)%Ys_mid
       this%mix%material(2)%VF_mid = 1.0 - this%mix%material(1)%VF_mid
 
-      mask1 = (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**(0.3_rkind)
-      mask2 = (1_rkind/0.6598_rkind)*( abs(VFbar(:,:,:,2)*(1-VFbar(:,:,:,2)) ) )**(0.3_rkind)
+      mask1 = (2_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**0.5_rkind    ! (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**(0.3_rkind)
+      mask2 = (2_rkind)*abs(VFbar(:,:,:,2)*(1-VFbar(:,:,:,2)))**0.5_rkind   ! (1_rkind/0.6598_rkind)*( abs(VFbar(:,:,:,2)*(1-VFbar(:,:,:,2)) ) )**(0.3_rkind)
 !     do i = 1,3
-         af(:,:,:,1) =this%CP*mask1*this%dt/this%rho_mid(:,:,:,1) * ( sos_int(:,:,:,1) + sqrt( this%u_mid(:,:,:,1)**2 + this%v_mid(:,:,:,1)**2 ) ) /sos_int(:,:,:,1)  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
-         af(:,:,:,2) =this%CP*mask2*this%dt/this%rho_mid(:,:,:,2) * ( sos_int(:,:,:,2) + sqrt( this%u_mid(:,:,:,2)**2 + this%v_mid(:,:,:,2)**2 ) ) /sos_int(:,:,:,2) 
+         af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))     ! * ( sos_int(:,:,:,1) + sqrt( this%u_mid(:,:,:,1)**2 + this%v_mid(:,:,:,1)**2 ) ) /sos_int(:,:,:,1)  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
+         af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))     ! * ( sos_int(:,:,:,2) + sqrt( this%u_mid(:,:,:,2)**2 + this%v_mid(:,:,:,2)**2 ) ) /sos_int(:,:,:,2) 
 !     enddo
 
 
       do j = 1,this%nyp-1
-        this%v_int(:,j,:) = this%v_mid(:,j,:,2) -  af(:,j,:,2) * ( this%p(:,j+1,:) - this%p(:,j,:) )/this%dy 
+        this%v_int(:,j,:) = this%v_mid(:,j,:,2) -  af(:,j,:,2)/this%dy * ( ( this%p(:,j+1,:) - this%p(:,j,:)   ) &
+                            + this%surfaceTension_coeff*kappabar(:,j,:,2)*( this%mix%material(1)%VF_mid(:,j+1,:,2) - this%mix%material(1)%VF_mid(:,j,:,2) ) )
       enddo
 
 
-      this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2) * ( this%p(:,1,:) - this%p(:,this%nyp,:) )/this%dy
+      this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2)/this%dy *( ( this%p(:,1,:) - this%p(:,this%nyp,:) ) & 
+                                + this%surfaceTension_coeff*kappabar(:,this%nyp,:,2)*( this%mix%material(1)%VF_mid(:,1,:,2) - this%mix%material(1)%VF_mid(:,this%nyp,:,2) ) )                                                          
+
       tmp1 = this%u_mid(:,:,:,1)
       tmp2 = af(:,:,:,1)  
       call transpose_y_to_x(tmp1,xtmp1,this%decomp)
       call transpose_y_to_x(tmp2,xtmp2,this%decomp)
       call transpose_y_to_x(this%p,xtmp3,this%decomp)
-!      call transpose_y_to_x(mask2,xtmp4,this%decomp)
-
+      call transpose_y_to_x(kappabar(:,:,:,1),xtmp4,this%decomp)
+      call transpose_y_to_x(this%mix%material(1)%VF_mid(:,:,:,1),xtmp5,this%decomp)
       
       do i = 1,nx-1
 
-         xtmp1(i,:,:) = xtmp1(i,:,:) - xtmp2(i,:,:) * ( xtmp3(i+1,:,:) - xtmp3(i,:,:) )/this%dx
-
+         xtmp1(i,:,:) = xtmp1(i,:,:) - xtmp2(i,:,:)/this%dx *( ( xtmp3(i+1,:,:) - xtmp3(i,:,:) )+this%surfaceTension_coeff*xtmp4(i,:,:)*( xtmp5(i+1,:,:) - xtmp5(i,:,:) )  )
+                        
       enddo
 
-      xtmp1(nx,:,:) = xtmp1(nx,:,:) - xtmp2(nx,:,:) * ( xtmp3(1,:,:) - xtmp3(nx,:,:) )/this%dx
+      xtmp1(nx,:,:) = xtmp1(nx,:,:) - xtmp2(nx,:,:)/this%dx *( ( xtmp3(1,:,:) - xtmp3(nx,:,:) ) + this%surfaceTension_coeff*xtmp4(nx,:,:)*( xtmp5(1,:,:) - xtmp5(nx,:,:) )  )
       call transpose_x_to_y(xtmp1,tmp1,this%decomp)
       this%u_int(:,:,:) = tmp1
-      
+      this%pEvolve = this%u_mid(:,:,:,1) - this%u_int
+      this%pError  = this%v_mid(:,:,:,2) - this%v_int
+ 
       this%VF_int =  this%mix%material(2)%VF_mid(:,:,:,2)
       this%m1_int = this%mix%material(1)%rhoYs_mid(:,:,:,2)
       this%m2_int = this%mix%material(2)%rhoYs_mid(:,:,:,2)

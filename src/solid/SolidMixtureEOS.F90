@@ -61,7 +61,7 @@ module SolidMixtureMod
         
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), allocatable, dimension(:,:,:)   ::  intX_error,intY_error,derX_error, derY_error, intx_exact, inty_exact, lapTest, DivTest,lap_error, div_error, entropy
-        real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa,VF_intx, VF_inty,VF_intz, DerX, DerY,DerZ, ddx_exact, ddy_exact, Pmix, DerYstagg , ddystagg_exact
+        real(rkind), allocatable, dimension(:,:,:)   :: kappa, maskKappa,VF_intx, VF_inty,VF_intz, DerX, DerY,DerZ, ddx_exact, ddy_exact, Pmix, DerYstagg , ddystagg_exact, HighYs,HighVF, OOBVF, OOBYs
         real(rkind), allocatable, dimension(:,:,:,:) :: norm, normFV,gradp,gradVF,gradxi
         real(rkind), allocatable, dimension(:,:,:,:,:) :: gradVF_FV, J_phi, J_VF
 	real(rkind), allocatable, dimension(:,:,:)   :: phi
@@ -432,6 +432,18 @@ contains
         if(allocated(this%kappa)) deallocate(this%kappa)
         allocate(this%kappa(this%nxp, this%nyp, this%nzp))
 
+        if(allocated(this%HighVF)) deallocate(this%HighVF)
+        allocate(this%HighVF(this%nxp, this%nyp, this%nzp))
+       
+        if(allocated(this%HighYs)) deallocate(this%HighYs)
+        allocate(this%HighYs(this%nxp, this%nyp, this%nzp)) 
+
+        if(allocated(this%OOBVF)) deallocate(this%OOBVF)
+        allocate(this%OOBVF(this%nxp, this%nyp, this%nzp))
+
+        if(allocated(this%OOBYs)) deallocate(this%OOBYs)
+        allocate(this%OOBYs(this%nxp, this%nyp, this%nzp))
+
         if(allocated(this%intX_error)) deallocate(this%intX_error)
         allocate(this%intX_error(this%nxp, this%nyp, this%nzp))
 
@@ -604,6 +616,10 @@ contains
         if(allocated(this%gradxi)) deallocate(this%gradxi)
         if(allocated(this%entropy)) deallocate(this%entropy)
         if(allocated(this%kappa)) deallocate(this%kappa)
+        if(allocated(this%HighVF)) deallocate(this%HighVF)
+        if(allocated(this%HighYs)) deallocate(this%HighYs)
+        if(allocated(this%OOBYs)) deallocate(this%OOBYs)
+        if(allocated(this%OOBVF)) deallocate(this%OOBVF)
         if(allocated(this%Pmix)) deallocate(this%Pmix)
         if(allocated(this%VF_intx)) deallocate(this%VF_intx)
         if(allocated(this%VF_inty)) deallocate(this%VF_inty)
@@ -1757,7 +1773,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                
 !                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,u,v,w,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),minYs(i),this%intSharp_cut,cVF,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%outdiff,this%material(i)%rhodiff_stagg,this%material(i)%adiff_stagg,x_bc,y_bc, z_bc,detady,dy_stretch)
 !               call this%LAD%get_diffusivity_Aslani(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
-                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt)
+                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs)
 
 !                 do d = 1,3
 !                    call this%LAD%get_diffusivity_5eqnOG(rho_int(:,:,:,d),this%material(i)%VF_mid(:,:,:,d),this%material(i)%rhoYs_mid(:,:,:,d),gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff_stagg(:,:,:,d),this%material(i)%rhodiff_stagg(:,:,:,d),x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0)

@@ -77,7 +77,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: rho
         real(rkind), allocatable :: Ys_thick, VF_thick, Ys_wiggle, VF_wiggle        
         ! species-specific artificial properties
-        real(rkind), dimension(:,:,:),   allocatable :: adiff,fd, physmu
+        real(rkind), dimension(:,:,:),   allocatable :: adiff,fd, physmu,OOBYs,OOBVF,HighVF, HighYs
         real(rkind), dimension(:,:,:),   allocatable :: rhodiff,outdiff,Ysdiff
         real(rkind), dimension(:,:,:),   allocatable :: kap
         real(rkind), dimension(:,:,:,:), allocatable :: qi,rhodiff_stagg,adiff_stagg
@@ -86,7 +86,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   allocatable :: diff_gt
         real(rkind), dimension(:,:,:),   allocatable :: diff_gp
         real(rkind), dimension(:,:,:),   allocatable :: diff_pe
-        real(rkind), dimension(:,:,:,:), allocatable :: Ji, Ji_phi, JiYs
+        real(rkind), dimension(:,:,:,:), allocatable :: Ji, Ji_phi,JiYs
         ! species-specific variables for interface sharpening
         real(rkind), dimension(:,:,:,:), allocatable :: intSharp_a,intSharp_R,intSharp_aDiff,intSharp_RDiff
         real(rkind), dimension(:,:,:),   allocatable :: intSharp_aFV,intSharp_RFV,intSharp_aDiffFV,intSharp_RDiffFV
@@ -590,6 +590,22 @@ contains
 
         if( allocated( this%outdiff ) ) deallocate( this%outdiff )
         allocate( this%outdiff(this%nxp,this%nyp,this%nzp) )
+  
+        if( allocated( this%HighVF ) ) deallocate( this%HighVF )
+        allocate( this%HighVF(this%nxp,this%nyp,this%nzp) )
+       
+        if( allocated( this%OOBVF ) ) deallocate( this%OOBVF )
+        allocate( this%OOBVF(this%nxp,this%nyp,this%nzp) )
+ 
+        if( allocated( this%OOBYs ) ) deallocate( this%OOBYs )
+        allocate( this%OOBYs(this%nxp,this%nyp,this%nzp) )
+
+        if( allocated( this%HighYs ) ) deallocate( this%HighYs )
+        allocate( this%HighYs(this%nxp,this%nyp,this%nzp) )
+ 
+        if( allocated( this%outdiff ) ) deallocate( this%outdiff )
+        allocate( this%outdiff(this%nxp,this%nyp,this%nzp) )
+         
 
         ! Allocate material diffusive flux
         if( allocated( this%YsLAD ) ) deallocate( this%YsLAD )
@@ -801,7 +817,10 @@ contains
         if( allocated( this%T )    ) deallocate( this%T )
         if( allocated( this%p )    ) deallocate( this%p )
         if( allocated( this%modDevSigma ) ) deallocate( this%modDevSigma )
-
+        if( allocated( this%OOBVF ) ) deallocate( this%OOBVF )
+        if( allocated( this%OOBYs ) ) deallocate( this%OOBYs )
+        if( allocated( this%HighVF ) ) deallocate( this%HighVF )
+        if( allocated( this%HighYs ) ) deallocate( this%HighYs )
         nullify( this%sxx ); nullify( this%sxy ); nullify( this%sxz )
                              nullify( this%syy ); nullify( this%syz )
                                                   nullify( this%szz )
