@@ -91,7 +91,7 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     real(rkind), dimension(:,:,:), allocatable :: randArr, ybuffC, ybuffE, zbuffC, zbuffE
     integer :: nz, nzE, k
     real(rkind)  :: Lx = one, Ly = one, Lz = one
-    real(rkind) ::  z0init = 2.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0, ustarinit = 1.0d
+    real(rkind) ::  z0init = 2.0d-4, epsnd, yperiods = 3.0d0, zpeak = 0.2d0, xperiods = 3.0d0, ustarinit = 1.0d0
     namelist /concurrentSimulationINPUT/ Lx, Ly, Lz, z0init, zpeak, ustarinit
 
     ioUnit = 11
@@ -110,15 +110,15 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     x => mesh(:,:,:,1)
  
     if(isPrecursor) then
-       epsnd = 5.0_rkind 
+       epsnd = 5.0d0 
        !epsnd = 0.0_rkind 
-       u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-       v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+       u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+       v = epsnd*(z/Lz)*cos(xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
        wC= zero  
     else
        epsnd = zero
-       u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
-       v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
+       u = (ustarinit/kappa)*log(z/z0init) + epsnd*cos(yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+       v = epsnd*(z/Lz)*cos(xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
        wC= zero  
     endif
     isPrecursor = .false.
@@ -267,7 +267,7 @@ subroutine hook_probes(inputfile, probe_locs)
     use kind_parameters,    only: rkind
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
-    integer, parameter :: nprobes = 2
+    integer, parameter :: nprobes = 20
     
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
     ! Example: If you have at least 3 probes:
@@ -281,9 +281,30 @@ subroutine hook_probes(inputfile, probe_locs)
     ! (0.2,0.2,0.2)  
     print*, inputfile
     allocate(probe_locs(3,nprobes))
-    probe_locs(1,1) = 0.1d0; probe_locs(2,1) = 0.1d0; probe_locs(3,1) = 0.1d0;
-    probe_locs(1,2) = 0.2d0; probe_locs(2,2) = 0.2d0; probe_locs(3,2) = 0.2d0;
-
+    probe_locs(1,1) = 1.0d0; probe_locs(2,1) = 0.8d0; probe_locs(3,1) = 0.1d0;
+    probe_locs(1,2) = 1.0d0; probe_locs(2,2) = 0.8d0; probe_locs(3,2) = 0.2d0;
+    probe_locs(1,3) = 1.0d0; probe_locs(2,3) = 0.8d0; probe_locs(3,3) = 0.5d0;
+    probe_locs(1,4) = 1.0d0; probe_locs(2,4) = 0.8d0; probe_locs(3,4) = 0.8d0;
+   
+    probe_locs(1,5) = 2.5d0; probe_locs(2,5) = 0.8d0; probe_locs(3,5) = 0.1d0;
+    probe_locs(1,6) = 2.5d0; probe_locs(2,6) = 0.8d0; probe_locs(3,6) = 0.2d0;
+    probe_locs(1,7) = 2.5d0; probe_locs(2,7) = 0.8d0; probe_locs(3,7) = 0.5d0;
+    probe_locs(1,8) = 2.5d0; probe_locs(2,8) = 0.8d0; probe_locs(3,8) = 0.8d0;
+   
+    probe_locs(1,9) = 3.0d0; probe_locs(2,9) = 0.8d0; probe_locs(3,9) = 0.1d0;
+    probe_locs(1,10) = 3.0d0; probe_locs(2,10) = 0.8d0; probe_locs(3,10) = 0.2d0;
+    probe_locs(1,11) = 3.0d0; probe_locs(2,11) = 0.8d0; probe_locs(3,11) = 0.5d0;
+    probe_locs(1,12) = 3.0d0; probe_locs(2,12) = 0.8d0; probe_locs(3,12) = 0.8d0;
+   
+    probe_locs(1,13) = 3.5d0; probe_locs(2,13) = 0.8d0; probe_locs(3,13) = 0.1d0;
+    probe_locs(1,14) = 3.5d0; probe_locs(2,14) = 0.8d0; probe_locs(3,14) = 0.2d0;
+    probe_locs(1,15) = 3.5d0; probe_locs(2,15) = 0.8d0; probe_locs(3,15) = 0.5d0;
+    probe_locs(1,16) = 3.5d0; probe_locs(2,16) = 0.8d0; probe_locs(3,16) = 0.8d0;
+   
+    probe_locs(1,17) = 4.0d0; probe_locs(2,17) = 0.8d0; probe_locs(3,17) = 0.1d0;
+    probe_locs(1,18) = 4.0d0; probe_locs(2,18) = 0.8d0; probe_locs(3,18) = 0.2d0;
+    probe_locs(1,19) = 4.0d0; probe_locs(2,19) = 0.8d0; probe_locs(3,19) = 0.5d0;
+    probe_locs(1,20) = 4.0d0; probe_locs(2,20) = 0.8d0; probe_locs(3,20) = 0.8d0;
 
 end subroutine
 

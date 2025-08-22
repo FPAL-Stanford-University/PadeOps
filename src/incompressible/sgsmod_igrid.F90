@@ -122,7 +122,7 @@ module sgsmod_igrid
             procedure, private :: compute_ustar_upstreampart
             procedure, private :: getSpanAvgVelAtWall
             procedure, private :: set_tauijWM
-            
+            procedure, private :: partition_stress_local2DelVel
 
             !! ALL DYNAMIC PROCEDURE SUBROUTINES
             procedure, private :: allocateMemory_DynamicProcedure

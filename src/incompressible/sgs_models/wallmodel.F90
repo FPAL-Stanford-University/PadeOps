@@ -75,6 +75,9 @@ subroutine initWallModel(this)
    case (5) ! wall model Goit 
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
    
+   case (6) ! Smooth wall wall model (Meneveau JoT 2020)
+       ! do nothing    
+      allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
    case default
       call gracefulExit("Invalid choice of Wallmodel.",324)
    end select
@@ -92,9 +95,12 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
    real(rkind), dimension(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)), intent(in) :: u, v
    complex(rkind), dimension(:,:,:), pointer :: cbuffz, cbuffy
    real(rkind) :: ust1fac, ustar1, epssmall = 1.0d-6, dzby2
-   real(rkind) :: Edash, fact
+   real(rkind) :: Edash, fact, utau
    integer, dimension(this%gpC%xsz(1), this%gpC%xsz(2)) :: modelregion
    integer :: i, j
+   
+   ! For Case 6
+   real(rkind) :: Re_del, Re_tauf, nu, b1, b2, k4, k3, p1, p2, p3
 
    cbuffz => this%cbuffzC(:,:,:,1)
    cbuffy => this%cbuffyC(:,:,:,1)
@@ -148,6 +154,17 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
             call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
         endif
       !endif
+
+           !if(nrank == 0) then
+            !print *, "nu = ", nu
+            !print *, "Re = ", this%Re
+            !print *, "dz = ", this%dz
+            !print *, "Uspmn = ", this%Uspmn
+            !print *, "Re_del = ", Re_del
+            !print *, "Re_tauf = ", Re_tauf
+            !print *, "WallMFactor = ", this%WallMFactor
+            !print *, "WM_matchingIndex = ", this%WM_matchingIndex
+           !end if
 
    case (3) ! Abkar-PA (2012) heterogeneous model
       !! type 1 :: SG-local method (span averages)
@@ -288,10 +305,83 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
           call transpose_z_to_y(this%tauijWMhat_inZ(:,:,:,2), this%tauijWMhat_inY(:,:,:,2), this%sp_gpE)
           call this%spectE%ifft(this%tauijWMhat_inY(:,:,:,2), this%tauijWM(:,:,:,2))
       endif
-      
+     
+    case (6)  !! smooth wall wall model (Meneveau JoT -- )
+
+
+           ! print *, "Re = ", this%Re
+            nu = 1.0d0 / this%Re
+
+            !print *, "Re = ", this%Re
+           ! print *, "dz = ", this%dz
+           ! print *, "nu = ", nu
+           ! print *, "Uspmn = ", this%Uspmn
+           ! print *, "Re_del = ", Re_del
+            !print *, "Re_tauf = ", Re_tauf
+            !print *, "WallMFactor = ", this%WallMFactor
+            !print *, "WM_matchingIndex = ", this%WM_matchingIndex
+            Re_del = this%Uspmn * (this%dz / 2.0d0) / nu
+
+            !b1 = (1.0d0 + 1.55d-1 * Re_del**(-3.0d-2))**(-1.0d0)
+            !b2 = 1.7d0 - (1.0d0 + 3.6d1 *Re_del**(-7.5d-1))**(-1.0d0)
+
+            !k3 = 5.0d-3
+            !k4 = k3 ** (b1 - 5.0d-1)
+            !p1 = k4 * Re_del ** b1
+            !p2 = 1.0d0 + (k3 * Re_del) ** (-b2)
+            !p3 = (b1 - 5.0d-1) / b2
+
+            !Re_tauf = p1 * p2 ** p3 
+         
+ 
+            Re_tauf = get_Retaufit(Re_del)
+ 
+            utau = Re_tauf * nu / (this%dz / 2.0d0)   !! -- correct but too large
+            !this%WallMFactor = Re_tauf * nu / (this%dz * this%Uspmn / 2.0d0)   !!! incorrerct but does not blow up
+
+            this%ustar = utau
+            this%WallMFactor = -utau*utau   !! -- correct but too large
+
+           if(nrank == 0) then
+            print *, "nu = ", nu
+            print *, "Re = ", this%Re
+            print *, "dz = ", this%dz
+            print *, "Uspmn = ", this%Uspmn
+            print *, "Re_del = ", Re_del
+            print *, "Re_tauf = ", Re_tauf
+            print *, "utau = ", utau
+            print *, "WallMFactor = ", this%WallMFactor
+            print *, "WM_matchingIndex = ", this%WM_matchingIndex
+           end if
+ 
+            !call this%spectC%fft(this%filteredSpeedSq, cbuffy)
+            !call transpose_y_to_z(cbuffy, cbuffz, this%sp_gpC)
+    
+            call this%getfilteredSpeedSqAtWall(uhat, vhat)
+            !call this%getSpanAvgVelAtWall()
+            call this%partition_stress_local2DelVel()
+        
    end select
 
 end subroutine
+
+function get_Retaufit(Re_del) result(Re_tauf)
+    !class(sgs_igrid)
+    real(rkind), intent(in) :: Re_del
+    real(rkind) :: b1, b2, k3, k4, p1, p2, p3
+    real(rkind) :: Re_tauf
+
+    b1 = (1.0d0 + 1.55d-1 * Re_del**(-3.0d-2))**(-1.0d0)
+    b2 = 1.7d0 - (1.0d0 + 3.6d1 * Re_del**(-7.5d-1))**(-1.0d0)
+
+    k3 = 5.0d-3
+    k4 = k3 ** (b1 - 5.0d-1)
+    p1 = k4 * Re_del ** b1
+    p2 = 1.0d0 + (k3 * Re_del) ** (-b2)
+    p3 = (b1 - 5.0d-1) / b2
+
+    Re_tauf = p1 * p2 ** p3
+end function
 
 function feval_one(this,xvar,fparams) result(fval) 
    
@@ -623,6 +713,46 @@ subroutine compute_and_bcast_surface_Mn(this, u, v, uhat, vhat, That )
 
 end subroutine
 
+subroutine partition_stress_local2DelVel(this)
+    class(sgs_igrid), intent(inout), target :: this
+    real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2, rbuffx3
+    real(rkind) :: ustar1
+
+    rbuffx1 => this%rbuffxC(:,:,:,1);    rbuffx2 => this%rbuffxC(:,:,:,2)
+    rbuffx3 => this%rbuffxC(:,:,:,3);
+
+    rbuffx3(:,:,1) = sqrt(this%filteredSpeedSq(:,:, 1))
+   
+    if (nrank == 0) then
+    print *, "shape rbuffx3: ", shape(rbuffx3)
+    print *, "shape rbuffx1: ", shape(rbuffx1)
+    print *, "shape umn: ", shape(this%umn)
+    print *, "shape vmn: ", shape(this%vmn)
+    end if
+
+    ! tau_13
+    rbuffx1(:,:,1) = this%WallmFactor * this%Uxvar / rbuffx3(:,:,1)
+    call transpose_x_to_y(rbuffx1, this%rbuffyC(:,:,:,1), this%gpC)
+    call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+
+    this%rbuffzE = 0.0d0;    this%rbuffzE(:,:,1,1) = this%rbuffzC(:,:,1,1)
+    call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+    call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%tauijWM(:,:,:,1), this%gpE)
+
+    ! tau_23
+    rbuffx2(:,:,1) = this%WallmFactor * this%Uyvar / rbuffx3(:,:,1)
+    call transpose_x_to_y(rbuffx2, this%rbuffyC(:,:,:,1), this%gpC)
+    call transpose_y_to_z(this%rbuffyC(:,:,:,1), this%rbuffzC(:,:,:,1), this%gpC)
+
+    this%rbuffzE = 0.0d0;    this%rbuffzE(:,:,1,1) = this%rbuffzC(:,:,1,1)
+    call transpose_z_to_y(this%rbuffzE(:,:,:,1), this%rbuffyE(:,:,:,1), this%gpE)
+    call transpose_y_to_x(this%rbuffyE(:,:,:,1), this%tauijWM(:,:,:,2), this%gpE)
+
+    !this%ustarsqvar = -this%WallMFactorvar * this%filteredSpeedSq(:,:,1)
+
+
+end subroutine
+
 subroutine BouZeidLocalModel(this)
     class(sgs_igrid), intent(inout), target :: this
     real(rkind), dimension(:,:,:), pointer :: rbuffx1, rbuffx2, rbuffx3
@@ -686,6 +816,10 @@ subroutine getSpanAvgVelAtWall(this)
     this%Uxspan(:,:) = this%filteredSpeedSq(:,:,2)
     this%Uyspan(:,:) = this%filteredSpeedSq(:,:,3)
 
+    if (nrank == 0) then
+    print *, "shape Uxspan: ", shape(this%Uxspan)
+    end if
+
     !this%filteredSpeedSq(:,:,1) = this%filteredSpeedSq(:,:,2)*this%filteredSpeedSq(:,:,2)
     !this%filteredSpeedSq(:,:,1) = this%filteredSpeedSq(:,:,1) + this%filteredSpeedSq(:,:,3)*this%filteredSpeedSq(:,:,3)
     this%filteredSpeedSq(:,:,2) = this%Uxspan*this%Uxspan + this%Uyspan*this%Uyspan
@@ -713,13 +847,14 @@ subroutine getfilteredSpeedSqAtWall(this, uhatC, vhatC)
     call transpose_z_to_y(tauWallH,cbuffy, this%sp_gpC)
     call this%spectC%ifft(cbuffy,rbuffx2)
 
-    if(this%is_z0_varying .and. (this%gpC%xst(3)==1)) then
-        !this%Uxvar = rbuffx1(:,:,1)
-        !this%Uyvar = rbuffx2(:,:,1)
-        this%Uxvar = rbuffx1(:,:,this%WM_matchingIndex)
-        this%Uyvar = rbuffx2(:,:,this%WM_matchingIndex)
-    endif
+   ! if(this%is_z0_varying .and. (this%gpC%xst(3)==1)) then
+        this%Uxvar = rbuffx1(:,:,1)
+        this%Uyvar = rbuffx2(:,:,1)
+        !this%Uxvar = rbuffx1(:,:,this%WM_matchingIndex)
+        !this%Uyvar = rbuffx2(:,:,this%WM_matchingIndex)
+   ! endif
 
+    !this%Uxvar = rbuffx1(:,:,this%WM_matchingIndex)
     rbuffx1 = rbuffx1*rbuffx1
     rbuffx2 = rbuffx2*rbuffx2
     rbuffx3 = rbuffx1 + rbuffx2

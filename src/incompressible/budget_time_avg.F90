@@ -266,7 +266,7 @@ contains
             
             call igrid_sim%spectC%alloc_r2c_out(this%uvisc)
             call igrid_sim%spectC%alloc_r2c_out(this%vvisc)
-            call igrid_sim%spectC%alloc_r2c_out(this%wvisc)
+            call igrid_sim%spectE%alloc_r2c_out(this%wvisc)
             
             call igrid_sim%spectC%alloc_r2c_out(this%ucor)
             call igrid_sim%spectC%alloc_r2c_out(this%vcor)
