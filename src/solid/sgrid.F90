@@ -1963,7 +1963,7 @@ contains
    
         ! Write out initial conditions
         ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-      !  call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
+!        call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
         if( this%Stretch1Dy) then
            call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
         else
@@ -2045,7 +2045,7 @@ contains
             ! Write out vizualization dump if vizcond is met 
            if (vizcond) then
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
-                !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
+!                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
 
                 call this%entropy_discreteKE()
                 if( this%Stretch1Dy) then               
@@ -2191,8 +2191,17 @@ contains
 
             endif
 
+            where( this%mix%material(1)%VF .GT. 1d-6 )
+               this%mix%deltakap =abs(this%mix%kappa*(this%dx*this%dz*this%dy_stretch)**(1_rkind/3_rkind)) !*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF) )*4.0           
+            elsewhere
+               this%mix%deltakap = 0
+            endwhere
 
+            do i = 1,2
+             
+             this%mix%material(i)%deltakap = this%mix%deltakap
 
+            enddo        
 !            call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
             call this%getFaces()
             call this%mix%get_entropy()
@@ -2532,10 +2541,10 @@ contains
 
     subroutine getFaces( this)
         use decomp_2d,  only: nrank
-        use operators, only: interpolateFV,interpolateFV_x,interpolateFV_F2Ny,interpolateFV_y,interpolateFV_F2Nx,filter3D
+        use operators, only: interpolateFV,interpolateFV_x,interpolateFV_F2Ny,interpolateFV_y,interpolateFV_F2Nx,filter3D,gradFV_N2Fx,gradFV_N2Fy
         class(sgrid), target, intent(inout) :: this
         integer :: i,j,k,iflag = one, nx
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int,sos_int,VFbar,kappabar
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int,sos_int,VFbar,kappabar,gradp,gradVF,peff
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: psi_int,e1_int, Gam_int,pVF_int,num,denom,af,c1_int,rhobar
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2, tmpFil, tmp3,psi,Gam,psi_safe,c1,rhom1,tmp1,mask1,mask2
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4,xtmp5
@@ -2552,7 +2561,7 @@ contains
         call interpolateFV(this%decomp,this%interpMid,this%rho*this%e,rhoe_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV(this%decomp,this%interpMid,this%rho*this%u,rhou_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)                
         call interpolateFV(this%decomp,this%interpMid,this%rho*this%v,rhov_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call interpolateFV(this%decomp,this%interpMid02,this%mix%kappa,kappabar,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
+        call interpolateFV(this%decomp,this%interpMid,this%mix%kappa,kappabar,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc) 
         this%pu_mid(:,:,:,1) = this%p_mid(:,:,:,1)*this%u_mid(:,:,:,1)
         this%pu_mid(:,:,:,2) = this%p_mid(:,:,:,2)*this%v_mid(:,:,:,2)
 
@@ -2585,6 +2594,13 @@ contains
 !      this%u_int = rhou_int(:,:,:,1) /this%rho_mid(:,:,:,1) - this%u_mid(:,:,:,1)
 !      this%v_int = rhov_int(:,:,:,2)/this%rho_mid(:,:,:,2) - this%v_mid(:,:,:,2)
 
+
+      
+      call gradFV_N2Fx(this%decomp,this%derStaggd02,this%p,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)           
+      call gradFV_N2Fy(this%decomp,this%derStaggd02,this%p,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+      call gradFV_N2Fx(this%decomp,this%derStagg,this%mix%material(1)%VF,gradVF(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fy(this%decomp,this%derStagg,this%mix%material(1)%VF,gradVF(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       call interpolateFV(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       this%mix%material(2)%Ys_mid = 1.0 - this%mix%material(1)%Ys_mid
       this%mix%material(2)%VF_mid = 1.0 - this%mix%material(1)%VF_mid
@@ -2592,35 +2608,49 @@ contains
       mask1 = (2_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**0.5_rkind    ! (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**(0.3_rkind)
       mask2 = (2_rkind)*abs(VFbar(:,:,:,2)*(1-VFbar(:,:,:,2)))**0.5_rkind   ! (1_rkind/0.6598_rkind)*( abs(VFbar(:,:,:,2)*(1-VFbar(:,:,:,2)) ) )**(0.3_rkind)
 !     do i = 1,3
-         af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))     ! * ( sos_int(:,:,:,1) + sqrt( this%u_mid(:,:,:,1)**2 + this%v_mid(:,:,:,1)**2 ) ) /sos_int(:,:,:,1)  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
-         af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))     ! * ( sos_int(:,:,:,2) + sqrt( this%u_mid(:,:,:,2)**2 + this%v_mid(:,:,:,2)**2 ) ) /sos_int(:,:,:,2) 
+         af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))  * ( (sqrt( this%u_mid(:,:,:,1)**2 + this%v_mid(:,:,:,1)**2 ) ) /sos_int(:,:,:,1) )**2  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
+         af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2)) *( ( sqrt( this%u_mid(:,:,:,2)**2 + this%v_mid(:,:,:,2)**2 ) ) /sos_int(:,:,:,2))**2
 !     enddo
 
+      peff = ( gradp + this%surfaceTension_coeff*kappabar*gradVF )
+      
 
-      do j = 1,this%nyp-1
-        this%v_int(:,j,:) = this%v_mid(:,j,:,2) -  af(:,j,:,2)/this%dy * ( ( this%p(:,j+1,:) - this%p(:,j,:)   ) &
-                            + this%surfaceTension_coeff*kappabar(:,j,:,2)*( this%mix%material(1)%VF_mid(:,j+1,:,2) - this%mix%material(1)%VF_mid(:,j,:,2) ) )
-      enddo
+     do j = 2,this%nyp-1
+        this%v_int(:,j,:) = this%v_mid(:,j,:,2) -  af(:,j,:,2) * ( peff(:,j,:,2) - 0.5_rkind*(peff(:,j+1,:,2) + peff(:,j-1,:,2) ) ) !  * ( gradp(:,j,:,2) + this%surfaceTension_coeff*kappabar(:,j,:,2)*gradVF(:,j,:,2) )  !/this%dy * ( ( this%p(:,j+1,:) - this%p(:,j,:)   ) &
+!                            + this%surfaceTension_coeff*kappabar(:,j,:,2)*( this%mix%material(1)%VF_mid(:,j+1,:,2) -  this%mix%material(1)%VF_mid(:,j,:,2) ) ) !  * ( gradp(:,j,:,2) + this%surfaceTension_coeff*kappabar(:,j,:,2)*gradVF(:,j,:,2) )
+
+     enddo
 
 
-      this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2)/this%dy *( ( this%p(:,1,:) - this%p(:,this%nyp,:) ) & 
-                                + this%surfaceTension_coeff*kappabar(:,this%nyp,:,2)*( this%mix%material(1)%VF_mid(:,1,:,2) - this%mix%material(1)%VF_mid(:,this%nyp,:,2) ) )                                                          
+     this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2) *( peff(:,this%nyp,:,2) - 0.5_rkind*(peff(:,1,:,2) + peff(:,this%nyp-1,:,2) ) )
+     this%v_int(:,1,:) = this%v_mid(:,1,:,2) - af(:,1,:,2) *( peff(:,1,:,2) - 0.5_rkind*(peff(:,2,:,2) + peff(:,this%nyp,:,2) ) )
+
+!                               /this%dy *( ( this%p(:,1,:) - this%p(:,this%nyp,:) ) & 
+!                               + this%surfaceTension_coeff*kappabar(:,this%nyp,:,2)*( this%mix%material(1)%VF_mid(:,1,:,2) - this%mix%material(1)%VF_mid(:,this%nyp,:,2) ) )                                                          
 
       tmp1 = this%u_mid(:,:,:,1)
-      tmp2 = af(:,:,:,1)  
+      tmp2 = af(:,:,:,1) 
+
+!     this%u_int = this%u_mid(:,:,:,1) - af(:,:,:,1) * ( gradp(:,:,:,1) + this%surfaceTension_coeff*kappabar(:,:,:,1)*gradVF(:,:,:,1) ) 
       call transpose_y_to_x(tmp1,xtmp1,this%decomp)
       call transpose_y_to_x(tmp2,xtmp2,this%decomp)
-      call transpose_y_to_x(this%p,xtmp3,this%decomp)
+      call transpose_y_to_x(peff(:,:,:,1),xtmp3,this%decomp)
       call transpose_y_to_x(kappabar(:,:,:,1),xtmp4,this%decomp)
-      call transpose_y_to_x(this%mix%material(1)%VF_mid(:,:,:,1),xtmp5,this%decomp)
-      
-      do i = 1,nx-1
+!      call transpose_y_to_x(this%mix%material(1)%VF_mid(:,:,:,1),xtmp5,this%decomp)
+!      
+      do i = 2,nx-1
+!
+         xtmp1(i,:,:) = xtmp1(i,:,:) - xtmp2(i,:,:) * ( xtmp3(i,:,:)- 0.5_rkind*(xtmp3(i+1,:,:) + xtmp3(i-1,:,:) ))
 
-         xtmp1(i,:,:) = xtmp1(i,:,:) - xtmp2(i,:,:)/this%dx *( ( xtmp3(i+1,:,:) - xtmp3(i,:,:) )+this%surfaceTension_coeff*xtmp4(i,:,:)*( xtmp5(i+1,:,:) - xtmp5(i,:,:) )  )
+
+!/this%dx *( ( xtmp3(i+1,:,:) - xtmp3(i,:,:) )+this%surfaceTension_coeff*xtmp4(i,:,:)*( xtmp5(i+1,:,:) - xtmp5(i,:,:) )  )
                         
       enddo
+!
+      xtmp1(nx,:,:) = xtmp1(nx,:,:) - xtmp2(nx,:,:) * ( xtmp3(nx,:,:) - 0.5_rkind*(xtmp3(1,:,:) + xtmp3(nx-1,:,:) ))
+      xtmp1(1,:,:) = xtmp1(1,:,:) - xtmp2(1,:,:) * ( xtmp3(1,:,:) - 0.5_rkind*(xtmp3(nx,:,:) + xtmp3(nx,:,:) ))
 
-      xtmp1(nx,:,:) = xtmp1(nx,:,:) - xtmp2(nx,:,:)/this%dx *( ( xtmp3(1,:,:) - xtmp3(nx,:,:) ) + this%surfaceTension_coeff*xtmp4(nx,:,:)*( xtmp5(1,:,:) - xtmp5(nx,:,:) )  )
+      !/this%dx *( ( xtmp3(1,:,:) - xtmp3(nx,:,:) ) + this%surfaceTension_coeff*xtmp4(nx,:,:)*( xtmp5(1,:,:) - xtmp5(nx,:,:) )  )
       call transpose_x_to_y(xtmp1,tmp1,this%decomp)
       this%u_int(:,:,:) = tmp1
       this%pEvolve = this%u_mid(:,:,:,1) - this%u_int
@@ -2638,7 +2668,7 @@ contains
 	use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
         class(sgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
-        real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0,dtYs1, dtYs2,dtVF1,dtVF2,deltay,dteKap
+        real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0,dtYs1, dtYs2,dtVF1,dtVF2,deltay,dteKap,dtCurv
         integer :: i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk   !Source term for possible use in VF, g eh eqns
         character(len=30) :: str,str2
@@ -2686,7 +2716,7 @@ contains
 
         !dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	
+	dtCurv = 0.75_rkind  / (P_MAXVAL( this%mix%material(1)%rhodiff*abs(this%mix%kappa)**2   ) + eps)
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then
           ! filter3D(this%
@@ -2826,8 +2856,16 @@ contains
               else if ( this%dt > dtSponge ) then
                  this%dt = dtplast
                  stability = 'sponge'
+             else if (this%dt > dtCurv ) then
+                 stability = 'numerical curvature'
              endif
-           
+          
+!            if ( this%dt > dtCurv ) then
+!               this%dt = dtCurv
+!               write(str,'(ES10.3E3)') 1.0D0-dtCurv/dtCFL
+!               stability = 'Curv: '//trim(str)//' CFL loss fraction'
+!            endif
+ 
             if ( this%dt > dtSponge ) then
                this%dt = dtSponge
                write(str,'(ES10.3E3)') 1.0D0-dtmu/dtCFL
@@ -3009,7 +3047,7 @@ contains
 
         call this%mix%get_eelastic_devstress(this%devstress)   ! Get species elastic energies, and mixture and species devstress
         call this%mix%get_ehydro_from_p(this%rho)              ! Get species hydrodynamic energy, temperature; and mixture pressure, temperature
-!        call this%mix%get_pmix(this%p)
+        call this%mix%get_pmix(this%p)
        ! Get mixture pressure
     !    if( this%useRestartFile ) then
 
@@ -3411,18 +3449,33 @@ contains
 
        if(this%SpongeLayer) then
 
-          !do i = 1,2
+
           rhs(:,:,:, mom_index   ) = rhs(:,:,:,mom_index   ) - this%sponge(:,:,:,1)*(-this%rho*this%u + this%rhou_ref(1))  &
                                      - this%sponge(:,:,:,2)*(-this%rho*this%u + this%rhou_ref(2))
+
           rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) - this%sponge(:,:,:,1)*(-this%rho*this%v + this%rhov_ref(1))  &
                                      - this%sponge(:,:,:,2)*(-this%rho*this%v + this%rhov_ref(2))
+
           rhs(:,:,:, mom_index+2 ) = rhs(:,:,:,mom_index+2 ) - this%sponge(:,:,:,1)*(-this%rho*this%w + this%rhow_ref(1))  &
                                      - this%sponge(:,:,:,2)*(-this%rho*this%w + this%rhow_ref(2))
+
           rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) - this%sponge(:,:,:,1)*(-this%rho*(this%e + 0.5*(this%u**2 + this%v**2 + this%w**2)) + this%rhoe_ref(1))  &
                                      - this%sponge(:,:,:,2)*(-this%rho*(this%e + 0.5*(this%u**2 + this%v**2 + this%w**2)) + this%rhoe_ref(2)) 
+          !do i = 1,2
+!          rhs(:,:,:, mom_index   ) = rhs(:,:,:,mom_index   ) - this%sponge(:,:,:,1)*(-this%rho*this%u + this%rhou_ref(1))  &
+!                                     - this%sponge(:,:,:,2)*(-this%rho*this%u + this%rhou_ref(2))
+!          rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) - this%sponge(:,:,:,1)*(-this%rho*this%v + this%rhov_ref(1))  &
+!                                     - this%sponge(:,:,:,2)*(-this%rho*this%v + this%rhov_ref(2))
+!          rhs(:,:,:, mom_index+2 ) = rhs(:,:,:,mom_index+2 ) - this%sponge(:,:,:,1)*(-this%rho*this%w + this%rhow_ref(1))  &
+!                                     - this%sponge(:,:,:,2)*(-this%rho*this%w + this%rhow_ref(2))
+!          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) - this%sponge(:,:,:,1)*(-this%rho*( 0.5*(this%u**2 + this%v**2 + this%w**2)) )  &
+!                                     - this%sponge(:,:,:,2)*(-this%rho*( 0.5*(this%u**2 + this%v**2 + this%w**2))) 
          ! enddo
         endif
 
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!! GRAVITY        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) - this%rho*0.1
+       ! rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) - this%rho*this%v*0.1
        ! call hook_mixture_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
  
     end subroutine

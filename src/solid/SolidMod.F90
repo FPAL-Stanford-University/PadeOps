@@ -35,10 +35,9 @@ module SolidMod
         type(filters),     pointer      :: gfil
 
         real(rkind), dimension(:,:,:), allocatable :: Ys
-        real(rkind), dimension(:,:,:), allocatable :: VF
         real(rkind), dimension(:,:,:), allocatable :: eh
         real(rkind), dimension(:,:,:), allocatable :: eel
-        real(rkind), dimension(:,:,:), allocatable ::  u_int,v_int,fluxYs, w_int
+        real(rkind), dimension(:,:,:), allocatable ::  u_int,v_int,fluxYs,w_int,deltakap
         real(rkind), dimension(:,:,:), allocatable ::  YsLAD, vfLAD,YsDiffLAD,advectVF
         real(rkind), dimension(:,:,:,:), allocatable :: g,g_t,g_p,rg,rg_t,rg_p,VF_int,Ys_int, rho_int, rhoYs_mid, VF_mid,Ys_mid,rho_mid
         real(rkind), dimension(:,:,:),   allocatable :: e_p,e_pp,pe,rpe
@@ -72,7 +71,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   pointer     :: szz
         
         real(rkind), dimension(:,:,:),   allocatable :: rhom, s
-        real(rkind), dimension(:,:,:),   allocatable :: p
+        real(rkind), dimension(:,:,:),   allocatable :: p,VF
         real(rkind), dimension(:,:,:),   allocatable :: T
         real(rkind), dimension(:,:,:),   allocatable :: rho
         real(rkind), allocatable :: Ys_thick, VF_thick, Ys_wiggle, VF_wiggle        
@@ -367,7 +366,11 @@ contains
         !Allocate material density
         if( allocated( this%w_int ) ) deallocate( this%w_int )
         allocate( this%w_int(this%nxp,this%nyp,this%nzp) )
- 
+
+          !Allocate material density
+        if( allocated( this%deltakap ) ) deallocate( this%deltakap )
+        allocate( this%deltakap(this%nxp,this%nyp,this%nzp) )
+
         !Allocate material density
         if( allocated( this%fluxYs ) ) deallocate( this%fluxYs )
         allocate( this%fluxYs(this%nxp,this%nyp,this%nzp) )
@@ -878,6 +881,7 @@ contains
         if( allocated( this%u_int )  ) deallocate( this%u_int )
         if( allocated( this%v_int )  ) deallocate( this%v_int )
         if( allocated( this%w_int )  ) deallocate( this%w_int )
+        if( allocated( this%deltakap )  ) deallocate( this%deltakap )
         if( allocated( this%fluxYs )  ) deallocate( this%fluxYs )
         if( allocated( this%VF_mid )  ) deallocate( this%VF_mid )
         if( allocated( this%rhoYs_mid )  ) deallocate( this%rhoYs_mid )
@@ -4783,7 +4787,7 @@ contains
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: tmp,tmp1,tmp2,tmp3,u_int,v_int,w_int,dYdx,dYdy,dYdz,ysLAD2,rhom,VF_bound
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)  :: Ys_int,rho_int,rhoYs_int, rhodiff_int, outdiff_int, Ysdiff_int, adiff_int,rhom_int,sos_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)  :: VF_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)  :: VF_int,m_fil
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x,dYdy_y,dYdz_z,outLAD, diffLAD,rhodiff_fil1,rhodiff_fil2,rhodiff_fil3
         real(rkind) :: md1 = (1d-6)**(0.5)
         if( this%LADInt) then
@@ -4819,27 +4823,38 @@ contains
 !          this%rhodiff =this%rhodiff +VF_bound
 
 
-           call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call gradFV_N2Fx(this%decomp,this%derStagg,this%rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call gradFV_N2Fy(this%decomp,this%derStagg,this%rho*this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call gradFV_N2Fz(this%decomp,this%derStagg,this%rho*this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
    !       call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
    !       call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
    !       call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-        !   call interpolateFV(this%decomp,this%interpMid,rhom,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,sos,sos_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,this%VF,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
     !       rhodiff_int   = 1d3*sos_int*( half*(abs(VF_int)-(one) + abs((VF_int)-(one))) )*(dx*dy*dx)**(1.0/3.0)
 !           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           rhodiff_fil1 = rhodiff_int(:,:,:,1)
-           rhodiff_fil2 = rhodiff_int(:,:,:,2)
-           rhodiff_fil3 = rhodiff_int(:,:,:,3)
+           rhodiff_fil1 = rhodiff_int(:,:,:,1)!*this%rhoYs_mid(:,:,:,1)
+           rhodiff_fil2 = rhodiff_int(:,:,:,2)!*this%rhoYs_mid(:,:,:,2)
+           rhodiff_fil3 = rhodiff_int(:,:,:,3)!*this%rhoYs_mid(:,:,:,3)
+           m_fil(:,:,:,1) = this%rhoYs_mid(:,:,:,1)
+           m_fil(:,:,:,2) = this%rhoYs_mid(:,:,:,2) 
+           m_fil(:,:,:,3) = this%rhoYs_mid(:,:,:,3)
+
            call filter3D(this%decomp, this%gfil, rhodiff_fil1, 1, x_bc, y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
 
+!           call filter3D(this%decomp, this%gfil, m_fil(:,:,:,1), 1, x_bc,y_bc,z_bc)
+!           call filter3D(this%decomp, this%gfil, m_fil(:,:,:,2), 1,x_bc,y_bc,z_bc)
+!           call filter3D(this%decomp, this%gfil, m_fil(:,:,:,3), 1,x_bc,y_bc,z_bc)
+!
+!           rhodiff_fil1 = abs(rhodiff_fil1/m_fil(:,:,:,1) )
+!           rhodiff_fil2 = abs(rhodiff_fil2/m_fil(:,:,:,2) ) 
+!           rhodiff_fil3 = abs(rhodiff_fil3/m_fil(:,:,:,3) )
 !           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
             call divergenceFV(this%decomp,this%derStagg,rhodiff_fil1*dYdx_x,rhodiff_fil2*dYdy_y,rhodiff_fil3*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
