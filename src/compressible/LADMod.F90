@@ -781,7 +781,7 @@ contains
         mask = ( 1 - 4*Ys*(1-Ys) )**nmask
 
         ! Step 2: Get 4th derivative in X
-        call transpose_y_to_x(Ys_fil,xtmp1,this%decomp)
+        call transpose_y_to_x(Ys,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         xtmp2 = xtmp1*this%dx**5
@@ -789,7 +789,7 @@ contains
         diffstar = ytmp4!*  ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
-        call transpose_y_to_z(Ys_fil,ztmp1,this%decomp)
+        call transpose_y_to_z(Ys,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
         ztmp2 = ztmp1*this%dz**5
@@ -797,7 +797,7 @@ contains
         diffstar = diffstar + ytmp4!* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
-        call this%der%d2dy2(Ys_fil,ytmp4,y_bc(1),y_bc(2))
+        call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
 
         if(this%yMetric) then
@@ -820,7 +820,7 @@ contains
            delta = min(this%dy,this%dx,this%dz) ! (this%dy*this%dx*this%dz)**(1/3)
         endif
 
-        diffstar =H1*abs(diffstar)*sos !!/rho ! CD part of diff
+        diffstar =abs(diffstar)*sos !!/rho ! CD part of diff
 !       call this%filter(diffstar, x_bc, y_bc, z_bc)
 !       call this%filter(outb, x_bc, y_bc, z_bc)
         rhodiff = this%Crho*diffstar 
@@ -871,7 +871,7 @@ contains
 
        
         ! Step 2: Get 4th derivative in X
-        call transpose_y_to_x(VF_fil,xtmp3,this%decomp)
+        call transpose_y_to_x(VF,xtmp3,this%decomp)
         call this%der%d2dx2(xtmp3,xtmp4,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp4,xtmp3,x_bc(1),x_bc(2))
         xtmp4 = xtmp3*this%dx**5
@@ -879,7 +879,7 @@ contains
         adiffstar = ytmp6 ! 1( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3+real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 3: Get 4th derivative in Z
-        call transpose_y_to_z(VF_fil,ztmp3,this%decomp)
+        call transpose_y_to_z(VF,ztmp3,this%decomp)
         call this%der%d2dz2(ztmp3,ztmp4,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp4,ztmp3,z_bc(1),z_bc(2))
         ztmp4 = ztmp3*this%dz**5
@@ -887,7 +887,7 @@ contains
         adiffstar = adiffstar + ytmp6 ! ( this%dz * ytmp3 / (ytmp1 + ytmp2+ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
         ! Step 4: Get 4th derivative in Y
-        call this%der%d2dy2(VF_fil,ytmp6,y_bc(1),y_bc(2))
+        call this%der%d2dy2(VF,ytmp6,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp6,ytmp7,y_bc(1),y_bc(2))
 
         if(this%yMetric) then
@@ -902,7 +902,7 @@ contains
 
         endif
 
-        adiffstar = H2*this%Cvf1*abs(adiffstar) * sos
+        adiffstar = this%Cvf1*abs(adiffstar) * sos
         !ytmp5 = this%Cvf2*sos*( (VF - 1 - minVF)*H2 - (VF -
         !minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one +
         !abs(Ys-one)) )*ytmp4 ! CY partof diff
@@ -967,7 +967,7 @@ contains
 !        rhodiff = this%Cdiff*Hthresh*barrier*( 1d-4 / ( abs(VF) + 1d-12 ) ) &
 !                  + this%Cdiff*Hthresh1*barrier*( 1d-4 / (abs(1 - VF ) + 1d-12 ) )  + (1-max(Hthresh,Hthresh1))*rhodiff 
 !       rhodiff = min(rhodiff,0.5*delta**2/(2d-5))
-        adiff   = rhodiff ! max(rhodiff, adiffstar,outb,ytmp5) !,VF_bound) ! max(adiffstar,ytmp5,VF_bound) ! rhodiff
+        adiff   = adiffstar + outb ! rhodiff ! max(rhodiff, adiffstar,outb,ytmp5) !,VF_bound) ! max(adiffstar,ytmp5,VF_bound) ! rhodiff
 
         
 !        call this%filter(adiff, x_bc, y_bc, z_bc)

@@ -2192,7 +2192,7 @@ contains
             endif
 
             where( this%mix%material(1)%VF .GT. 1d-6 )
-               this%mix%deltakap =abs(this%mix%kappa*(this%dx*this%dz*this%dy_stretch)**(1_rkind/3_rkind)) !*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF) )*4.0           
+               this%mix%deltakap =abs(this%mix%kappa*(this%dy_stretch)) !*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF) )*4.0           
             elsewhere
                this%mix%deltakap = 0
             endwhere
@@ -2860,11 +2860,11 @@ contains
                  stability = 'numerical curvature'
              endif
           
-!            if ( this%dt > dtCurv ) then
-!               this%dt = dtCurv
-!               write(str,'(ES10.3E3)') 1.0D0-dtCurv/dtCFL
-!               stability = 'Curv: '//trim(str)//' CFL loss fraction'
-!            endif
+            if ( this%dt > dtCurv ) then
+               this%dt = dtCurv
+               write(str,'(ES10.3E3)') 1.0D0-dtCurv/dtCFL
+               stability = 'Curv: '//trim(str)//' CFL loss fraction'
+            endif
  
             if ( this%dt > dtSponge ) then
                this%dt = dtSponge

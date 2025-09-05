@@ -564,7 +564,7 @@ contains
 
         this%mpi_rank_prev = mod((this%mpi_rank - 1 + this%mpi_size), this%mpi_size)
         this%mpi_rank_next = mod((this%mpi_rank + 1), this%mpi_size)
-
+        this%tag = 0
 
 
     end subroutine
@@ -2956,7 +2956,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  !call
                  !divergenceFV(this,gradFVFV,this%intdiff,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-!              where(abs( this%deltakap) .GE. 1.2 )
+!              where(abs( this%deltakap) .GE. 1.5 .OR. this%tag .GE. 1  )
 !                 antiDiffFVint(:,:,:,1,i) =0.0_rkind*antiDiffFVint(:,:,:,1,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,1))
 !                 antiDiffFVint(:,:,:,2,i) =0.0_rkind*antiDiffFVint(:,:,:,2,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,2))
 !                 antiDiffFVint(:,:,:,3,i) =0.0_rkind*antiDiffFVint(:,:,:,3,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,3))
@@ -2966,7 +2966,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                  antiDiffFVint(:,:,:,2,i) = antiDiffFVint(:,:,:,2,i) +  this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,2))
                  antiDiffFVint(:,:,:,3,i) = antiDiffFVint(:,:,:,3,i) +  this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,3))
 !                this%tag = this%tag +  0
-
+!
 !              endwhere
 !              rhoantiDiffFVint(:,:,:,1,i) = rhoantiDiffFVint(:,:,:,1,i) + this%intSharp_gam * (this%intSharp_eps * gradrhoYs(:,:,:,1))
 !              rhoantiDiffFVint(:,:,:,2,i) = rhoantiDiffFVint(:,:,:,2,i) + this%intSharp_gam * (this%intSharp_eps * gradrhoYs(:,:,:,2))
@@ -4721,7 +4721,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,udiv, divuphi,VFmag,tanhmask, GVFmag, GPHImag, mask2, updatedKappa, weight, kappaSum, phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2,divu,divphiu,dirac,H,tmp1,tmp2,tmp3
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi, gradxi, gradVFk, p_int, VF_int, gradH,u_int, uphi_int, gradFV,gradVF_l
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
-        real(rkind)   :: cut_off = 1d-8
+        real(rkind)   :: cut_off = 1d-6
 	integer :: iflag = one
 	real(rkind) :: r = 0.4D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0, e = 1D-100 
 	!TODO: add additional arrays to be used locally in calculation of surface tension force
