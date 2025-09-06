@@ -120,9 +120,9 @@ contains
 
     end subroutine
 
-    subroutine get_viscosities(this,rho,p,sos,duidxj,mu,bulk,x_bc,y_bc,z_bc,dt,pfloor,detady,dy_stretch,fsw,divgrad)
+    subroutine get_viscosities(this,rho,p,sos,duidxj,mu,bulk,x_bc,y_bc,z_bc,dt,pfloor,detady,dy_stretch,fsw,divgrad,deltakapVF,deltakapYs)
         class(ladobject),        intent(in) :: this
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(in)  :: rho,p,sos,detady,dy_stretch
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(in)  :: rho,p,sos,detady,dy_stretch,deltakap,deltakapYs
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9), target, intent(in)  :: duidxj
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),           intent(inout) :: mu,bulk,fsw,divgrad
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
@@ -175,7 +175,7 @@ contains
         endif
         mustar = mustar + ytmp1
 
-        mustar = this%Cmu*rho*abs(mustar)
+        mustar = this%Cmu*rho*abs(mustar)*max(deltakapVF,deltakapYs)
         
         ! Filter mustar
         call this%filter(mustar, x_bc, y_bc, z_bc)
