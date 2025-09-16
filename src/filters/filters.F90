@@ -1,5 +1,6 @@
 module FiltersMod
     use kind_parameters, only: rkind, clen
+    !use constants,       only: zero
     use cf90stuff,       only: cf90
     use gaussianstuff,   only: gaussian
     use lstsqstuff,      only: lstsq
@@ -168,7 +169,7 @@ contains
           if(associated(this%mbtopology)) then
             allocate(this%ycf90(this%mbtopology%y_num_blocks))
             do imb = 1, this%mbtopology%y_num_blocks
-              ierr = this%ycf90(imb)%init(this%mbtopology%yen(1,imb)-this%mbtopology%yst(1,imb)+1, periodicy)
+              ierr = this%ycf90(imb)%init(this%mbtopology%yen(2,imb)-this%mbtopology%yst(2,imb)+1, periodicy)
               if (ierr .ne. 0) then
                   call message("Initializing cf90 block number ", imb)
                   call GracefulExit("Initializing cf90 failed in Y ",51)
@@ -187,7 +188,7 @@ contains
           if(associated(this%mbtopology)) then
             allocate(this%ygauf(this%mbtopology%y_num_blocks))
             do imb = 1, this%mbtopology%y_num_blocks
-              ierr = this%ygauf(imb)%init(this%mbtopology%yen(1,imb)-this%mbtopology%yst(1,imb)+1, periodicy)
+              ierr = this%ygauf(imb)%init(this%mbtopology%yen(2,imb)-this%mbtopology%yst(2,imb)+1, periodicy)
               if (ierr .ne. 0) then
                   call message("Initializing gaussian filter block number ", imb)
                   call GracefulExit("Initializing gaussian filter failed in Y ",51)
@@ -228,7 +229,7 @@ contains
           if(associated(this%mbtopology)) then
             allocate(this%zcf90(this%mbtopology%z_num_blocks))
             do imb = 1, this%mbtopology%z_num_blocks
-              ierr = this%zcf90(imb)%init(this%mbtopology%zen(1,imb)-this%mbtopology%zst(1,imb)+1, periodicz)
+              ierr = this%zcf90(imb)%init(this%mbtopology%zen(3,imb)-this%mbtopology%zst(3,imb)+1, periodicz)
               if (ierr .ne. 0) then
                   call message("Initializing cf90 block number ", imb)
                   call GracefulExit("Initializing cf90 failed in Z ",51)
@@ -247,7 +248,7 @@ contains
           if(associated(this%mbtopology)) then
             allocate(this%zgauf(this%mbtopology%z_num_blocks))
             do imb = 1, this%mbtopology%z_num_blocks
-              ierr = this%zgauf(imb)%init(this%mbtopology%zen(1,imb)-this%mbtopology%zst(1,imb)+1, periodicz)
+              ierr = this%zgauf(imb)%init(this%mbtopology%zen(3,imb)-this%mbtopology%zst(3,imb)+1, periodicz)
               if (ierr .ne. 0) then
                   call message("Initializing gaussian filter block number ", imb)
                   call GracefulExit("Initializing gaussian filter failed in Z ",51)
@@ -317,7 +318,7 @@ contains
         select case (this%ymethod)  
         case (1)
           if(associated(this%mbtopology)) then
-            do imb = 1, this%mbtopology%x_num_blocks
+            do imb = 1, this%mbtopology%y_num_blocks
               call this%ycf90(imb)%destroy()
             enddo
           else
@@ -326,7 +327,7 @@ contains
           deallocate(this%ycf90)
         case (2)
           if(associated(this%mbtopology)) then
-            do imb = 1, this%mbtopology%x_num_blocks
+            do imb = 1, this%mbtopology%y_num_blocks
               call this%ygauf(imb)%destroy()
             enddo
           else
@@ -342,7 +343,7 @@ contains
         select case (this%zmethod)  
         case (1)
           if(associated(this%mbtopology)) then
-            do imb = 1, this%mbtopology%x_num_blocks
+            do imb = 1, this%mbtopology%z_num_blocks
               call this%zcf90(imb)%destroy()
             enddo
           else
@@ -351,7 +352,7 @@ contains
           deallocate(this%zcf90)
         case (2)
           if(associated(this%mbtopology)) then
-            do imb = 1, this%mbtopology%x_num_blocks
+            do imb = 1, this%mbtopology%z_num_blocks
               call this%zgauf(imb)%destroy()
             enddo
           else
@@ -378,6 +379,7 @@ contains
 
         integer :: imb, nxst, nyst, nzst, nxen, nyen, nzen
 
+        ff = f
         select case (this%xmethod)
         case (1)
           if(associated(this%mbtopology)) then
@@ -421,6 +423,7 @@ contains
 
         integer :: imb, nxst, nyst, nzst, nxen, nyen, nzen
 
+        ff = f
         select case (this%ymethod)
         case (1)
           if(associated(this%mbtopology)) then
@@ -464,6 +467,7 @@ contains
 
         integer :: imb, nxst, nyst, nzst, nxen, nyen, nzen
 
+        ff = f
         select case (this%zmethod)
         case (1)
           if(associated(this%mbtopology)) then

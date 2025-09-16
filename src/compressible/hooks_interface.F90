@@ -4,6 +4,7 @@ module cgrid_hooks
     use DerivativesMod,  only: derivatives
     use MixtureEOSMod,   only: mixture
     use sgsmod_cgrid,    only: sgs_cgrid
+    use MultiBlockTopologyMod, only: multiblocktopol
     implicit none
 
     interface meshgen
@@ -58,10 +59,11 @@ module cgrid_hooks
     end interface
 
     interface hook_bc
-        subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step)
+        subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, useMultiBlock, mbtopology)
             import :: rkind
             import :: decomp_info
             import :: mixture
+            import :: multiblocktopol
             type(decomp_info),               intent(in)    :: decomp
             type(mixture),                   intent(in)    :: mix
             real(rkind),                     intent(in)    :: tsim
@@ -70,6 +72,8 @@ module cgrid_hooks
             integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
             logical,                         intent(in)    :: newTimeStep
             integer,                         intent(in)    :: time_step
+            logical, optional,               intent(in)    :: useMultiBlock
+            type(multiblocktopol), optional, intent(in)    :: mbtopology
 
         end subroutine
     end interface

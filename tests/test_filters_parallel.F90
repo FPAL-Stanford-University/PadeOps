@@ -51,7 +51,7 @@ program test_filters
     use transfer_funcs,  only: GetTransferFunctionCF90,GetTransferFunctionGaussian,GetTransferFunctionLstsq
     implicit none
 
-    integer :: nx = 256, ny=256, nz=256
+    integer :: nx = 128, ny=128, nz=128
 
 
     type( decomp_info ) :: gp
@@ -59,7 +59,7 @@ program test_filters
     real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,df
     real(rkind), dimension(:,:,:), allocatable :: xtmp1,xtmp2,ztmp1,ztmp2
     real(rkind) :: dx, dy, dz
-    real(rkind), parameter :: omega = 64._rkind
+    real(rkind), parameter :: omega = 10._rkind
 
     real(rkind) :: k_norm_x,k_norm_y,k_norm_z,TF1_x,TF1_y,TF1_z,TF2_x,TF2_y,TF2_z,TF3_x,TF3_y,TF3_z
 
@@ -138,19 +138,19 @@ program test_filters
     call method1 % filterx(xtmp1,xtmp2)
     call transpose_x_to_y(xtmp2,df,gp)
     call toc ("Time to get the x filter:")
-    call message("Maximum error", P_MAXVAL(df - TF1_x*f))
+    call message("Maximum error", P_MAXVAL(abs(df - TF1_x*f)))
 
     call tic() 
     call method1 % filtery(f,df)
     call toc ("Time to get the y filter:")
-    call message("Maximum error", P_MAXVAL(df - TF1_y*f))
+    call message("Maximum error", P_MAXVAL(abs(df - TF1_y*f)))
 
     call tic()
     call transpose_y_to_z(f,ztmp1,gp)
     call method1 % filterz(ztmp1,ztmp2)
     call transpose_z_to_y(ztmp2,df,gp)
     call toc ("Time to get the z filter:")
-    call message("Maximum error", P_MAXVAL(df - TF1_z*f))
+    call message("Maximum error", P_MAXVAL(abs(df - TF1_z*f)))
 
 
     call message("===========================================")

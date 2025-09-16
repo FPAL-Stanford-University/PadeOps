@@ -1,6 +1,6 @@
 program test_cf90
 
-    use kind_parameters, only: rkind
+    use kind_parameters, only: rkind,clen
     use constants,       only: two,pi
     use timer,           only: tic,toc
     use cf90stuff,       only: cf90
@@ -8,7 +8,8 @@ program test_cf90
 
     integer :: nx = 32, ny=32, nz=32
 
-    logical, parameter :: periodic = .FALSE.
+    logical :: periodic = .FALSE.
+    character(len=clen) :: outputfile
 
     type( cf90 ) :: xcf90, ycf90, zcf90
     real(rkind), dimension(:,:,:), allocatable :: x,y,z,f,df,df_x,df_y,df_z
@@ -17,10 +18,12 @@ program test_cf90
     real(rkind) :: TF_x, k_norm_x
     real(rkind) :: TF_y, k_norm_y
     real(rkind) :: TF_z, k_norm_z
-
     integer :: iounit = 17
-
     integer :: i,j,k,ierr
+
+    namelist /INPUT/ nx, ny, nz, periodic, omega
+    OPEN(UNIT=iounit, FILE="input.dat", FORM='FORMATTED')
+    READ(UNIT=iounit, NML=INPUT)
 
     allocate( x(nx,ny,nz) )
     allocate( y(nx,ny,nz) )
@@ -83,9 +86,10 @@ program test_cf90
     call toc ("Time to get the y filter:")
     print*, "Maximum error = ", MAXVAL( ABS(df - df_y))
 
-    OPEN(UNIT=iounit, FILE="cf90.txt", FORM='FORMATTED')
+    write(outputfile,'(a,i4.4,a)') 'filtery_cf90_per',ny,'.dat'
+    OPEN(UNIT=iounit, FILE=outputfile, FORM='FORMATTED')
     do i=1,ny
-        WRITE(iounit,'(3ES24.16)') y(1,i,1), f(1,i,1), df(1,i,1)
+        WRITE(iounit,'(4ES24.16)') y(1,i,1), f(1,i,1), df(1,i,1), df_y(1,i,1)
     end do
     CLOSE(iounit)
 

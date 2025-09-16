@@ -68,10 +68,10 @@ program test_multiblock_setup
     logical :: periodicx=.true., periodicy=.true., periodicz=.true.
     logical :: xmetric=.false., ymetric=.false., zmetric=.false.
     character(len=clen) :: derivative_x="cd10", derivative_y="cd10", derivative_z = "cd10"
-    real(rkind) :: linf, l2norm, errcen
+    real(rkind) :: linf, l2norm, errcen, omega
     integer :: ii, kk, jj, x_bc(2), y_bc(2), z_bc(2), rank_debug = 0
 
-    namelist /INPUT/ nx, ny, nz, Lx, Ly, Lz, prow, pcol, rank_debug, periodicx, periodicy, periodicz
+    namelist /INPUT/ nx, ny, nz, Lx, Ly, Lz, prow, pcol, rank_debug, periodicx, periodicy, periodicz, omega
 
     call MPI_Init(ierr)
 
@@ -108,13 +108,13 @@ program test_multiblock_setup
         dx = Lx/real(max(nx-1,1),rkind)
     endif
 
-    if(periodicx) then
+    if(periodicy) then
         dy = Ly/real(max(ny,1),rkind)
     else
         dy = Ly/real(max(ny-1,1),rkind)
     endif
 
-    if(periodicx) then
+    if(periodicz) then
         dz = Lz/real(max(nz,1),rkind)
     else
         dz = Lz/real(max(nz-1,1),rkind)

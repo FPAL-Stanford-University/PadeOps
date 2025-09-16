@@ -10,6 +10,8 @@ pcol = 1
 periodicx = .true.
 periodicy = .true.
 periodicz = .true.
+om_x_arr = 1.0d0, 4.0d0, 8.0d0
+amp_x_arr = 1.0d0, 0.2d0, 0.3d0
 /
 
 &MULTIBLOCK

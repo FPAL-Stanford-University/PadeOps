@@ -108,8 +108,9 @@ module CompressibleGrid
         real(rkind), dimension(:,:,:),     allocatable :: dxs, dys, dzs
 
         ! multiblock topology
-        logical :: useMultiBlock
+        logical :: useMultiBlock = .false.
         type(multiblocktopol), allocatable :: mbtopology
+        logical :: debugflag = .false.
 
         contains
             procedure          :: init
@@ -135,6 +136,7 @@ module CompressibleGrid
             procedure, private :: get_J
             procedure, private :: write_viz
             procedure, private :: write_restart
+            procedure, private :: print_min_max_arr
             procedure          :: read_restart
     end type
 
@@ -191,8 +193,9 @@ contains
         logical     :: compute_scale_decomposition = .false.
         logical     :: forcing_mat = .false. ! KVM 2021
         logical     :: forcing_cha = .false. ! Vishwaja 2024
-        logical     :: useSGS = .false.
+        logical     :: useSGS = .false., useMultiBlock = .false.
         logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
+        logical     :: debugflag = .false.
 
         namelist /INPUT/ nx, ny, nz, tstop, dt, CFL, nsteps, inputdir, &
                          outputdir, vizprefix, tviz, reduce_precision, &
@@ -200,13 +203,13 @@ contains
                              derivative_x, derivative_y, derivative_z, &
                                          filter_x, filter_y, filter_z, &
                                           xmetric,  ymetric,  zmetric, &
-                                                           prow, pcol, &
-                                                             SkewSymm  
+                                          useMultiBlock,   prow, pcol, &
+                                                  SkewSymm, debugflag
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
                              inviscid, nrestart, rewrite_viz, vizramp, &
                       compute_tke_budget, compute_scale_decomposition, &
                              x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
-                                                      forcing_mat, forcing_cha, useSGS
+                                     forcing_mat, forcing_cha, useSGS
 
 
         ioUnit = 11
@@ -238,6 +241,7 @@ contains
         this%compute_scale_decomposition = compute_scale_decomposition
         this%forcing_mat = forcing_mat 
         this%forcing_cha = forcing_cha
+        this%debugflag   = debugflag
 
         ! Allocate decomp
         if ( allocated(this%decomp) ) deallocate(this%decomp)
@@ -376,6 +380,7 @@ contains
             call message("Note: Filtering turned off")
         end if
 
+        this%useMultiBlock = useMultiBlock
         if(this%useMultiBlock) then
             allocate(this%mbtopology)
             call this%mbtopology%init(this%decomp, this%mesh, inputfile, this%xbuf, this%zbuf)
@@ -714,6 +719,7 @@ contains
         use exits,      only: GracefulExit, message
         use reductions, only: P_MAXVAL, P_MINVAL
         use RKCoeffs,   only: RK45_steps
+        use decomp_2d,  only: nrank
         class(cgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
@@ -737,8 +743,8 @@ contains
         real(rkind), dimension(:,:,:),   pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
         ! real(rkind) :: dt_tke
-        integer :: i
-        integer :: stepramp = 0
+        integer :: i, stepramp = 0
+        character(len=14) :: fname
 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: rhs  ! RHS for conserved variables
 
@@ -752,9 +758,23 @@ contains
         dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
         dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
         
+        duidxj = zero
         call this%gradient(this%u,dudx,dudy,dudz,-this%x_bc, this%y_bc, this%z_bc)
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
+        if(this%debugflag) then
+          call this%print_min_max_arr('sim-fields', this%fields(:,:,:,1:4), .true.)
+          call this%print_min_max_arr('sim-derivs', duidxj, .true.)
+          !if(nrank==1) then
+            write(fname,'(a,i4.4,a)') 'debug_', nrank, '.out'
+            open(10,file=fname,status='unknown',action='write',position='append')
+            do i = 1, size(this%u,1)
+                write(100+nrank,'(i5,3(1x,e21.15))') i, this%x(i,1,1), this%u(i,1,1), dudx(i,1,1)
+                write(10,'(i5,3(1x,e21.15))') i, this%x(i,1,1), this%u(i,1,1), dudx(i,1,1)
+            enddo
+            close(10)
+          !endif
+        endif
 
         ! call this%getPhysicalProperties()
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
@@ -1084,7 +1104,9 @@ contains
                 newTimeStep = .false.
             endif
 
+            if(this%debugflag) call this%print_min_max_arr('primitives', this%fields(:,:,:,1:7), .false.)
             call this%get_conserved()
+            if(this%debugflag) call this%print_min_max_arr('wcnsrv', this%Wcnsrv, .false.)
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
@@ -1094,10 +1116,12 @@ contains
             end if
 
             call this%getRHS(rhs, newTimeStep)
+            if(this%debugflag) call this%print_min_max_arr('rhs', rhs, .false.)
             Qtmp = this%dt*rhs + RK45_A(isub)*Qtmp
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
+
 
             ! if ( (vizcond) .and. (this%compute_tke_budget) .and. (isub == RK45_steps) ) then
             if ( (vizcond) .and. ((this%compute_tke_budget) .or. (this%compute_scale_decomposition)) ) then
@@ -1128,13 +1152,25 @@ contains
             end if
 
             call this%get_primitive()
-            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
-                          this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step)
+            if(this%useMultiBlock) then
+              call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
+                            this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
+                            this%useMultiBlock, this%mbtopology)
+            else
+              call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
+                            this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step)
+            endif
             call this%post_bc()
             !!!============Vishwaja channel flow isothermal walls=========!!!
             if (this%forcing_cha) then
-            call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
-                          this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step)
+              if(this%useMultiBlock) then
+                call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
+                              this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
+                              this%useMultiBlock, this%mbtopology)
+              else
+                call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
+                              this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step)
+              endif
             end if
             ! Compute TKE budgets
             if ((vizcond) .and. ((this%compute_tke_budget) .or. (this%compute_scale_decomposition))) then
@@ -1393,6 +1429,7 @@ contains
         call this%gradient(this%v,dvdx,dvdy,dvdz, this%x_bc,-this%y_bc, this%z_bc)
         call this%gradient(this%w,dwdx,dwdy,dwdz, this%x_bc, this%y_bc,-this%z_bc)
         call this%gradient(this%T,dTdx,dTdy,dTdz, this%x_bc, this%y_bc, this%z_bc)
+        if(this%debugflag) call this%print_min_max_arr('derivs', duidxj, .false.)
 
         ! call this%getPhysicalProperties()
         call this%mix%get_transport_properties(this%p, this%T, this%Ys, this%mu, this%bulk, this%kap, this%diff)
@@ -2341,6 +2378,49 @@ contains
         call this%restart%init( mpi_comm_world, this%decomp, 'y', this%outputdir, 'restart', &
                                 reduce_precision=.false., write_xdmf=.false., read_only=.true., jump_to_last=.true.)
         nrestarts = this%restart%vizcount
+
+    end subroutine
+
+    subroutine print_min_max_arr(this, strin, arrin, print_locs)
+        use decomp_2d,  only: nrank
+        use reductions, only: p_maxval, p_minval
+        class(cgrid), intent(inout) :: this
+        character(len=*), intent(in) :: strin
+        real(rkind), dimension(:,:,:,:), intent(in) :: arrin
+        logical, intent(in) :: print_locs
+
+        real(rkind) :: vmax, vmin, mymax, mymin
+        integer :: i, maxrank, minrank, arr_maxloc(3), arr_minloc(3)
+
+        if(nrank==0) print *, strin
+        do i = 1, size(arrin,4)
+          arr_maxloc = (/-1,-1,-1/); maxrank = -1
+          arr_minloc = (/-1,-1,-1/); minrank = -1
+          vmax = p_maxval(arrin(:,:,:,i))
+          vmin = p_minval(arrin(:,:,:,i))
+          mymax = maxval(arrin(:,:,:,i))
+          mymin = minval(arrin(:,:,:,i))
+          if(print_locs) then
+            if(abs(vmax-mymax) < 1.0d-14) then
+              maxrank = nrank
+              arr_maxloc = maxloc(arrin(:,:,:,i))
+            endif
+            if(nrank==maxrank) then
+              print '(a,i4.4,a,e21.15,a,4(i5,1x))', 'var no.', i, ' max:', vmax, ' maxloc=', nrank, arr_maxloc
+            endif
+            if(abs(vmin-mymin) < 1.0d-14) then
+              minrank = nrank
+              arr_minloc = minloc(arrin(:,:,:,i))
+            endif
+            if(nrank==minrank) then
+              print '(a,i4.4,a,e21.15,a,4(i5,1x))', 'var no.', i, ' min:', vmin, ' minloc=', nrank, arr_minloc
+            endif
+          else
+            if(nrank==0) then
+              print '(a,i4.4,1x,2(a,e21.15))', 'var no.', i, ' max:', vmax, ' min:', vmin
+            endif
+          endif
+        enddo
 
     end subroutine
 

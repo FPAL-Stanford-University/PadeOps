@@ -772,6 +772,7 @@ contains
 
         integer imb, nxst, nxen, nyst, nyen, nzst, nzen
 
+        dfdx = zero
         select case (this%xmethod)
         case (1)
           if(associated(this%mbtopology)) then
@@ -828,6 +829,7 @@ contains
 
         integer imb, nxst, nxen, nyst, nyen, nzst, nzen
 
+        dfdx = zero
         select case (this%ymethod)
         case (1)
           if(associated(this%mbtopology)) then
@@ -884,6 +886,7 @@ contains
 
         integer imb, nxst, nxen, nyst, nyen, nzst, nzen
 
+        dfdx = zero
         select case (this%zmethod)
         case (1)
           if(associated(this%mbtopology)) then

@@ -20,6 +20,10 @@ module MultiBlockTopologyMod
         !private 
         integer :: x_num_blocks, y_num_blocks, z_num_blocks
         integer, allocatable, dimension(:,:) :: xst, yst, zst, xen, yen, zen
+        integer, allocatable, dimension(:,:) :: ybclo_st, ybclo_en, ybchi_st, ybchi_en
+        integer, allocatable, dimension(:,:) :: y_intbd_left_st, y_intbd_left_en
+        integer, allocatable, dimension(:,:) :: y_intbd_rght_st, y_intbd_rght_en
+        integer, allocatable, dimension(:)   :: y_num_intbd_left, y_num_intbd_rght
         real(rkind), allocatable, dimension(:,:,:) :: mask
         
         contains
@@ -46,11 +50,15 @@ contains
       real(rkind), dimension(3,max_numbl) :: y_dombl_pt1, y_dombl_pt2
       real(rkind), dimension(3,max_numbl) :: z_dombl_pt1, z_dombl_pt2
       integer,     dimension(3,max_numbl) :: xst, yst, zst, xen, yen, zen   !! for temporary storage
+      integer,     dimension(3,max_numbl) :: ybclo_st, ybclo_en, ybchi_st, ybchi_en !! temporary storage for bc
+      integer,     dimension(3,max_numbl) :: y_intbd_left_st, y_intbd_left_en !! temporary storage for internal (left/right) boundaries
+      integer,     dimension(max_numbl)   :: y_num_intbd_left, y_num_intbd_rght !! number of internal (left/right) boundaries
+      integer,     dimension(3,max_numbl) :: y_intbd_rght_st, y_intbd_rght_en !! temporary storage for internal (left/right) boundaries
       integer :: x_num_blocks=0, y_num_blocks=0, z_num_blocks=0             !! for temporary storage
       real(rkind), allocatable, dimension(:) :: xline_x, yline_x, zline_x
       real(rkind), allocatable, dimension(:) :: xline_y, yline_y, zline_y
       real(rkind), allocatable, dimension(:) :: xline_z, yline_z, zline_z
-      integer :: iounit=123, i1, i2, j1, j2, k1, k2, jj, kk
+      integer :: iounit=123, i1, i2, j1, j2, k1, k2, jj, kk, i_intbd, imb1, imb2
       logical :: intersection_exists, detailed_debug = .false., file_exists
       real(rkind), dimension(3) :: intrbl_pt1, intrbl_pt2, x_procbl_pt1, x_procbl_pt2
       real(rkind), dimension(3) :: y_procbl_pt1, y_procbl_pt2, z_procbl_pt1, z_procbl_pt2
@@ -148,7 +156,7 @@ contains
       call transpose_y_to_x(mesh(:,:,:,2), xtmp, decomp);  yline_x = xtmp(1,:,1)
       call transpose_y_to_x(mesh(:,:,:,3), xtmp, decomp);  zline_x = xtmp(1,1,:)
 
-      print *, '++==', nrank, decomp%xsz(1), size(xline_x)
+      !print *, '++==', nrank, decomp%xsz(1), size(xline_x)
       x_procbl_pt1(1) = xline_x(1);      x_procbl_pt2(1) = xline_x(decomp%xsz(1))
       x_procbl_pt1(2) = yline_x(1);      x_procbl_pt2(2) = yline_x(decomp%xsz(2))
       x_procbl_pt1(3) = zline_x(1);      x_procbl_pt2(3) = zline_x(decomp%xsz(3))
@@ -242,15 +250,119 @@ contains
            y_num_blocks = y_num_blocks + 1
            yst(:,y_num_blocks) = indices_pt1
            yen(:,y_num_blocks) = indices_pt2
+
+           ! store lower boundary indices
+           ybclo_st(:, y_num_blocks) = (/ indices_pt1(1), indices_pt1(2), indices_pt1(3)/)
+           ybclo_en(:, y_num_blocks) = (/ indices_pt2(1), indices_pt1(2), indices_pt2(3)/)  !! note 2nd entry here
+
+           ! store upper boundary indices
+           ybchi_st(:, y_num_blocks) = (/ indices_pt1(1), indices_pt2(2), indices_pt1(3)/)  !! note 2nd entry here
+           ybchi_en(:, y_num_blocks) = (/ indices_pt2(1), indices_pt2(2), indices_pt2(3)/)
         endif
       enddo
+
+
+      !if(nrank==1) then
+      !    print *, 'Topology: bclo_st:', ybclo_st(:,1:y_num_blocks), 'bclo_en:', ybclo_en(:,1:y_num_blocks)
+      !endif
+
+      ! figure out vertical internal boundaries --  only for 2D blocks (in x-y) as of now
+      y_num_intbd_left(:) = 0;      y_num_intbd_rght(:) = 0;
+      y_intbd_left_st(:,:) = -1;    y_intbd_rght_st(:,:) = -1
+      y_intbd_left_en(:,:) = -1;    y_intbd_rght_en(:,:) = -1
+      do imb1 = 1, y_num_blocks
+        ! when imb1 is to the left of imb2
+        i1 = ybclo_en(1, imb1);  j1 = ybclo_en(2, imb1);  k1 = ybclo_en(3, imb1)
+        do imb2 = imb1+1, y_num_blocks
+            if(imb1==imb2) then
+                ! internal boundary cannot exist if both blocks are the same
+                cycle
+            endif
+            i2 = ybclo_st(1, imb2);  j2 = ybclo_st(2, imb2);  k2 = ybclo_st(3, imb2)
+            if(i1+1==i2) then
+                !! internal boundary exists
+                !! count this for imb1 or imb2; is it left or right boundary
+                if(j1 > j2) then
+                    !! block imb2 has a left internal boundary
+                    y_num_intbd_left(imb2) = y_num_intbd_left(imb2) + 1
+                    i_intbd = y_num_intbd_left(imb2)
+                    y_intbd_left_st(:, i_intbd) = (/i2, j2, k2/)
+                    y_intbd_left_en(:, i_intbd) = (/i2, j1, k1/)
+                else
+                    !! block imb1 has a right internal boundary
+                    y_num_intbd_rght(imb1) = y_num_intbd_rght(imb1) + 1
+                    i_intbd = y_num_intbd_rght(imb1)
+                    y_intbd_rght_st(:, i_intbd) = (/i1, j1, k2/)
+                    y_intbd_rght_en(:, i_intbd) = (/i1, j2, k1/)
+                endif
+            endif
+        enddo
+
+        ! when imb1 is to the right of imb2
+        i1 = ybclo_st(1, imb1);  j1 = ybclo_st(2, imb1);  k1 = ybclo_st(3, imb1)
+        do imb2 = imb1+1, y_num_blocks
+            if(imb1==imb2) then
+                ! internal boundary cannot exist if both blocks are the same
+                cycle
+            endif
+            i2 = ybclo_en(1, imb2);  j2 = ybclo_en(2, imb2);  k2 = ybclo_en(3, imb2)
+            if(i1==i2+1) then
+                !! internal boundary exists
+                !! count this for imb1 or imb2; is it left or right boundary
+                if(j1 > j2) then
+                    !! block imb2 has a right internal boundary
+                    y_num_intbd_rght(imb2) = y_num_intbd_rght(imb2) + 1
+                    i_intbd = y_num_intbd_rght(imb2)
+                    y_intbd_rght_st(:, i_intbd) = (/i2, j2, k1/)
+                    y_intbd_rght_en(:, i_intbd) = (/i2, j1, k2/)
+                else
+                    !! block imb1 has a left internal boundary
+                    y_num_intbd_left(imb1) = y_num_intbd_left(imb1) + 1
+                    i_intbd = y_num_intbd_left(imb1)
+                    y_intbd_left_st(:, i_intbd) = (/i1, j1, k1/)
+                    y_intbd_left_en(:, i_intbd) = (/i1, j2, k2/)
+                endif
+            endif
+        enddo
+      enddo
+
       ! transfer information from temporary vars to topology object
+      ! first for the bulk
       this%y_num_blocks = y_num_blocks
       allocate(this%yst(3,this%y_num_blocks))
       allocate(this%yen(3,this%y_num_blocks))
       do imb = 1, this%y_num_blocks
           this%yst(:,imb) = yst(:,imb)
           this%yen(:,imb) = yen(:,imb)
+      enddo
+      ! next for the boundaries (needed only for ydecomposition)
+      ! bottom and top boundaries
+      allocate(this%ybclo_st(3,this%y_num_blocks), this%ybclo_en(3,this%y_num_blocks))
+      allocate(this%ybchi_st(3,this%y_num_blocks), this%ybchi_en(3,this%y_num_blocks))
+      do imb = 1, this%y_num_blocks
+          this%ybclo_st(:,imb) = ybclo_st(:,imb)
+          this%ybclo_en(:,imb) = ybclo_en(:,imb)
+          this%ybchi_st(:,imb) = ybchi_st(:,imb)
+          this%ybchi_en(:,imb) = ybchi_en(:,imb)
+      enddo
+      ! internal (left/right) boundaries
+      allocate(this%y_num_intbd_left(this%y_num_blocks))
+      allocate(this%y_num_intbd_rght(this%y_num_blocks))
+      this%y_num_intbd_left(1:this%y_num_blocks) = y_num_intbd_left(1:this%y_num_blocks)
+      this%y_num_intbd_rght(1:this%y_num_blocks) = y_num_intbd_rght(1:this%y_num_blocks)
+      allocate(this%y_intbd_left_st(3,this%y_num_blocks))
+      allocate(this%y_intbd_left_en(3,this%y_num_blocks))
+      allocate(this%y_intbd_rght_st(3,this%y_num_blocks))
+      allocate(this%y_intbd_rght_en(3,this%y_num_blocks))
+      do imb = 1, this%y_num_blocks
+        do i_intbd = 1, this%y_num_intbd_left(imb)
+          this%y_intbd_left_st(:,i_intbd) = y_intbd_left_st(:,i_intbd)
+          this%y_intbd_left_en(:,i_intbd) = y_intbd_left_en(:,i_intbd)
+        enddo
+        do i_intbd = 1, this%y_num_intbd_rght(imb)
+          this%y_intbd_rght_st(:,i_intbd) = y_intbd_rght_st(:,i_intbd)
+          this%y_intbd_rght_en(:,i_intbd) = y_intbd_rght_en(:,i_intbd)
+        enddo
       enddo
       !! STEP 4b :: Done
 
@@ -294,7 +406,7 @@ contains
       call transpose_x_to_y(xtmp, this%mask, decomp)
       call decomp_2d_write_one(2, this%mask, 'multiblock_mask_y.out', decomp)
       call decomp_2d_write_one(1, xtmp,      'multiblock_mask_x.out', decomp)
-      print '(a,e19.12,1x,e19.12,1x)', 'Mask-minmax: ', p_maxval(maxval(this%mask)), p_minval(minval(this%mask))
+      !print '(a,e19.12,1x,e19.12,1x)', 'Mask-minmax: ', p_maxval(maxval(this%mask)), p_minval(minval(this%mask))
       !! STEP 5  :: Done Create Mask
 
       !! STEP 6 :: Debug
@@ -355,6 +467,14 @@ contains
       deallocate(this%zst)
       deallocate(this%yen)
       deallocate(this%yst)
+      deallocate(this%y_intbd_rght_en)
+      deallocate(this%y_intbd_rght_st)
+      deallocate(this%y_intbd_left_en)
+      deallocate(this%y_intbd_left_st)
+      deallocate(this%y_num_intbd_rght)
+      deallocate(this%y_num_intbd_left)
+      deallocate(this%ybclo_en, this%ybclo_st)
+      deallocate(this%ybchi_en, this%ybchi_st)
       deallocate(this%xen)
       deallocate(this%xst)
 

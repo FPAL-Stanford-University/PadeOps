@@ -1,0 +1,154 @@
+&INPUT
+
+inputdir   =  "/home/nghaisas/runs/cgrid/multiblock/bfs/first"      ! Directory for input files
+outputdir  = "/home/nghaisas/runs/cgrid/multiblock/bfs/first"      ! Directory for output files
+
+nx = 32                 ! Number of points in X
+ny = 32                 ! Number of points in Y
+nz = 32                 ! Number of points in Z
+
+dt = -2.0D-4               ! Fixed time step value (Set to negative to disable)
+tstop = 1.0D1                ! Physical time to stop the simulation
+CFL = 0.7D0                ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1                ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 1.0D-1                ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "devchan"      ! Prefix for the visualization files
+reduce_precision  = .false.
+
+periodicx = .false.       ! Periodic in X?
+periodicy = .FALSE.       ! Periodic in Y?
+periodicz = .true.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+xmetric = .false.          ! Streching in x-direction
+ymetric = .false.          ! Streching in y-direction
+zmetric = .false.          ! Streching in z-direction
+
+useMultiBlock = .true.
+
+prow = 4                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 1                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+
+SkewSymm   = .false.
+debugflag  = .false.
+/
+
+&CINPUT
+ns   = 1
+gam  = 1.4D0                    ! Ratio of specific heats
+Rgas = 78.3187D0                  ! Gas constant (1/gam*Mc^2)
+Cmu   = 0.002D0                 ! LAD coeff  
+Cbeta = 1.75D0                  ! LAD coeff 
+Ckap  = 0.01D0                  ! LAD coeff 
+Cdiff = 0.003D0                 ! LAD coeff 
+Cy    = 1D2                     ! LAD coeff 
+inviscid = .false.
+nrestart = 100000            ! Number of steps between restart dumps
+y_bc1 = 1                 ! Left  Y boundary ( 0 => general, 1 => symmetric ) 
+y_bcn = 1                 ! Right Y boundary ( 0 => general, 1 => symmetric ) 
+compute_tke_budget = .false.
+compute_scale_decomposition = .false.
+!forcing = .false.
+useSGS   = .false.
+/
+
+&SGS_MODEL
+DynamicProcedureType     =  1        !0=Static  1=Local_mgm  2=Global_mgm
+SGSmodelID               =  2        !0=Smagorinsky  1=sigma 2=AMD 3=MGM
+useWallDamping           =  .false. 
+ncWall                   =  1.0D0
+Csgs                     =  1.3D0
+Ctke                     =  0.1D0
+DynProcFreq              =  1
+useSGSDynamicRestartFile =  .false.
+DomainAveraged_DynProc   =  .false.
+SGSDynamicRestartFile    =  "null"
+filter_in_x              =  .true. 
+filter_in_y              =  .true.
+filter_in_z              =  .true.
+testfilter_x             =  "box2"
+testfilter_y             =  "box2"   
+testfilter_z             =  "box2"
+DeltaRatio               =   2.0D0
+isEddyViscosityModel     =  .true.
+isEddyDiffmodel          =  .true.
+isTurbPrandtlconst       =  .false.
+useDynamicProcedureScalar=  .false.
+PrSGS                    =   0.7D0
+
+/
+&PROBINPUT
+ns     = 1
+Lx     = 12.6D0
+Ly     = 2.0D0
+Lz     = 4.2D0
+Pr     = 0.7D0
+Sc     = 1.0D0
+gam    = 1.4D0
+rho_ref= 1.0D0
+Tw     = 1.0D0
+Re     = 190.71
+Mc     = 0.0955D0
+add_pert = .false.
+fname_prefix = "/home/vsj/Codes/channel/perturb_code"
+/
+
+
+&METRICS
+ymetric_flag = 2
+metric_params(2,1) = 0.5D0    !alpha (both walls concentration)
+metric_params(2,2) = 1.054D0  !beta-stretching parameter
+metric_params(2,3) = -1.0D0   !ystart
+metric_params(2,4) = 2.0D0    !yh
+
+/
+
+&MULTIBLOCK
+x_dom_numbl = 2
+x_dombl_pt1(1,1) = 5.0d0
+x_dombl_pt1(2,1) = -1.0d0
+x_dombl_pt1(3,1) = 0.0d0
+x_dombl_pt2(1,1) = 12.6d0
+x_dombl_pt2(2,1) = -0.499999999999d0     !! ensure no overlap at all
+x_dombl_pt2(3,1) = 4.2d0
+
+x_dombl_pt1(1,2) = 0.0d0
+x_dombl_pt1(2,2) = -0.5d0
+x_dombl_pt1(3,2) = 0.0d0
+x_dombl_pt2(1,2) = 12.6d0
+x_dombl_pt2(2,2) = 1.0d0
+x_dombl_pt2(3,2) = 4.2d0
+
+y_dom_numbl = 2
+y_dombl_pt1(1,1) = 0.0d0
+y_dombl_pt1(2,1) = -0.5d0
+y_dombl_pt1(3,1) = 0.0d0
+y_dombl_pt2(1,1) = 4.999999999999d0   !! ensure no overlap
+y_dombl_pt2(2,1) = 1.0d0
+y_dombl_pt2(3,1) = 4.2d0
+
+y_dombl_pt1(1,2) = 5.0d0
+y_dombl_pt1(2,2) = -1.0d0
+y_dombl_pt1(3,2) = 0.0d0
+y_dombl_pt2(1,2) = 12.6d0
+y_dombl_pt2(2,2) = 1.0d0
+y_dombl_pt2(3,2) = 4.2d0
+
+z_dom_numbl = 1
+z_dombl_pt1(1,1) = 0.0d0
+z_dombl_pt1(2,1) = -1.0d0
+z_dombl_pt1(3,1) = 0.0d0
+z_dombl_pt2(1,1) = 12.6d0
+z_dombl_pt2(2,1) = 1.0d0
+z_dombl_pt2(3,1) = 4.2d0
+
+detailed_debug = .false.
+/

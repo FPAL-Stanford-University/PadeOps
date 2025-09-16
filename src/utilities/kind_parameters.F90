@@ -13,6 +13,7 @@ module kind_parameters
     integer, parameter :: rkind = double_kind
     integer, parameter :: mpirkind = MPI_DOUBLE_PRECISION
     integer, parameter :: mpickind = MPI_DOUBLE_COMPLEX
+    integer, parameter :: mpiint   = MPI_INTEGER
    
     integer, parameter :: clen = 256
 
