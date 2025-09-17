@@ -1903,17 +1903,17 @@ contains
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
         this%mix%deltakap = 1
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))**0.5_rkind*2_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF)**0.5_rkind*2_rkind))
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
             ehmix = this%e
             do imat = 1, this%mix%ns
                 ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
             enddo
-            call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
-        end if
+         endif
+            call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
 
-        call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
+!        call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         ! compute species artificial conductivities and diffusivities
         call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w, duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
         do imat = 1,2
@@ -2193,7 +2193,7 @@ contains
 
             endif
 
-            where( this%mix%material(1)%VF .GT. 1d-6 )
+            where( this%mix%material(1)%VF .GT. 1d-10 )
                this%mix%deltakap =abs(this%mix%kappa*(this%dy_stretch)) !*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF) )*4.0           
             elsewhere
                this%mix%deltakap = 0
@@ -2672,7 +2672,7 @@ contains
         character(len=*), intent(out) :: stability
         real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0,dtYs1, dtYs2,dtVF1,dtVF2,deltay,dteKap,dtCurv
         integer :: i
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk   !Source term for possible use in VF, g eh eqns
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk,rhofil   !Source term for possible use in VF, g eh eqns
         character(len=30) :: str,str2
         real(rkind) :: dtSponge, sigma_max
         this%st_limit = 20
@@ -2710,15 +2710,17 @@ contains
         !print *, this%dz
         !print *, "sosmax"
         !print *, P_MAXVAL( this%sos)
+        rhofil = this%mix%material(1)%rhodiff
+        call this%filter(rhofil, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
-        dtYs1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%rhodiff   ) + eps) 
-        dtYs2 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff  ) + eps)
-        dtVF1 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff  ) + eps)
-        dtVF2 = 0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff  ) + eps)
+        dtYs1 = 0.75_rkind * delta**2 / (P_MAXVAL( rhofil   ) + eps) 
+        dtYs2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff  ) + eps)
+        dtVF1 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff  ) + eps)
+        dtVF2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff  ) + eps)
 
-        !dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
+        dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	dtCurv = 0.75_rkind  / (P_MAXVAL( this%mix%material(1)%rhodiff*abs(this%mix%kappa)**2   ) + eps)
+	dtCurv = 0.75_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then
           ! filter3D(this%
@@ -3251,26 +3253,55 @@ contains
 
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))**0.5_rkind*2_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF)**0.5_rkind * 2_rkind))
-      !  call this%LAD%get_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))* 4_rkind)
+        call this%LAD%get_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
 
 !       call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
 
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Conductivity LAD        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        rhoeJ = 0
        do i = 1,2
 
-          rhoh = this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*(this%p_mid + this%mix%material(i)%hydro%Pinf)
-          call gradFV_N2Fx(this%decomp,this%derStagg,rhoh,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)       
-          call gradFV_N2Fy(this%decomp,this%derStagg,rhoh,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-          call gradFV_N2Fz(this%decomp,this%derStagg,rhoh,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         rhoh = this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*(this%p_mid + this%mix%material(i)%hydro%Pinf)
+         call gradFV_N2Fx(this%decomp,this%derStagg,rhoh,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call gradFV_N2Fy(this%decomp,this%derStagg,rhoh,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call gradFV_N2Fz(this%decomp,this%derStagg,rhoh,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call this%LAD%get_e(this%rho,this%e,this%mix%material(i)%eh ,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric)
+
+
+         call interpolateFV_x(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call interpolateFV_y(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call interpolateFV_z(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+         call divergenceFV(this%decomp,this%derStagg,this%mix%material(i)%VF_mid(:,:,:,1)*eLADcoef(:,:,:,1)*drhoedx,this%mix%material(i)%VF_mid(:,:,:,2)*eLADcoef(:,:,:,2)*drhoedy,this%mix%material(i)%VF_mid(:,:,:,3)*eLADcoef(:,:,:,3)*drhoedz,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+         rhoeJ = rhoeJ + tmp
+     enddo
+
+
+!       call gradFV_N2Fx(this%decomp,this%derStagg,this%T,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       call gradFV_N2Fy(this%decomp,this%derStagg,this%T,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       call gradFV_N2Fz(this%decomp,this%derStagg,this%T,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+!       call interpolateFV_x(this%decomp,this%interpMid,this%kap,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       call interpolateFV_y(this%decomp,this%interpMid,this%kap,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       call interpolateFV_z(this%decomp,this%interpMid,this%kap,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+!       call divergenceFV(this%decomp,this%derStagg,eLADcoef(:,:,:,1)*drhoedx,eLADcoef(:,:,:,2)*drhoedy,eLADcoef(:,:,:,3)*drhoedz,rhoeJ,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+!       do i = 1,2
+
+!          rhoh = this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*(this%p_mid + this%mix%material(i)%hydro%Pinf)
+!         call gradFV_N2Fx(this%decomp,this%derStagg,rhoh,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)       
+!         call gradFV_N2Fy(this%decomp,this%derStagg,rhoh,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!         call gradFV_N2Fz(this%decomp,this%derStagg,rhoh,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
 !          call interpolateFV_x(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 !          call interpolateFV_y(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 !          call interpolateFV_z(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-          call divergenceFV(this%decomp,this%derStagg,this%mix%material(i)%VF_mid(:,:,:,1)*this%mix%material(i)%adiff_stagg(:,:,:,1)*drhoedx,this%mix%material(i)%VF_mid(:,:,:,2)*this%mix%material(i)%adiff_stagg(:,:,:,2)*drhoedy,this%mix%material(i)%VF_mid(:,:,:,3)*this%mix%material(i)%adiff_stagg(:,:,:,3)*drhoedz,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!         call divergenceFV(this%decomp,this%derStagg,this%mix%material(i)%VF_mid(:,:,:,1)*this%mix%material(i)%adiff_stagg(:,:,:,1)*drhoedx,this%mix%material(i)%VF_mid(:,:,:,2)*this%mix%material(i)%adiff_stagg(:,:,:,2)*drhoedy,this%mix%material(i)%VF_mid(:,:,:,3)*this%mix%material(i)%adiff_stagg(:,:,:,3)*drhoedz,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-          rhoeJ = rhoeJ + tmp
-      enddo
+!         rhoeJ = rhoeJ + tmp
+!     enddo
 
         !call this%LAD%get_P_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         if (this%PTeqb) then
@@ -3281,7 +3312,7 @@ contains
             do imat = 1, this%mix%ns
                 ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
             enddo
-            call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
+           ! call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         end if
 
         if( .NOT. this%use_Stagg) then
@@ -3443,7 +3474,7 @@ contains
           rhs(:,:,:, mom_index   ) = rhs(:,:,:,mom_index   ) + this%uJ
           rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + this%vJ
           rhs(:,:,:, mom_index+2 ) = rhs(:,:,:,mom_index+2 ) + this%wJ
-          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%keJ + this%eJ !  + rhoeJ
+          rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%keJ + this%eJ  + rhoeJ
           this%eJ = rhoeJ
         endif
 
@@ -3549,7 +3580,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call this%getPhysicalProperties()
         !call
         !this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call  this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))**0.5_rkind*2_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF)**0.5_rkind*2_rkind))
+        call  this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
 
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy.
@@ -3560,7 +3591,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
             do imat = 1, this%mix%ns
                 ehmix = ehmix - this%mix%material(imat)%Ys *this%mix%material(imat)%eel
             enddo
-            call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
+        !    call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         end if
 
        ! call this%get_tau( duidxj, viscwork )
