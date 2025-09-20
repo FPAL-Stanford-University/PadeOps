@@ -2759,7 +2759,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
     subroutine get_intSharp_clean2(this,rho,ke_mid,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w,p)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
         use operators, only: divergence,gradient,filter3D,interpolateFV_x,interpolateFV_y, interpolateFV_z, gradFV_N2Fx, gradFV_N2Fy,gradFV_N2Fz
-        use constants,       only: zero,epssmall,eps,one,two,third,half
+        use constants,       only: zero,epssmall,eps,one,two,third,half,pi
         use exits,           only: GracefulExit
         use reductions, only : P_MAXVAL
         class(solid_mixture), intent(inout) :: this
@@ -3023,33 +3023,62 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 
            if(this%intSharp_msk) then
+                 
+                  this%intdiff =  antiDiffFVint(:,:,:,1,i)
+                  do d = 1,3
+
+                    where((this%xi(:,:,:,i)-0.225) .GE.  3*dx  )
+                       Hh = 0_rkind
+                    elsewhere(((this%xi(:,:,:,i)-0.225) .LT. 3*dx ) .OR. ((this%xi(:,:,:,i)-0.225) .GT. -3*dx ) )
+                       Hh = 1 - 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(3_rkind*dx) +  1/pi*sin(pi*this%xi(:,:,:,i)/3*dx) )
+                    elsewhere
+                       Hh = 1_rkind
+
+                    endwhere
+
+                    where((this%xi(:,:,:,i)+0.225) .GE. 3*dx  )
+                       Hl = 1_rkind
+                    elsewhere(((this%xi(:,:,:,i)+0.225) .LT. 3*dx ) .OR. ((this%xi(:,:,:,i)+0.225) .GT. -3*dx ) )
+                       Hl = 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(3_rkind*dx) +  1/pi*sin(pi*this%xi(:,:,:,i)/3*dx) )
+                    elsewhere
+                       Hl = 0_rkind
+
+                    endwhere
+
+                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(Hl*Hh)
+
+                  enddo
+
+                  this%antidiff = antiDiffFVint(:,:,:,1,i)
+
+
 
 !                 do d = 1,3
 !                    Hl = 1_rkind/2_rkind*(1_rkind - tanh((this%material(i)%VF_mid(:,:,:,d)-1d-4)/(1.5_rkind*(dx*dy*dz)**1_rkind/3_rkind) ))
 !                    Hh = 1_rkind/2_rkind*(1_rkind - tanh((this%material(i)%VF_mid(:,:,:,d)-(1d0-1d-4))/(1.5_rkind*(dx*dy*dz)**1_rkind/3_rkind) )) 
 !                    antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(1-Hl-Hh) 
 !                 enddo
-                where(( (this%material(i)%Ys .lt. cut_offY) .OR.(this%material(i)%VF .lt. cut_off)  ))
+!                where(( (this%material(i)%Ys .lt. cut_offY) .OR.(this%material(i)%VF .lt. cut_off)  ))
 !                  OOB_mask = 1_rkind
-                 antiDiffFVint(:,:,:,1,i) = zero
-                elsewhere(( (this%material(i)%Ys .gt. one-cut_offY) .OR.(this%material(i)%VF .gt. one-cut_off)   )) 
+!                 antiDiffFVint(:,:,:,1,i) = zero
+!                elsewhere(( (this%material(i)%Ys .gt. one-cut_offY) .OR.(this%material(i)%VF .gt. one-cut_off)   )) 
 !                   OOB_mask = 1_rkind
-                  antiDiffFVint(:,:,:,1,i) = zero
-                endwhere
-                where(((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)  )  )
+!                  antiDiffFVint(:,:,:,1,i) = zero
+!                endwhere
+!                where(((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)  )  )
 !                   OOB_mask = 1_rkind
-                  antiDiffFVint(:,:,:,2,i) = zero
-                elsewhere( ( (this%material(i)%Ys.gt. one-cut_offY) .OR. (this%material(i)%VF .gt. one-cut_off)) )
+!                  antiDiffFVint(:,:,:,2,i) = zero
+!                elsewhere( ( (this%material(i)%Ys.gt. one-cut_offY) .OR. (this%material(i)%VF .gt. one-cut_off)) )
 !                   OOB_mask = 1_rkind
-                  antiDiffFVint(:,:,:,2,i) = zero
-                endwhere
-                where( ((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)) )
+!                  antiDiffFVint(:,:,:,2,i) = zero
+!                endwhere
+!                where( ((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)) )
 !                   OOB_mask = 1_rkind
-                  antiDiffFVint(:,:,:,3,i) = zero
-                elsewhere( ((this%material(i)%Ys .gt. one-cut_offY) .OR. (this%material(i)%VF.gt. one-cut_off)))
+!                  antiDiffFVint(:,:,:,3,i) = zero
+!                elsewhere( ((this%material(i)%Ys .gt. one-cut_offY) .OR. (this%material(i)%VF.gt. one-cut_off)))
 !                   OOB_mask = 1_rkind
-                  antiDiffFVint(:,:,:,3,i) = zero
-                endwhere
+!                  antiDiffFVint(:,:,:,3,i) = zero
+!                endwhere
              endif
 
 !             call filter3D(this%decomp, this%gfil, OOB_mask,iflag, x_bc,y_bc,z_bc)
