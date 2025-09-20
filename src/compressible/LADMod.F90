@@ -678,10 +678,10 @@ contains
         kap = kapstar
     end subroutine
 
-    subroutine get_diffusivity_5eqnOG(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dVFdx,dVFdy,dVFdz,umag,duidxj,minYs,minVF, sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,rho0,dt, OOBVF, OOBYs, HighVF, HighYs,VF_fil,Ys_fil)
+    subroutine get_diffusivity_5eqnOG(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dVFdx,dVFdy,dVFdz,umag,duidxj,minYs,minVF, sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,rho0,dt, OOBVF, OOBYs, HighVF, HighYs,VF_fil,Ys_fil,deltakapYs,deltakapVF)
         use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
         class(ladobject),  intent(in) :: this
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz, umag,dy_stretch,detady,VF_fil,Ys_fil
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz, umag,dy_stretch,detady,VF_fil,Ys_fil,deltakapYs,deltakapVF
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in) :: dVFdx,dVFdy,dVFdz
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff, OOBVF, OOBYs, HighVF, HighYs
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9),target,intent(in)  :: duidxj
@@ -689,7 +689,7 @@ contains
         real(rkind),intent(in)  :: rho0,dt
         real(rkind), intent(in) :: minYs, minVF
         real(rkind), dimension(:,:,:), pointer::dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta,mdiffstar, barrier
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta,mdiffstar, barrier,VFhigh,VFlow,Yslow,Yshigh
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: HVF_outb,HYs_outb,Ys_bound,HYs, HVF,Hbound,Hthresh,Hthresh1
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) ::xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) ::ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
@@ -811,8 +811,9 @@ contains
         !abs((Ys-minYs)-(one-minYs))) )*(this%dy*this%dx*this%dz)**(1/3)
  
         if(this%yMetric) then
-
-           outb = this%CY*(dy_stretch*this%dx*this%dz)**(1/3) *(sos)*(half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) !(umag+ sos)
+           Yslow = max(0*Ys, (1d-5-Ys) /(1d-5 + 1d-14) )
+           Yshigh = max(0*Ys, (Ys-1+1d-5) /(1d-5 + 1d-14) )
+           outb = this%CY*(dy_stretch*this%dx*this%dz)**(1/3) *(sos)*max(Yslow,Yshigh) !(half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) !(umag+ sos)
            delta = min(dy_stretch,this%dx,this%dz)   !(dy_stretch*this%dx*this%dz)**(1/3)
         else
 
@@ -907,8 +908,11 @@ contains
         !minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one +
         !abs(Ys-one)) )*ytmp4 ! CY partof diff
         if(this%yMetric) then
-
-           ytmp5 = this%Cvf2*(dy_stretch*this%dx*this%dz)**(1/3)*(sos)*( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *(sos + umag)
+           VFlow = max(0*VF, (1d-5-VF)/(1d-5 + 1d-14) )
+           VFhigh = max(0*VF, (VF-1+1d-5) /(1d-5 + 1d-14) )
+!             VFlow = max(0*VF, (1-VF) )
+!             VFhigh = max(0*VF, VF-1 )
+           ytmp5 = this%Cvf2*(dy_stretch*this%dx*this%dz)**(1/3)*(sos)*max(VFlow,VFhigh) !( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *(sos + umag)
 
         else
 

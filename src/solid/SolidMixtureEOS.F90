@@ -1758,7 +1758,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         do i = 1,this%ns
             call this%material(i)%getPhysicalProperties()
-            call this%LAD%get_conductivity(rho,p,this%material(i)%Ys*this%material(i)%eh, e, sos,this%material(i)%kap, x_bc, y_bc, z_bc,tfloor,dy_stretch,detady,4*abs(this%material(1)%VF*(this%material(1)%VF ) )*this%deltakap, 4*abs(this%material(1)%Ys*(this%material(1)%Ys ) )*this%deltakap)
+!            call this%LAD%get_conductivity(rho,p,this%material(i)%Ys*this%material(i)%eh, e, sos,this%material(i)%kap, x_bc, y_bc, z_bc,tfloor,dy_stretch,detady,4*abs(this%material(1)%VF*(this%material(1)%VF ) )*this%deltakap, 4*abs(this%material(1)%Ys*(this%material(1)%Ys ) )*this%deltakap)
             if (.NOT. this%PTeqb) then
                 ! Artificial conductivity
                 !call this%LAD%get_conductivity(rho, this%material(i)%eh, this%material(i)%T, sos, &
@@ -1784,7 +1784,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                 call filter3D(this%decomp, this%fil, VF_fil, 1,x_bc,y_bc,z_bc)
 !                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,u,v,w,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),minYs(i),this%intSharp_cut,cVF,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%outdiff,this%material(i)%rhodiff_stagg,this%material(i)%adiff_stagg,x_bc,y_bc, z_bc,detady,dy_stretch)
 !               call this%LAD%get_diffusivity_Aslani(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
-                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,VF_fil,Ys_fil,this%deltakap)
+                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,VF_fil,Ys_fil,this%deltakap,this%deltakap)
 
 !                 do d = 1,3
 !                    call this%LAD%get_diffusivity_5eqnOG(rho_int(:,:,:,d),this%material(i)%VF_mid(:,:,:,d),this%material(i)%rhoYs_mid(:,:,:,d),gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff_stagg(:,:,:,d),this%material(i)%rhodiff_stagg(:,:,:,d),x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0)
@@ -3029,24 +3029,24 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !                    Hh = 1_rkind/2_rkind*(1_rkind - tanh((this%material(i)%VF_mid(:,:,:,d)-(1d0-1d-4))/(1.5_rkind*(dx*dy*dz)**1_rkind/3_rkind) )) 
 !                    antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(1-Hl-Hh) 
 !                 enddo
-                where(( (this%material(i)%Ys_mid(:,:,:,1) .lt. cut_offY) .OR.(this%material(i)%VF_mid(:,:,:,1) .lt. cut_off)  ))
+                where(( (this%material(i)%Ys .lt. cut_offY) .OR.(this%material(i)%VF .lt. cut_off)  ))
 !                  OOB_mask = 1_rkind
                  antiDiffFVint(:,:,:,1,i) = zero
-                elsewhere(( (this%material(i)%Ys_mid(:,:,:,1) .gt. one-cut_offY) .OR.(this%material(i)%VF_mid(:,:,:,1) .gt. one-cut_off)   )) 
+                elsewhere(( (this%material(i)%Ys .gt. one-cut_offY) .OR.(this%material(i)%VF .gt. one-cut_off)   )) 
 !                   OOB_mask = 1_rkind
                   antiDiffFVint(:,:,:,1,i) = zero
                 endwhere
-                where(((this%material(i)%Ys_mid(:,:,:,2) .lt. cut_offY) .OR. (this%material(i)%VF_mid(:,:,:,2) .lt. cut_off)  )  )
+                where(((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)  )  )
 !                   OOB_mask = 1_rkind
                   antiDiffFVint(:,:,:,2,i) = zero
-                elsewhere( ( (this%material(i)%Ys_mid(:,:,:,2) .gt. one-cut_offY) .OR. (this%material(i)%VF_mid(:,:,:,2) .gt. one-cut_off)) )
+                elsewhere( ( (this%material(i)%Ys.gt. one-cut_offY) .OR. (this%material(i)%VF .gt. one-cut_off)) )
 !                   OOB_mask = 1_rkind
                   antiDiffFVint(:,:,:,2,i) = zero
                 endwhere
-                where( ((this%material(i)%Ys_mid(:,:,:,3) .lt. cut_offY) .OR. (this%material(i)%VF_mid(:,:,:,3) .lt. cut_off)) )
+                where( ((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)) )
 !                   OOB_mask = 1_rkind
                   antiDiffFVint(:,:,:,3,i) = zero
-                elsewhere( ((this%material(i)%Ys_mid(:,:,:,3) .gt. one-cut_offY) .OR. (this%material(i)%VF_mid(:,:,:,3) .gt. one-cut_off)))
+                elsewhere( ((this%material(i)%Ys .gt. one-cut_offY) .OR. (this%material(i)%VF.gt. one-cut_off)))
 !                   OOB_mask = 1_rkind
                   antiDiffFVint(:,:,:,3,i) = zero
                 endwhere

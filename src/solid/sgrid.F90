@@ -1911,7 +1911,7 @@ contains
                 ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
             enddo
          endif
-            call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
+!            call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
 
 !        call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         ! compute species artificial conductivities and diffusivities
@@ -3175,9 +3175,9 @@ contains
            dwdx_z => duidxj_int(:,:,:,10); dwdy_z => duidxj_int(:,:,:,11); dvdz_y => duidxj_int(:,:,:,12);
 
            
-           call gradient(this%decomp,this%derCD06_nostretch,this%u, dudx, dudy, dudz,  -this%x_bc,  this%y_bc,this%z_bc)
-           call gradient(this%decomp,this%derCD06_nostretch,this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,this%z_bc)
-           call gradient(this%decomp,this%derCD06_nostretch,this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc,-this%z_bc)
+           call gradient(this%decomp,this%derCD06,this%u, dudx, dudy, dudz,  -this%x_bc,  this%y_bc,this%z_bc)
+           call gradient(this%decomp,this%derCD06,this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,this%z_bc)
+           call gradient(this%decomp,this%derCD06,this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc,-this%z_bc)
 
 
            call interpolateFV_x(this%decomp,this%interpMid,dvdy,dvdy_x,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3254,28 +3254,28 @@ contains
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
         call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))* 4_rkind)
-        call this%LAD%get_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
+!        call this%LAD%get_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
 
 !       call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
 
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Conductivity LAD        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        rhoeJ = 0
-       do i = 1,2
+!       do i = 1,2
 
-         rhoh = this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*(this%p_mid + this%mix%material(i)%hydro%Pinf)
-         call gradFV_N2Fx(this%decomp,this%derStagg,rhoh,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-         call gradFV_N2Fy(this%decomp,this%derStagg,rhoh,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-         call gradFV_N2Fz(this%decomp,this%derStagg,rhoh,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-         call this%LAD%get_e(this%rho,this%e,this%mix%material(i)%eh ,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric)
+!         rhoh = this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*(this%p_mid + this%mix%material(i)%hydro%Pinf)
+!         call gradFV_N2Fx(this%decomp,this%derStagg,rhoh,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!         call gradFV_N2Fy(this%decomp,this%derStagg,rhoh,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!         call gradFV_N2Fz(this%decomp,this%derStagg,rhoh,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!         call this%LAD%get_e(this%rho,this%e,this%mix%material(i)%eh ,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric)
 
+!
+!         call interpolateFV_x(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!         call interpolateFV_y(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!         call interpolateFV_z(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!         call divergenceFV(this%decomp,this%derStagg,this%mix%material(i)%VF_mid(:,:,:,1)*eLADcoef(:,:,:,1)*drhoedx,this%mix%material(i)%VF_mid(:,:,:,2)*eLADcoef(:,:,:,2)*drhoedy,this%mix%material(i)%VF_mid(:,:,:,3)*eLADcoef(:,:,:,3)*drhoedz,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-         call interpolateFV_x(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-         call interpolateFV_y(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-         call interpolateFV_z(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-         call divergenceFV(this%decomp,this%derStagg,this%mix%material(i)%VF_mid(:,:,:,1)*eLADcoef(:,:,:,1)*drhoedx,this%mix%material(i)%VF_mid(:,:,:,2)*eLADcoef(:,:,:,2)*drhoedy,this%mix%material(i)%VF_mid(:,:,:,3)*eLADcoef(:,:,:,3)*drhoedz,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-         rhoeJ = rhoeJ + tmp
-     enddo
+!         rhoeJ = rhoeJ + tmp
+!     enddo
 
 
 !       call gradFV_N2Fx(this%decomp,this%derStagg,this%T,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
