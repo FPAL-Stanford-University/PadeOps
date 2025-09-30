@@ -477,8 +477,8 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
            sponge(:,:,:,1) = 0
         endwhere
 
-        where(yphys .GE. 4.5)
-           sponge(:,:,:,2) = sigma1*( (yphys- 4.5)/1.5)**2.0 / 5
+        where(yphys .GE. 5.25)
+           sponge(:,:,:,2) = sigma1*( (yphys- 5.25)/0.75)**2.0 / 5
         elsewhere
            sponge(:,:,:,2) = 0
         endwhere

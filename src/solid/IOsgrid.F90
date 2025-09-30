@@ -426,7 +426,7 @@ contains
             E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_a',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
 
-            call update_halo(mix%material(imat)%adiff,tmp1,1,gp,.FALSE.)
+            call update_halo(mix%material(imat)%adiff_stagg(:,:,:,1),tmp1,1,gp,.FALSE.)
             E_IO=VTK_VAR_XML(NC_NN=nn,varname='mat'//trim(strz(2,imat))//'_aDiff',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
         

@@ -1734,7 +1734,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), intent(in) :: tfloor,dt
         real(rkind), dimension(2) :: minYs
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradrYs,gradphi,tmpYs,rho_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: umag,rhom1,rhom2,c1,c2,cVF,rhom,Ys_fil,VF_fil
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: umag,rhom1,rhom2,c1,c2,cVF,rhom,Ys_fil,VF_fil,divu
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: dYdx_x, dYdy_y, dYdz_z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,2) :: tmp,VF_int,rhodiff_int,rhom_int, adiff_int,Ys_int
         integer :: i,d
@@ -1778,13 +1778,14 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                this%material(i)%outdiff = 0
                 call gradient(this%decomp,this%der,this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3))
                 call gradient(this%decomp,this%der,this%material(i)%VF,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3))
+                call divergence(this%decomp,this%der,u,v,w,divu,x_bc,y_bc,z_bc)
                 Ys_fil=this%material(i)%Ys
                 VF_fil=this%material(i)%VF
                 call filter3D(this%decomp, this%fil, Ys_fil, 1,x_bc,y_bc,z_bc)       
                 call filter3D(this%decomp, this%fil, VF_fil, 1,x_bc,y_bc,z_bc)
 !                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,u,v,w,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),minYs(i),this%intSharp_cut,cVF,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%outdiff,this%material(i)%rhodiff_stagg,this%material(i)%adiff_stagg,x_bc,y_bc, z_bc,detady,dy_stretch)
 !               call this%LAD%get_diffusivity_Aslani(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
-                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,VF_fil,Ys_fil,this%deltakap,this%deltakap)
+                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,VF_fil,Ys_fil,this%deltakap,this%kappa,divu)
 
 !                 do d = 1,3
 !                    call this%LAD%get_diffusivity_5eqnOG(rho_int(:,:,:,d),this%material(i)%VF_mid(:,:,:,d),this%material(i)%rhoYs_mid(:,:,:,d),gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff_stagg(:,:,:,d),this%material(i)%rhodiff_stagg(:,:,:,d),x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0)
@@ -2773,7 +2774,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: uFVint_6,vFVint_6,wFVint_6,rhoFVint_6,gradrhoYs,keFV_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint, rhoiFVint_local,pFVint, intDiff,hiFVint_6, rhoiFVint_6, pFVint_6,rhoantiDiffFVint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint, gradXi_FV
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom, Db,H,OOB_mask,Hl,Hh
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom, Db,H,OOB_mask,Hl,Hh,HYs,HVF,xi_mask
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: gradVF_x,gradVF_y, gradVF_z,tmp1,tmp2,tmp3,tmp1_i,tmp2_i,tmp3_i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i,VF_RHS_i, Kij_coeff_i
         real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-32, intSharp_exp = -1.0D0,gradDiff,md1,md2,cut_off=1d-4,cut_offY=1d-4 !, intSharp_tnh = 0.1
@@ -3024,34 +3025,63 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
            if(this%intSharp_msk) then
                  
-                  this%intdiff =  antiDiffFVint(:,:,:,1,i)
+!                  this%intdiff =  antiDiffFVint(:,:,:,1,i)
                   do d = 1,3
-
-                    where((this%xi(:,:,:,i)-0.225) .GE.  3*dx  )
+!
+                    where((this%xi(:,:,:,i)-0.325) .GE. 1.5*dx  )
                        Hh = 0_rkind
-                    elsewhere(((this%xi(:,:,:,i)-0.225) .LT. 3*dx ) .OR. ((this%xi(:,:,:,i)-0.225) .GT. -3*dx ) )
-                       Hh = 1 - 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(3_rkind*dx) +  1/pi*sin(pi*this%xi(:,:,:,i)/3*dx) )
+                    elsewhere(((this%xi(:,:,:,i)-0.325) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)-0.325) .GT. -1.5*dx ) )
+                       Hh = 1 - 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +  1_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5*dx)) )
                     elsewhere
                        Hh = 1_rkind
 
                     endwhere
-
-                    where((this%xi(:,:,:,i)+0.225) .GE. 3*dx  )
+!!
+                    where((this%xi(:,:,:,i)+0.325) .GE. 1.5*dx  )
                        Hl = 1_rkind
-                    elsewhere(((this%xi(:,:,:,i)+0.225) .LT. 3*dx ) .OR. ((this%xi(:,:,:,i)+0.225) .GT. -3*dx ) )
-                       Hl = 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(3_rkind*dx) +  1/pi*sin(pi*this%xi(:,:,:,i)/3*dx) )
+                    elsewhere(((this%xi(:,:,:,i)+0.325) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)+0.325) .GT. -1.5*dx ) )
+                       Hl = 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +  1_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5*dx)) )
                     elsewhere
                        Hl = 0_rkind
 
                     endwhere
 
-                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(Hl*Hh)
+                    where(( this%material(i)%Ys_mid(:,:,:,d) .GE. 1)  )
+!!                     
+                       H = abs( this%material(i)%Ys_mid(:,:,:,d) -1 )
+                    elsewhere( (this%material(i)%Ys_mid(:,:,:,d) .LE. 0 ) )
+                       H = abs(this%material(i)%Ys_mid(:,:,:,d) )
+                    elsewhere
+                       H = 0
+                     endwhere
 
+
+   !                  where(( this%material(i)%Ys .GE. 1)  )
+   !                    H = abs( this%material(i)%Ys -1 )
+   !                 elsewhere( (this%material(i)%Ys .LE. 0 ) )
+   !                    H = abs(this%material(i)%Ys )
+   !                 elsewhere
+   !                    H = 0
+   !                  endwhere
+
+                    
+                    call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc) 
+
+                    
+!                   where( abs(H) .GT. 1d-5 )
+!                       HYs = 0_rkind
+!                   elsewhere
+!                       HYs = 1_rkind
+!                   endwhere
+
+                    HYs = exp(-( abs(H) / 5d-7)**2_rkind)
+                     this%intdiff =  HYs                
+                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(Hl*Hh*HYs)
+!!
                   enddo
-
-                  this%antidiff = antiDiffFVint(:,:,:,1,i)
-
-
+!
+!
+!
 
 !                 do d = 1,3
 !                    Hl = 1_rkind/2_rkind*(1_rkind - tanh((this%material(i)%VF_mid(:,:,:,d)-1d-4)/(1.5_rkind*(dx*dy*dz)**1_rkind/3_rkind) ))
@@ -3059,27 +3089,28 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !                    antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(1-Hl-Hh) 
 !                 enddo
 !                where(( (this%material(i)%Ys .lt. cut_offY) .OR.(this%material(i)%VF .lt. cut_off)  ))
-!                  OOB_mask = 1_rkind
+! !                 OOB_mask = 1_rkind
 !                 antiDiffFVint(:,:,:,1,i) = zero
 !                elsewhere(( (this%material(i)%Ys .gt. one-cut_offY) .OR.(this%material(i)%VF .gt. one-cut_off)   )) 
-!                   OOB_mask = 1_rkind
+! !                  OOB_mask = 1_rkind
 !                  antiDiffFVint(:,:,:,1,i) = zero
 !                endwhere
 !                where(((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)  )  )
-!                   OOB_mask = 1_rkind
+! !                  OOB_mask = 1_rkind
 !                  antiDiffFVint(:,:,:,2,i) = zero
 !                elsewhere( ( (this%material(i)%Ys.gt. one-cut_offY) .OR. (this%material(i)%VF .gt. one-cut_off)) )
-!                   OOB_mask = 1_rkind
+! !                  OOB_mask = 1_rkind
 !                  antiDiffFVint(:,:,:,2,i) = zero
 !                endwhere
 !                where( ((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)) )
-!                   OOB_mask = 1_rkind
+! !                  OOB_mask = 1_rkind
 !                  antiDiffFVint(:,:,:,3,i) = zero
 !                elsewhere( ((this%material(i)%Ys .gt. one-cut_offY) .OR. (this%material(i)%VF.gt. one-cut_off)))
-!                   OOB_mask = 1_rkind
+! !                  OOB_mask = 1_rkind
 !                  antiDiffFVint(:,:,:,3,i) = zero
 !                endwhere
-             endif
+                 this%antidiff = antiDiffFVint(:,:,:,1,i)
+            endif
 
 !             call filter3D(this%decomp, this%gfil, OOB_mask,iflag, x_bc,y_bc,z_bc)
 !             call interpolateFV(this,OOB_mask,OOB_mask_int,periodicx,periodicy,periodicz,-this%x_bc,this%y_bc,this%z_bc)

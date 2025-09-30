@@ -243,7 +243,7 @@ contains
         ! !where ((func .GE. zero).AND.(p.gt.1.D1*pfloor))
         ! !   ytmp1 = zero
         ! !end where
-        bulkstar = this%Cbeta*rho*ytmp1*abs(bulkstar)
+        bulkstar = this%Cbeta*rho*abs(bulkstar)*fsw !*max(deltakapVF,deltakapYs)
 
 
 
@@ -481,9 +481,9 @@ contains
         kap = kap + kapstar
     end subroutine
 
-    subroutine get_e(this,rho,p,e,T,sos,eLAD,x_bc,y_bc,z_bc,tfloor)
+    subroutine get_e(this,rho,p,e,T,sos,eLAD,x_bc,y_bc,z_bc,tfloor,dy_stretch,detady,deltakapVF,deltakapYs)
         class(ladobject),  intent(in) :: this
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in) :: rho,e,T,sos,p
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in) :: rho,e,T,sos,p,dy_stretch,detady,deltakapVF,deltakapYs
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: eLAD
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
 
@@ -543,11 +543,16 @@ contains
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(e,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
-        ytmp4 = ytmp5*this%dy**4
-        estar = estar + ytmp4 * ( this%dy ) ! * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
+        if(this%yMetric) then
+           ytmp4 = ytmp5*dy_stretch**4 *( detady**4 )
+           estar = estar + ytmp4 * ( dy_stretch ) 
+        else
+           ytmp4 = ytmp5*this%dy**4
+           estar = estar + ytmp4 * ( this%dy ) ! * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
+        endif
 
-        estar = this%Ce*sos*abs(estar)/e
+        estar = this%Ce*sos*abs(estar)/e*max(deltakapVF,deltakapYs)
 
         call this%filter(estar, x_bc, y_bc, z_bc)
 !        call this%filter(estar, x_bc, y_bc, z_bc)
@@ -678,18 +683,18 @@ contains
         kap = kapstar
     end subroutine
 
-    subroutine get_diffusivity_5eqnOG(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dVFdx,dVFdy,dVFdz,umag,duidxj,minYs,minVF, sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,rho0,dt, OOBVF, OOBYs, HighVF, HighYs,VF_fil,Ys_fil,deltakapYs,deltakapVF)
+    subroutine get_diffusivity_5eqnOG(this,rho,VF,rhoYs,drYsdx,drYsdy,drYsdz,dVFdx,dVFdy,dVFdz,umag,duidxj,minYs,minVF, sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,rho0,dt, OOBVF, OOBYs, HighVF, HighYs,VF_fil,Ys_fil,deltakapYs,kappa,divu)
         use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
         class(ladobject),  intent(in) :: this
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz, umag,dy_stretch,detady,VF_fil,Ys_fil,deltakapYs,deltakapVF
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in) :: dVFdx,dVFdy,dVFdz
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in)    :: rhoYs,sos,VF,rho,drYsdx,drYsdy,drYsdz, umag,dy_stretch,detady,VF_fil,Ys_fil,deltakapYs,kappa
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in) :: dVFdx,dVFdy,dVFdz,divu
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff, OOBVF, OOBYs, HighVF, HighYs
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3),9),target,intent(in)  :: duidxj
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind),intent(in)  :: rho0,dt
         real(rkind), intent(in) :: minYs, minVF
         real(rkind), dimension(:,:,:), pointer::dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta,mdiffstar, barrier,VFhigh,VFlow,Yslow,Yshigh
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask, dil, omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta,mdiffstar, barrier,VFhigh,VFlow,Yslow,Yshigh,Curvstar,divustar
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: HVF_outb,HYs_outb,Ys_bound,HYs, HVF,Hbound,Hthresh,Hthresh1
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) ::xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) ::ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
@@ -711,10 +716,10 @@ contains
         Ys = rhoYs/rho
         ! Step 1: Construct Heaviside Functions
 
-        where( abs((Ys)*(1 - (Ys))) .GT. 0)
-           H1 = 1
+        where( Ys .LT. 0 .OR. Ys .GT. 1)
+           H1 = 4
         elsewhere
-           H1 = 0
+           H1 = 1
         endwhere
 
 
@@ -788,7 +793,8 @@ contains
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         diffstar = ytmp4!*  ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
 
-        ! Step 3: Get 4th derivative in Z
+        
+! Step 3: Get 4th derivative in Z
         call transpose_y_to_z(Ys,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
@@ -820,15 +826,38 @@ contains
            outb = this%CY*(this%dy*this%dx*this%dz)**(1/3) *(sos)*( half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) ! *(sos+umag) !*(this%dy*this%dx*this%dz)**(1/3)
            delta = min(this%dy,this%dx,this%dz) ! (this%dy*this%dx*this%dz)**(1/3)
         endif
-
-        diffstar =abs(diffstar)*sos !!/rho ! CD part of diff
+        
+!        diffstar =abs(diffstar)*sos !!/rho ! CD part of diff
 !       call this%filter(diffstar, x_bc, y_bc, z_bc)
 !       call this%filter(outb, x_bc, y_bc, z_bc)
-        rhodiff = this%Crho*diffstar 
-
+        rhodiff = this%Crho*abs(diffstar*sos) 
         HighYs = rhodiff 
         OOBYs  = outb
 
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        !                           Curv                                    !
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        call transpose_y_to_x(kappa,xtmp1,this%decomp)
+        call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+        xtmp1 = xtmp2*this%dx**5
+        call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
+        Curvstar = ytmp4
+     
+        call transpose_y_to_z(kappa,ztmp1,this%decomp)
+        call this%der%d2dz2(ztmp1,ztmp2,x_bc(1),x_bc(2))
+        ztmp1 = ztmp2*this%dz**5
+        call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
+        Curvstar = Curvstar +ytmp4
+
+        call this%der%d2dy2(kappa,ytmp4,y_bc(1),y_bc(2))
+       if(this%yMetric) then
+          ytmp5 = (detady**4)*ytmp4*dy_stretch**5
+          Curvstar =    Curvstar + ytmp5 !* ( dy_stretch   * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )
+        else
+          ytmp5 = ytmp4*this%dy**5
+          Curvstar =    Curvstar + ytmp5
+        endif
+        Curvstar = sos*abs(Curvstar)*abs( 1 - 4*abs(VF*(1-VF)) ) 
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         !                           MASS                                    !
@@ -903,6 +932,7 @@ contains
 
         endif
 
+        divustar = abs(max(abs(adiffstar),abs(diffstar))*divu)
         adiffstar = this%Cvf1*abs(adiffstar) * sos
         !ytmp5 = this%Cvf2*sos*( (VF - 1 - minVF)*H2 - (VF -
         !minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one +
@@ -957,14 +987,15 @@ contains
 
 !        call this%filter(VF_bound, x_bc, y_bc, z_bc)
 
-        VF_bound = this%Cdiff*VF_bound
-        Ys_bound = this%Cdiff*Ys_bound
-        
-        HighVF = adiffstar
+!        VF_bound = this%Cdiff*VF_bound
+!        Ys_bound = this%Cdiff*Ys_bound
+ 
+       
+        HighVF = Curvstar
         OOBVF  = ytmp5
         barrier = max(rhodiff,adiffstar) + max(outb,ytmp5)
-        rhodiff = max(rhodiff, adiffstar)  + max(outb, ytmp5) ! + max( HVF*VF_bound,HYs*Ys_bound)
-       
+!        adiff = max(rhodiff, adiffstar,this%Cdiff*Curvstar)  + max(outb, ytmp5)
+        rhodiff = max(rhodiff, adiffstar,this%Cdiff*Curvstar)  + max(outb, ytmp5)      
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 
