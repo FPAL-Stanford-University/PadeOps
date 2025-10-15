@@ -1,18 +1,18 @@
 &INPUT
-inputdir = "/scratch/06632/ryanhass/LES/HITdecay/shearlessMixing_Bodart/SM78/256"   ! Directory for any input files
-outputdir = "/scratch/06632/ryanhass/LES/HITdecay/shearlessMixing_Bodart/SM78/256"   ! Directory for all output files
-nx              = 256          ! Number of points in X
-ny              = 256          ! Number of points in Y
-nz              = 256          ! Number of points in Z
+inputdir = "/scratch/06632/ryanhass/LES/HITdecay/shearlessMixing_Bodart/SM126/768"   ! Directory for any input files
+outputdir = "/scratch/06632/ryanhass/LES/HITdecay/shearlessMixing_Bodart/SM126/768"   ! Directory for all output files
+nx = 768
+ny = 768
+nz = 544
 tstop           = 999999.D0    ! Physical time to stop the simulation
-CFL             = -1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
+CFL             = 1.0D0        ! CFL criterion for calculating the time step (Set to negative to disable)
 dt              = 3.D-3        ! Fixed time step value (only used if CFL is set to negative)
 nsteps          = 999999 
 prow            = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 pcol            = 0            ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
 useRestartFile  = .true.      ! Set to false if it's a fresh simulation 
-restartFile_TID = 00       ! TimeID of the restart file being used
-restartFile_RID = 78            ! RunID of the restart file being used
+restartFile_TID = -1
+restartFile_RID = 26
 CviscDT         = 1.D0
 nstepConstDt    = 0
 /
@@ -33,19 +33,19 @@ clearRoundOffFreq     = 100
 /
 /
 &IO
-RunID                 = 78          ! Run Label (All output files will be tagged with this nubber)
-t_restartDump         = 200       ! Restart File Dumping Frequency  (# of timesteps)
-t_dataDump            = 200       ! Data dumping frequency (# of timesteps)
+runID = 26
+t_restartDump = 500
+t_dataDump = 500
 ioType                = 0          ! 0: Fortran Binaries, 1: .vtk files
-dumpPlanes            = .TRUE.     ! Dump plane visualations. Select planes in initialize.F90
-t_planeDump           = 100         ! Plane dumping frequency (# of timesteps)
+dumpPlanes = .TRUE.
+t_planeDump = 160
 t_start_planeDump     = 00          ! When do you want to start dumping planes?
-t_stop_planeDump      = 200000       ! When do you want to stop dumping planes?
+t_stop_planeDump = 999999
 VizDump_Schedule      = 0          ! ???????
 deltaT_dump           = 1.D0       ! ???????
-useProbes             = .TRUE.     ! Use probes?
+useProbes             = .FALSE.     ! Use probes?
 dump_NU_SGS           = .TRUE.    ! Dump nu_sgs?
-dump_KAPPA_SGS        = .FALSE.    ! Dump kappa_sgs?
+dump_KAPPA_SGS        = .TRUE.    ! Dump kappa_sgs?
 t_start_pointProbe    = 00          ! When do you want to start recording data?
 t_stop_pointProbe     = 900000     ! When do you want to end recording data?
 t_pointProbe          = 200       ! How often do you want to write probe data to disk? 
@@ -67,10 +67,10 @@ useMoisture           = .FALSE.     ! Include moisture (passive scalar) transpor
 Re                    = 1.D5       ! Reynolds Number; used when isInvisid is FALSE
 Ro                    = 1.D10       ! Rossby Number used when Coriolis is ON
 Pr                    = 0.9D0       ! Turbulent Prandtl Number
-Fr                    = 5.D-1       ! Froude number; used when isStratified is TRUE
+Fr = 1.25d0
 Ra                    = 1.D14       ! Rayleigh number; used when isStratified is TRUE && BuoyancyTermType==3
 useSGS                = .TRUE.      ! Do you want to use the SGS model?  
-PrandtlFluid          = 7.2D0       ! ?????
+PrandtlFluid          = 7.2
 BulkRichardson        = 0.0D0       ! Used if isStratified is TRUE && BuoyancyTermType==2
 BuoyancyTermType      = 1           ! Used if isStratified is TRUE. 1: (Fr, ThetaRef); 2:BulkRichardson; 3: (Ra, Re)
 useforcedStratification = .FALSE.   ! ????
@@ -92,8 +92,8 @@ buoyancyDirection     = 3           ! Are 1 and 2 implemented????
 &PRESSURE_CALC
 fastCalcPressure      = .TRUE.      ! Compute and store pressure at every time step using the faster algorithm?
 storePressure         = .TRUE.     ! Would you like to compute and store pressure?
-P_dumpFreq            = 140         ! How often (timesteps) do you want to dump pressure?
-P_compFreq            = 20          ! How often (timesteps) do you want to compute pressure? 
+P_dumpFreq = 500
+P_compFreq = 50
 computeDNSPressure    = .FALSE.
 computeFringePressure = .FALSE.
 /
@@ -103,7 +103,7 @@ PeriodicInZ           = .FALSE.      ! Is the problem periodic in Z? If yes, the
 botWall               = 2           ! no_slip = 1, slip = 2
 topWall               = 2           ! no_slip = 1, slip = 2
 useSpongeLayer        = .TRUE.     ! Use a sponge layer at the top 
-zstSponge             = 0.9d0       ! Height above which the sponge layer is active
+zstSponge = 0.9058823529411765
 SpongeTscale          = 10.d0       ! e-folding time to dt ratio (somewhere between 10 - 50) 
 sponge_type           = 1           ! 1 or 2; used if useSpongeLayer is TRUE
 botBC_Temp            = 0           ! 0: Dirichlet; 1: Homog. Neumann; 2: Inhomog. Neumann; 3: ????
@@ -135,9 +135,11 @@ SGSDynamicRestartFile         = "null"
 useDynamicProcedureScalar     = .false.
 deltaRatio                    = 2.d0
 turbPrandtl                   = 0.9d0        ! Turbulent Prandtl number used for temperature
-useScalarBounding             = .false.
+useScalarBounding = .TRUE.
+kappa_bounding_scheme = 0
+kappa_bounding_threshhold = 10.d0
 Cy                            = 1.0d2
-lowbound                      = -1.0d0
+lowbound = 0.d0
 highbound                     = 1.0d0
 WM_MatchingIndex              = 1
 /
@@ -153,14 +155,6 @@ Apply_z_fringe       = .FALSE.
 /
 &KSPREPROCESS
 PreprocessForKS       = .FALSE.        ! Do you want to generate preprocessing files for KS? 
-/
-/
-&STATS_XY
-tid_start    = 1 
-compute_freq = 25 
-dump_freq    = 200
-outputdir    = "/scratch/06632/ryanhass/LES/HITdecay/shearlessMixing_Bodart/SM78/256/stats" 
-do_stats     = .true.
 /
 /
 &SCALARS
@@ -179,31 +173,30 @@ moisture_info_dir = "null"
 /
 /
 &spectForceLayer
-zmid                  = 0.d0
-lf                    = 1.5d0
-kmin                  = 7.d0
-kmax                  = 45.d0
-tgtKE                 = 20.d0
-tgtDissipation        = 0.1d0
-gain                  = 2.d3
-dumpForce             = .true.
-maskType              = 2                ! 1: Gaussian 2: Fringe-type function
+zmid           = 0.d0
+lf             = 1.5d0
+kmin           = 7.d0
+kmax           = 45.d0
+tgtKE          = 0.370370370370370d0
+fringe_delta   = 0.5d0
+relax_fact     = 10.d0
+dumpForce      = .true.
+maskType       = 2                ! 1: Gaussian 2: Fringe-type function
 Temp_in_forcing_layer = 1.d0
-lambdaFact_temp       = 0.1d0
-nForceTimeScalesOn    = 0      !The number of forcing time scales to have forcing turned "on". Set to 0 for forcing always on
-onoffratio            = 1.d0   ! ratio of time "on" and time "off" for the forcing (if nForceTimeScalesOn > 0)
-rampfact              = 0.25d0 ! Sets the rate at which the forcing turns on/off (if nForceTimeScalesOn > 0)
+lambdaFact_temp = 0.1d0
 /
 /
 &SMinput
-Lx                    = 6.d0           ! Domain Length  (appropriate dimesions/non-dimensionalized)
-Ly                    = 6.d0          ! Domain Width  (appropriate dimesions/non-dimensionalized)
-Lz                    = 2.d0       ! Domain Half-height (appropriate dimesnions/non-dimensionalized)
-zmin                  = -4.d0
-symmetricDomain       = .false.
-Tref                  = 50.d0
+Lx = 9.d0
+Ly = 9.d0
+Lz = 1.35d0
+zmin = -5.025d0
+symmetricDomain = .false.
+Tref = 1.d0
+stats_info_dir = "/work2/06632/ryanhass/stampede2/problems/LES/HITdecay/shearlessMixing_Bodart/SM126/inputFiles/768"
+num_stats_instances = 1
 /
 /
 &Probes
-probefile = "/work2/06632/ryanhass/stampede2/problems/LES/HITdecay/shearlessMixing_Bodart/SM78/probes/probes.txt" 
+probefile = "/work2/06632/ryanhass/stampede2/problems/LES/HITdecay/shearlessMixing_Bodart/SM126/probes/probes.txt" 
 /

@@ -1,0 +1,12 @@
+&STATS_XY
+tid_start      = 1 
+compute_freq = 50
+dump_freq = 500
+outputdir = "/scratch/06632/ryanhass/LES/HITdecay/shearlessMixing_Bodart/SM126/768/stats/kc0.0" 
+do_stats       = .true.
+nscales        = 1 ! set to <= 1 if you don't want to do scale splitting
+/
+/
+&SCALE_SPLITTING
+kc_for_scale_splitting = -1
+/
