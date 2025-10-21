@@ -1,7 +1,8 @@
-module Channel_data
+module FlatPlateBL_data
     use kind_parameters,  only: rkind, mpirkind, clen
     use constants,        only: zero, half, one, two, four, pi, imi, three
     use FiltersMod,       only: filters
+    use MultiBlockTopologyMod, only: multiblocktopol
     use decomp_2d,        only: decomp_info, nrank
     use basic_io,         only: read_2d_ascii 
     use reductions,       only: P_MAXVAL,P_MINVAL
@@ -19,19 +20,77 @@ module Channel_data
     real(rkind) :: gam    = 1.4_rkind
     real(rkind) :: rho_ref= 1.0_rkind
     real(rkind) :: Tw     = 1.0_rkind
+    real(rkind) :: Rgas   = 1.0_rkind
     real(rkind) :: Re     = 3000.0_rkind
     real(rkind) :: Mc     = 1.5_rkind
-    real(rkind) :: Rgas   = 1.0_rkind
     real(rkind) :: x1, y1, z1
     real(rkind) :: xn, yn, zn
     logical     :: periodicx = .true., periodicy = .false., periodicz = .true. 
     logical     :: add_pert = .true.
     character(len=clen) :: fname_prefix
+    real(rkind), allocatable, dimension(:,:) :: uleftbc
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 
 contains
 
+  subroutine sponge_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
+    use decomp_2d,        only: decomp_info, nrank
+    use operators,        only: filter3D
+
+    type(decomp_info),               intent(in)    :: decomp
+    type(filters),                   intent(in)    :: mygfil
+    real(rkind), dimension(:,:,:),   intent(in)    :: x
+    real(rkind),                     intent(in)    :: Lx
+    real(rkind), dimension(:,:,:),   intent(inout) :: u,v,w,p,rho
+    integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
+
+    integer :: i, j, k
+    real(rkind) :: dx, dy, dz, filpt, thickT
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
+    character(len=clen) :: outputfile
+
+    dx = Lx/real(decomp%xsz(1)-1,rkind)
+    filpt = 2.00_rkind/dx 
+    thickT = real(0.3D0, rkind)
+
+    ! Gaussian Filter for right side of domain 
+    do i=1,decomp%ysz(1)
+       dumT(i,:,:)=half*(one-tanh( (real(decomp%xsz(1)- (decomp%yst(1) - 1 + i - 1), rkind)-filpt) / thickT ))
+    end do
+
+    !! To check whether dumT is calculted correctly !!!
+    write(outputfile, '(a,i3.3,a)') 'dumT_', nrank, '.dat'
+    open(10,file=outputfile,status='unknown')
+    do i=1,decomp%ysz(1)
+       write(10,'(2(e19.12),1x)') x(i,1,1), dumT(i,1,1)
+    end do
+    close(10)
+
+    dumF = u
+    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    u = u + dumT*(dumF-u) 
+
+    dumF = v
+    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    v = v + dumT*(dumF-v)
+
+    dumF = w
+    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    w = w + dumT*(dumF-w)
+
+    dumF = p
+    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    p = p + dumT*(dumF-p)
+
+    dumF = rho
+    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    rho = rho + dumT*(dumF-rho)
+
+  end subroutine
+   
     subroutine sponge_y(decomp, mygfil, y, Ly, u, v, w, p, rho, x_bc, y_bc, z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
@@ -227,11 +286,11 @@ contains
         !p = p + pperturb 
         !rho = rho + rperturb
 
-        deallocate(uperturb)
-        deallocate(vperturb)
-        deallocate(wperturb)
-        deallocate(pperturb)
-        deallocate(rperturb)
+        !deallocate(uperturb)
+        !deallocate(vperturb)
+        !deallocate(wperturb)
+        !deallocate(pperturb)
+        !deallocate(rperturb)
 
         !allocate(rand_u(nxl, nyl, nzl))
         !call random_number(rand_u)
@@ -255,7 +314,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     use kind_parameters,  only: rkind
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info, nrank, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
-    use Channel_data
+    use FlatPlateBL_data
 
     implicit none
 
@@ -307,12 +366,12 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
             print *, "Domain size: ",Lx,Ly,Lz
         end if
 
-        dx = Lx/real(nx-0,rkind)  !periodic
-        dy = Ly/real(ny-1,rkind)
-        dz = Lz/real(nz-0,rkind)  !periodic    
+        dx = Lx/real(nx-1,rkind)  ! not periodic
+        dy = Ly/real(ny-1,rkind)  ! not periodic
+        dz = Lz/real(nz-0,rkind)  ! periodic    
 
-        x1 = 0._rkind;        y1 = -Ly/2._rkind;     z1 = 0._rkind
-        xn = Lx;              yn =  Ly/2._rkind;     zn = Lz
+        x1 = 0._rkind;        y1 = 0._rkind;     z1 = 0._rkind
+        xn = Lx;              yn = Ly;           zn = Lz
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
@@ -325,9 +384,11 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
         end do
 
     
-    if(nrank == zero) then
-      print*, '>>alpha=',metric_params(2,1), '>>beta=',metric_params(2,2), '>>ystart=',metric_params(2,3), '>>yh=', metric_params(2,4)
-      print*, '>>ymetric=',ymetric, '>>yflag=',ymetric_flag
+    if(nrank == 0) then
+      if(ymetric) then
+        print*, '>>alpha=',metric_params(2,1), '>>beta=',metric_params(2,2), '>>ystart=',metric_params(2,3), '>>yh=', metric_params(2,4)
+        print*, '>>ymetric=',ymetric, '>>yflag=',ymetric_flag
+      endif
     endif
 
     if(xmetric) then
@@ -350,19 +411,23 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
 
     ! Grid width on stretched/uniform mesh
     call transpose_y_to_x(x,xtmp1,decomp)   ! Decomposition in x
-    do i = 1, nx-1
-       xtmp2(i,:,:) =  xtmp1(i+1,:,:) - xtmp1(i,:,:)
+    ! compute dxs for non-periodic x
+    xtmp2(1,:,:) = xtmp1(2,:,:) - xtmp1(1,:,:)
+    do i = 2, nx-1
+       xtmp2(i,:,:) =  (xtmp1(i+1,:,:) - xtmp1(i-1,:,:)) / 2._rkind
     end do
-    xtmp2(nx,:,:) = xn - xtmp1(nx,:,:)
+    xtmp2(nx,:,:) = xtmp1(nx,:,:) - xtmp1(nx-1,:,:)
     call transpose_x_to_y(xtmp2,dxs,decomp)   ! Decomposition in x
        
 
+    ! compute dys for non-periodic y
     dys(:,1,:) = y(:,2,:) - y(:,1,:)       ! Base decomposition in Y
     do j=2, decomp%ysz(2)-1
        dys(:,j,:) =  (y(:,j+1,:) - y(:,j-1,:))/2
     end do
     dys(:,decomp%ysz(2),:) = y(:,decomp%ysz(2),:) - y(:,decomp%ysz(2)-1,:)       ! Base decomposition in Y
 
+    ! compute dzs for periodic z
     call transpose_y_to_z(z,ztmp1,decomp)   ! Decomposition in z
     do k = 1, nz-1
        ztmp2(:,:,k) =  ztmp1(:,:,k+1) - ztmp1(:,:,k)
@@ -371,29 +436,30 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     call transpose_z_to_y(ztmp2,dzs,decomp)   ! Decomposition in x
    
 
-   ! !! Write grid width to a file
-   ! write(outputfile, '(a,i0,a)') 'grid_x_', nrank, '.dat'
-   ! open(11,file=outputfile,status='unknown')
-   ! do i=1,decomp%ysz(1)
-   !    write(11,'(2(e19.12),1x)') x(i,1,1), dxs(i,1,1)
-   ! enddo
-   ! close(11)
+    !! Write grid width to a file
+    write(outputfile, '(a,i0,a)') 'grid_x_', nrank, '.dat'
+    open(11,file=outputfile,status='unknown')
+    do i=1,decomp%ysz(1)
+       write(11,'(2(e19.12),1x)') x(i,1,1), dxs(i,1,1)
+    enddo
+    close(11)
 
-   ! if(nrank==0) then
-   !   write(outputfile, '(a)') 'grid_y.dat'
-   !   open(10,file=outputfile,status='unknown')
-   !   do j=1,decomp%ysz(2)
-   !      write(10,'(2(e19.12),1x)') y(1,j,1), dys(1,j,1)
-   !   enddo
-   !   close(10)
-   ! endif
+    !if(nrank==0) then
+      !write(outputfile, '(a)') 'grid_y.dat'
+      write(outputfile, '(a,i0,a)') 'grid_y_', nrank, '.dat'
+      open(10,file=outputfile,status='unknown')
+      do j=1,decomp%ysz(2)
+         write(10,'(2(e19.12),1x)') y(1,j,1), dys(1,j,1)
+      enddo
+      close(10)
+    !endif
 
-   ! write(outputfile, '(a,i0,a)') 'grid_z_', nrank, '.dat'
-   ! open(13,file=outputfile,status='unknown')
-   ! do k=1,decomp%ysz(3)
-   !    write(13,'(2(e19.12),1x)') z(1,1,k), dzs(1,1,k)
-   ! enddo
-   ! close(13)
+    write(outputfile, '(a,i0,a)') 'grid_z_', nrank, '.dat'
+    open(13,file=outputfile,status='unknown')
+    do k=1,decomp%ysz(3)
+       write(13,'(2(e19.12),1x)') z(1,1,k), dzs(1,1,k)
+    enddo
+    close(13)
     end associate
     nullify(xtmp1)
     nullify(xtmp2)
@@ -419,7 +485,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use exits,                       only: GracefulExit, message, nancheck
     use random,                      only: gaussian_random                  
 
-    use Channel_data
+    use FlatPlateBL_data
     use mpi
 
     implicit none
@@ -454,6 +520,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     ! Local domain sizes
     nxl = decomp%ysz(1);    nyl = decomp%ysz(2);   nzl = decomp%ysz(3)
     
+    if(allocated(uleftbc)) deallocate(uleftbc)
+    allocate(uleftbc(nyl, nzl))
+
     associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
                  v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
                  p => fields(:,:,:,  p_index), T  => fields(:,:,:,T_index),&
@@ -475,26 +544,24 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         call mix%update(Ys)     
      
         ! Add base flow profiles
-        !u = (1-y**2)*1.5
 
         do k=1,nzl
             do j=1,nyl
                 do i=1,nxl
-                   u(i,j,k) = 1.5_rkind*(1-y(i,j,k)**2)
+                   !u(i,j,k) = 1.5_rkind*(1-y(i,j,k)**2)
                    !T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
-                   var = (1-abs(y(i,j,k)))*Re
-                   if (var .lt. 10) then
-                       u(i,j,k) = var
-                   else
-                       u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
-                   endif
-
+                   !var = y(i,j,k)*Re
+                   !if (var .lt. 10) then
+                   !    u(i,j,k) = var
+                   !else
+                   !    u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
+                   !endif
+                   u(i,j,k) = (y(i,j,k)/Ly)**(0.25)
                 end do
             end do
         end do
-
         umax = p_maxval(u)
-        u = u/umax * 1.1d0
+        u = u/umax
 
         v   = zero
         w   = zero
@@ -507,6 +574,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         endif
 
         T = p/(rho*Rgas)     
+
+        ! store boundary condition on the left
+        if(decomp%yst(1) == 1) then 
+          do k = 1, decomp%ysz(3) 
+            do j = 1, decomp%ysz(2)
+              uleftbc(j,k) = u(1,j,k)
+            end do
+          end do
+        end if
 
         ! Initialize gaussian filter mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, "gaussian", "gaussian", "gaussian" )
@@ -522,7 +598,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use DerivativesMod,   only: derivatives
     use MixtureEOSMod,    only: mixture
     use reductions,       only: P_MEAN
-    use Channel_data
+    use FlatPlateBL_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -554,7 +630,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 end subroutine
 
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, useMultiBlock, mbtopology)
     use kind_parameters,  only: rkind
     use decomp_2d,        only: decomp_info, nrank, transpose_y_to_x, transpose_x_to_y
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
@@ -562,7 +638,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     use MixtureEOSMod,    only: mixture
     use operators,        only: filter3D
 
-    use Channel_data
+    use FlatPlateBL_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -573,8 +649,11 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
     logical,                         intent(in)    :: newTimeStep
     integer,                         intent(in)    :: time_step 
+    logical, optional,               intent(in)    :: useMultiBlock
+    type(multiblocktopol), optional, intent(in)    :: mbtopology
 
     integer :: i, j, k, nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
+    integer :: ist, ien, jlo, jst, jen, kst, ken, imb, i_intbd
     real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw
     real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p
     character(len=clen) :: outputfile
@@ -590,23 +669,117 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        !!!!! =============  Add Sponge+bulk for exit bc ==========!!!!!
-        ! Apply sponge in Y-direction on top and bottom
-        !call  sponge_y(decomp, mygfil, y, Ly, u, v, w, p, rho, x_bc, y_bc, z_bc)
-
         Rgas_Tw = mix%material(1)%mat%Rgas * Tw
-        !Rgas_Tw = Rgas * Tw
 
-        ! set Dirichlet BC for velocity, Temperature
+
+        ! set Dirichlet BC at the inlet
+        if(decomp%yst(1) == 1) then 
+          do k = 1, decomp%ysz(3) 
+            do j = 1, decomp%ysz(2)
+              u(1,j,k)   =  uleftbc(j,k)
+              rho(1,j,k) =  rho_ref
+              !T(1,j,k)   =  Tw
+              v(1,j,k)   = zero
+              w(1,j,k)   = zero
+              p(1,j,k)   =  rho(1,j,k) * Rgas_Tw
+            enddo
+          enddo
+        endif
+
+        ! set Dirichlet BC at top and bottom
         do k = 1,decomp%ysz(3) 
-           u(:,1,k) = zero;                   u(:,decomp%ysz(2),k) = zero
-           v(:,1,k) = zero;                   v(:,decomp%ysz(2),k) = zero
-           w(:,1,k) = zero;                   w(:,decomp%ysz(2),k) = zero
-           !T(:,1,k) = Tw;                    T(:,decomp%ysz(2),k) = Tw
-           p(:,1,k) = rho(:,1,k) * Rgas_Tw;   p(:,decomp%ysz(2),k) = rho(:,decomp%ysz(2),k) * Rgas_Tw
+           u(:,1,k) = zero;                  !u(:,decomp%ysz(2),k) = zero
+           v(:,1,k) = zero;                  !v(:,decomp%ysz(2),k) = zero
+           w(:,1,k) = zero;                  !w(:,decomp%ysz(2),k) = zero
+           !T(:,1,k) = Tw;                   !T(:,decomp%ysz(2),k) = Tw
+           p(:,1,k) = rho(:,1,k)*Rgas_Tw;    !p(:,decomp%ysz(2),k) = rho(:,decomp%ysz(2),k)*Rgas_Tw
         end do
-         
+        
+        if(present(useMultiBlock)) then
+         if(useMultiBlock) then
+            ! set Dirichlet BC at bottom block of multiblock
+            do imb = 1, mbtopology%y_num_blocks
+              !jlo = mbtopology%yst(2, imb)
+              !ist = mbtopology%yst(1, imb);   ien = mbtopology%yen(1, imb)
+              !kst = mbtopology%yst(3, imb);   ken = mbtopology%yen(3, imb)
+              !do k = kst, ken
+              !    u(ist:ien, jlo, k) = zero
+              !    v(ist:ien, jlo, k) = zero
+              !    w(ist:ien, jlo, k) = zero
+              !    T(ist:ien, jlo, k) = Tw
+              !enddo
 
+              ! lower boundary (jst, jen should be the same)
+              ist = mbtopology%ybclo_st(1,imb); jst = mbtopology%ybclo_st(2,imb); kst = mbtopology%ybclo_st(3,imb)
+              ien = mbtopology%ybclo_en(1,imb); jen = mbtopology%ybclo_en(2,imb); ken = mbtopology%ybclo_en(3,imb)
+              do k = kst, ken
+                  u(ist:ien, jst, k) = zero
+                  v(ist:ien, jst, k) = zero
+                  w(ist:ien, jst, k) = zero
+                  !T(ist:ien, jst, k) = Tw
+                  p(ist:ien, jst, k) = rho(ist:ien, jst, k) * Rgas_Tw
+              enddo
+
+              ! upper boundary (jst, jen should be the same)
+              ist = mbtopology%ybchi_st(1,imb); jst = mbtopology%ybchi_st(2,imb); kst = mbtopology%ybchi_st(3,imb)
+              ien = mbtopology%ybchi_en(1,imb); jen = mbtopology%ybchi_en(2,imb); ken = mbtopology%ybchi_en(3,imb)
+              do k = kst, ken
+                  u(ist:ien, jst, k) = zero
+                  v(ist:ien, jst, k) = zero
+                  w(ist:ien, jst, k) = zero
+                  !T(ist:ien, jst, k) = Tw
+                  p(ist:ien, jst, k) = rho(ist:ien, jst, k) * Rgas_Tw
+              enddo
+
+              !print *, 'Num-internal-boundaries-left: nrank=', nrank, 'num_blocks=', mbtopology%y_num_blocks, 'num_int_bdries=',mbtopology%y_num_intbd_left
+              ! left internal boundary (ist, ien should be the same)
+              do i_intbd = 1, mbtopology%y_num_intbd_left(imb)
+                ist = mbtopology%y_intbd_left_st(1,i_intbd) 
+                jst = mbtopology%y_intbd_left_st(2,i_intbd)
+                kst = mbtopology%y_intbd_left_st(3,i_intbd)
+                ien = mbtopology%y_intbd_left_en(1,i_intbd)
+                jen = mbtopology%y_intbd_left_en(2,i_intbd)
+                ken = mbtopology%y_intbd_left_en(3,i_intbd)
+                do k = kst, ken
+                 do j = jst, jen
+                    u(ist, j, k) = zero
+                    v(ist, j, k) = zero
+                    w(ist, j, k) = zero
+                    !T(ist, j, k) = Tw
+                    p(ist, j, k) = rho(ist, j, k) * Rgas_Tw
+                 enddo
+                enddo
+              enddo
+
+              ! right internal boundary (ist, ien should be the same)
+              do i_intbd = 1, mbtopology%y_num_intbd_rght(imb)
+                ist = mbtopology%y_intbd_rght_st(1,i_intbd) 
+                jst = mbtopology%y_intbd_rght_st(2,i_intbd)
+                kst = mbtopology%y_intbd_rght_st(3,i_intbd)
+                ien = mbtopology%y_intbd_rght_en(1,i_intbd)
+                jen = mbtopology%y_intbd_rght_en(2,i_intbd)
+                ken = mbtopology%y_intbd_rght_en(3,i_intbd)
+                do k = kst, ken
+                 do j = jst, jen
+                    u(ist, j, k) = zero
+                    v(ist, j, k) = zero
+                    w(ist, j, k) = zero
+                    !T(ist, j, k) = Tw
+                    p(ist, j, k) = rho(ist, j, k) * Rgas_Tw
+                 enddo
+                enddo
+              enddo
+            enddo
+         endif
+        endif
+ 
+        !p   = rho*Rgas*T
+
+        !!!!! =============  Add Sponge+bulk for exit bc ==========!!!!!
+        ! Gradually apply the exit boundary conditions
+        ! Apply sponge in X-direction on right
+        call  sponge_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc)
+        call  sponge_y(decomp, mygfil, y, Ly, u, v, w, p, rho, x_bc, y_bc, z_bc)
 
     end associate
 end subroutine
@@ -622,7 +795,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
     use exits,            only: message
     use reductions,       only: P_MAXVAL,P_MINVAL
 
-    use Channel_data
+    use FlatPlateBL_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -703,7 +876,7 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
     use decomp_2d,          only: decomp_info,nrank
     use MixtureEOSMod,      only: mixture
     use reductions,         only: P_MAXVAL,P_MINVAL
-    use channel_data
+    use FlatPlateBL_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -716,100 +889,104 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
     integer,                         intent(in)    :: step
     real(rkind), dimension(:,:,:),       intent(in)    :: dys
 
-    integer :: mass_index, mom_index, TE_index, i, j, k, ioUnit, nxl, nyl, nzl, nx, ny, nz, mpi_ierr, ierr
-    real(rkind) :: f_src = 0._rkind, q0_flux = 2.0_rkind, mu_bar, mu_locsum, mu_globsum, alpha, beta, q_flux_old, q_flux_new,u_bulk
+    !integer :: mass_index, mom_index, TE_index, i, j, k, ioUnit, nxl, nyl, nzl, nx, ny, nz, mpi_ierr, ierr
+    !real(rkind) :: f_src = 0._rkind, q0_flux = 2.0_rkind, mu_bar, mu_locsum, mu_globsum, alpha, beta, q_flux_old, q_flux_new,u_bulk
     !real(rkind), allocatable, dimension(:)     :: u_locsum, u_globsum, rhou_locsum, rhou_globsum, rho_locsum, rho_globsum,dys_1d
     !real(rkind), allocatable, dimension(:,:,:) :: du_bardy, u_bar
-    real(rkind), dimension(decomp%ysz(2)) :: u_locsum, u_globsum, rhou_locsum, rhou_globsum, rho_locsum, rho_globsum,dys_1d
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: du_bardy, u_bar
-    integer, dimension(3) :: st
-    integer :: my_step=0
-    character(len=clen) :: outputfile
-    real(rkind) :: src
+    !integer, dimension(3) :: st
+    !integer :: my_step=0
+    !character(len=clen) :: outputfile
+    !real(rkind) :: src
 
 
-    associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
-                 v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
-                 p => fields(:,:,:,  p_index), T  => fields(:,:,:,T_index),&
-                 e => fields(:,:,:,  e_index), mu => fields(:,:,:,mu_index ),&
-                Ys => fields(:,:,:,Ys_index:Ys_index+mix%ns-1), &
-                 y => mesh(:,:,:,2) )
-        ! Set mass, momentum and energy indices in Wcnsrv
-        mass_index = 1
-        mom_index  = mass_index + ns
-        TE_index   = mom_index + 3
-      
-        ! Global domain sizes
-        nx = decomp%xsz(1);     ny = decomp%ysz(2);    nz = decomp%zsz(3)
-        ! Local domain sizes
-        nxl = decomp%ysz(1);    nyl = decomp%ysz(2);   nzl = decomp%ysz(3)
-       
-        !allocate(u_locsum(nyl));      allocate(u_globsum(nyl)) ;  allocate(dys_1d(nyl))  
-        !allocate(rhou_locsum(nyl));   allocate(rhou_globsum(nyl)) ;  
-        !allocate(rho_locsum(nyl));    allocate(rho_globsum(nyl)) ;  
-        !allocate(u_bar(nxl,nyl,nzl)); allocate(du_bardy(nxl,nyl,nzl))
+    !associate( rho => fields(:,:,:,rho_index), u  => fields(:,:,:,u_index),&
+    !             v => fields(:,:,:,  v_index), w  => fields(:,:,:,w_index),&
+    !             p => fields(:,:,:,  p_index), T  => fields(:,:,:,T_index),&
+    !             e => fields(:,:,:,  e_index), mu => fields(:,:,:,mu_index ),&
+    !            Ys => fields(:,:,:,Ys_index:Ys_index+mix%ns-1), &
+    !             y => mesh(:,:,:,2) )
+    !    ! Set mass, momentum and energy indices in Wcnsrv
+    !    mass_index = 1
+    !    mom_index  = mass_index + ns
+    !    TE_index   = mom_index + 3
+    !  
+    !    ! Global domain sizes
+    !    nx = decomp%xsz(1);     ny = decomp%ysz(2);    nz = decomp%zsz(3)
+    !    ! Local domain sizes
+    !    nxl = decomp%ysz(1);    nyl = decomp%ysz(2);   nzl = decomp%ysz(3)
+    !   
+    !    allocate(u_locsum(nyl));      allocate(u_globsum(nyl)) ;  allocate(dys_1d(nyl))  
+    !    allocate(rhou_locsum(nyl));   allocate(rhou_globsum(nyl)) ;  
+    !    allocate(rho_locsum(nyl));    allocate(rho_globsum(nyl)) ;  
+    !    allocate(u_bar(nxl,nyl,nzl)); allocate(du_bardy(nxl,nyl,nzl))
  
-        dys_1d = dys(1,:,1)
-        
-        mu_locsum = 0
-        do k=1,nzl
-          mu_locsum = mu_locsum + sum(mu(:,1,k))
-        end do
-        call mpi_allreduce(mu_locsum, mu_globsum, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
-        mu_bar  = mu_globsum/(nx*nz) 
-        !print*, nrank, mu(1,1,1), mu_locsum, mu_globsum, mu_bar       
+    !    dys_1d = dys(1,:,1)
+    !    
+    !    mu_locsum = 0
+    !    do k=1,nzl
+    !       do i=1,nxl
+    !          mu_locsum = mu_locsum + mu(i,1,k)
+    !       end do
+    !    end do
+    !    call mpi_allreduce(mu_locsum, mu_globsum, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+    !    mu_bar  = mu_globsum/(nx*nz) 
+    !    !print*, nrank, mu(1,1,1), mu_locsum, mu_globsum, mu_bar       
 
-        u_locsum = 0; rhou_locsum = 0; rho_locsum = 0
-        do k=1,nzl
-          do j=1,nyl
-              u_locsum(j)    = u_locsum(j)    + sum(u(:,j,k))
-              rhou_locsum(j) = rhou_locsum(j) + sum(u(:,j,k)*rho(:,j,k))
-              rho_locsum(j)  = rho_locsum(j)  + sum(rho(:,j,k))
-          end do
-        end do
-        call mpi_allreduce(u_locsum, u_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
-        call mpi_allreduce(rhou_locsum, rhou_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
-        call mpi_allreduce(rho_locsum, rho_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
-        do k=1,nzl
-          do j=1,nyl
-              u_bar(:,j,k) = u_globsum(j)/(nx*nz)
-          end do
-        end do
-        
-        call der%ddy(u_bar,du_bardy,ybc1,ybcn) 
-        
-        q_flux_old = sum( (rhou_globsum/(nx*nz)) * dys_1d)
-        q_flux_new = q_flux_old - dt*( Ly*Lz*f_src + two*Lz*mu_bar*du_bardy(1,1,1))
-        alpha  = two/dt;  beta = -0.2_rkind/dt
-        f_src  = f_src + (dt/(Ly*Lz))*(alpha*(q_flux_new-q0_flux) + beta*(q_flux_old-q0_flux))
-        u_bulk = sum( (rhou_globsum/(nx*nz)) * dys_1d)/sum( (rho_globsum/(nx*nz))* dys_1d )
+    !    u_locsum = 0; rhou_locsum = 0; rho_locsum = 0
+    !    do k=1,nzl
+    !      do j=1,nyl
+    !       do i=1,nxl
+    !            u_locsum(j)    = u_locsum(j)    + u(i,j,k)
+    !            rhou_locsum(j) = rhou_locsum(j) + u(i,j,k)*rho(i,j,k)
+    !            rho_locsum(j)  = rho_locsum(j)  + rho(i,j,k)
+    !       end do
+    !      end do
+    !    end do
+    !    call mpi_allreduce(u_locsum, u_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+    !    call mpi_allreduce(rhou_locsum, rhou_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+    !    call mpi_allreduce(rho_locsum, rho_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+    !    do k=1,nzl
+    !      do j=1,nyl
+    !       do i=1,nxl
+    !            u_bar(i,j,k) = u_globsum(j)/(nx*nz)
+    !       end do
+    !      end do
+    !    end do
+    !    
+    !    call der%ddy(u_bar,du_bardy,ybc1,ybcn) 
+    !    
+    !    q_flux_old = sum( (rhou_globsum/(nx*nz)) * dys_1d)
+    !    q_flux_new = q_flux_old - dt*( Ly*Lz*f_src + two*Lz*mu_bar*du_bardy(1,1,1))
+    !    alpha  = two/dt;  beta = -0.2_rkind/dt
+    !    f_src  = f_src + (dt/(Ly*Lz))*(alpha*(q_flux_new-q0_flux) + beta*(q_flux_old-q0_flux))
+    !    u_bulk = sum( (rhou_globsum/(nx*nz)) * dys_1d)/sum( (rho_globsum/(nx*nz))* dys_1d )
 
-        !if(step==0) then
-        !   my_step = my_step + 1
-        !   if (nrank==0) then
-        !       write(outputfile, '(a,i3.3,a)') 'dump_uavg_', my_step, '.dat'
-        !       open(10,file=outputfile,status='unknown')
-        !       do i=1,decomp%ysz(2)
-        !           write(10,'(3(e19.12),1x)') y(1,i,1), u_bar(1,i,1), du_bardy(1,i,1)
-        !       end do
-        !       close(10)
-        !   endif
-        !endif
-        
-        src = -mu_bar*du_bardy(1,1,1)
-        if (nrank==0)then
-           print*, '>> Mass flux=',0.5*q_flux_new, '>> Bulk Vel=',u_bulk , '>> f_src=',f_src
-        endif
-        ! X momentum source:
-        rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - f_src
-        !rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index)  - src
+    !    !if(step==0) then
+    !    !   my_step = my_step + 1
+    !    !   if (nrank==0) then
+    !    !       write(outputfile, '(a,i3.3,a)') 'dump_uavg_', my_step, '.dat'
+    !    !       open(10,file=outputfile,status='unknown')
+    !    !       do i=1,decomp%ysz(2)
+    !    !           write(10,'(3(e19.12),1x)') y(1,i,1), u_bar(1,i,1), du_bardy(1,i,1)
+    !    !       end do
+    !    !       close(10)
+    !    !   endif
+    !    !endif
+    !    
+    !    src = -mu_bar*du_bardy(1,1,1)
+    !    if (nrank==0)then
+    !       print*, '>> Mass flux=',0.5*q_flux_new, '>> Bulk Vel=',u_bulk , '>> f_src=',f_src
+    !    endif
+    !    ! X momentum source:
+    !    rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index) - f_src
+    !    !rhs(:,:,:,mom_index) = rhs(:,:,:,mom_index)  - src
 
-        ! Energy source: e
-        !rhs(:,:,:,TE_index) = rhs(:,:,:,TE_index) - f_src*u_bulk
-        rhs(:,:,:,TE_index) = rhs(:,:,:,TE_index) - f_src*u(:,:,:)
-        !rhs(:,:,:,TE_index) = rhs(:,:,:,TE_index)  -  src*u(:,:,:)
-        
-        !deallocate(u_locsum);  deallocate(rhou_locsum); deallocate(dys_1d)
-        !deallocate(u_globsum); deallocate(rhou_globsum)
-    end associate
+    !    ! Energy source: e
+    !    !rhs(:,:,:,TE_index) = rhs(:,:,:,TE_index) - f_src*u_bulk
+    !    rhs(:,:,:,TE_index) = rhs(:,:,:,TE_index) - f_src*u(:,:,:)
+    !    !rhs(:,:,:,TE_index) = rhs(:,:,:,TE_index)  -  src*u(:,:,:)
+    !    
+    !    deallocate(u_locsum);  deallocate(rhou_locsum); deallocate(dys_1d)
+    !    deallocate(u_globsum); deallocate(rhou_globsum)
+    !end associate
 end subroutine

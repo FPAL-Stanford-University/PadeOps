@@ -550,7 +550,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
 
     integer :: i, j, k, nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
     integer :: ist, ien, jlo, jst, jen, kst, ken, imb, i_intbd
-    real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0
+    real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw
     real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p
     character(len=clen) :: outputfile
     real(rkind), dimension(:,:),       allocatable :: u_noise, v_noise, w_noise
@@ -565,6 +565,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
+        Rgas_Tw = mix%material(1)%mat%Rgas * Tw
+
 
         ! set Dirichlet BC at the inlet
         if(decomp%yst(1) == 1) then 
@@ -572,19 +574,21 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
             do j = 1, decomp%ysz(2)
               u(1,j,k)   =  one
               rho(1,j,k) =  rho_ref
-              T(1,j,k)   =  Tw
+              !T(1,j,k)   =  Tw
               v(1,j,k)   = zero
               w(1,j,k)   = zero
+              p(1,j,k)   =  rho(1,j,k) * Rgas_Tw
             enddo
           enddo
         endif
 
         ! set Dirichlet BC at top and bottom
         do k = 1,decomp%ysz(3) 
-           u(:,1,k) = zero;          u(:,decomp%ysz(2),k) = zero
-           v(:,1,k) = zero;          v(:,decomp%ysz(2),k) = zero
-           w(:,1,k) = zero;          w(:,decomp%ysz(2),k) = zero
-           T(:,1,k) = Tw;            T(:,decomp%ysz(2),k) = Tw
+           u(:,1,k) = zero;                  u(:,decomp%ysz(2),k) = zero
+           v(:,1,k) = zero;                  v(:,decomp%ysz(2),k) = zero
+           w(:,1,k) = zero;                  w(:,decomp%ysz(2),k) = zero
+           !T(:,1,k) = Tw;                   T(:,decomp%ysz(2),k) = Tw
+           p(:,1,k) = rho(:,1,k)*Rgas_Tw;    p(:,decomp%ysz(2),k) = rho(:,decomp%ysz(2),k)*Rgas_Tw
         end do
         
         if(useMultiBlock) then
@@ -607,7 +611,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                   u(ist:ien, jst, k) = zero
                   v(ist:ien, jst, k) = zero
                   w(ist:ien, jst, k) = zero
-                  T(ist:ien, jst, k) = Tw
+                  !T(ist:ien, jst, k) = Tw
+                  p(ist:ien, jst, k) = rho(ist:ien, jst, k) * Rgas_Tw
               enddo
 
               ! upper boundary (jst, jen should be the same)
@@ -617,7 +622,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                   u(ist:ien, jst, k) = zero
                   v(ist:ien, jst, k) = zero
                   w(ist:ien, jst, k) = zero
-                  T(ist:ien, jst, k) = Tw
+                  !T(ist:ien, jst, k) = Tw
+                  p(ist:ien, jst, k) = rho(ist:ien, jst, k) * Rgas_Tw
               enddo
 
               !print *, 'Num-internal-boundaries-left: nrank=', nrank, 'num_blocks=', mbtopology%y_num_blocks, 'num_int_bdries=',mbtopology%y_num_intbd_left
@@ -634,7 +640,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                     u(ist, j, k) = zero
                     v(ist, j, k) = zero
                     w(ist, j, k) = zero
-                    T(ist, j, k) = Tw
+                    !T(ist, j, k) = Tw
+                    p(ist, j, k) = rho(ist, j, k) * Rgas_Tw
                  enddo
                 enddo
               enddo
@@ -652,14 +659,15 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                     u(ist, j, k) = zero
                     v(ist, j, k) = zero
                     w(ist, j, k) = zero
-                    T(ist, j, k) = Tw
+                    !T(ist, j, k) = Tw
+                    p(ist, j, k) = rho(ist, j, k) * Rgas_Tw
                  enddo
                 enddo
               enddo
             enddo
         endif
  
-        p   = rho*Rgas*T
+        !p   = rho*Rgas*T
 
         !!!!! =============  Add Sponge+bulk for exit bc ==========!!!!!
         ! Gradually apply the exit boundary conditions

@@ -1295,12 +1295,12 @@ contains
         class(cgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
-        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtdiff
+        real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtdiff, rampfac
 
         call this%mix%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
 
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dxs + ABS(this%v)/this%dys + ABS(this%w)/this%dzs &
-               + cs*sqrt( one/(this%dxs**two) + one/(this%dys**two) + one/(this%dzs**two) ))
+               + cs*sqrt( one/(this%dxs**2) + one/(this%dys**2) + one/(this%dzs**2) ))
         dtmu   = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
         dtbulk = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
         dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**4))))**(third) + eps)
@@ -1332,6 +1332,11 @@ contains
             if (this%step .LE. 10) then
                 this%dt = this%dt / 10._rkind
                 stability = 'startup'
+            elseif(this%step .LE. 20) then
+                ! ramp up the time step from 10 to 20
+                rampfac = real(this%step-10, rkind) / 10._rkind
+                this%dt = this%dt / 10._rkind * (1._rkind-rampfac) + this%dt * rampfac
+                stability = 'rampup'
             end if
         end if
 
