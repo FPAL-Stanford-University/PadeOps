@@ -1682,7 +1682,7 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 12.0 
+       L = 16.0
 
        y_half = this%y + 0.5*this%dy
         
@@ -1927,8 +1927,9 @@ contains
         ! ------------------------------------------------
         if (this%useRestartFile) then
  
-          this%dt = 1d-9
-     
+!          this%dt = 1d-9
+ 
+           call this%get_dt(stability)
         else
           call this%get_dt(stability)
         endif
@@ -2076,6 +2077,7 @@ contains
 
            if ( restartWrite .or. (mod(this%step,this%t_restartDump) == 0) ) then
                  call this%dumpRestartfile()
+                 
                  call message(0,"Scheduled restart file dumped.")
             end if
             ! Check tstop condition
@@ -2212,8 +2214,9 @@ contains
             !call this%get_conserved_g()
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-            if ( nancheck(this%fields(:,:,:,rho_index)) ) then
-              write(charout,'(A,5(I0,A))') "NaN encountered in rho "
+            if ( nancheck(this%fields(:,:,:,rho_index),i,j,k) ) then
+              write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution rho at substep ", isub, " of step ", this%step+1, " at (",i+this%decomp%yst(1)-1,", ",j+this%decomp%yst(2)-1,", ",k+this%decomp%yst(3)-1,") of Wcnsrv"
+ 
               call GracefulExit(charout,4909)
             end if
 
@@ -2228,6 +2231,8 @@ contains
             call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,this%y_bc,this%z_bc)
             call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc,-this%y_bc,this%z_bc)
             call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,this%y_bc,-this%z_bc)
+            this%dudy = dudy
+            call this%laplacian(this%u,this%dudy2, this%x_bc,this%y_bc,this%z_bc)
 
             call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
 
@@ -2435,8 +2440,8 @@ contains
            ! this%e = 1
            ! this%mix%material(1)%eh = 1
            ! this%mix%material(2)%eh = 1            
-            if ( nancheck(this%fields(:,:,:,rho_index)) ) then
-              write(charout,'(A,5(I0,A))') "NaN encountered in rho "
+            if ( nancheck(this%fields(:,:,:,rho_index),i,j,k) ) then
+              write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution rho at substep ", isub, " of step ",this%step+1, " at(",i+this%decomp%yst(1)-1,", ",j+this%decomp%yst(2)-1,", ",k+this%decomp%yst(3)-1,") of rho"
               call GracefulExit(charout,4909)
             end if
 
@@ -2546,9 +2551,9 @@ contains
         use operators, only: interpolateFV,interpolateFV_x,interpolateFV_F2Ny,interpolateFV_y,interpolateFV_F2Nx,filter3D,gradFV_N2Fx,gradFV_N2Fy
         class(sgrid), target, intent(inout) :: this
         integer :: i,j,k,iflag = one, nx
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int,sos_int,VFbar,kappabar,gradp,gradVF,peff
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int,sos_int,VFbar,kappabar,gradp,gradVF,peff,peff_fil
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: psi_int,e1_int, Gam_int,pVF_int,num,denom,af,c1_int,rhobar
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2, tmpFil, tmp3,psi,Gam,psi_safe,c1,rhom1,tmp1,mask1,mask2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2, tmpfil, tmp3,psi,Gam,psi_safe,c1,rhom1,tmp1,mask1,mask2
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4,xtmp5
         real(rkind) :: e = 1d-10
           
@@ -2615,17 +2620,23 @@ contains
 !     enddo
 
       peff = ( gradp + this%surfaceTension_coeff*kappabar*gradVF )
-      
+      peff_fil = peff
+
+      do i = 1,3
+       tmpfil =  peff_fil(:,:,:,i)
+       call filter3D(this%decomp, this%fil, tmpfil, 1, this%x_bc, this%y_bc, this%z_bc) 
+       peff_fil(:,:,:,i) = tmpfil
+      enddo
 
      do j = 2,this%nyp-1
-        this%v_int(:,j,:) = this%v_mid(:,j,:,2) -  af(:,j,:,2) * ( peff(:,j,:,2) - 0.5_rkind*(peff(:,j+1,:,2) + peff(:,j-1,:,2) ) ) !  * ( gradp(:,j,:,2) + this%surfaceTension_coeff*kappabar(:,j,:,2)*gradVF(:,j,:,2) )  !/this%dy * ( ( this%p(:,j+1,:) - this%p(:,j,:)   ) &
+        this%v_int(:,j,:) = this%v_mid(:,j,:,2) -  af(:,j,:,2) * (peff(:,j,:,2) - peff_fil(:,j,:,2)) ! ( peff(:,j,:,2) - 0.5_rkind*(peff(:,j+1,:,2) + peff(:,j-1,:,2) ) ) !  * ( gradp(:,j,:,2) + this%surfaceTension_coeff*kappabar(:,j,:,2)*gradVF(:,j,:,2) )  !/this%dy * ( ( this%p(:,j+1,:) - this%p(:,j,:)   ) &
 !                            + this%surfaceTension_coeff*kappabar(:,j,:,2)*( this%mix%material(1)%VF_mid(:,j+1,:,2) -  this%mix%material(1)%VF_mid(:,j,:,2) ) ) !  * ( gradp(:,j,:,2) + this%surfaceTension_coeff*kappabar(:,j,:,2)*gradVF(:,j,:,2) )
 
      enddo
 
 
-     this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2) *( peff(:,this%nyp,:,2) - 0.5_rkind*(peff(:,1,:,2) + peff(:,this%nyp-1,:,2) ) )
-     this%v_int(:,1,:) = this%v_mid(:,1,:,2) - af(:,1,:,2) *( peff(:,1,:,2) - 0.5_rkind*(peff(:,2,:,2) + peff(:,this%nyp,:,2) ) )
+     this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2) *  (peff(:,this%nyp,:,2) - peff_fil(:,this%nyp,:,2)) !( peff(:,this%nyp,:,2) - 0.5_rkind*(peff(:,1,:,2) + peff(:,this%nyp-1,:,2) ) )
+     this%v_int(:,1,:) = this%v_mid(:,1,:,2) - af(:,1,:,2) *  (peff(:,1,:,2) - peff_fil(:,1,:,2))     !( peff(:,1,:,2) - 0.5_rkind*(peff(:,2,:,2) + peff(:,this%nyp,:,2) ) )
 
 !                               /this%dy *( ( this%p(:,1,:) - this%p(:,this%nyp,:) ) & 
 !                               + this%surfaceTension_coeff*kappabar(:,this%nyp,:,2)*( this%mix%material(1)%VF_mid(:,1,:,2) - this%mix%material(1)%VF_mid(:,this%nyp,:,2) ) )                                                          
@@ -2636,21 +2647,21 @@ contains
 !     this%u_int = this%u_mid(:,:,:,1) - af(:,:,:,1) * ( gradp(:,:,:,1) + this%surfaceTension_coeff*kappabar(:,:,:,1)*gradVF(:,:,:,1) ) 
       call transpose_y_to_x(tmp1,xtmp1,this%decomp)
       call transpose_y_to_x(tmp2,xtmp2,this%decomp)
-      call transpose_y_to_x(peff(:,:,:,1),xtmp3,this%decomp)
+      call transpose_y_to_x(peff(:,:,:,1)-peff_fil(:,:,:,1),xtmp3,this%decomp)
       call transpose_y_to_x(kappabar(:,:,:,1),xtmp4,this%decomp)
 !      call transpose_y_to_x(this%mix%material(1)%VF_mid(:,:,:,1),xtmp5,this%decomp)
 !      
       do i = 2,nx-1
 !
-         xtmp1(i,:,:) = xtmp1(i,:,:) - xtmp2(i,:,:) * ( xtmp3(i,:,:)- 0.5_rkind*(xtmp3(i+1,:,:) + xtmp3(i-1,:,:) ))
+         xtmp1(i,:,:) = xtmp1(i,:,:) - xtmp2(i,:,:) * ( xtmp3(i,:,:) ) !- 0.5_rkind*(xtmp3(i+1,:,:) + xtmp3(i-1,:,:) ))
 
 
 !/this%dx *( ( xtmp3(i+1,:,:) - xtmp3(i,:,:) )+this%surfaceTension_coeff*xtmp4(i,:,:)*( xtmp5(i+1,:,:) - xtmp5(i,:,:) )  )
                         
       enddo
 !
-      xtmp1(nx,:,:) = xtmp1(nx,:,:) - xtmp2(nx,:,:) * ( xtmp3(nx,:,:) - 0.5_rkind*(xtmp3(1,:,:) + xtmp3(nx-1,:,:) ))
-      xtmp1(1,:,:) = xtmp1(1,:,:) - xtmp2(1,:,:) * ( xtmp3(1,:,:) - 0.5_rkind*(xtmp3(nx,:,:) + xtmp3(nx,:,:) ))
+      xtmp1(nx,:,:) = xtmp1(nx,:,:) - xtmp2(nx,:,:) * ( xtmp3(nx,:,:) )  !- 0.5_rkind*(xtmp3(1,:,:) + xtmp3(nx-1,:,:) ))
+      xtmp1(1,:,:) = xtmp1(1,:,:) - xtmp2(1,:,:) * ( xtmp3(1,:,:) )      ! - 0.5_rkind*(xtmp3(nx,:,:) + xtmp3(nx,:,:) ))
 
       !/this%dx *( ( xtmp3(1,:,:) - xtmp3(nx,:,:) ) + this%surfaceTension_coeff*xtmp4(nx,:,:)*( xtmp5(1,:,:) - xtmp5(nx,:,:) )  )
       call transpose_x_to_y(xtmp1,tmp1,this%decomp)
@@ -2714,14 +2725,14 @@ contains
         rhokappafil = this%mix%material(1)%rhodiff*(this%mix%kappa)**2
         call this%filter(rhofil, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
-        dtYs1 = 0.25_rkind * delta**2 / (P_MAXVAL( rhofil   ) + eps) 
+        dtYs1 = 0.75_rkind * delta**2 / (P_MAXVAL( rhofil   ) + eps) 
         dtYs2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff  ) + eps)
         dtVF1 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff  ) + eps)
         dtVF2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff  ) + eps)
 
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	dtCurv = 0.25_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)  ! (P_MAXVAL(rhokappafil ) + eps) ! (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
+	dtCurv = 0.75_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)  ! (P_MAXVAL(rhokappafil ) + eps) ! (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then
           ! filter3D(this%
@@ -5755,7 +5766,8 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",rid, "_p.",tid
         fname = this%inputdir(:len_trim(this%inputdir))//"/"//trim(tempname)
         call decomp_2d_read_one(2,this%p,fname, this%decomp)
-
+        this%mix%material(1)%p = this%p 
+        this%mix%material(2)%p = this%p
         if (nrank == 0) then
             write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",rid, "_info.",tid
             fname = this%inputdir(:len_trim(this%inputdir))//"/"//trim(tempname)
@@ -5765,6 +5777,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
             close(fid)
         end if
 
+    
 
         call mpi_barrier(mpi_comm_world, ierr)
         call mpi_bcast(this%tsim,1,mpirkind,0,mpi_comm_world,ierr)
@@ -5786,7 +5799,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         use mpi
         use exits, only: message
         class(sgrid), intent(inout) :: this
-        character(len=clen) :: tempname, fname
+        character(len=512) :: tempname, fname
         integer :: ierr, rank
 
         call MPI_COMM_RANK(mpi_comm_world,rank,ierr)
@@ -5799,27 +5812,31 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
      !   endif
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_u.",this%step
         fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%u,fname, this%decomp)
+        call decomp_2d_write_one(2,this%u,trim(fname), this%decomp)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_v.",this%step
         fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%v,fname, this%decomp)
+        call decomp_2d_write_one(2,this%v,trim(fname), this%decomp)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_w.",this%step
         fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%w,fname, this%decomp)
+        call decomp_2d_write_one(2,this%w,trim(fname), this%decomp)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_VF.",this%step
         fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%mix%material(1)%VF,fname, this%decomp)
+        call decomp_2d_write_one(2,this%mix%material(1)%VF,trim(fname), this%decomp)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_Ys.",this%step
         fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%mix%material(1)%Ys,fname, this%decomp)
+        call decomp_2d_write_one(2,this%mix%material(1)%Ys,trim(fname), this%decomp)
 
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_rho.",this%step
         fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
-        call decomp_2d_write_one(2,this%rho,fname, this%decomp)
+        call decomp_2d_write_one(2,this%rho,trim(fname), this%decomp)
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_p.",this%step
+        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
+        call decomp_2d_write_one(2,this%p,trim(fname), this%decomp)
 
         if (nrank == 0) then
             write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
@@ -5828,6 +5845,16 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
             write(10,"(100g15.5)") this%tsim
             close(10)
         end if
+
+        if (nrank == 0) then
+           print *, "DEBUG: runID=", this%runID, " step=", this%step
+           print *, "DEBUG filename=", trim(tempname)
+       endif
+
+       if (nrank == 0) then
+            print *, "Passing fname to decomp_2d_write_one: ", trim(fname)
+       endif
+       
 
         call mpi_barrier(mpi_comm_world, ierr)
         call message(1, "Just Dumped a RESTART file")

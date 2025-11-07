@@ -2375,6 +2375,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
           call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
           call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
           call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
+
            adiff_int(:,:,:,1) = adiff_fil1
            adiff_int(:,:,:,2) = adiff_fil2
            adiff_int(:,:,:,3) = adiff_fil3
@@ -2386,6 +2390,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
           call filter3D(this%decomp, this%gfil, rhodiff_fil1, 1, x_bc,y_bc,z_bc)
           call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
           call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, rhodiff_fil1, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
+
            rhodiff_int(:,:,:,1) = rhodiff_fil1 !*rho_int(:,:,:,1)
            rhodiff_int(:,:,:,2) = rhodiff_fil2 !*rho_int(:,:,:,2)
            rhodiff_int(:,:,:,3) = rhodiff_fil3 !*rho_int(:,:,:,3)
@@ -2777,7 +2785,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom, Db,H,OOB_mask,Hl,Hh,HYs,HVF,xi_mask
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: gradVF_x,gradVF_y, gradVF_z,tmp1,tmp2,tmp3,tmp1_i,tmp2_i,tmp3_i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i,VF_RHS_i, Kij_coeff_i
-        real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-32, intSharp_exp = -1.0D0,gradDiff,md1,md2,cut_off=1d-4,cut_offY=1d-4 !, intSharp_tnh = 0.1
+        real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-32, intSharp_exp = -1.0D0,gradDiff,md1,md2,cut_off=1d-4,cut_offY=1d-4,xiLow,xiHigh !, intSharp_tnh = 0.1
 !1.0D-2
         integer :: i,j,ii,jj,kk,iflag = one,im,jm,km,k,q,d
         logical :: useTiwari = .FALSE., useRhoYsbound = .FALSE., useTotalRho = .FALSE.
@@ -3024,22 +3032,32 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 
            if(this%intSharp_msk) then
-                 
-!                  this%intdiff =  antiDiffFVint(:,:,:,1,i)
+
+                  if(i == 1) then
+                     xiLow = abs(this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (1 - this%intSharp_cut - 4d-5 + e) ) )
+                     xiHigh = abs(this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (1 - this%intSharp_cut - 1d-2 + e) ) )                 
+                  else
+                     xiLow = abs(this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (1 - this%intSharp_cut - 1d-2 + e) ) )
+                     xiHigh = abs(this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (1 - this%intSharp_cut - 4d-5 + e) ) )      
+
+                  endif
+
+                  !                  this%intdiff =  antiDiffFVint(:,:,:,1,i)
                   do d = 1,3
+
 !
-                    where((this%xi(:,:,:,i)-0.325) .GE. 1.5*dx  )
+                    where((this%xi(:,:,:,i)-xiHigh) .GE. 1.5*dx  )
                        Hh = 0_rkind
-                    elsewhere(((this%xi(:,:,:,i)-0.325) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)-0.325) .GT. -1.5*dx ) )
+                    elsewhere(((this%xi(:,:,:,i)-xiHigh) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)-xiHigh) .GT. -1.5*dx ) )
                        Hh = 1 - 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +  1_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5*dx)) )
                     elsewhere
                        Hh = 1_rkind
 
                     endwhere
 !!
-                    where((this%xi(:,:,:,i)+0.325) .GE. 1.5*dx  )
+                    where((this%xi(:,:,:,i)+xiLow) .GE. 1.5*dx  )
                        Hl = 1_rkind
-                    elsewhere(((this%xi(:,:,:,i)+0.325) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)+0.325) .GT. -1.5*dx ) )
+                    elsewhere(((this%xi(:,:,:,i)+xiLow) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)+xiLow) .GT. -1.5*dx ) )
                        Hl = 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +  1_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5*dx)) )
                     elsewhere
                        Hl = 0_rkind
@@ -3064,19 +3082,23 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
    !                    H = 0
    !                  endwhere
 
-                    
                     call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc) 
-
+                    call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc)
                     
-!                   where( abs(H) .GT. 1d-5 )
-!                       HYs = 0_rkind
-!                   elsewhere
-!                       HYs = 1_rkind
-!                   endwhere
+                  where( abs(H) .GT. 1d-6 )
+                      HYs = 0_rkind
+                  elsewhere
+                      HYs = 1_rkind
+                  endwhere
 
-                    HYs = exp(-( abs(H) / 5d-7)**2_rkind)
+!                   where( abs(H) .GT. 1d-12)
+!                           HYs = H/P_MAXVAL(H)
+!                   elsewhere
+!                           HYs = 0
+!                   endwhere
+!                    HYs = exp(-( abs(H) / 5d-7)**2_rkind)
                      this%intdiff =  HYs                
-                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(Hl*Hh*HYs)
+                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(Hl*Hh*(HYs))
 !!
                   enddo
 !

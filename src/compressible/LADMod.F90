@@ -175,11 +175,11 @@ contains
         endif
         mustar = mustar + ytmp1
 
-        mustar = this%Cmu*rho*abs(mustar)*max(deltakapVF,deltakapYs)
+        mustar = this%Cmu*rho*abs(mustar)*(max(deltakapVF,deltakapYs) + 1d-3)
         
         ! Filter mustar
         call this%filter(mustar, x_bc, y_bc, z_bc)
-        
+        call this%filter(mustar, x_bc, y_bc, z_bc) 
         mu = mu + mustar
 
         ! -------- Artificial Bulk Viscosity --------
@@ -789,6 +789,9 @@ contains
         call transpose_y_to_x(Ys,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
+!       call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+!       call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
+
         xtmp2 = xtmp1*this%dx**5
         call transpose_x_to_y(xtmp2,ytmp4,this%decomp)
         diffstar = ytmp4!*  ( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
@@ -798,6 +801,9 @@ contains
         call transpose_y_to_z(Ys,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
+!       call this%der%d2dz2(ztmp1,ztmp2,z_bc(1),z_bc(2))
+!       call this%der%d2dz2(ztmp2,ztmp1,z_bc(1),z_bc(2))
+
         ztmp2 = ztmp1*this%dz**5
         call transpose_z_to_y(ztmp2,ytmp4,this%decomp)
         diffstar = diffstar + ytmp4!* ( this%dz * ytmp3 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
@@ -805,6 +811,8 @@ contains
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(Ys,ytmp4,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
+!        call this%der%d2dy2(ytmp5,ytmp4,y_bc(1),y_bc(2))
+!        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
 
         if(this%yMetric) then
           ytmp4 = (detady**4)*ytmp5*dy_stretch**5
@@ -819,6 +827,9 @@ contains
         if(this%yMetric) then
            Yslow = max(0*Ys, (1d-5-Ys) /(1d-5 + 1d-14) )
            Yshigh = max(0*Ys, (Ys-1+1d-5) /(1d-5 + 1d-14) )
+!           Yslow = max(0*Ys, (-Ys) )
+!           Yshigh = max(0*Ys, Ys-1 )
+
            outb = this%CY*(dy_stretch*this%dx*this%dz)**(1/3) *(sos)*max(Yslow,Yshigh) !(half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) !(umag+ sos)
            delta = min(dy_stretch,this%dx,this%dz)   !(dy_stretch*this%dx*this%dz)**(1/3)
         else
@@ -857,7 +868,7 @@ contains
           ytmp5 = ytmp4*this%dy**5
           Curvstar =    Curvstar + ytmp5
         endif
-        Curvstar = sos*abs(Curvstar)*abs( 1 - 4*abs(VF*(1-VF)) ) 
+        Curvstar = sos*abs(log(abs(rho+1d-16)) ) * abs(Curvstar) !*abs( 1 - 4*abs(VF*(1-VF)) ) 
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         !                           MASS                                    !
@@ -904,6 +915,9 @@ contains
         call transpose_y_to_x(VF,xtmp3,this%decomp)
         call this%der%d2dx2(xtmp3,xtmp4,x_bc(1),x_bc(2))
         call this%der%d2dx2(xtmp4,xtmp3,x_bc(1),x_bc(2))
+!       call this%der%d2dx2(xtmp3,xtmp4,x_bc(1),x_bc(2))
+!       call this%der%d2dx2(xtmp4,xtmp3,x_bc(1),x_bc(2))
+
         xtmp4 = xtmp3*this%dx**5
         call transpose_x_to_y(xtmp4,ytmp6,this%decomp)
         adiffstar = ytmp6 ! 1( this%dx * ytmp1 / (ytmp1 + ytmp2 + ytmp3+real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
@@ -912,6 +926,9 @@ contains
         call transpose_y_to_z(VF,ztmp3,this%decomp)
         call this%der%d2dz2(ztmp3,ztmp4,z_bc(1),z_bc(2))
         call this%der%d2dz2(ztmp4,ztmp3,z_bc(1),z_bc(2))
+!       call this%der%d2dz2(ztmp3,ztmp4,z_bc(1),z_bc(2))
+!       call this%der%d2dz2(ztmp4,ztmp3,z_bc(1),z_bc(2))
+
         ztmp4 = ztmp3*this%dz**5
         call transpose_z_to_y(ztmp4,ytmp6,this%decomp)
         adiffstar = adiffstar + ytmp6 ! ( this%dz * ytmp3 / (ytmp1 + ytmp2+ytmp3 + real(1.0D-32,rkind)) ) ! Add eps in case denominator is zero
@@ -919,6 +936,8 @@ contains
         ! Step 4: Get 4th derivative in Y
         call this%der%d2dy2(VF,ytmp6,y_bc(1),y_bc(2))
         call this%der%d2dy2(ytmp6,ytmp7,y_bc(1),y_bc(2))
+ !      call this%der%d2dy2(ytmp7,ytmp6,y_bc(1),y_bc(2))
+ !      call this%der%d2dy2(ytmp6,ytmp7,y_bc(1),y_bc(2))
 
         if(this%yMetric) then
 
@@ -940,8 +959,8 @@ contains
         if(this%yMetric) then
            VFlow = max(0*VF, (1d-5-VF)/(1d-5 + 1d-14) )
            VFhigh = max(0*VF, (VF-1+1d-5) /(1d-5 + 1d-14) )
-!             VFlow = max(0*VF, (1-VF) )
-!             VFhigh = max(0*VF, VF-1 )
+!            VFlow = max(0*VF, (-VF) )
+!            VFhigh = max(0*VF, VF-1 )
            ytmp5 = this%Cvf2*(dy_stretch*this%dx*this%dz)**(1/3)*(sos)*max(VFlow,VFhigh) !( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *(sos + umag)
 
         else
@@ -994,8 +1013,8 @@ contains
         HighVF = Curvstar
         OOBVF  = ytmp5
         barrier = max(rhodiff,adiffstar) + max(outb,ytmp5)
-!        adiff = max(rhodiff, adiffstar,this%Cdiff*Curvstar)  + max(outb, ytmp5)
-        rhodiff = max(rhodiff, adiffstar,this%Cdiff*Curvstar)  + max(outb, ytmp5)      
+!       adiff = max(rhodiff, adiffstar,this%Cdiff*Curvstar)  + max(outb, ytmp5)
+        rhodiff =( max(rhodiff, adiffstar,this%Cdiff*Curvstar) + max(outb, ytmp5) )
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 !        call this%filter(rhodiff, x_bc, y_bc, z_bc)
 

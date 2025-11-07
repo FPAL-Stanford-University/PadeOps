@@ -4847,6 +4847,9 @@ contains
            call filter3D(this%decomp, this%gfil, rhodiff_fil1, 1, x_bc, y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
+           call filter3D(this%decomp, this%gfil, rhodiff_fil1, 1, x_bc, y_bc,z_bc)
+           call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
+           call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
 
 !           call filter3D(this%decomp, this%gfil, m_fil(:,:,:,1), 1, x_bc,y_bc,z_bc)
 !           call filter3D(this%decomp, this%gfil, m_fil(:,:,:,2), 1,x_bc,y_bc,z_bc)
@@ -5477,7 +5480,10 @@ contains
            call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
-     
+           call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
+           call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
+           call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
+ 
 
 !          do i = 1,3
 !          outVF(:,:,:,i) =( ( 0.5_rkind*(abs(this%VF_mid(:,:,:,i))-(1.0_rkind) + abs((this%VF_mid(:,:,:,i))-(1.0_rkind))))*abs(sos_int(:,:,:,i))*(dx*dy*dy)**(1.0/3.0) )
