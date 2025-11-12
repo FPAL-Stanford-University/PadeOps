@@ -59,7 +59,7 @@ module cgrid_hooks
     end interface
 
     interface hook_bc
-        subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, useMultiBlock, mbtopology)
+        subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn, useMultiBlock, mbtopology)
             import :: rkind
             import :: decomp_info
             import :: mixture
@@ -72,6 +72,10 @@ module cgrid_hooks
             integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
             logical,                         intent(in)    :: newTimeStep
             integer,                         intent(in)    :: time_step
+            logical,                         intent(in)    :: xplbc
+            real(rkind), dimension(:,:,:,:), intent(in)    :: xplbcInflow
+            integer,                         intent(in)    :: numtbc
+            real(rkind), dimension(:),       intent(in)    :: tbcIn
             logical, optional,               intent(in)    :: useMultiBlock
             type(multiblocktopol), optional, intent(in)    :: mbtopology
 
@@ -79,7 +83,7 @@ module cgrid_hooks
     end interface
 
     interface hook_timestep
-        subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
+        subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,outputdir,sgsmodel)
             import :: rkind
             import :: decomp_info
             import :: mixture
@@ -90,6 +94,7 @@ module cgrid_hooks
             real(rkind),                     intent(in) :: tsim
             real(rkind), dimension(:,:,:,:), intent(in) :: mesh
             real(rkind), dimension(:,:,:,:), intent(in) :: fields
+            character(len=*),                intent(in) :: outputdir
             type(sgs_cgrid), optional,       intent(in) :: sgsmodel
 
         end subroutine

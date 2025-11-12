@@ -27,6 +27,8 @@ module Channel_data
     logical     :: periodicx = .true., periodicy = .false., periodicz = .true. 
     logical     :: add_pert = .true.
     character(len=clen) :: fname_prefix
+    logical :: dump_inflow_plane = .false.
+    logical :: first_inflowpl_written = .false.
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 
@@ -273,7 +275,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
 
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, dump_inflow_plane
     namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
 
     ioUnit = 15
@@ -441,7 +443,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(decomp%ysz(2)) :: y_new
     real(rkind), dimension(decomp%ysz(3)) :: z_new
     
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, dump_inflow_plane
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -510,6 +512,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
         ! Initialize gaussian filter mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, "gaussian", "gaussian", "gaussian" )
+
     end associate
 end subroutine
 
@@ -554,7 +557,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 end subroutine
 
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn)
     use kind_parameters,  only: rkind
     use decomp_2d,        only: decomp_info, nrank, transpose_y_to_x, transpose_x_to_y
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
@@ -573,6 +576,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
     logical,                         intent(in)    :: newTimeStep
     integer,                         intent(in)    :: time_step 
+    logical,                         intent(in)    :: xplbc
+    real(rkind), dimension(:,:,:,:), intent(in)    :: xplbcInflow
+    integer,                         intent(in)    :: numtbc
+    real(rkind), dimension(:),       intent(in)    :: tbcIn
 
     integer :: i, j, k, nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
     real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw
@@ -612,11 +619,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
 end subroutine
 
 
-subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
+subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,outputdir,sgsmodel)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,two
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
     use decomp_2d,        only: decomp_info, nrank
+    use decomp_2d_io
     use MixtureEOSMod,    only: mixture
     use sgsmod_cgrid,     only: sgs_cgrid
     use exits,            only: message
@@ -631,13 +639,15 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
     real(rkind),                     intent(in) :: tsim
     real(rkind), dimension(:,:,:,:), intent(in) :: mesh
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
+    character(len=*),                intent(in) :: outputdir
     type(sgs_cgrid), optional,       intent(in) :: sgsmodel
 
     real(rkind) :: dx, Ythick, oob
     integer :: ny  , j, my_step = 0
-    integer :: iounit = 229
-    character(len=clen) :: outputfile
+    integer :: iounit = 229, decompdir, iindx, dirid, nyfull, nzfull
+    character(len=clen) :: outputfile, tempname
     real(rkind), dimension(decomp%ysz(2)) :: cmodel_loc, cmodel_loc_Qjsgs, cmodel_loc_tke
+    real(rkind), dimension(decomp%ysz(2),decomp%zsz(3)) :: pltmp
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -657,6 +667,75 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
         call message(2,"Maximum diffusivity",P_MAXVAL(diff))
 
+        if(dump_inflow_plane) then
+            !write(tempname,"(A18,I6.6,A4)") "inflowfield_uVel_t", step, ".out"
+            !outputfile = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+            !call decomp_2d_write_one(2, u, outputfile, decomp)
+
+            decompdir = 2    ! all variables are always in y-decomp
+            dirid = 1        ! direction of the desired slice - here, X
+            iindx = 5        ! index of X plane in global coordinates
+
+            !! write u along the selected X plane
+            write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",iindx,"_uVel_t", step, ".out"
+            outputfile = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, u, dirid, iindx, outputfile, decomp)
+
+            ! write v along the selected X plane
+            write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",iindx,"_vVel_t", step, ".out"
+            outputfile = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, v, dirid, iindx, outputfile, decomp)
+
+            ! write w along the selected X plane
+            write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",iindx,"_wVel_t", step, ".out"
+            outputfile = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, w, dirid, iindx, outputfile, decomp)
+
+            ! write p along the selected X plane
+            write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",iindx,"_pres_t", step, ".out"
+            outputfile = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, p, dirid, iindx, outputfile, decomp)
+
+            ! write rho along the selected X plane
+            write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",iindx,"_rhof_t", step, ".out"
+            outputfile = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+            call decomp_2d_write_plane(decompdir, rho, dirid, iindx, outputfile, decomp)
+
+            ! to be done only once
+            if(.not. first_inflowpl_written) then
+                ! write y and z along the selected X plane
+                write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",iindx,"_ygrd_t", step, ".out"
+                outputfile = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(decompdir, y, dirid, iindx, outputfile, decomp)
+
+                write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",iindx,"_zgrd_t", step, ".out"
+                outputfile = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+                call decomp_2d_write_plane(decompdir, z, dirid, iindx, outputfile, decomp)
+
+                !! ensure y,z are written only once
+                first_inflowpl_written = .true.
+            endif
+
+            if(nrank==0) then
+                ! write time stamp
+                write(tempname,"(A)") "inflowpl_timestamps.out"
+                outputfile = outputDir(:len_trim(outputDir))//"/"//trim(tempname)
+                open(iounit,file=outputfile,form="formatted",status="unknown",action="write",position="append")
+                write(iounit,'(e22.15)') tsim
+                close(iounit)
+            endif
+
+            !!!if(nrank==0) then
+            !!nyfull = decomp%ysz(2); nzfull = decomp%zsz(3)
+            !!open(iounit,file=outputfile,form="unformatted",access="stream",status='old',action="read")
+            !!read(iounit) pltmp
+            !!close(iounit)
+            !!print *, 'Done reading file'
+            !!print *, '---nrank=',nrank,pltmp(3, 4)
+            !!!endif
+            !!!call MPI_FILE_READ(fid, pltmp, nyfull*nzfull, MPI_DOUBLE, )
+
+        endif
 
         !!!if(useSGS)
          ! !!if(sgsmodel%DynamicProcedureType==1) then

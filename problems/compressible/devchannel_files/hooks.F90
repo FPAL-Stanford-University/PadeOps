@@ -526,7 +526,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 end subroutine
 
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, useMultiBlock, mbtopology)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn, useMultiBlock, mbtopology)
     use kind_parameters,  only: rkind
     use decomp_2d,        only: decomp_info, nrank, transpose_y_to_x, transpose_x_to_y
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
@@ -545,13 +545,17 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
     logical,                         intent(in)    :: newTimeStep
     integer,                         intent(in)    :: time_step 
+    logical,                         intent(in)    :: xplbc
+    real(rkind), dimension(:,:,:,:), intent(in)    :: xplbcInflow
+    integer,                         intent(in)    :: numtbc
+    real(rkind), dimension(:),       intent(in)    :: tbcIn
     logical, optional,               intent(in)    :: useMultiBlock
     type(multiblocktopol), optional, intent(in)    :: mbtopology
 
     integer :: i, j, k, nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
-    integer :: ist, ien, jlo, jst, jen, kst, ken, imb, i_intbd
-    real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw
-    real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p
+    integer :: ist, ien, jlo, jst, jen, kst, ken, imb, i_intbd, ttind
+    real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw, alpf
+    real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p, onemalpf
     character(len=clen) :: outputfile
     real(rkind), dimension(:,:),       allocatable :: u_noise, v_noise, w_noise
     real(rkind), dimension(:,:,:),     allocatable :: u_xtmp, v_xtmp, w_xtmp
@@ -570,16 +574,48 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
 
         ! set Dirichlet BC at the inlet
         if(decomp%yst(1) == 1) then 
-          do k = 1, decomp%ysz(3) 
-            do j = 1, decomp%ysz(2)
-              u(1,j,k)   =  one
-              rho(1,j,k) =  rho_ref
-              !T(1,j,k)   =  Tw
-              v(1,j,k)   = zero
-              w(1,j,k)   = zero
-              p(1,j,k)   =  rho(1,j,k) * Rgas_Tw
-            enddo
-          enddo
+          if(xplbc) then
+             ! use x-plane boundary condition from a previous simulation
+             ! temporal interpolation index and factor
+             ttind = minloc(abs(tbcIn-tsim),1)
+             if(tbcIn(ttind) > tsim) ttind = ttind-1
+             if(ttind==0) then
+                 ! tsim is before smallest time where inflow is read in
+                 ttind = ttind+1
+                 alpf = zero
+             elseif(ttind==numtbc) then
+                 ! tsim is after largest time where inflow is read in
+                 ttind = ttind-1
+                 alpf = one
+             else
+                 ! tsim is within the range of times where inflow is read in
+                 alpf = (tsim - tbcIn(ttind)) / (tbcIn(ttind+1) - tbcIn(ttind))
+             endif
+             onemalpf = one - alpf
+
+             do k = 1, decomp%ysz(3) 
+               do j = 1, decomp%ysz(2)
+                 u(1,j,k)   =  onemalpf * xplbcInflow(j,k,1,ttind) + alpf * xplbcInflow(j,k,1,ttind+1)
+                 v(1,j,k)   =  onemalpf * xplbcInflow(j,k,2,ttind) + alpf * xplbcInflow(j,k,2,ttind+1)
+                 w(1,j,k)   =  onemalpf * xplbcInflow(j,k,3,ttind) + alpf * xplbcInflow(j,k,3,ttind+1)
+                 p(1,j,k)   =  onemalpf * xplbcInflow(j,k,4,ttind) + alpf * xplbcInflow(j,k,4,ttind+1)
+                 rho(1,j,k) =  onemalpf * xplbcInflow(j,k,5,ttind) + alpf * xplbcInflow(j,k,5,ttind+1)
+               enddo
+             enddo
+
+             print '(a,e19.12,1x,a,i7.7,a,i4.4)', 'Applied x-inflow bc at tsim=', tsim, 'using ttind=', ttind, 'on rank=', nrank
+          else
+             do k = 1, decomp%ysz(3) 
+               do j = 1, decomp%ysz(2)
+                 u(1,j,k)   =  one
+                 rho(1,j,k) =  rho_ref
+                 !T(1,j,k)   =  Tw
+                 v(1,j,k)   = zero
+                 w(1,j,k)   = zero
+                 p(1,j,k)   =  rho(1,j,k) * Rgas_Tw
+               enddo
+             enddo
+          endif
         endif
 
         ! set Dirichlet BC at top and bottom
@@ -591,7 +627,8 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
            p(:,1,k) = rho(:,1,k)*Rgas_Tw;    p(:,decomp%ysz(2),k) = rho(:,decomp%ysz(2),k)*Rgas_Tw
         end do
         
-        if(useMultiBlock) then
+        if(present(useMultiBlock)) then
+         if(useMultiBlock) then
             ! set Dirichlet BC at bottom block of multiblock
             do imb = 1, mbtopology%y_num_blocks
               !jlo = mbtopology%yst(2, imb)
@@ -665,6 +702,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                 enddo
               enddo
             enddo
+         endif
         endif
  
         !p   = rho*Rgas*T
