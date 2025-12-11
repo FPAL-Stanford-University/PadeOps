@@ -26,7 +26,7 @@ module DevChannel_data
     real(rkind) :: x1, y1, z1
     real(rkind) :: xn, yn, zn
     logical     :: periodicx = .true., periodicy = .false., periodicz = .true. 
-    logical     :: add_pert = .true.
+    logical     :: add_pert = .true., xplbc_recycle = .true.
     character(len=clen) :: fname_prefix
     ! Gaussian filter for sponge
     type(filters) :: mygfil
@@ -248,7 +248,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
 
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, xplbc_recycle
     namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
 
     ioUnit = 15
@@ -409,14 +409,14 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
-    real(rkind) :: S, Sk, T0, var, mu_ref
+    real(rkind) :: S, Sk, T0, var, mu_ref, umax
     integer :: i,j, k, iounit, nx, ny, nz, nxl, nyl, nzl
     character(len=clen) :: outputfile
     real(rkind), dimension(decomp%ysz(1)) :: x_new
     real(rkind), dimension(decomp%ysz(2)) :: y_new
     real(rkind), dimension(decomp%ysz(3)) :: z_new
     
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, xplbc_recycle
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -450,23 +450,26 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         call mix%update(Ys)     
      
         ! Add base flow profiles
-        u = 1.0d0 !(1-y**2)
+        !u = 1.0d0 !(1-y**2)
 
-        !do k=1,nzl
-        !    do j=1,nyl
-        !        do i=1,nxl
-        !           u(i,j,k) = 1.5_rkind*(1-y(i,j,k)**2)
-        !           !T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
-        !           !var = (1-abs(y(i,j,k)))*Re
-        !           !if (var .lt. 10) then
-        !           !    u(i,j,k) = var
-        !           !else
-        !           !    u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
-        !           !endif
+        do k=1,nzl
+            do j=1,nyl
+                do i=1,nxl
+                   u(i,j,k) = 1.5_rkind*(1-y(i,j,k)**2)
+                   !T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
+                   var = (1-abs(y(i,j,k)))*Re
+                   if (var .lt. 10) then
+                       u(i,j,k) = var
+                   else
+                       u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
+                   endif
 
-        !        end do
-        !    end do
-        !end do
+                end do
+            end do
+        end do
+
+        umax = p_maxval(u)
+        u = u/umax * 1.1d0
 
         v   = zero
         w   = zero
@@ -526,7 +529,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 end subroutine
 
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn, useMultiBlock, mbtopology)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn, xplbcin_type, useMultiBlock, mbtopology)
     use kind_parameters,  only: rkind
     use decomp_2d,        only: decomp_info, nrank, transpose_y_to_x, transpose_x_to_y
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
@@ -549,13 +552,15 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     real(rkind), dimension(:,:,:,:), intent(in)    :: xplbcInflow
     integer,                         intent(in)    :: numtbc
     real(rkind), dimension(:),       intent(in)    :: tbcIn
+    integer,                         intent(in)    :: xplbcin_type
     logical, optional,               intent(in)    :: useMultiBlock
     type(multiblocktopol), optional, intent(in)    :: mbtopology
 
-    integer :: i, j, k, nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
+    integer :: i, j, k, nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx, ncycles
     integer :: ist, ien, jlo, jst, jen, kst, ken, imb, i_intbd, ttind
-    real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw, alpf
+    real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw, alpf, tbcmax
     real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p, onemalpf
+    real(rkind) :: umax, vmax, wmax, rmax, pmax
     character(len=clen) :: outputfile
     real(rkind), dimension(:,:),       allocatable :: u_noise, v_noise, w_noise
     real(rkind), dimension(:,:,:),     allocatable :: u_xtmp, v_xtmp, w_xtmp
@@ -577,8 +582,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
           if(xplbc) then
              ! use x-plane boundary condition from a previous simulation
              ! temporal interpolation index and factor
-             ttind = minloc(abs(tbcIn-tsim),1)
-             if(tbcIn(ttind) > tsim) ttind = ttind-1
+             if(xplbc_recycle) then
+                 tbcmax = maxval(tbcIn)
+                 ncycles = floor(tsim/tbcmax)
+                 ttind = minloc(abs(tbcIn-(tsim-ncycles*tbcmax)), 1)
+             else
+                 ttind = minloc(abs(tbcIn-tsim),1)
+                 if(tbcIn(ttind) > tsim) ttind = ttind-1
+             endif
              if(ttind==0) then
                  ! tsim is before smallest time where inflow is read in
                  ttind = ttind+1
@@ -593,17 +604,31 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
              endif
              onemalpf = one - alpf
 
-             do k = 1, decomp%ysz(3) 
-               do j = 1, decomp%ysz(2)
-                 u(1,j,k)   =  onemalpf * xplbcInflow(j,k,1,ttind) + alpf * xplbcInflow(j,k,1,ttind+1)
-                 v(1,j,k)   =  onemalpf * xplbcInflow(j,k,2,ttind) + alpf * xplbcInflow(j,k,2,ttind+1)
-                 w(1,j,k)   =  onemalpf * xplbcInflow(j,k,3,ttind) + alpf * xplbcInflow(j,k,3,ttind+1)
-                 p(1,j,k)   =  onemalpf * xplbcInflow(j,k,4,ttind) + alpf * xplbcInflow(j,k,4,ttind+1)
-                 rho(1,j,k) =  onemalpf * xplbcInflow(j,k,5,ttind) + alpf * xplbcInflow(j,k,5,ttind+1)
+             if(xplbcin_type==1) then
+               do k = 1, decomp%ysz(3) 
+                 do j = 1, decomp%ysz(2)
+                   u(1,j,k)   =  onemalpf * xplbcInflow(j,k,ttind,1) + alpf * xplbcInflow(j,k,ttind+1,1)
+                   v(1,j,k)   =  onemalpf * xplbcInflow(j,k,ttind,2) + alpf * xplbcInflow(j,k,ttind+1,2)
+                   w(1,j,k)   =  onemalpf * xplbcInflow(j,k,ttind,3) + alpf * xplbcInflow(j,k,ttind+1,3)
+                   p(1,j,k)   =  onemalpf * xplbcInflow(j,k,ttind,4) + alpf * xplbcInflow(j,k,ttind+1,4)
+                   rho(1,j,k) =  onemalpf * xplbcInflow(j,k,ttind,5) + alpf * xplbcInflow(j,k,ttind+1,5)
+                 enddo
                enddo
-             enddo
-
-             print '(a,e19.12,1x,a,i7.7,a,i4.4)', 'Applied x-inflow bc at tsim=', tsim, 'using ttind=', ttind, 'on rank=', nrank
+             elseif(xplbcin_type==2) then
+               do k = 1, decomp%ysz(3) 
+                 do j = 1, decomp%ysz(2)
+                   u(1,j,k)   =  u(1,j,k)   + onemalpf * xplbcInflow(j,k,ttind,1) + alpf * xplbcInflow(j,k,ttind+1,1)
+                   v(1,j,k)   =  v(1,j,k)   + onemalpf * xplbcInflow(j,k,ttind,2) + alpf * xplbcInflow(j,k,ttind+1,2)
+                   w(1,j,k)   =  w(1,j,k)   + onemalpf * xplbcInflow(j,k,ttind,3) + alpf * xplbcInflow(j,k,ttind+1,3)
+                   p(1,j,k)   =  p(1,j,k)   + onemalpf * xplbcInflow(j,k,ttind,4) + alpf * xplbcInflow(j,k,ttind+1,4)
+                   rho(1,j,k) =  rho(1,j,k) + onemalpf * xplbcInflow(j,k,ttind,5) + alpf * xplbcInflow(j,k,ttind+1,5)
+                 enddo
+               enddo
+             endif
+ 
+             umax = maxval(abs(u)); vmax = maxval(abs(v));  wmax = maxval(abs(w)); 
+             pmax = maxval(abs(p)); rmax = maxval(abs(rho)); 
+             if(nrank==0) print '(a,e19.12,1x,a,i6.6,1x,a,i4.4,1x,a,5(e19.12,1x))', 'x-inflow bc tsim= ', tsim, ' ttind=', ttind, 'rank=', nrank, "uvwpr=", umax, vmax, wmax, pmax, rmax
           else
              do k = 1, decomp%ysz(3) 
                do j = 1, decomp%ysz(2)

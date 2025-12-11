@@ -99,6 +99,7 @@ module CompressibleGrid
         real(rkind), dimension(:),       allocatable :: tbcIn
         integer                         :: numtbcIn
         logical                         :: xplbc
+        integer                         :: xplbcin_type
 
         integer :: nrestart = 0
         integer :: vizramp  = 5
@@ -665,8 +666,8 @@ contains
 
         real(rkind) :: tmpval
         integer     :: numtbcIn=0, tstbc=0, tenbc=0, tskipbc=0, batchtbcIn=0
-        integer     :: nybcIn=0, nzbcIn=0, xplid=0
-        real(rkind) :: tstbctranslate=zero, yIntranslate=zero, yInscale=one, zIntranslate=zero, zInscale=one
+        integer     :: nybcIn=0, nzbcIn=0, xplid=0, xplbcin_type = 0
+        real(rkind) :: tstbctranslate=zero, tbcscale=zero, yIntranslate=zero, yInscale=one, zIntranslate=zero, zInscale=one
         character(len=clen) :: xplbcInDir
 
         real(rkind), allocatable, dimension(:,:,:,:) :: xplbcReadIn
@@ -678,20 +679,21 @@ contains
         real(rkind), dimension(this%decomp%ysz(2), this%decomp%zsz(3)) :: pltmp
         
         namelist /XPLBCIN/ numtbcIn, xplbcInDir, tstbc, tenbc, tskipbc, &
-                     xplid, batchtbcIn, nybcIn, nzbcIn, tstbctranslate, &
-                     yIntranslate, yInscale, zIntranslate, zInscale
+           xplid, batchtbcIn, nybcIn, nzbcIn, tstbctranslate, tbcscale, &
+          yIntranslate, yInscale, zIntranslate, zInscale, xplbcin_type
 
         iounit = 11
         open(unit=iounit, file=trim(inputfile), form='FORMATTED')
         read(unit=iounit, NML=XPLBCIN)
         close(iounit)
 
+        this%xplbcin_type = xplbcin_type
         this%numtbcIn = numtbcIn
         if(batchtbcIn .ne. this%numtbcIn) then
             call GracefulExit("numtbcIn must be identical to batchtbcIn for now",11)
         endif
-        allocate(xplbcReadIn(nybcIn, nzbcIn, 5, batchtbcIn))    ! 5 fields are u, v, w, p, rho
-        allocate(this%xplbcInflow(this%decomp%ysz(2), this%decomp%ysz(3), 5, batchtbcIn))
+        allocate(xplbcReadIn(nybcIn, nzbcIn, batchtbcIn, 5))    ! 5 fields are u, v, w, p, rho
+        allocate(this%xplbcInflow(this%decomp%ysz(2), this%decomp%ysz(3), batchtbcIn, 5))
         allocate(this%tbcIn(this%numtbcIn))
         allocate(ygridIn(nybcIn, nzbcIn), zgridIn(nybcIn, nzbcIn))
         allocate(ygridOut(this%decomp%ysz(2), this%decomp%ysz(3)))
@@ -699,83 +701,170 @@ contains
         allocate(interpFactors(this%decomp%ysz(2), this%decomp%ysz(3),4))
         allocate(interpIndices(this%decomp%ysz(2), this%decomp%ysz(3),4))
 
-        ! read in all the time stamps at which input files are available
-        iounit = 10
-        open(iounit)
-        write(tempname,"(A)") "inflowpl_timestamps.out"
-        inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
-        open(iounit,file=inputfile2,form="formatted",status="old",action="read")
-        do ii = 1, this%numtbcIn
-            read(iounit,*) this%tbcIn(ii)
-        enddo
-        this%tbcIn = this%tbcIn - tstbctranslate
-        close(iounit)
+        if(this%xplbcin_type==1) then
+           !! from a pre-run PadeOps simulation
 
-        ! read y-grid in the inflow plane
-        write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_ygrd_t", tstbc, ".out"
-        inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
-        open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
-        read(iounit) ygridIn
-        close(iounit)
-        call message("Read y-grid at the initial time step")
+           ! read in all the time stamps at which input files are available
+           iounit = 10
+           open(iounit)
+           write(tempname,"(A)") "inflowpl_timestamps.out"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="formatted",status="old",action="read")
+           do ii = 1, this%numtbcIn
+               read(iounit,*) this%tbcIn(ii)
+           enddo
+           this%tbcIn = this%tbcIn - tstbctranslate
+           this%tbcIn = this%tbcIn * tbcscale
+           close(iounit)
 
-        ! read z-grid in the inflow plane
-        write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_zgrd_t", tstbc, ".out"
-        inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
-        open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
-        read(iounit) zgridIn
-        close(iounit)
-        call message("Read z-grid at the initial time step")
+           ! read y-grid in the inflow plane
+           write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_ygrd_t", tstbc, ".out"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+           read(iounit) ygridIn
+           close(iounit)
+           call message("Read y-grid at the initial time step")
 
-        ! read in xplbcIn from the input files
-        do ii = 1, batchtbcIn
-          tcurr = tstbc + (ii-1) * tskipbc
+           ! read z-grid in the inflow plane
+           write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_zgrd_t", tstbc, ".out"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+           read(iounit) zgridIn
+           close(iounit)
+           call message("Read z-grid at the initial time step")
 
-          ! read u inflow plane field
-          write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_uVel_t", tcurr, ".out"
-          inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
-          open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
-          read(iounit) pltmp
-          close(iounit)
-          xplbcReadIn(:,:,1,ii) = pltmp
-          call message("Read u field for tcurr = ", tcurr)
+           ! read in xplbcIn from the input files
+           do ii = 1, batchtbcIn
+             tcurr = tstbc + (ii-1) * tskipbc
 
-          ! read v inflow plane field
-          write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_vVel_t", tcurr, ".out"
-          inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
-          open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
-          read(iounit) pltmp
-          close(iounit)
-          xplbcReadIn(:,:,2,ii) = pltmp
-          call message("Read v field for tcurr = ", tcurr)
+             ! read u inflow plane field
+             write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_uVel_t", tcurr, ".out"
+             inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+             open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+             read(iounit) pltmp
+             close(iounit)
+             xplbcReadIn(:,:,ii,1) = pltmp
+             call message("Read u field for tcurr = ", tcurr)
 
-          ! read w inflow plane field
-          write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_wVel_t", tcurr, ".out"
-          inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
-          open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
-          read(iounit) pltmp
-          close(iounit)
-          xplbcReadIn(:,:,3,ii) = pltmp
-          call message("Read w field for tcurr = ", tcurr)
+             ! read v inflow plane field
+             write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_vVel_t", tcurr, ".out"
+             inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+             open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+             read(iounit) pltmp
+             close(iounit)
+             xplbcReadIn(:,:,ii,2) = pltmp
+             call message("Read v field for tcurr = ", tcurr)
 
-          ! read p inflow plane field
-          write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_pres_t", tcurr, ".out"
-          inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
-          open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
-          read(iounit) pltmp
-          close(iounit)
-          xplbcReadIn(:,:,4,ii) = pltmp
-          call message("Read p field for tcurr = ", tcurr)
+             ! read w inflow plane field
+             write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_wVel_t", tcurr, ".out"
+             inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+             open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+             read(iounit) pltmp
+             close(iounit)
+             xplbcReadIn(:,:,ii,3) = pltmp
+             call message("Read w field for tcurr = ", tcurr)
 
-          ! read rho inflow plane field
-          write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_rhof_t", tcurr, ".out"
-          inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
-          open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
-          read(iounit) pltmp
-          close(iounit)
-          xplbcReadIn(:,:,5,ii) = pltmp
-          call message("Read rho field for tcurr = ", tcurr)
-        enddo
+             ! read p inflow plane field
+             write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_pres_t", tcurr, ".out"
+             inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+             open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+             read(iounit) pltmp
+             close(iounit)
+             xplbcReadIn(:,:,ii,4) = pltmp
+             call message("Read p field for tcurr = ", tcurr)
+
+             ! read rho inflow plane field
+             write(tempname,"(A10,I4.4,A7,I6.6,A4)") "inflowpl_x",xplid,"_rhof_t", tcurr, ".out"
+             inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+             open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+             read(iounit) pltmp
+             close(iounit)
+             xplbcReadIn(:,:,ii,5) = pltmp
+             call message("Read rho field for tcurr = ", tcurr)
+           enddo
+
+        elseif(this%xplbcin_type==2) then
+           !! from a synthetic inflow generator
+
+           ! read in all the time stamps at which input files are available
+           iounit = 10
+           open(iounit)
+           write(tempname,"(A12,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_xline_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="formatted",status="old",action="read")
+           do ii = 1, this%numtbcIn
+               read(iounit,*) this%tbcIn(ii)
+           enddo
+           this%tbcIn = this%tbcIn - tstbctranslate
+           this%tbcIn = this%tbcIn * tbcscale
+           close(iounit)
+
+           ! read y-grid in the inflow plane
+           write(tempname,"(A12,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_xline_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="formatted",status='old',action="read")
+           do j = 1, nybcIn
+               read(iounit,*) ygridIn(j,1)
+               ygridIn(j,2:nzbcIn) = ygridIn(j,1)
+           enddo
+           close(iounit)
+           call message("Read y-grid at the initial time step")
+
+           ! read z-grid in the inflow plane
+           write(tempname,"(A12,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_xline_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="formatted",status='old',action="read")
+           do k = 1, nzbcIn
+               read(iounit,*) zgridIn(1,k)
+               zgridIn(2:nybcIn,k) = zgridIn(1,k)
+           enddo
+           close(iounit)
+           call message("Read z-grid at the initial time step")
+
+           ! read u inflow plane field
+           write(tempname,"(A8,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_u_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+           read(iounit) xplbcReadIn(:,:,:,1)
+           close(iounit)
+           call message("Read u field from synthetic turbulence generator")
+
+           ! read v inflow plane field
+           write(tempname,"(A8,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_v_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+           read(iounit) xplbcReadIn(:,:,:,2)
+           close(iounit)
+           call message("Read v field from synthetic turbulence generator")
+
+           ! read w inflow plane field
+           write(tempname,"(A8,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_w_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+           read(iounit) xplbcReadIn(:,:,:,3)
+           close(iounit)
+           call message("Read w field from synthetic turbulence generator")
+
+           ! read r inflow plane field
+           write(tempname,"(A8,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_r_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+           read(iounit) xplbcReadIn(:,:,:,5)
+           close(iounit)
+           call message("Read rho field from synthetic turbulence generator")
+
+           xplbcReadIn(:,:,:,4) = zero
+           !! read T inflow plane field
+           !write(tempname,"(A8,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_T_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           !inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
+           !open(iounit,file=inputfile2,form="unformatted",access="stream",status='old',action="read")
+           !read(iounit) xplbcReadIn(:,:,:,5)
+           !close(iounit)
+           !call message("Read T field from synthetic turbulence generator")
+
+        else
+           call GracefulExit("Wrong xplbcin_type", 11)
+        endif
 
         ! translate and scale yIn and zIn to match with current grid
         ygridIn = (ygridIn + yIntranslate) * yInscale
@@ -795,18 +884,18 @@ contains
 
 
         ! now perform the interpolation
-        do ii = 1, batchtbcIn
-         do ff = 1, 5
+        do ff = 1, 5
+         do ii = 1, batchtbcIn
           do k = 1, this%decomp%ysz(3)
            do j = 1, this%decomp%ysz(2)
                tmpval = zero
                jp = interpIndices(j,k,1); jp1 = interpIndices(j,k,2)
                kp = interpIndices(j,k,3); kp1 = interpIndices(j,k,4)
-               tmpval = interpFactors(j,k,1) * xplbcReadIn(jp,  kp,  ff, ii) + &
-                        interpFactors(j,k,2) * xplbcReadIn(jp1, kp,  ff, ii) + &
-                        interpFactors(j,k,3) * xplbcReadIn(jp,  kp1, ff, ii) + &
-                        interpFactors(j,k,4) * xplbcReadIn(jp1, kp1, ff, ii)
-               this%xplbcInflow(j,k,ff,ii) = tmpval
+               tmpval = interpFactors(j,k,1) * xplbcReadIn(jp,  kp, ii, ff) + &
+                        interpFactors(j,k,2) * xplbcReadIn(jp1, kp, ii, ff) + &
+                        interpFactors(j,k,3) * xplbcReadIn(jp,  kp1,ii, ff) + &
+                        interpFactors(j,k,4) * xplbcReadIn(jp1, kp1,ii, ff)
+               this%xplbcInflow(j,k,ii,ff) = tmpval
            enddo
           enddo
          enddo
@@ -815,7 +904,7 @@ contains
         !! check if interpolation happened correctly
         !! entire plane
         !ff = 1; ii = 4
-        !this%ybuf(1,:,:,1) = this%xplbcInflow(:,:,ff,ii)
+        !this%ybuf(1,:,:,1) = this%xplbcInflow(:,:,ii,ff)
         !write(tempname,"(A,I4.4,A)") "interpcheck_interpolated.out"
         !outputfile = trim(tempname)
         !call decomp_2d_write_plane(2, this%ybuf(:,:,:,1), 1, 1, outputfile, this%decomp)
@@ -824,7 +913,7 @@ contains
         !write(tempname,"(A,I4.4,A)") "interpcheck_readin_",nrank,".out"
         !outputfile = trim(tempname)
         !open(iounit,file=outputfile,form="unformatted",access="stream",status="unknown",action="write")
-        !write(iounit) xplbcReadIn(:,:,ff,ii)
+        !write(iounit) xplbcReadIn(:,:,ii,ff)
         !close(iounit)
 
         ! one line at a time
@@ -834,7 +923,7 @@ contains
         !!open(iounit,file=outputfile,status='unknown',action="write")
         !!k = 5; ii = 4
         !!do j = 1, nybcIn
-        !!    write(iounit,'(6(e22.15, 1x))') ygridIn(j,k), xplbcReadIn(j,k,1:5,ii)
+        !!    write(iounit,'(6(e22.15, 1x))') ygridIn(j,k), xplbcReadIn(j,k,ii,1:5)
         !!enddo
         !!close(iounit)
         !!
@@ -844,7 +933,7 @@ contains
         !!open(iounit,file=outputfile,status='unknown',action="write")
         !!k = 5; ii = 4
         !!do j = 1, this%decomp%ysz(2)
-        !!    write(iounit,'(6(e22.15, 1x))') this%mesh(1,j,k,2), this%xplbcInflow(j,k,1:5,ii)
+        !!    write(iounit,'(6(e22.15, 1x))') this%mesh(1,j,k,2), this%xplbcInflow(j,k,ii,1:5)
         !!enddo
         !!close(iounit)
         !!
@@ -854,7 +943,7 @@ contains
         !!open(iounit,file=outputfile,status='unknown',action="write")
         !!j = 5; ii = 4
         !!do k = 1, nzbcIn
-        !!    write(iounit,'(6(e22.15, 1x))') zgridIn(j,k), xplbcReadIn(j,k,1:5,ii)
+        !!    write(iounit,'(6(e22.15, 1x))') zgridIn(j,k), xplbcReadIn(j,k,ii,1:5)
         !!enddo
         !!close(iounit)
         !!
@@ -864,7 +953,7 @@ contains
         !!open(iounit,file=outputfile,status='unknown',action="write")
         !!j = 5; ii = 4
         !!do k = 1, this%decomp%ysz(3)
-        !!    write(iounit,'(6(e22.15, 1x))') this%mesh(1,j,k,3), this%xplbcInflow(j,k,1:5,ii)
+        !!    write(iounit,'(6(e22.15, 1x))') this%mesh(1,j,k,3), this%xplbcInflow(j,k,ii,1:5)
         !!enddo
         !!close(iounit)
 
@@ -1439,11 +1528,12 @@ contains
               call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
                             this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
-                            this%useMultiBlock, this%mbtopology)
+                            this%xplbcin_type, this%useMultiBlock, this%mbtopology)
             else
               call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
-                            this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn)
+                            this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, & 
+                            this%xplbcin_type)
             endif
             call this%post_bc()
             !!!============Vishwaja channel flow isothermal walls=========!!!
@@ -1452,11 +1542,12 @@ contains
                 call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
                               this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
                               this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
-                              this%useMultiBlock, this%mbtopology)
+                              this%xplbcin_type, this%useMultiBlock, this%mbtopology)
               else
                 call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
                               this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
-                              this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn)
+                              this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
+                              this%xplbcin_type)
               endif
             end if
             ! Compute TKE budgets
@@ -1583,6 +1674,8 @@ contains
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
         real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtdiff, rampfac
+        real(rkind) :: dtlimits(5)
+        integer     :: imin
 
         call this%mix%get_sos(this%rho,this%p,cs)  ! Speed of sound - hydrodynamic part
 
@@ -1593,28 +1686,46 @@ contains
         dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**4))))**(third) + eps)
         dtdiff = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%diff ) + eps)
 
-        !print*, nrank, P_MINVAL(this%dxs), P_MINVAL(this%dys), P_MINVAL(this%dzs)
+        dtlimits(1) = dtCFL;    dtlimits(2) = dtmu;    dtlimits(3) = dtbulk
+        dtlimits(4) = dtkap;    dtlimits(5) = dtdiff
+        !if(nrank==0) print '(5(e11.4,1x))', dtlimits
 
         ! Use fixed time step if CFL <= 0
         if ( this%CFL .LE. zero ) then
             this%dt = this%dtfixed
             stability = 'fixed'
         else
-            stability = 'convective'
-            this%dt = dtCFL
-            if ( this%dt > dtmu ) then
-                this%dt = dtmu
+            !stability = 'convective'
+            !this%dt = dtCFL
+            !if ( this%dt > dtmu ) then
+            !    this%dt = dtmu
+            !    stability = 'shear'
+            !else if ( this%dt > dtbulk ) then
+            !    this%dt = dtbulk
+            !    stability = 'bulk'
+            !else if ( this%dt > dtkap ) then
+            !    this%dt = dtkap
+            !    stability = 'conductive'
+            !else if ( this%dt > dtdiff ) then
+            !    this%dt = dtdiff
+            !    stability = 'diffusive'
+            !end if
+            this%dt = minval(dtlimits)
+            imin = minloc(dtlimits, 1)
+            select case(imin)
+            case (1)
+                stability = 'convective'
+            case (2)
                 stability = 'shear'
-            else if ( this%dt > dtbulk ) then
-                this%dt = dtbulk
+            case (3)
                 stability = 'bulk'
-            else if ( this%dt > dtkap ) then
-                this%dt = dtkap
+            case (4)
                 stability = 'conductive'
-            else if ( this%dt > dtdiff ) then
-                this%dt = dtdiff
+            case (5)
                 stability = 'diffusive'
-            end if
+            case default
+                stability = 'none found'
+            end select
 
             if (this%step .LE. 10) then
                 this%dt = this%dt / 10._rkind

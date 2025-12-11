@@ -1,4 +1,4 @@
-module CurvilCompressibleGrid
+module CurvilDirLADCompressibleGrid
     use kind_parameters,       only: rkind, clen
     use constants,             only: zero,eps,third,half,one,two,three,four
     use FiltersMod,            only: filters
@@ -54,7 +54,7 @@ module CurvilCompressibleGrid
     integer, parameter :: nbufsy = 6
     integer, parameter :: nbufsz = 2
 
-    type, extends(grid) :: cvlgrid
+    type, extends(grid) :: cvldirladgrid
        
         type(filters), allocatable :: gfil
         type(mixture), allocatable :: mix
@@ -157,14 +157,14 @@ contains
         use mpi
         use reductions, only: P_MAXVAL, P_MINVAL
         use exits, only: message, nancheck, GracefulExit
-        class(cvlgrid),target, intent(inout) :: this
+        class(cvldirladgrid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
 
         integer :: nx, ny, nz
         integer :: ns = 1
         character(len=clen) :: outputdir
         character(len=clen) :: inputdir
-        character(len=clen) :: vizprefix = "cvlgrid"
+        character(len=clen) :: vizprefix = "cvldirladgrid"
         logical :: reduce_precision = .true.
         real(rkind) :: tviz = zero, Pr, Cp !! -- Pr, Cp need to be fixed
         character(len=clen), dimension(:), allocatable :: varnames
@@ -228,6 +228,8 @@ contains
         read(unit=ioUnit, NML=INPUT)
         read(unit=ioUnit, NML=CINPUT)
         close(ioUnit)
+
+        print *, 'In cvlgrid_LAD'
 
         this%nx = nx
         this%ny = ny
@@ -573,7 +575,7 @@ contains
 
 
     subroutine destroy_grid(this)
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
 
         if (allocated(this%LAD_kappastar))      deallocate(this%LAD_kappastar)
         if (allocated(this%LAD_mustar))         deallocate(this%LAD_mustar)
@@ -653,7 +655,7 @@ contains
         use reductions,       only : P_MAXVAL,P_MINVAL
         use decomp_2d,        only: decomp_info, nrank
         use constants,        only: zero,eps,third,half,one,two,three,four,pi,eight
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
         character(len=* ) ,intent(in) :: inputfile
 
         real(rkind), dimension(:,:,:,:), allocatable, target :: dxidxij
@@ -751,7 +753,7 @@ contains
         use reductions,       only : P_MAXVAL,P_MINVAL
         use decomp_2d,        only: decomp_info, nrank
         use constants,        only: zero,eps,third,half,one,two,three,four,pi,eight
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
         character(len=* ) ,intent(in) :: inputfile
 
         real(rkind), allocatable, dimension(:,:) :: metric_params
@@ -900,7 +902,7 @@ contains
 
     subroutine init_metric(this, xstretch, xuniform, flag, params, dxudxs)
         use exits, only: GracefulExit
-        class(cvlgrid),             intent(in) :: this
+        class(cvldirladgrid),             intent(in) :: this
         integer,                    intent(in) :: flag
         real(rkind), dimension(5), intent(in)  :: params
         real(rkind), dimension(:,:,:), intent(in)  :: xstretch, xuniform
@@ -1027,7 +1029,7 @@ contains
     end subroutine 
 
     subroutine gradient_cvl(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
-        class(cvlgrid),target, intent(inout) :: this
+        class(cvldirladgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
@@ -1062,7 +1064,7 @@ contains
     end subroutine 
 
     subroutine gradient(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
-        class(cvlgrid),target, intent(inout) :: this
+        class(cvldirladgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
@@ -1108,7 +1110,7 @@ contains
 
     subroutine laplacian(this, f, lapf, x_bc, y_bc, z_bc)
         use timer
-        class(cvlgrid),target, intent(inout) :: this
+        class(cvldirladgrid),target, intent(inout) :: this
         real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
         real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
         integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
@@ -1151,7 +1153,7 @@ contains
         use exits,      only: GracefulExit, message
         use reductions, only: P_MAXVAL, P_MINVAL
         use RKCoeffs,   only: RK45_steps
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
 
         logical :: tcond, vizcond, stepcond
         character(len=clen) :: stability
@@ -1440,7 +1442,7 @@ contains
         use exits,      only: message,nancheck,GracefulExit
         use reductions, only: P_MAXVAL, P_MINVAL
         use decomp_2d,        only: decomp_info, nrank
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv), intent(inout) :: rhs  ! RHS for conserved variables
         logical,              intent(in)    :: vizcond
 
@@ -1709,7 +1711,7 @@ contains
     subroutine get_dt(this,stability)
         use reductions, only : P_MAXVAL,P_MINVAL
         use decomp_2d,        only: decomp_info, nrank
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         character(len=*), intent(out) :: stability
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: cs
         real(rkind) :: dtCFL, dtmu, dtbulk, dtkap, dtdiff
@@ -1770,7 +1772,7 @@ contains
     end subroutine
 
     pure subroutine get_primitive(this)
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(:,:,:), pointer :: onebyrho
         real(rkind), dimension(:,:,:), pointer :: rhou,rhov,rhow,TE
         integer :: i
@@ -1805,7 +1807,7 @@ contains
     end subroutine
 
     pure subroutine get_conserved(this)
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
         integer :: i
 
         do i = 1,this%mix%ns
@@ -1819,7 +1821,7 @@ contains
     end subroutine
 
     subroutine post_bc(this)
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
 
         call this%mix%update(this%Ys)
         call this%mix%get_e_from_p(this%rho,this%p,this%e)
@@ -1828,7 +1830,7 @@ contains
     end subroutine
 
     subroutine getRHS(this, rhs, newTimeStep)
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,9), target :: duidxj
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,3), target :: gradT
@@ -1937,7 +1939,7 @@ contains
     subroutine getRHS_xi(       this,  rhs,&
                            tauxx,tauxy,tauxz,tauyx,tauyy,tauyz,tauzx,tauzy,tauzz,&
                                qx,qy,qz,Jx,Jy,Jz )
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz,tauyx,tauyy,tauyz,tauzx,tauzy,tauzz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx,qy,qz
@@ -2020,7 +2022,7 @@ contains
     subroutine getRHS_eta(       this,  rhs,&
                            tauxx,tauxy,tauxz,tauyx,tauyy,tauyz,tauzx,tauzy,tauzz,&
                                qx,qy,qz,Jx,Jy,Jz )
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz,tauyx,tauyy,tauyz,tauzx,tauzy,tauzz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx,qy,qz
@@ -2087,7 +2089,7 @@ contains
     subroutine getRHS_zeta(       this,  rhs,&
                            tauxx,tauxy,tauxz,tauyx,tauyy,tauyz,tauzx,tauzy,tauzz,&
                                qx,qy,qz,Jx,Jy,Jz )
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv), intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz,tauyx,tauyy,tauyz,tauzx,tauzy,tauzz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx,qy,qz
@@ -2172,7 +2174,7 @@ contains
                            dYsdx,dYsdy,dYsdz )
         use reductions, only: P_MAXVAL
         use decomp_2d,        only: decomp_info, nrank
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, this%mix%ns), optional, intent(in) :: dYsdx,dYsdy,dYsdz
         
@@ -2568,7 +2570,7 @@ contains
     end subroutine
 
     subroutine filter(this,arr,myfil,numtimes, x_bc, y_bc, z_bc)
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: arr
         type(filters), target, optional, intent(in) :: myfil
         integer, optional, intent(in) :: numtimes
@@ -2647,7 +2649,7 @@ contains
     end subroutine
    
     subroutine getPhysicalProperties(this)
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
 
         ! TODO
         ! Hard code these values for now. Need to make a better interface for this later
@@ -2669,7 +2671,7 @@ contains
     end subroutine  
 
     subroutine get_tau(this,duidxj)
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), target, intent(inout) :: duidxj
 
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
@@ -2717,7 +2719,7 @@ contains
 
     subroutine get_q(this,duidxj,Jx,Jy,Jz)
         use exits, only: nancheck
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,9), intent(inout) :: duidxj
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,this%mix%ns), intent(in) :: Jx,Jy,Jz
 
@@ -2785,7 +2787,7 @@ contains
     end subroutine 
 
     subroutine get_J(this,gradYs)
-        class(cvlgrid), target, intent(inout) :: this
+        class(cvldirladgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,3*this%mix%ns), target, intent(in) :: gradYs
         real(rkind), dimension(:,:,:,:), pointer :: dYsdx, dYsdy, dYsdz
         real(rkind), dimension(:,:,:), pointer :: sumJx, sumJy, sumJz
@@ -2819,7 +2821,7 @@ contains
     subroutine write_viz(this)
         use exits, only: message
         use timer, only: tic, toc
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
         character(len=clen) :: charout
         real(rkind) :: cputime
         integer :: i
@@ -2879,7 +2881,7 @@ contains
     subroutine write_restart(this)
         use exits, only: message
         use timer, only: tic, toc
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
         character(len=clen) :: charout
         real(rkind) :: cputime
         integer :: i
@@ -2923,7 +2925,7 @@ contains
     subroutine read_restart(this, vizcount)
         use exits, only: message
         use timer, only: tic, toc
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
         integer,      intent(in)    :: vizcount
         character(len=clen) :: charout
         real(rkind) :: cputime
@@ -2976,7 +2978,7 @@ contains
     
     subroutine setup_postprocessing(this, nrestarts)
         use mpi
-        class(cvlgrid), intent(inout) :: this
+        class(cvldirladgrid), intent(inout) :: this
         integer,      intent(out)   :: nrestarts
 
         ! Destroy old restart object

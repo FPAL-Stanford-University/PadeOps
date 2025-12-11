@@ -22,11 +22,13 @@ module FlatPlateBL_data
     real(rkind) :: Tw     = 1.0_rkind
     real(rkind) :: Rgas   = 1.0_rkind
     real(rkind) :: Re     = 3000.0_rkind
+    real(rkind) :: utau   = 0.060_rkind
     real(rkind) :: Mc     = 1.5_rkind
     real(rkind) :: x1, y1, z1
     real(rkind) :: xn, yn, zn
     logical     :: periodicx = .true., periodicy = .false., periodicz = .true. 
     logical     :: add_pert = .true.
+    integer     :: inittype = 1
     character(len=clen) :: fname_prefix
     real(rkind), allocatable, dimension(:,:) :: uleftbc
     ! Gaussian filter for sponge
@@ -307,6 +309,54 @@ contains
         call message(2,"Minimum w", P_MINVAL(w))
     end subroutine
        
+    function get_vandriest_scaling(yplus, kap, B, ylinmax, ylogmin, ylogmax) result(uplus)
+        use kind_parameters,  only: rkind
+        use constants,        only: one
+        implicit none
+        real(rkind), intent(in) :: yplus, kap, B, ylogmax
+        real(rkind), intent(in) :: ylinmax, ylogmin
+    
+        real(rkind) :: uplus
+        real(rkind) :: u1, u2, y1, y2
+    
+        if(yplus < ylinmax) then
+            uplus = yplus
+        elseif(yplus < ylogmin) then
+            y1 = ylinmax; y2 = ylogmin;
+            u1 = y1; u2 = B + one/kap * log(y2);
+            uplus = u1 + (u2-u1)/(y2-y1) * (yplus-y1)
+        elseif(yplus < ylogmax) then
+            uplus = B + one/kap * log(yplus)
+        else
+            uplus = B + one/kap * log(ylogmax)
+        endif
+       
+    end function
+    
+    function get_vandriest_temperature(yplus, kap, Prt, CT, ylinmax, ylogmin, ylogmax) result(Tplus)
+        use kind_parameters,  only: rkind
+        use constants,        only: one
+        implicit none
+        real(rkind), intent(in) :: yplus, kap, Prt, CT
+        real(rkind), intent(in) :: ylinmax, ylogmin, ylogmax
+    
+        real(rkind) :: Tplus
+        real(rkind) :: T1, T2, y1, y2
+    
+        if(yplus < ylinmax) then
+            Tplus = yplus
+        elseif(yplus < ylogmin) then
+            y1 = ylinmax; y2 = ylogmin;
+            T1 = y1; T2 = CT + Prt/kap * log(y2);
+            Tplus = T1 + (T2-T1)/(y2-y1) * (yplus-y1)
+        elseif(yplus < ylogmax) then
+            Tplus = CT + Prt/kap * log(yplus)
+        else
+            Tplus = CT + Prt/kap * log(ylogmax)
+        endif
+       
+    end function
+
 end module
 
 
@@ -332,7 +382,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
 
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype
     namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
 
     ioUnit = 15
@@ -501,13 +551,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
     real(rkind) :: S, Sk, T0, var, mu_ref, umax
+    real(rkind) :: B, kap, ylinmax, ylogmin, ylogmax, Bq, Prt, CT
+    real(rkind) :: yplus, uplus, Tplus
     integer :: i,j, k, iounit, nx, ny, nz, nxl, nyl, nzl
     character(len=clen) :: outputfile
     real(rkind), dimension(decomp%ysz(1)) :: x_new
     real(rkind), dimension(decomp%ysz(2)) :: y_new
     real(rkind), dimension(decomp%ysz(3)) :: z_new
     
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -531,7 +583,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         if (mix%ns /= ns) call GracefulExit("Wrong number of species. Check your input file and make ns consistent with the problem file.",4562)
-        Rgas = one/(gam*(Mc**two))
+        if(inittype==1) then
+            Rgas = one/(gam*(Mc**two))
+        elseif(inittype==2) then
+            Rgas = one/gam
+        else
+            call GracefulExit("Incorrect inittype. Cannot proceed.",11)
+        endif
         mu_ref = one/Re
 
         !!!! Set each material's transport coefficient object
@@ -545,28 +603,44 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
      
         ! Add base flow profiles
 
+        B = 5.1_rkind;    kap = 0.41_rkind;   ylinmax = 10.0_rkind
+        ylogmin = 20.0_rkind; ylogmax = 1000.0_rkind;
+        Prt = 0.85_rkind;   CT = 3.9_rkind    !!  Huang-temploglawscaling-JFM (2023)
+        Bq = -0.04_rkind                      !! Scalo-JFM (2021); Note the - sign
+
         do k=1,nzl
-            do j=1,nyl
-                do i=1,nxl
-                   !u(i,j,k) = 1.5_rkind*(1-y(i,j,k)**2)
-                   !T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
-                   !var = y(i,j,k)*Re
-                   !if (var .lt. 10) then
-                   !    u(i,j,k) = var
-                   !else
-                   !    u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
-                   !endif
-                   u(i,j,k) = (y(i,j,k)/Ly)**(0.25)
-                end do
-            end do
+         do j=1,nyl
+          do i=1,nxl
+             yplus = y(i,j,k) * Re * utau
+             uplus = get_vandriest_scaling(yplus, kap, B, ylinmax, ylogmin, ylogmax)
+             u(i,j,k) = uplus * utau
+
+             Tplus = get_vandriest_temperature(yplus, kap, Prt, CT, ylinmax, ylogmin, ylogmax)
+             T(i,j,k) = Tw * (1-Bq*Tplus)
+
+             !u(i,j,k) = 1.5_rkind*(1-y(i,j,k)**2)
+             !T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
+             !var = y(i,j,k)*Re
+             !if (var .lt. 10) then
+             !    u(i,j,k) = var
+             !else
+             !    u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
+             !endif
+             !u(i,j,k) = (y(i,j,k)/Ly)**(0.25)
+          end do
+         end do
         end do
         umax = p_maxval(u)
-        u = u/umax
+        if(inittype==1) then
+           u = u/umax
+           T = Tw 
+        elseif(inittype==2) then
+           !!! do nothing !!!
+        endif
 
         v   = zero
         w   = zero
         rho = rho_ref  
-        T   = Tw 
         p   = rho*Rgas*T
 
         if (add_pert) then
@@ -588,7 +662,6 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         call mygfil%init(decomp, periodicx, periodicy, periodicz, "gaussian", "gaussian", "gaussian" )
     end associate
 end subroutine
-
 
 subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use kind_parameters,  only: rkind,clen

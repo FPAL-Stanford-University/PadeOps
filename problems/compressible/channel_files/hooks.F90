@@ -21,6 +21,7 @@ module Channel_data
     real(rkind) :: Tw     = 1.0_rkind
     real(rkind) :: Re     = 3000.0_rkind
     real(rkind) :: Mc     = 1.5_rkind
+    real(rkind) :: q0_flux= 2.0_rkind
     real(rkind) :: Rgas   = 1.0_rkind
     real(rkind) :: x1, y1, z1
     real(rkind) :: xn, yn, zn
@@ -28,6 +29,7 @@ module Channel_data
     logical     :: add_pert = .true.
     character(len=clen) :: fname_prefix
     logical :: dump_inflow_plane = .false.
+    integer :: inittype=1
     logical :: first_inflowpl_written = .false.
     ! Gaussian filter for sponge
     type(filters) :: mygfil
@@ -275,7 +277,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
 
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, dump_inflow_plane
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, dump_inflow_plane, inittype
     namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
 
     ioUnit = 15
@@ -443,7 +445,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(decomp%ysz(2)) :: y_new
     real(rkind), dimension(decomp%ysz(3)) :: z_new
     
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, dump_inflow_plane
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, dump_inflow_plane, inittype
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -464,7 +466,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         if (mix%ns /= ns) call GracefulExit("Wrong number of species. Check your input file and make ns consistent with the problem file.",4562)
-        Rgas = one/(gam*(Mc**two))
+        if(inittype==1) then
+            Rgas = one/(gam*(Mc**two))
+        elseif(inittype==2) then
+            Rgas = one/gam
+        endif
         mu_ref = one/Re
 
         !!!! Set each material's transport coefficient object
@@ -496,7 +502,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         end do
 
         umax = p_maxval(u)
-        u = u/umax * 1.1d0
+        if(inittype==1) then
+            u = u/umax * 1.1d0
+            q0_flux = 2.0d0
+        elseif(inittype==2) then
+            u = u/umax * 1.1d0 * Mc
+            q0_flux = 2.0d0 * Mc
+        endif
 
         v   = zero
         w   = zero
@@ -796,7 +808,7 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
     real(rkind), dimension(:,:,:),       intent(in)    :: dys
 
     integer :: mass_index, mom_index, TE_index, i, j, k, ioUnit, nxl, nyl, nzl, nx, ny, nz, mpi_ierr, ierr
-    real(rkind) :: f_src = 0._rkind, q0_flux = 2.0_rkind, mu_bar, mu_locsum, mu_globsum, alpha, beta, q_flux_old, q_flux_new,u_bulk
+    real(rkind) :: f_src = 0._rkind, mu_bar, mu_locsum, mu_globsum, alpha, beta, q_flux_old, q_flux_new,u_bulk
     !real(rkind), allocatable, dimension(:)     :: u_locsum, u_globsum, rhou_locsum, rhou_globsum, rho_locsum, rho_globsum,dys_1d
     !real(rkind), allocatable, dimension(:,:,:) :: du_bardy, u_bar
     real(rkind), dimension(decomp%ysz(2)) :: u_locsum, u_globsum, rhou_locsum, rhou_globsum, rho_locsum, rho_globsum,dys_1d

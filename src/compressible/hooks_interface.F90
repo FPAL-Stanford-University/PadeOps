@@ -59,7 +59,7 @@ module cgrid_hooks
     end interface
 
     interface hook_bc
-        subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn, useMultiBlock, mbtopology)
+        subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn, xplbcin_type, useMultiBlock, mbtopology)
             import :: rkind
             import :: decomp_info
             import :: mixture
@@ -76,6 +76,7 @@ module cgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(in)    :: xplbcInflow
             integer,                         intent(in)    :: numtbc
             real(rkind), dimension(:),       intent(in)    :: tbcIn
+            integer,                         intent(in)    :: xplbcin_type
             logical, optional,               intent(in)    :: useMultiBlock
             type(multiblocktopol), optional, intent(in)    :: mbtopology
 

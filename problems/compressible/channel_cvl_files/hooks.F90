@@ -120,8 +120,8 @@ contains
     use exits,            only: GracefulExit, message, nancheck
 
     type(decomp_info),               intent(in)    :: decomp
-    real(rkind), dimension(:,:,:),   intent(inout) :: y
-    real(rkind), dimension(:,:,:  ), intent(inout) :: eta
+    real(rkind), dimension(:,:,:),   intent(out)   :: y
+    real(rkind), dimension(:,:,:  ), intent(in)    :: eta
     integer,                         intent(in)    :: ymetric_flag
     real(rkind),                     intent(in)    :: param1, param2, param3, param4
     integer     :: i,j,k

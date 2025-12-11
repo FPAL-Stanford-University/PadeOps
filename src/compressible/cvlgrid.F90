@@ -224,6 +224,8 @@ contains
         read(unit=ioUnit, NML=CINPUT)
         close(ioUnit)
 
+        print *, 'In cvlgrid'
+
         this%nx = nx
         this%ny = ny
         this%nz = nz
@@ -643,6 +645,7 @@ contains
         use reductions,       only : P_MAXVAL,P_MINVAL
         use decomp_2d,        only: decomp_info, nrank
         use constants,        only: zero,eps,third,half,one,two,three,four,pi,eight
+        use exits,            only: message, GracefulExit
         class(cvlgrid), intent(inout) :: this
         character(len=* ) ,intent(in) :: inputfile
 
@@ -663,6 +666,9 @@ contains
         read(unit=123, NML=METRICS)
         close(123)
 
+        if( ((xmetric_flag+ymetric_flag+zmetric_flag) > 0) .and. (curvil_flag==0) ) then
+             call GracefulExit("Metric_flags are inconsistent. Check the input file.", 11)
+        endif
 
         if(curvil_flag==0) then !! uniform mesh
             this%metric_multipliers(:,:,:,1) = one
@@ -674,6 +680,7 @@ contains
             this%metric_multipliers(:,:,:,7) = zero
             this%metric_multipliers(:,:,:,8) = zero
             this%metric_multipliers(:,:,:,9) = one
+            call message(0, "!!!!! WARNING !!!!!! curvil_flag is 0 although cvlgrid is being used. Make sure you want this!!!!")
         elseif(curvil_flag==1)then  !! only stretching
             call this%init_metric(this%x, this%xi,  xmetric_flag, metric_params(1,:), this%dxidx)
             call this%init_metric(this%y, this%eta, ymetric_flag, metric_params(2,:), this%detady)
