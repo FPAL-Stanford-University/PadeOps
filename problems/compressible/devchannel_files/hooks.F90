@@ -248,7 +248,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
 
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, xplbc_recycle
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, xplbc_recycle
     namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
 
     ioUnit = 15
@@ -286,8 +286,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
         dy = Ly/real(ny-1,rkind)
         dz = Lz/real(nz-0,rkind)  !periodic    
 
-        x1 = 0._rkind;        y1 = -Ly/2._rkind;     z1 = 0._rkind
-        xn = Lx;              yn =  Ly/2._rkind;     zn = Lz
+        x1 = 0._rkind;                               z1 = 0._rkind
+        xn = Lx;              yn =  y1 + Ly;         zn = Lz
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
@@ -416,7 +416,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(decomp%ysz(2)) :: y_new
     real(rkind), dimension(decomp%ysz(3)) :: z_new
     
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, xplbc_recycle
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, xplbc_recycle
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -453,23 +453,30 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         !u = 1.0d0 !(1-y**2)
 
         do k=1,nzl
-            do j=1,nyl
-                do i=1,nxl
-                   u(i,j,k) = 1.5_rkind*(1-y(i,j,k)**2)
-                   !T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
-                   var = (1-abs(y(i,j,k)))*Re
-                   if (var .lt. 10) then
-                       u(i,j,k) = var
-                   else
-                       u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
-                   endif
+          do j=1,nyl
+            do i=1,nxl
+              !! laminar inflow
+              if(y(i,j,k) < zero) then
+                u(i,j,k) = zero
+              else
+                u(i,j,k) = 6.0_rkind * y(i,j,k) * (1-y(i,j,k))
+              endif
+              !!T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
 
-                end do
+              ! turbulent inflow
+              !var = (1-abs(y(i,j,k)))*Re
+              !if (var .lt. 10) then
+              !    u(i,j,k) = var
+              !else
+              !    u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
+              !endif
             end do
+          end do
         end do
 
-        umax = p_maxval(u)
-        u = u/umax * 1.1d0
+        ! turbulent inflow
+        !umax = p_maxval(u)
+        !u = u/umax * 1.1d0
 
         v   = zero
         w   = zero
