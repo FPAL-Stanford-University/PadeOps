@@ -407,7 +407,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
 end subroutine
 
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz,scaling_flag)
     use kind_parameters,             only: rkind, clen
     use constants,                   only: zero,half,one,two,four,five,pi,eight, three
     use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,&
@@ -434,6 +434,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
+    logical,                         intent(in)    :: scaling_flag
 
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
@@ -466,10 +467,18 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
         if (mix%ns /= ns) call GracefulExit("Wrong number of species. Check your input file and make ns consistent with the problem file.",4562)
+<<<<<<< Updated upstream
         if(inittype==1) then
             Rgas = one/(gam*(Mc**two))
         elseif(inittype==2) then
             Rgas = one/gam
+=======
+        
+        if(scaling_flag) then
+          Rgas = one/gam
+        else
+          Rgas = one/(gam*(Mc**two))
+>>>>>>> Stashed changes
         endif
         mu_ref = one/Re
 
@@ -489,7 +498,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
             do j=1,nyl
                 do i=1,nxl
                    u(i,j,k) = 1.5_rkind*(1-y(i,j,k)**2)
-                   !T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
+                   T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three)
                    var = (1-abs(y(i,j,k)))*Re
                    if (var .lt. 10) then
                        u(i,j,k) = var
@@ -502,18 +511,26 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         end do
 
         umax = p_maxval(u)
+<<<<<<< Updated upstream
         if(inittype==1) then
             u = u/umax * 1.1d0
             q0_flux = 2.0d0
         elseif(inittype==2) then
             u = u/umax * 1.1d0 * Mc
             q0_flux = 2.0d0 * Mc
+=======
+        
+        if(scaling_flag) then
+          u = u/umax * 1.1d0 * Mc
+        else
+          u = u/umax * 1.1d0
+>>>>>>> Stashed changes
         endif
 
         v   = zero
         w   = zero
         rho = rho_ref  
-        T   = Tw 
+        T   = T*Tw
         p   = rho*Rgas*T
 
         if (add_pert) then
@@ -569,7 +586,11 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 end subroutine
 
 
+<<<<<<< Updated upstream
 subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn)
+=======
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep,time_step)!,useMultiBlock,mbtopology)
+>>>>>>> Stashed changes
     use kind_parameters,  only: rkind
     use decomp_2d,        only: decomp_info, nrank, transpose_y_to_x, transpose_x_to_y
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
@@ -588,17 +609,22 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
     logical,                         intent(in)    :: newTimeStep
     integer,                         intent(in)    :: time_step 
+<<<<<<< Updated upstream
     logical,                         intent(in)    :: xplbc
     real(rkind), dimension(:,:,:,:), intent(in)    :: xplbcInflow
     integer,                         intent(in)    :: numtbc
     real(rkind), dimension(:),       intent(in)    :: tbcIn
+=======
+    !logical, optional,               intent(in)    :: useMultiBlock
+    !type(multiblocktopol), optional, intent(in)    :: mbtopology
+>>>>>>> Stashed changes
 
-    integer :: i, j, k, nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
-    real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw
-    real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p
-    character(len=clen) :: outputfile
-    real(rkind), dimension(:,:),       allocatable :: u_noise, v_noise, w_noise
-    real(rkind), dimension(:,:,:),     allocatable :: u_xtmp, v_xtmp, w_xtmp
+    integer :: k!,i,j, nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
+    real(rkind) :: Rgas_Tw!, dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw
+    !real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p
+    !character(len=clen) :: outputfile
+    !real(rkind), dimension(:,:),       allocatable :: u_noise, v_noise, w_noise
+    !real(rkind), dimension(:,:,:),     allocatable :: u_xtmp, v_xtmp, w_xtmp
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -784,7 +810,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,outputdir,sgsmodel)
 
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,scaling_flag,der,dt,step,dys)
     use CompressibleGrid,   only: rho_index,u_index,v_index,w_index,&
                                   p_index,T_index,e_index,Ys_index,mu_index
     use kind_parameters,    only: rkind
@@ -798,14 +824,16 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
-    type(derivatives),               intent(in)    :: der
-    type(mixture),                   intent(in)    :: mix
-    real(rkind),                     intent(in)    :: tsim,dt
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
+    type(mixture),                   intent(in)    :: mix
+    real(rkind),                     intent(in)    :: tsim
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-    integer,                         intent(in)    :: step
-    real(rkind), dimension(:,:,:),       intent(in)    :: dys
+    logical,                         intent(in)    :: scaling_flag
+    type(derivatives),optional,               intent(in)    :: der
+    real(rkind),optional,                     intent(in)    :: dt
+    integer,optional,                         intent(in)    :: step
+    real(rkind), dimension(:,:,:),optional,   intent(in)    :: dys
 
     integer :: mass_index, mom_index, TE_index, i, j, k, ioUnit, nxl, nyl, nzl, nx, ny, nz, mpi_ierr, ierr
     real(rkind) :: f_src = 0._rkind, mu_bar, mu_locsum, mu_globsum, alpha, beta, q_flux_old, q_flux_new,u_bulk
@@ -868,6 +896,10 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
         end do
         
         call der%ddy(u_bar,du_bardy,ybc1,ybcn) 
+
+        if(scaling_flag) then
+          q0_flux = 2.0_rkind * Mc
+        endif
         
         q_flux_old = sum( (rhou_globsum/(nx*nz)) * dys_1d)
         q_flux_new = q_flux_old - dt*( Ly*Lz*f_src + two*Lz*mu_bar*du_bardy(1,1,1))

@@ -71,12 +71,13 @@ module CompressibleGrid
         
         logical                  :: forcing_mat 
         logical                  :: forcing_cha 
+        logical                  :: scaling_flag 
         real(rkind)              :: tsim_0, dtheta_0
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
        
         real(rkind) :: Cmu, Cbeta, Ckap, Cdiff, CY
-
+        real(rkind) :: M2,rho2,p2
         real(rkind), dimension(:,:,:), pointer :: x 
         real(rkind), dimension(:,:,:), pointer :: y 
         real(rkind), dimension(:,:,:), pointer :: z 
@@ -156,7 +157,7 @@ contains
         use exits, only: message, nancheck, GracefulExit
         class(cgrid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
-
+        
         integer :: nx, ny, nz
         integer :: ns = 1
         character(len=clen) :: outputdir
@@ -186,6 +187,7 @@ contains
         real(rkind) :: dt = -one
         real(rkind) :: tstop = one
         real(rkind) :: CFL = -one
+        real(rkind) :: M2,rho2,p2
         logical :: SkewSymm = .FALSE.
         real(rkind) :: Cmu = 0.002_rkind
         real(rkind) :: Cbeta = 1.75_rkind
@@ -202,6 +204,7 @@ contains
         logical     :: compute_scale_decomposition = .false.
         logical     :: forcing_mat = .false. ! KVM 2021
         logical     :: forcing_cha = .false. ! Vishwaja 2024
+        logical     :: scaling_flag = .false.! to change the scaling factors
         logical     :: useSGS = .false., useMultiBlock = .false.
         logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
         logical     :: debugflag = .false., xplbc = .false.
@@ -213,12 +216,17 @@ contains
                                          filter_x, filter_y, filter_z, &
                                           xmetric,  ymetric,  zmetric, &
                                           useMultiBlock,   prow, pcol, &
-                                                  SkewSymm, debugflag
+                                       M2,rho2,p2,SkewSymm, debugflag
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
                              inviscid, nrestart, rewrite_viz, vizramp, &
                       compute_tke_budget, compute_scale_decomposition, &
                              x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
+<<<<<<< Updated upstream
                               forcing_mat, forcing_cha, useSGS, xplbc
+=======
+                        scaling_flag, forcing_mat, forcing_cha, useSGS
+
+>>>>>>> Stashed changes
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -238,7 +246,11 @@ contains
 
         this%step = 0
         this%nsteps = nsteps
-
+        
+        this%M2 = M2
+        this%rho2 = rho2
+        this%p2 = p2
+        
         this%Cmu = Cmu
         this%Cbeta = Cbeta
         this%Ckap = Ckap
@@ -249,6 +261,7 @@ contains
         this%compute_scale_decomposition = compute_scale_decomposition
         this%forcing_mat = forcing_mat 
         this%forcing_cha = forcing_cha
+        this%scaling_flag = scaling_flag
         this%debugflag   = debugflag
 
         ! Allocate decomp
@@ -492,6 +505,7 @@ contains
 
         ! Go to hooks if a different initialization is derired 
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+<<<<<<< Updated upstream
                         this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
 
         ! If x-plane inflow boundary condition is to be read in
@@ -500,6 +514,10 @@ contains
             call this%setup_xplbc(inputfile)
         endif
 
+=======
+                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz, this%scaling_flag)
+        
+>>>>>>> Stashed changes
         ! Check for correct initialization of the mixture object
         call this%mix%check_initialization()
 
@@ -1324,9 +1342,17 @@ contains
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
             if(this%useSGS) then
+<<<<<<< Updated upstream
               call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim, this%outputdir, this%sgsmodel)
             else
               call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim, this%outputdir)
+=======
+              !call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim, this%sgsmodel)
+              call hook_timestep(this%decomp, this%der, this%dx, this%dy, this%dz, this%mesh, this%fields, this%mix, this%step, this%tsim, this%sgsmodel)
+            else
+              !call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
+              call hook_timestep(this%decomp, this%der, this%dx, this%dy, this%dz, this%mesh, this%fields, this%mix, this%step, this%tsim)
+>>>>>>> Stashed changes
             endif
           
             ! Write out vizualization dump if vizcond is met 
@@ -1525,8 +1551,9 @@ contains
 
             call this%get_primitive()
             if(this%useMultiBlock) then
-              call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
+              call hook_bc(this%decomp,this%mesh, this%fields, this%mix, this%tsim, &
                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
+<<<<<<< Updated upstream
                             this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
                             this%xplbcin_type, this%useMultiBlock, this%mbtopology)
             else
@@ -1534,11 +1561,19 @@ contains
                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
                             this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, & 
                             this%xplbcin_type)
+=======
+                            this%dx,this%M2,this%rho2,this%p2, &
+                            this%useMultiBlock,this%mbtopology)
+            else
+              call hook_bc(this%decomp,this%mesh, this%fields, this%mix, this%tsim, &
+                            this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step,this%dx,this%M2,this%rho2,this%p2)
+>>>>>>> Stashed changes
             endif
             call this%post_bc()
             !!!============Vishwaja channel flow isothermal walls=========!!!
             if (this%forcing_cha) then
               if(this%useMultiBlock) then
+<<<<<<< Updated upstream
                 call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
                               this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
                               this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
@@ -1548,6 +1583,16 @@ contains
                               this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
                               this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
                               this%xplbcin_type)
+=======
+                call hook_bc(this%decomp,this%mesh, this%fields, this%mix, this%tsim, &
+                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
+                             this%dx,this%M2,this%rho2,this%p2, &
+                             this%useMultiBlock,this%mbtopology)
+                           !this%dx,this%M2,this%rho2,this%p2,this%useMultiBlock,this%mbtopology)
+              else
+                call hook_bc(this%decomp,this%mesh, this%fields, this%mix, this%tsim, &
+                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step,this%dx,this%M2,this%rho2,this%p2)
+>>>>>>> Stashed changes
               endif
             end if
             ! Compute TKE budgets
@@ -1907,9 +1952,9 @@ contains
             !    this%mix, this%tsim, rhs, &
             !    this%Wcnsrv,this%budget,this%tsim_0,this%dtheta_0)
         elseif (this%forcing_cha) then
-            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs, this%der, this%dt, this%step, this%dys)
+            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs, this%scaling_flag, this%der, this%dt, this%step, this%dys)
         else
-            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
+            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs, this%scaling_flag)
         endif
     end subroutine
 

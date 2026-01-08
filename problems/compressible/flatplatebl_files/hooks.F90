@@ -223,6 +223,7 @@ contains
              end do
           end do
        end do
+<<<<<<< Updated upstream
     elseif(ymetric_flag==3) then
        ! concentrate at one end
        !print*,'its entering in to the ymetricflag=3'
@@ -244,6 +245,13 @@ contains
        beta = param2; ystart = param3; yh = param4; yfocus = param1 + abs(ystart)
        top = one + ((yfocus/yh)*(exp(beta)-1))
        bot = one + ((yfocus/yh)*(exp(-beta)-1))
+=======
+    elseif(ymetric_flag==4) then
+       ! concentrate at arbitrary point
+       beta = param2; ystart = param3; yh = param4; yfocus = param1 + abs(ystart)
+       top = 1+ ((yfocus/yh)*(exp(beta)-1))
+       bot = 1+ ((yfocus/yh)*(exp(-beta)-1))
+>>>>>>> Stashed changes
        BB = (log(top/bot))/(2*beta)
        do k = 1,decomp%ysz(3)
           do j = 1,decomp%ysz(2)
@@ -255,6 +263,28 @@ contains
              end do
           end do
        end do
+<<<<<<< Updated upstream
+=======
+       
+       !call GracefulExit("flag = 3 (concentrate at arbitrary point) is incomplete right now",21)
+    elseif(ymetric_flag==3) then
+       ! concentrate at one end
+       !print*,'its entering in to the ymetricflag=3'
+       beta = param2; ystart = param3; yh = param4
+       BB   = (beta + 1) / (beta - 1)
+       do k = 1,decomp%ysz(3)
+          do j = 1,decomp%ysz(2)
+             do i = 1,decomp%ysz(1)
+                  yuniform_adj = (eta(i,j,k) - ystart)/yh
+                  BB2 = BB ** (1 - yuniform_adj)
+                  num = (beta+1)-((beta-1)*BB2)
+                  den = 1 + BB2
+                  y(i,j,k) = yh * (num/den) + ystart
+             end do
+          end do
+       end do
+
+>>>>>>> Stashed changes
     elseif(ymetric_flag==10) then
        ! finite-difference evaluation of metrics (reduces order of accuracy)
        call GracefulExit("flag = 4 (finite-difference evaluation of metrics) is incomplete right now",21)
@@ -548,7 +578,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
 end subroutine
 
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz,scaling_flag)
     use kind_parameters,             only: rkind, clen
     use constants,                   only: zero,half,one,two,four,five,pi,eight, three
     use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,&
@@ -575,14 +605,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
+    logical,                         intent(in)    :: scaling_flag
 
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
     real(rkind) :: S, Sk, T0, var, mu_ref, umax
+<<<<<<< Updated upstream
     real(rkind) :: B, kap, ylinmax, ylogmin, ylogmax, Bq, Prt, CT
     real(rkind) :: yplus, uplus, Tplus
     integer :: i,j, k, iounit, nx, ny, nz, nxl, nyl, nzl
+=======
+    integer :: i,j, k, ioUnit, nx, ny, nz, nxl, nyl, nzl
+>>>>>>> Stashed changes
     character(len=clen) :: outputfile
     real(rkind), dimension(decomp%ysz(1)) :: x_new
     real(rkind), dimension(decomp%ysz(2)) :: y_new
@@ -591,6 +626,19 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype
 
     ioUnit = 11
+!    print *, 'fine inputfile is',inputfile
+!    print *, 'DEBUG: inputfile = "', trim(inputfile), '"'
+!    open(unit=ioUnit, file=trim(inputfile), form='formatted', status='old',action='read', iostat=ios)
+!    if (ios /= 0) then
+!       print *, 'ERROR: failed to open input file: ', trim(inputfile), '  iostat= ', ios
+!       stop
+!    end if
+
+!    read(unit=ioUnit, nml=PROBINPUT, iostat=ios)
+!    if (ios /= 0) then
+!       print *, 'ERROR: failed to read namelist PROBINPUT from file: ',trim(inputfile), '  iostat = ', ios
+!       stop
+!    end if
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
@@ -713,7 +761,12 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     real(rkind), dimension(:,:,:,:), intent(in) :: fields
     character(len=clen) :: outputfile,str
     integer :: i,outputunit=229
-
+    !real(rkind), allocatable, dimension(:)     :: u_locsum, u_globsum, rho_locsum, rho_globsum
+    !real(rkind) :: f_src = 0._rkind, q0_flux = 2.0_rkind, mu_bar, mu_locsum, mu_globsum, alpha, beta, q_flux_old, q_flux_new,u_bulk
+    !real(rkind), allocatable, dimension(:,:,:) :: du_bardy, u_bar
+    !real(rkind) :: u_tau,src
+    !integer :: j, k 
+    !integer :: nxl, nyl, nzl, nx, ny, nz, mpi_ierr, ierr
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
@@ -723,7 +776,53 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
                  diff => fields(:,:,:,Ys_index+mix%ns:Ys_index+2*mix%ns-1),        &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
-        !write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Channel_t.dat"
+        ! Global domain sizes
+        !nx = decomp%xsz(1);     ny = decomp%ysz(2);    nz = decomp%zsz(3)
+        ! Local domain sizes
+        !nxl = decomp%ysz(1);    nyl = decomp%ysz(2);   nzl = decomp%ysz(3)
+       
+       ! allocate(u_locsum(nyl));      allocate(u_globsum(nyl)) ;  allocate(dys_1d(nyl))  
+       ! allocate(rhou_locsum(nyl));   allocate(rhou_globsum(nyl)) ;  
+        !allocate(rho_locsum(nyl));    allocate(rho_globsum(nyl)) ;  
+        !allocate(u_bar(nxl,nyl,nzl)); allocate(du_bardy(nxl,nyl,nzl))
+    
+        !u_locsum = 0; !rhou_locsum = 0; rho_locsum = 0
+        !do k=1,nzl
+        !  do j=1,nyl
+        !   do i=1,nxl
+        !        u_locsum(j)    = u_locsum(j)    + u(i,j,k)
+    !            rhou_locsum(j) = rhou_locsum(j) + u(i,j,k)*rho(i,j,k)
+        !        rho_locsum(j)  = rho_locsum(j)  + rho(i,j,k)
+        !   end do
+        !  end do
+        !end do
+        !call mpi_allreduce(u_locsum, u_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+    !    call mpi_allreduce(rhou_locsum, rhou_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        !call mpi_allreduce(rho_locsum, rho_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        !do k=1,nzl
+        !  do j=1,nyl
+        !   do i=1,nxl
+        !        u_bar(i,j,k) = u_globsum(j)/(nx*nz)
+        !   end do
+        !  end do
+        !end do
+        !call der%ddy(u_bar,du_bardy,ybc1,ybcn) 
+        !mu_locsum = 0
+        !do k=1,nzl
+        !   do i=1,nxl
+        !      mu_locsum = mu_locsum + mu(i,1,k)
+        !   end do
+        !end do
+        !call mpi_allreduce(mu_locsum, mu_globsum, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        !mu_bar  = mu_globsum/(nx*nz) 
+        !print*, nrank, mu(1,1,1), mu_locsum, mu_globsum, mu_bar       
+    !write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Channel_t.dat"
+
+        !src = -mu_bar*du_bardy(1,1,1)
+        !u_tau = sqrt(ABS(du_bardy(1,2,1))*mu_bar/rho_globsum(2))
+        !if (nrank==0)then
+        !   print*, '>> Mass flux=',0.5*q_flux_new, '>> Bulk Vel=',u_bulk , '>> f_src=',f_src , '>> u_tau=',u_tau
+        !endif
 
         !open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
         !do
@@ -732,7 +831,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 end subroutine
 
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, useMultiBlock, mbtopology)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step,dx,M2,rho2,p2,useMultiBlock,mbtopology)
     use kind_parameters,  only: rkind
     use decomp_2d,        only: decomp_info, nrank, transpose_y_to_x, transpose_x_to_y
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
@@ -751,17 +850,20 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
     logical,                         intent(in)    :: newTimeStep
     integer,                         intent(in)    :: time_step 
+    real(rkind),                     intent(in)    :: dx,M2,rho2,p2
     logical, optional,               intent(in)    :: useMultiBlock
     type(multiblocktopol), optional, intent(in)    :: mbtopology
 
-    integer :: i, j, k, nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
+    integer :: i, j, k 
+    integer :: nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
     integer :: ist, ien, jlo, jst, jen, kst, ken, imb, i_intbd
-    real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw
+    real(rkind) :: dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, s_l_i, s_r_i !s_l_i shock left index, s_r_i shock right index, s_d shock distance       
+    real(rkind) :: Rgas_Tw !s_l_i shock left index, s_r_i shock right index, s_d shock distance       
     real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p
     character(len=clen) :: outputfile
     real(rkind), dimension(:,:),       allocatable :: u_noise, v_noise, w_noise
     real(rkind), dimension(:,:,:),     allocatable :: u_xtmp, v_xtmp, w_xtmp
-
+    real(rkind) :: s_d = 4.0_rkind
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
                  p    => fields(:,:,:,   p_index), T   => fields(:,:,:,  T_index), &
@@ -788,15 +890,21 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
           enddo
         endif
 
+        s_l_i = int(s_d/dx) + 1;
+        s_r_i = s_l_i + 1;
+        
+         
         ! set Dirichlet BC at top and bottom
         do k = 1,decomp%ysz(3) 
-           u(:,1,k) = zero;                  !u(:,decomp%ysz(2),k) = zero
+           u(:,1,k) = zero;                  !u(:,decomp%ysz(2),k) = zero ! u(s_r_i,decomp%ysz(2),k) = M2 * sqrt(gam*Rgas*T(s_l_i,decomp%ysz(2),K))    
            v(:,1,k) = zero;                  !v(:,decomp%ysz(2),k) = zero
            w(:,1,k) = zero;                  !w(:,decomp%ysz(2),k) = zero
-           !T(:,1,k) = Tw;                   !T(:,decomp%ysz(2),k) = Tw
-           p(:,1,k) = rho(:,1,k)*Rgas_Tw;    !p(:,decomp%ysz(2),k) = rho(:,decomp%ysz(2),k)*Rgas_Tw
+           T(:,1,k) = Tw;                    !T(:,decomp%ysz(2),k) = Tw
+           !p(:,1,k) = rho(:,1,k)*Rgas_Tw;    !p(s_r_i,decomp%ysz(2),k) = p2 * p(s_l_i,decomp%ysz(2),k)
+           !rho(s_r_i,decomp%ysz(2),k) = rho2 * rho(s_l_i,decomp%ysz(2),k)
         end do
         
+
         if(present(useMultiBlock)) then
          if(useMultiBlock) then
             ! set Dirichlet BC at bottom block of multiblock
@@ -887,7 +995,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
 end subroutine
 
 
-subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
+subroutine hook_timestep(decomp,der,dx,dy,dz,mesh,fields,mix,step,tsim,sgsmodel)
     use kind_parameters,  only: rkind,clen
     use constants,        only: zero,half,two
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
@@ -896,23 +1004,32 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
     use sgsmod_cgrid,     only: sgs_cgrid
     use exits,            only: message
     use reductions,       only: P_MAXVAL,P_MINVAL
+    use DerivativesMod,   only: derivatives
 
     use FlatPlateBL_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
+    type(derivatives),               intent(in) :: der
+    real(rkind),                     intent(in) :: dx,dy,dz
+    real(rkind), dimension(:,:,:,:), intent(in) :: mesh
+    real(rkind), dimension(:,:,:,:), intent(in) :: fields
     type(mixture),                   intent(in) :: mix
     integer,                         intent(in) :: step
     real(rkind),                     intent(in) :: tsim
-    real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-    real(rkind), dimension(:,:,:,:), intent(in) :: fields
     type(sgs_cgrid), optional,       intent(in) :: sgsmodel
 
-    real(rkind) :: dx, Ythick, oob
-    integer :: ny  , j, my_step = 0
+    real(rkind) :: Ythick, oob
+    integer :: my_step = 0
     integer :: iounit = 229
     character(len=clen) :: outputfile
     real(rkind), dimension(decomp%ysz(2)) :: cmodel_loc, cmodel_loc_Qjsgs, cmodel_loc_tke
+    real(rkind), allocatable, dimension(:)     :: u_locsum, u_globsum, rho_locsum, rho_globsum
+    real(rkind) :: f_src = 0._rkind, q0_flux = 2.0_rkind, mu_bar, mu_locsum, mu_globsum, alpha, beta, q_flux_old, q_flux_new,u_bulk
+    real(rkind), allocatable, dimension(:,:,:) :: du_bardy, u_bar
+    real(rkind) :: u_tau,src,neu
+    integer :: i, j, k 
+    integer :: nxl, nyl, nzl, nx, ny, nz, mpi_ierr, ierr
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -931,7 +1048,55 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
         call message(2,"Maximum bulk viscosity",P_MAXVAL(bulk))
         call message(2,"Maximum conductivity",P_MAXVAL(kap))
         call message(2,"Maximum diffusivity",P_MAXVAL(diff))
+        
+        ! Global domain sizes
+        nx = decomp%xsz(1);     ny = decomp%ysz(2);    nz = decomp%zsz(3)
+        ! Local domain sizes
+        nxl = decomp%ysz(1);    nyl = decomp%ysz(2);   nzl = decomp%ysz(3)
+       
+        allocate(u_locsum(nyl));      allocate(u_globsum(nyl)) ;!  allocate(dys_1d(nyl))  
+       ! allocate(rhou_locsum(nyl));   allocate(rhou_globsum(nyl)) ;  
+        allocate(rho_locsum(nyl));    allocate(rho_globsum(nyl)) ;  
+        allocate(u_bar(nxl,nyl,nzl)); allocate(du_bardy(nxl,nyl,nzl))
+    
+        u_locsum = 0; rho_locsum = 0
+        do k=1,nzl
+          do j=1,nyl
+           do i=1,nxl
+                u_locsum(j)    = u_locsum(j)    + u(i,j,k)
+    !            rhou_locsum(j) = rhou_locsum(j) + u(i,j,k)*rho(i,j,k)
+                rho_locsum(j)  = rho_locsum(j)  + rho(i,j,k)
+           end do
+          end do
+        end do
+        call mpi_allreduce(u_locsum, u_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+    !    call mpi_allreduce(rhou_locsum, rhou_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        call mpi_allreduce(rho_locsum, rho_globsum, nyl, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        do k=1,nzl
+          do j=1,nyl
+           do i=1,nxl
+                u_bar(i,j,k) = u_globsum(j)/(nx*nz)
+           end do
+          end do
+        end do
+        call der%ddy(u_bar,du_bardy,ybc1,ybcn) 
+        mu_locsum = 0
+        do k=1,nzl
+           do i=1,nxl
+              mu_locsum = mu_locsum + mu(i,1,k)
+           end do
+        end do
+        call mpi_allreduce(mu_locsum, mu_globsum, 1, mpirkind, MPI_SUM, MPI_COMM_WORLD, ierr)
+        mu_bar  = mu_globsum/(nx*nz) 
+        !print*, nrank, mu(1,1,1), mu_locsum, mu_globsum, mu_bar       
+    !write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Channel_t.dat"
 
+        src = -mu_bar*du_bardy(1,1,1)
+        u_tau = sqrt(ABS(du_bardy(1,2,1))*mu_bar/rho_globsum(2))
+        neu = mu_bar/rho_globsum(2)
+        if (nrank==0)then
+           print*, '>> Mass flux=',0.5*q_flux_new, '>> Bulk Vel=',u_bulk , '>> f_src=',f_src , '>> u_tau=',u_tau ,'>>neu=',neu
+        end if
 
         !!!if(useSGS)
          ! !!if(sgsmodel%DynamicProcedureType==1) then
@@ -968,7 +1133,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
 
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,scaling_flag,der,dt,step,dys)
     use CompressibleGrid,   only: rho_index,u_index,v_index,w_index,&
                                   p_index,T_index,e_index,Ys_index,mu_index
     use kind_parameters,    only: rkind
@@ -988,6 +1153,7 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
+    logical,                         intent(in)    :: scaling_flag
     integer,                         intent(in)    :: step
     real(rkind), dimension(:,:,:),       intent(in)    :: dys
 
