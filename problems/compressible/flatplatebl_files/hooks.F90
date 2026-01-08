@@ -188,7 +188,7 @@ contains
     integer,                         intent(in)    :: ymetric_flag
     real(rkind),                     intent(in)    :: param1, param2, param3, param4
     integer     :: i,j,k
-    real(rkind) :: yfocus, ytau, ystart, yh, alpha, beta
+    real(rkind) :: yfocus, ytau, ystart, yh, alpha, beta, top,bot
     real(rkind) :: yfocus_adj, num, den, BB, yuniform_adj, BB2
 
     ! concentrate towards the center -- Pletcher, Tannehill, Anderson
@@ -224,8 +224,37 @@ contains
           end do
        end do
     elseif(ymetric_flag==3) then
+       ! concentrate at one end
+       !print*,'its entering in to the ymetricflag=3'
+       beta = param2; ystart = param3; yh = param4
+       BB   = (beta + 1) / (beta - 1)
+       do k = 1,decomp%ysz(3)
+          do j = 1,decomp%ysz(2)
+             do i = 1,decomp%ysz(1)
+                  yuniform_adj = (eta(i,j,k) - ystart)/yh
+                  BB2 = BB ** (1 - yuniform_adj)
+                  num = (beta+1)-((beta-1)*BB2)
+                  den = one + BB2
+                  y(i,j,k) = yh * (num/den) + ystart
+             end do
+          end do
+       end do
+    elseif(ymetric_flag==4) then
        ! concentrate at arbitrary point
-       call GracefulExit("flag = 3 (concentrate at arbitrary point) is incomplete right now",21)
+       beta = param2; ystart = param3; yh = param4; yfocus = param1 + abs(ystart)
+       top = one + ((yfocus/yh)*(exp(beta)-1))
+       bot = one + ((yfocus/yh)*(exp(-beta)-1))
+       BB = (log(top/bot))/(2*beta)
+       do k = 1,decomp%ysz(3)
+          do j = 1,decomp%ysz(2)
+             do i = 1,decomp%ysz(1)
+                  yuniform_adj = (eta(i,j,k) - ystart)/yh
+                  num = sinh(beta*(yuniform_adj-BB))
+                  den = sinh(beta*BB)
+                  y(i,j,k) = yfocus * (1+(num/den))
+             end do
+          end do
+       end do
     elseif(ymetric_flag==10) then
        ! finite-difference evaluation of metrics (reduces order of accuracy)
        call GracefulExit("flag = 4 (finite-difference evaluation of metrics) is incomplete right now",21)

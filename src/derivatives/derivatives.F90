@@ -1107,14 +1107,14 @@ contains
     end subroutine 
 
 
-    subroutine init_metric(this, nxp, nyp, nzp, xstretch, xuniform, flag, params, dxudxs, dxudxs_sq, d2xudxs2)
+    subroutine init_metric(this, nxp, nyp, nzp, xstretch, xuniform, flag, params, dxudxs, dxudxs_sq, d2xudxs2) 
         class(derivatives),         intent(in) :: this
         integer,                    intent(in) :: nxp, nyp, nzp, flag
         real(rkind), dimension(5), intent(in)  :: params
         real(rkind), dimension(:,:,:), intent(in)  :: xstretch, xuniform
         real(rkind), dimension(:,:,:), intent(out) :: dxudxs, dxudxs_sq, d2xudxs2
         real(rkind) :: xfocus, xfocus_adj, xtau, hh, xstart, num, num1, den, BB, BB2, xstretch_loc
-        real(rkind) :: xbyxfocm1, xuniform_adj, alpha, beta
+        real(rkind) :: xbyxfocm1, xuniform_adj, alpha, beta, top, bot
         integer     :: i, j, k
 
         if(flag==1) then
@@ -1194,32 +1194,67 @@ contains
               enddo
            enddo
         elseif(flag==3) then
-           ! concentrate at one side at xstart
-           ! (Section 5.6, Transformation 1, pg. 334) 
+           ! concentrate towards the start at xstart
+           ! (Section 5.6, Transformation 2, pg. 335) 
            alpha  = params(1);  beta   = params(2);  xstart = params(3); hh = params(4)
            !print '(5(e19.12,1x))', params(:)
            !print '(5(e19.12,1x))', alpha, beta, xstart, hh
            BB = (beta + 1) / (beta - 1)
-           num1 = (2*beta)/log(BB)
+           num1 = 2*beta / log(BB)
            do k = 1, nzp
               do j = 1, nyp
                  do i = 1, nxp
-                    ! adjust for starting point
-                    xuniform_adj = xuniform(i,j,k) - xstart
+                    !)) adjust for starting point
+                    xuniform_adj = (xuniform(i,j,k) - xstart) / hh
                     ! stretched location
-                    num = (beta+1) - (beta-1)*(BB**(1-xuniform_adj/hh))
-                    den = (BB**(1-xuniform_adj/hh)) + 1
-                    xstretch_loc = hh*(num/den) + xstart
+                    BB2 = BB ** (1 - xuniform_adj)
+                    num = (beta+1) - ((beta - 1) * BB2)
+                    xstretch_loc = hh * (num / (BB2+1)) + xstart !same strectching but done in locally
 
-                    ! metric for first derivative
-                    BB2 = 1 - ((xstretch_loc-xstart)/hh)
-                    dxudxs(i,j,k) = num1/(beta**2 - BB2**2)
+                    ! metric for first derivative y=(xstretch_loc-xstart)
+                    BB2 = (1 - ((xstretch_loc-xstart)/hh)) !(1-y/h) 
+                    dxudxs(i,j,k) = num1 / ((beta**2 - BB2**2)*hh)
 
                     ! square of the metric for first derivative
                     dxudxs_sq(i,j,k) = dxudxs(i,j,k)**2
 
                     ! metric for second derivative
-                    d2xudxs2(i,j,k) = - ((num1/hh) * 2* BB2)/ ((beta**2 - BB2**2)**2)
+                    d2xudxs2(i,j,k) = - ((num1/hh**2) * 2 * BB2) / ((beta**2 - BB2**2)**2)
+                    !print '(i5,1x,4(e19.12,1x))', j, xstretch(1,j,1), xuniform(1,j,1), dxudxs(1,j,1), d2xudxs2(1,j,1)
+
+                    ! compare with xstretch specified in meshgen
+                    if(abs(xstretch(i,j,k)-xstretch_loc) > 1.0d-12) then
+                        print '(3i5,1x,2(e19.12,1x))', i,j,k, xstretch(i,j,k), xstretch_loc
+                        call GracefulExit("flag = 3; metric is not consistent with meshgen. Check details.", 21)
+                    endif
+                 enddo
+              enddo
+           enddo
+        elseif(flag==4) then
+           ! concentrate at any arbitary point
+           ! (Section 5.6, Transformation 1, pg. 334)
+           beta = params(2); xstart = params(3); hh = params(4); xfocus = params(1) + abs(xstart)
+           top = 1+ ((xfocus/hh)*(exp(beta)-1))
+           bot = 1+ ((xfocus/hh)*(exp(-beta)-1))
+           BB = (log(top/bot))/(2*beta)
+           do k = 1, nzp
+              do j = 1, nyp
+                 do i = 1, nxp
+                    ! adjust for starting point
+                    xuniform_adj = (xuniform(i,j,k) - xstart)/hh
+                    num = sinh(beta*(xuniform_adj-BB))
+                    den = sinh(beta*BB)
+                    xstretch_loc = xfocus*(1+(num/den))
+
+                    ! metric for first derivative
+                    BB2 = 1 + (((xstretch_loc/xfocus)-1)*den)**2
+                    dxudxs(i,j,k) = den/(beta*xfocus*(BB**0.5))
+
+                    ! square of the metric for first derivative
+                    dxudxs_sq(i,j,k) = dxudxs(i,j,k)**2
+
+                    ! metric for second derivative
+                    d2xudxs2(i,j,k) = -((den**3)*((xstretch_loc/xfocus)-1))/(beta*xfocus*(BB**1.5))
 
                     if(abs(xstretch(i,j,k)-xstretch_loc) > 1.0d-12) then
                         print '(3i5,1x,2(e19.12,1x))', i,j,k, xstretch(i,j,k), xstretch_loc
@@ -1231,7 +1266,10 @@ contains
 
         elseif(flag==10) then
            ! finite-difference evaluation of metrics (reduces order of accuracy)
-            call GracefulExit("flag = 4 (finite-difference evaluation of metrics) is incomplete right now",21)
+            call GracefulExit("flag = 10 (finite-difference evaluation of metrics) is incomplete right now",21)
+        else
+           ! incorrect input for flag
+            call GracefulExit("flag must be 1, 2, 3, 4 or 10",21)
         endif
 
     end subroutine 

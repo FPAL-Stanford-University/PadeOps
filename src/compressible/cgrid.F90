@@ -606,11 +606,6 @@ contains
         if(allocated(this%tbcIn)) deallocate(this%tbcIn)
         if(allocated(this%xplbcInflow))  deallocate(this%xplbcInflow)
 
-        if (this%useMultiBlock) then
-          call this%mbtopology%destroy()
-          deallocate(this%mbtopology)
-        end if
-
         if (this%useSGS) then
           call this%sgsmodel%destroy()
           deallocate(this%sgsmodel)
@@ -635,6 +630,11 @@ contains
         call this%gfil%destroy()
         if (allocated(this%gfil)) deallocate(this%gfil) 
         
+        if (this%useMultiBlock) then
+          call this%mbtopology%destroy()
+          deallocate(this%mbtopology)
+        end if
+
         call destroy_buffs(this%xbuf)
         call destroy_buffs(this%ybuf)
         call destroy_buffs(this%zbuf)
