@@ -888,10 +888,9 @@ contains
             a06 = a06d1 
             b06 = b06d1
             c06 = c06d1 
-            RHS = 0.0d0
+            RHS = 1.0d0
         select case(dir)
            case("N2F")
-
                RHS(:,:         ,1) = a06 * ( f(:,:,2)        + f(:,:,1) ) &
                                    + b06 * ( f(:,:,3)        + f(:,:,this%n) ) &
                                    + c06 *( f(:,:,4)         +f(:,:,this%n-1) )
@@ -946,7 +945,7 @@ contains
                 case ("N2F")!TODO: implement better non-periodic BC: currently2466...6642
                     !interior   
                      RHS(:,:,3:this%n-3)  = a06 * ( f(:,:,4:this%n-2) +f(:,:,3:this%n-3) ) &
-                                          + b06 * ( f(:,:,5:this%n-1) +f(:,:,4:this%n-4) ) &
+                                          + b06 * ( f(:,:,5:this%n-1) +f(:,:,2:this%n-4) ) &
                                           + c06 * ( f(:,:,6:this%n) +f(:,:,1:this%n-5) )
                      select case(bc1)
                         !left boundary (1:2)
@@ -1145,6 +1144,7 @@ contains
         end if
 
         call this%ComputeYD1RHS(fF, fN,"F2N", na, nb)
+        if (any(fN == HUGE(1.0_rkind))) stop "Unwritten Z RHS"
         select case (this%periodic)
         case (.TRUE.)
            call this%SolveYLU1(fN,na,nb)
@@ -1187,7 +1187,9 @@ contains
             bcn = 0
         end if
 
+
         call this%ComputeZD1RHS(fN, fF,"N2F", na, nb,bc1,bcn)
+!         if (any(fN == HUGE(1.0_rkind))) stop "Unwritten Z RHS"
         select case (this%periodic) 
         case (.TRUE.)
            call this%SolveZLU1(fF,na,nb)
@@ -1210,6 +1212,8 @@ contains
         end if
 
         call this%ComputeZD1RHS(fF, fN,"F2N", na, nb)
+       if (any(fN == HUGE(1.0_rkind))) stop "Unwritten Z RHS"
+
         select case (this%periodic)
         case (.TRUE.)
            call this%SolveZLU1(fN,na,nb)

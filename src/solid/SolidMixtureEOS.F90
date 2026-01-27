@@ -61,7 +61,7 @@ module SolidMixtureMod
         
         integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind), allocatable, dimension(:,:,:)   ::  intX_error,intY_error,derX_error, derY_error, intx_exact, inty_exact, lapTest, DivTest,lap_error, div_error, entropy
-        real(rkind), allocatable, dimension(:,:,:)   :: kappa,YsKappa, maskKappa,VF_intx, VF_inty,VF_intz, DerX, DerY,DerZ, ddx_exact, ddy_exact, Pmix, DerYstagg , ddystagg_exact, HighYs,HighVF, OOBVF, OOBYs,deltakap,tag
+        real(rkind), allocatable, dimension(:,:,:)   :: kappaNoFil, kappa,YsKappa, maskKappa,VF_intx, VF_inty,VF_intz, DerX, DerY,DerZ, ddx_exact, ddy_exact, Pmix, DerYstagg , ddystagg_exact, HighYs,HighVF, OOBVF, OOBYs,deltakap,tag
         real(rkind), allocatable, dimension(:,:,:,:) :: norm, normFV,gradp,gradVF,gradxi
         real(rkind), allocatable, dimension(:,:,:,:,:) :: gradVF_FV, J_phi, J_VF
 	real(rkind), allocatable, dimension(:,:,:)   :: phi
@@ -70,6 +70,8 @@ module SolidMixtureMod
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_send_2, buffer_send_k_2
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_recieve_1, buffer_recieve_k_1
         real(rkind), allocatable, dimension(:,:,:)   :: buffer_recieve_2, buffer_recieve_k_2
+        real(rkind), allocatable, dimension(:) :: recvL_kappa, recvR_kappa, sendL_VF, sendR_VF,  recvL_VF,recvR_VF,sendL_kappa, sendR_kappa
+
 !        real(rkind), dimension(:,:,:), pointer       :: buffs1, buffs2, buffr1, buffr2
 !        real(rkind), dimension(:,:,:), pointer       :: buffsk1, buffsk2, buffrk1, buffrk2
         integer, dimension(8) :: MPI_req, MPI_Stats
@@ -433,6 +435,9 @@ contains
         if(allocated(this%kappa)) deallocate(this%kappa)
         allocate(this%kappa(this%nxp, this%nyp, this%nzp))
 
+        if(allocated(this%kappaNoFil)) deallocate(this%kappaNoFil)
+        allocate(this%kappaNoFil(this%nxp, this%nyp, this%nzp))
+
         if(allocated(this%deltakap)) deallocate(this%deltakap)
         allocate(this%deltakap(this%nxp, this%nyp, this%nzp))
 
@@ -511,6 +516,30 @@ contains
         if(allocated(this%DerX)) deallocate(this%DerX)
         allocate(this%DerX(this%nxp, this%nyp, this%nzp))
 
+        if(allocated(this%recvL_kappa)) deallocate(this%recvL_kappa)
+        allocate(this%recvL_kappa(this%nyp))
+
+         if(allocated(this%recvR_kappa)) deallocate(this%recvR_kappa)
+        allocate(this%recvR_kappa(this%nyp))
+
+         if(allocated(this%recvL_VF)) deallocate(this%recvL_VF)
+        allocate(this%recvL_VF(this%nyp))
+
+         if(allocated(this%recvR_VF)) deallocate(this%recvR_VF)
+        allocate(this%recvR_VF(this%nyp))
+
+         if(allocated(this%sendL_kappa)) deallocate(this%sendL_kappa)
+        allocate(this%sendL_kappa(this%nyp))
+
+         if(allocated(this%sendR_kappa)) deallocate(this%sendR_kappa)
+        allocate(this%sendR_kappa(this%nyp))
+
+         if(allocated(this%sendL_VF)) deallocate(this%sendL_VF)
+        allocate(this%sendL_VF(this%nyp))
+
+         if(allocated(this%sendR_VF)) deallocate(this%sendR_VF)
+        allocate(this%sendR_VF(this%nyp))
+   
         if(allocated(this%buffer_send_1)) deallocate(this%buffer_send_1)
         allocate(this%buffer_send_1(1,this%nyp, this%nzp))
 
@@ -623,6 +652,7 @@ contains
         if(allocated(this%gradxi)) deallocate(this%gradxi)
         if(allocated(this%entropy)) deallocate(this%entropy)
         if(allocated(this%kappa)) deallocate(this%kappa)
+        if(allocated(this%kappaNoFil)) deallocate(this%kappaNoFil)
         if(allocated(this%deltakap)) deallocate(this%deltakap)
         if(allocated(this%tag)) deallocate(this%tag)
         if(allocated(this%HighVF)) deallocate(this%HighVF)
@@ -658,6 +688,15 @@ contains
         if(allocated(this%buffer_send_k_2)) deallocate(this%buffer_send_k_2)
         if(allocated(this%buffer_recieve_k_1)) deallocate(this%buffer_recieve_k_1)
         if(allocated(this%buffer_recieve_k_2)) deallocate(this%buffer_recieve_k_2)
+        if(allocated(this%recvL_kappa)) deallocate(this%recvL_kappa)
+        if(allocated(this%recvR_kappa)) deallocate(this%recvR_kappa)
+        if(allocated(this%sendL_kappa)) deallocate(this%sendL_kappa)
+        if(allocated(this%sendR_kappa)) deallocate(this%sendR_kappa)
+        if(allocated(this%recvL_VF)) deallocate(this%recvL_VF)
+        if(allocated(this%recvR_VF)) deallocate(this%recvR_VF)
+        if(allocated(this%sendL_VF)) deallocate(this%sendL_VF)
+        if(allocated(this%sendR_VF)) deallocate(this%sendR_VF)
+
         if(allocated(this%xi)) deallocate(this%xi)
 
         if(allocated(this%maskKappa)) deallocate(this%maskKappa)
@@ -1786,7 +1825,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                 call filter3D(this%decomp, this%fil, VF_fil, 1,x_bc,y_bc,z_bc)
 !                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,u,v,w,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),minYs(i),this%intSharp_cut,cVF,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%outdiff,this%material(i)%rhodiff_stagg,this%material(i)%adiff_stagg,x_bc,y_bc, z_bc,detady,dy_stretch)
 !               call this%LAD%get_diffusivity_Aslani(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
-                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,VF_fil,Ys_fil,this%deltakap,this%kappa,divu)
+                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,VF_fil,Ys_fil,this%deltakap,this%kappaNoFil,divu)
 
 !                 do d = 1,3
 !                    call this%LAD%get_diffusivity_5eqnOG(rho_int(:,:,:,d),this%material(i)%VF_mid(:,:,:,d),this%material(i)%rhoYs_mid(:,:,:,d),gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff_stagg(:,:,:,d),this%material(i)%rhodiff_stagg(:,:,:,d),x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0)
@@ -2783,7 +2822,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: uFVint_6,vFVint_6,wFVint_6,rhoFVint_6,gradrhoYs,keFV_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint, rhoiFVint_local,pFVint, intDiff,hiFVint_6, rhoiFVint_6, pFVint_6,rhoantiDiffFVint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint, gradXi_FV
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom, Db,H,OOB_mask,Hl,Hh,HYs,HVF,xi_mask
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom,Db,H,OOB_mask,Hl,Hh,HYs,HVF,xi_mask,HVF2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: gradVF_x,gradVF_y, gradVF_z,tmp1,tmp2,tmp3,tmp1_i,tmp2_i,tmp3_i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i,VF_RHS_i, Kij_coeff_i
         real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-32, intSharp_exp = -1.0D0,gradDiff,md1,md2,cut_off=1d-4,cut_offY=1d-4,xiLow,xiHigh !, intSharp_tnh = 0.1
@@ -3065,13 +3104,21 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                     endwhere
 
-                    where(( this%material(i)%Ys_mid(:,:,:,d) .GE. 1)  )
+                    where(( this%material(i)%Ys_mid(:,:,:,d) .GE. 1) )
 !!                     
                        H = abs( this%material(i)%Ys_mid(:,:,:,d) -1 )
                     elsewhere( (this%material(i)%Ys_mid(:,:,:,d) .LE. 0 ) )
                        H = abs(this%material(i)%Ys_mid(:,:,:,d) )
                     elsewhere
                        H = 0
+                     endwhere
+
+                    where(( this%material(i)%VF_mid(:,:,:,d) .GE. 1) )
+                       HVF = abs( this%material(i)%VF_mid(:,:,:,d) -1 )
+                    elsewhere( (this%material(i)%VF_mid(:,:,:,d) .LE. 0 ) )
+                       HVF = abs(this%material(i)%VF_mid(:,:,:,d) )
+                    elsewhere
+                       HVF = 0
                      endwhere
 
 
@@ -3085,11 +3132,19 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                     call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc) 
                     call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc)
-                    
+                    call filter3D(this%decomp, this%gfil, HVF,iflag,x_bc,y_bc,z_bc)
+                    call filter3D(this%decomp, this%gfil, HVF,iflag,x_bc,y_bc,z_bc)
+ 
                   where( abs(H) .GT. 1d-6 )
                       HYs = 0_rkind
                   elsewhere
                       HYs = 1_rkind
+                  endwhere
+
+                  where( abs(HVF) .GT. 1d-6 )
+                      HVF2 = 0_rkind
+                  elsewhere
+                      HVF2 = 1_rkind
                   endwhere
 
 !                   where( abs(H) .GT. 1d-12)
@@ -5123,7 +5178,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
     end subroutine
 
 
-    subroutine get_surfaceTension(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w)
+    subroutine get_surfaceTension(this,rho,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w,x,y,step)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
         use operators, only:divergence,gradient,filter3D,laplacian,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x, gradFV_y, gradFV_z,gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz
         use constants,       only: zero,epssmall,eps,one,two,third,half, pi
@@ -5132,9 +5187,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         class(solid_mixture),                               intent(inout) :: this
         integer, dimension(2),                              intent(in) :: x_bc, y_bc, z_bc
         real(rkind),                                        intent(in) :: dx,dy,dz
-	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w
+	real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho,u,v,w,x,y
         logical,                                            intent(in) :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,udiv, divuphi,VFmag,tanhmask, GVFmag,GPHImag,mask2,updatedKappa, weight, kappaSum, phi, xi,  mu,d2vfdx2,d2vfdy2,d2vfdz2,divu,divphiu,dirac,H,tmp1,tmp2,tmp3,lapkappa,nkappa
+        integer,                                            intent(in) :: step
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,udiv, divuphi,VFmag,tanhmask,GVFmag,GPHImag,mask2,updatedKappa, weight, kappaSum, phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2,divu,divphiu,dirac,H,tmp1,tmp2,tmp3,lapkappa,nkappa,rexact
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi, gradxi, gradVFk, p_int, VF_int, gradH,u_int, uphi_int, gradFV,gradVF_l,xi_int,gradkappa,gradkappa_int
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
         real(rkind)   :: cut_off = 1d-13
@@ -5188,11 +5244,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
        this%gradVF = gradVF
    !   call gradient(this%decomp,this%der,this%material(1)%p,this%gradp(:,:,:,1),this%gradp(:,:,:,2),this%gradp(:,:,:,3))
  
+!      if(step .EQ. 1) then
 	if (this%use_gradVF) then
 
                 if(this%use_FV) then
 
-                   call gradient(this%decomp,this%derD02,this%material(1)%VF,gradVFk(:,:,:,1),gradVFk(:,:,:,2),gradVFk(:,:,:,3)) !high order derivative
+                   call gradient(this%decomp,this%derCD06,this%material(1)%VF,gradVFk(:,:,:,1),gradVFk(:,:,:,2),gradVFk(:,:,:,3)) !high order derivative
                   ! call gradientFV(this,this%material(1)%VF,gradVF_FV,dx,dy,dz,periodicx,periodicy,periodicz, this%x_bc, this%y_bc, this%z_bc)
 
                    this%gradVF_FV = gradVF_FV
@@ -5239,16 +5296,30 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 	
 		if (this%use_FV) then
              
-	         call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
-		 call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
-              	 call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
-                 this%normFV(:,:,:,1) = NMint(:,:,:,1,1)	
-                 this%normFV(:,:,:,2) = NMint(:,:,:,2,2)
-                 this%normFV(:,:,:,3) = NMint(:,:,:,3,3)
+!	         call interpolateFV(this,this%norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc, this%y_bc, this%z_bc)
+!		 call interpolateFV(this,this%norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz, this%x_bc,-this%y_bc, this%z_bc)
+!              	 call interpolateFV(this,this%norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz, this%x_bc, this%y_bc,-this%z_bc)
+!                 this%normFV(:,:,:,1) = NMint(:,:,:,1,1)	
+!                 this%normFV(:,:,:,2) = NMint(:,:,:,2,2)
+!                 this%normFV(:,:,:,3) = NMint(:,:,:,3,3)
 
-                 call divergenceFV(this,this%normFV, this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!                 call divergenceFV(this,this%normFV, this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
                 !  call divergence(this%decomp,this%derD02,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
+               call interpolateFV_x(this%decomp,this%interpMid,this%norm(:,:,:,1),this%normFV(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+               call interpolateFV_y(this%decomp,this%interpMid,this%norm(:,:,:,2),this%normFV(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+               call interpolateFV_z(this%decomp,this%interpMid,this%norm(:,:,:,3),this%normFV(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+!               this%normFV(:,:,:,1) = NMint(:,:,:,1,1)
+!               this%normFV(:,:,:,2) = NMint(:,:,:,2,2)
+!               this%normFV(:,:,:,3) = NMint(:,:,:,3,3)
+
+!               call divergenceFV_6(this,this%normFV,this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+              call gradFV_x(this%decomp,this%derStagg,this%normFV(:,:,:,1),tmp1,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+              call gradFV_y(this%decomp,this%derStagg,this%normFV(:,:,:,2),tmp2,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+              call gradFV_z(this%decomp,this%derStagg,this%normFV(:,:,:,3),tmp3,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+              this%kappa = tmp1+tmp2+tmp3
+
                 else if (this%use_D04) then
                   call divergence(this%decomp,this%derD04,this%norm(:,:,:,1),this%norm(:,:,:,2),this%norm(:,:,:,3),this%kappa,x_bc,y_bc,z_bc)
                 else		!kappa, divergence of surface normal	
@@ -5268,11 +5339,11 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
           endwhere
 
           call filter3D(this%decomp, this%gfil,this%xi(:,:,:,1),iflag,x_bc,y_bc,z_bc)
-
+!          call filter3D(this%decomp, this%gfil,this%xi(:,:,:,1),iflag,x_bc,y_bc,z_bc)
 
          if(this%use_FV) then
           ! call gradientFV(this,this%xi(:,:,:,1) ,gradVF_FV,dx,dy,dz,periodicx,periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
-           call gradient(this%decomp,this%derCD06,this%xi(:,:,:,1),gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3))
+           call gradient(this%decomp,this%der,this%xi(:,:,:,1),gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3))
 !          this%gradVF_FV = gradVF_FV
          else if(this%use_D04) then
            call gradient(this%decomp,this%derD06,this%xi(:,:,:,1),gradxi(:,:,:,1),gradxi(:,:,:,2),gradxi(:,:,:,3))
@@ -5318,22 +5389,22 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               call gradFV_y(this%decomp,this%derStagg,this%normFV(:,:,:,2),tmp2,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
               call gradFV_z(this%decomp,this%derStagg,this%normFV(:,:,:,3),tmp3,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
               this%kappa = tmp1+tmp2+tmp3
-              call gradient(this%decomp,this%derCD06,this%kappa,gradkappa(:,:,:,1),gradkappa(:,:,:,2),gradkappa(:,:,:,3))
-              call interpolateFV_x(this%decomp,this%interpMid,gradkappa(:,:,:,1),gradkappa_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)   
-              call interpolateFV_y(this%decomp,this%interpMid,gradkappa(:,:,:,2),gradkappa_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-              call interpolateFV_z(this%decomp,this%interpMid,gradkappa(:,:,:,3),gradkappa_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!              call gradient(this%decomp,this%derCD06,this%kappa,gradkappa(:,:,:,1),gradkappa(:,:,:,2),gradkappa(:,:,:,3))
+!              call interpolateFV_x(this%decomp,this%interpMid,gradkappa(:,:,:,1),gradkappa_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)   
+!              call interpolateFV_y(this%decomp,this%interpMid,gradkappa(:,:,:,2),gradkappa_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!              call interpolateFV_z(this%decomp,this%interpMid,gradkappa(:,:,:,3),gradkappa_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!
+!              call gradFV_x(this%decomp,this%derStagg,gradkappa_int(:,:,:,1),tmp1,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!              call gradFV_y(this%decomp,this%derStagg,gradkappa_int(:,:,:,2),tmp2,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!              call gradFV_z(this%decomp,this%derStagg,gradkappa_int(:,:,:,3),tmp3,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!
+!              lapkappa=tmp1+tmp2+tmp3
+!              call gradFV_x(this%decomp,this%derStagg,this%normFV(:,:,:,1)*gradkappa_int(:,:,:,1),tmp1,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!              call gradFV_y(this%decomp,this%derStagg,this%normFV(:,:,:,2)*gradkappa_int(:,:,:,2),tmp2,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!              call gradFV_z(this%decomp,this%derStagg,this%normFV(:,:,:,3)*gradkappa_int(:,:,:,3),tmp3,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-              call gradFV_x(this%decomp,this%derStagg,gradkappa_int(:,:,:,1),tmp1,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call gradFV_y(this%decomp,this%derStagg,gradkappa_int(:,:,:,2),tmp2,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call gradFV_z(this%decomp,this%derStagg,gradkappa_int(:,:,:,3),tmp3,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-              lapkappa=tmp1+tmp2+tmp3
-              call gradFV_x(this%decomp,this%derStagg,this%normFV(:,:,:,1)*gradkappa_int(:,:,:,1),tmp1,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call gradFV_y(this%decomp,this%derStagg,this%normFV(:,:,:,2)*gradkappa_int(:,:,:,2),tmp2,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call gradFV_z(this%decomp,this%derStagg,this%normFV(:,:,:,3)*gradkappa_int(:,:,:,3),tmp3,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-              nkappa=this%norm(:,:,:,1)*tmp1+this%norm(:,:,:,2)*tmp2 + this%norm(:,:,:,3)*tmp3
-              this%kappa = this%kappa + 0.05*dx**2.0_rkind * ( lapkappa - nkappa  )
+!              nkappa=this%norm(:,:,:,1)*tmp1+this%norm(:,:,:,2)*tmp2 + this%norm(:,:,:,3)*tmp3
+!              this%kappa = this%kappa + dx**2.0_rkind * ( - nkappa  )
 
 
             elseif(this%use_normFV) then
@@ -5369,6 +5440,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               call gradFV_y(this%decomp,this%derStagg,this%norm(:,:,:,2),tmp2,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
               call gradFV_z(this%decomp,this%derStagg,this%norm(:,:,:,3),tmp3,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
               this%kappa = tmp1+tmp2+tmp3
+              
 !              call filter3D(this%decomp, this%fil,this%kappa,iflag,x_bc,y_bc,z_bc)
 !              call divergenceFV_6(this,this%norm,this%kappa,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
             endif
@@ -5437,149 +5509,185 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 	endif
 
 
+      this%kappaNoFil=this%kappa  
       if (this%weightedcurvature) then
 
-      !  do n = 1,5
+        do n = 1,10
 !   print*, this%mpi_rank
-!           this%MPI_req = MPI_REQUEST_NULL
+!          this%MPI_req = MPI_REQUEST_NULL
 
-      !     call MPI_Irecv(this%buffer_recieve_1, this%nyp, MPI_real, this%mpi_rank_prev, 1, MPI_Comm_world, this%MPI_req(1), this%ierror)
-
-
-      !      call MPI_Irecv(this%buffer_recieve_2, this%nyp, MPI_real, this%mpi_rank_next, 2, MPI_Comm_world, this%MPI_req(2), this%ierror)
+          call MPI_Irecv(this%recvL_VF, this%nyp,MPI_DOUBLE_PRECISION, this%mpi_rank_prev, 1, MPI_Comm_world, this%MPI_req(1), this%ierror)
 
 
-      !      call MPI_Irecv(this%buffer_recieve_k_1, this%nyp, MPI_real, this%mpi_rank_prev, 3, MPI_Comm_world, this%MPI_req(3), this%ierror)
+          call MPI_Irecv(this%recvR_VF, this%nyp, MPI_DOUBLE_PRECISION, this%mpi_rank_next, 2, MPI_Comm_world, this%MPI_req(2), this%ierror)
 
 
-      !      call MPI_Irecv(this%buffer_recieve_k_2, this%nyp, MPI_real, this%mpi_rank_next, 4, MPI_Comm_world, this%MPI_req(4), this%ierror)
+          call MPI_Irecv(this%recvL_kappa, this%nyp,MPI_DOUBLE_PRECISION, this%mpi_rank_prev, 3, MPI_Comm_world, this%MPI_req(3), this%ierror)
+
+
+          call MPI_Irecv(this%recvR_kappa, this%nyp,MPI_DOUBLE_PRECISION, this%mpi_rank_next, 4, MPI_Comm_world, this%MPI_req(4), this%ierror)
+ 
+
+!          print *, loc(this%material(1)%VF(1,1,1)), loc(this%material(1)%VF(1,2,1))
+
+
+           do j = 1, this%nyp
+              this%sendL_VF(j)     = this%material(1)%VF(1,   j, 1)
+              this%sendR_VF(j)     = this%material(1)%VF(this%nxp, j, 1)
+           
+              this%sendL_kappa(j) = this%kappa(1,   j, 1)
+              this%sendR_kappa(j) = this%kappa(this%nxp, j, 1)
+           enddo
+
+!            this%buffer_send_1 = this%material(1)%VF(1:1,:,:);
+            call  MPI_Isend(this%sendL_VF,this%nyp,MPI_DOUBLE_PRECISION, this%mpi_rank_prev, 2, MPI_Comm_world, this%MPI_req(5), this%ierror)
+
+!            this%buffer_send_2 = this%material(1)%VF(this%nxp:this%nxp,:, :);
+            call  MPI_Isend(this%sendR_VF,this%nyp,MPI_DOUBLE_PRECISION, this%mpi_rank_next, 1, MPI_Comm_world, this%MPI_req(6), this%ierror)
+
+!            this%buffer_send_k_1 = this%kappa(1:1,:,:);
+            call  MPI_Isend(this%sendL_kappa,this%nyp,MPI_DOUBLE_PRECISION, this%mpi_rank_prev, 4, MPI_Comm_world, this%MPI_req(7), this%ierror)
+!            this%buffer_send_k_2 = this%kappa(this%nxp:this%nxp,:, :);
+            call  MPI_Isend(this%sendR_kappa,this%nyp,MPI_DOUBLE_PRECISION, this%mpi_rank_next, 3, MPI_Comm_world, this%MPI_req(8), this%ierror)
+
+!           call MPI_Sendrecv( this%buffer_send_1, this%nyp, MPI_real, &
+!                   this%mpi_rank_prev, 10, &
+!                   this%buffer_receive_2, this%nyp, MPI_real, &
+!                   this%mpi_rank_next, 10, &
+!                   MPI_COMM_WORLD, MPI_STATUS_IGNORE, this%ierror )
+!
+!           call MPI_Sendrecv( this%buffer_send_2, this%nyp, MPI_real, &
+!                   this%mpi_rank_next, 11, &
+!                  this% buffer_receive_1, this%nyp, MPI_real, &
+!                   this%mpi_rank_prev, 11, &
+!                   MPI_COMM_WORLD, MPI_STATUS_IGNORE, this%ierror )
+!
+!
+!           call MPI_Sendrecv( this%buffer_send_k_1, this%nyp, MPI_real, &
+!                   this%mpi_rank_prev, 12, &
+!                   this%buffer_receive_k_2, this%nyp, MPI_real, &
+!                   this%mpi_rank_next, 12, &
+!                   MPI_COMM_WORLD, MPI_STATUS_IGNORE, this%ierror )
+!
+!           call MPI_Sendrecv( this%buffer_send_2, this%nyp, MPI_real, &
+!                   this%mpi_rank_next, 13, &
+!                   this%buffer_receive_k_1, this%nyp, MPI_real, &
+!                   this%mpi_rank_prev, 13, &
+!                   MPI_COMM_WORLD, MPI_STATUS_IGNORE, this%ierror )
+!
+
+
+            call MPI_Waitall(8, this%MPI_req, this%MPI_Stats, this%ierror)
+
+
+
+                do k = 1, this%nzp
+                  do j = 2, (this%nyp-1)
+                     i = 1
+
+
+                      weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
+                        (this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
+                        (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
+                        (this%recvL_VF(j)*(1-this%recvL_VF(j)))**2 + &
+                        (this%recvL_VF(j+1)*(1-this%recvL_VF(j+1)))**2 +  &
+                        (this%recvL_VF(j-1)*(1-this%recvL_VF(j-1)))**2 + &
+                        (this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2 + &
+                        (this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 + &
+                        (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2
+
+
+                       kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
+                          this%kappa(i+1,j,k)*(this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
+                          this%kappa(i+1,j-1,k)*(this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 + &
+                          this%recvL_kappa(j)*(this%recvL_VF(j)*(1-this%recvL_VF(j)))**2 + &
+                          this%recvL_kappa(j+1)*(this%recvL_VF(j+1)*(1-this%recvL_VF(j+1)))**2 +  &
+                          this%recvL_kappa(j-1)*(this%recvL_VF(j-1)*(1-this%recvL_VF(j-1)))**2 + &
+                          this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
+                          this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
+                          this%kappa(i+1,j+1,k)*(this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2
+                 enddo
+              enddo
+
+               do k = 1, this%nzp
+                  do j = 2, (this%nyp-1)
+                     i = this%nxp
+
+
+                      weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
+                        (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
+                        (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
+                        (this%recvR_VF(j)*(1-this%recvR_VF(j)))**2 + &
+                        (this%recvR_VF(j+1)*(1-this%recvR_VF(j+1)))**2 +  &
+                        (this%recvR_VF(j-1)*(1-this%recvR_VF(j-1)))**2 + &
+                        (this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
+                        (this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2 + &
+                        (this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2
+
+
+                       kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
+                          this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
+                          this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
+                          this%recvR_kappa(j)*(this%recvR_VF(j)*(1-this%recvR_VF(j)))**2 + &
+                          this%recvR_kappa(j+1)*(this%recvR_VF(j+1)*(1-this%recvR_VF(j+1)))**2 +  &
+                          this%recvR_kappa(j-1)*(this%recvR_VF(j-1)*(1-this%recvR_VF(j-1)))**2 + &
+                          this%kappa(i-1,j,k)*(this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2 + &
+                          this%kappa(i-1,j-1,k)*(this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
+                          this%kappa(i-1,j+1,k)*(this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2
+
+                 enddo
+              enddo
+
+
         
-
-
-      !      this%buffer_send_1 = this%material(1)%VF(1:1,:,:);
-      !      call  MPI_Issend(this%buffer_send_1,this%nyp, MPI_real, this%mpi_rank_prev, 2, MPI_Comm_world, this%MPI_req(5), this%ierror)
-
-      !      this%buffer_send_2 = this%material(1)%VF(this%nxp:this%nxp,:, :);
-      !      call  MPI_Issend(this%buffer_send_2,this%nyp, MPI_real, this%mpi_rank_next, 1, MPI_Comm_world, this%MPI_req(6), this%ierror)
-
-      !      this%buffer_send_k_1 = this%kappa(1:1,:,:);
-      !      call  MPI_Issend(this%buffer_send_k_1,this%nyp, MPI_real, this%mpi_rank_prev, 4, MPI_Comm_world, this%MPI_req(7), this%ierror)
-
-      !      this%buffer_send_k_2 = this%kappa(this%nxp:this%nxp,:, :);
-      !      call  MPI_Issend(this%buffer_send_k_2,this%nyp, MPI_real, this%mpi_rank_next, 3, MPI_Comm_world, this%MPI_req(8), this%ierror)
-
-      !      call MPI_Waitall(8, this%MPI_req, this%MPI_Stats, this%ierror)
-
-
-      !          do k = 1, this%nzp
-      !            do j = 2, (this%nyp-1)
-      !               i = 1
-
-
-      !                weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-      !                  (this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
-      !                  (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-      !                  (this%buffer_recieve_1(1,j,k)*(1-this%buffer_recieve_1(1,j,k)))**2 + &
-      !                  (this%buffer_recieve_1(1,j+1,k)*(1-this%buffer_recieve_1(1,j+1,k)))**2 +  &
-      !                  (this%buffer_recieve_1(1,j-1,k)*(1-this%buffer_recieve_1(1,j-1,k)))**2 + &
-      !                  (this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2 + &
-      !                  (this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 + &
-      !                  (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2
-
-
-      !                 kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-      !                    this%kappa(i+1,j,k)*(this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
-      !                    this%kappa(i+1,j-1,k)*(this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 + &
-      !                    this%buffer_recieve_k_1(1,j,k)*(this%buffer_recieve_1(1,j,k)*(1-this%buffer_recieve_1(1,j,k)))**2 + &
-      !                    this%buffer_recieve_k_1(1,j+1,k)*(this%buffer_recieve_1(1,j+1,k)*(1-this%buffer_recieve_1(1,j+1,k)))**2 +  &
-      !                    this%buffer_recieve_k_1(1,j-1,k)*(this%buffer_recieve_1(1,j-1,k)*(1-this%buffer_recieve_1(1,j-1,k)))**2 + &
-      !                    this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-      !                    this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-      !                    this%kappa(i+1,j+1,k)*(this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2
-
-      !           enddo
-      !        enddo
-
-      !         do k = 1, this%nzp
-      !            do j = 2, (this%nyp-1)
-      !               i = this%nxp
-
-
-      !                weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-      !                  (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-      !                  (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-      !                  (this%buffer_recieve_2(1,j,k)*(1-this%buffer_recieve_2(1,j,k)))**2 + &
-      !                  (this%buffer_recieve_2(1,j+1,k)*(1-this%buffer_recieve_2(1,j+1,k)))**2 +  &
-      !                  (this%buffer_recieve_2(1,j-1,k)*(1-this%buffer_recieve_2(1,j-1,k)))**2 + &
-      !                  (this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
-      !                  (this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2 + &
-      !                  (this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2
-
-
-      !                 kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-      !                    this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-      !                    this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-      !                    this%buffer_recieve_k_2(1,j,k)*(this%buffer_recieve_2(1,j,k)*(1-this%buffer_recieve_2(1,j,k)))**2 + &
-      !                    this%buffer_recieve_k_2(1,j+1,k)*(this%buffer_recieve_2(1,j+1,k)*(1-this%buffer_recieve_2(1,j+1,k)))**2 +  &
-      !                    this%buffer_recieve_k_2(1,j-1,k)*(this%buffer_recieve_2(1,j-1,k)*(1-this%buffer_recieve_2(1,j-1,k)))**2 + &
-      !                    this%kappa(i-1,j,k)*(this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2 + &
-      !                    this%kappa(i-1,j-1,k)*(this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
-      !                    this%kappa(i-1,j+1,k)*(this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2
-
-      !           enddo
-      !        enddo
-
-
-        
-      !  do k = 1, this%nzp
-      !    do j = 2, (this%nyp-1)
-      !      do i = 2, (this%nxp-1)
+        do k = 1, this%nzp
+          do j = 2, (this%nyp-1)
+            do i = 2, (this%nxp-1)
                             
                               
-      !         weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-      !                  (this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
-      !                  (this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2 + &
-      !                  (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-      !                  (this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 +  &
-      !                  (this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
-      !                  (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-      !                  (this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2 + &
-      !                  (this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2 
+               weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
+                        (this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
+                        (this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2 + &
+                        (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
+                        (this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 +  &
+                        (this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
+                        (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
+                        (this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2 + &
+                        (this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2 
                
                 
-      !         kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-      !                    this%kappa(i+1,j,k)*(this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
-      !                    this%kappa(i-1,j,k)*(this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2 + &
-      !                    this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-      !                    this%kappa(i+1,j-1,k)*(this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 +  &
-      !                    this%kappa(i-1,j-1,k)*(this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
-      !                    this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-      !                    this%kappa(i-1,j+1,k)*(this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2 + &
-      !                    this%kappa(i+1,j+1,k)*(this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2
+               kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
+                          this%kappa(i+1,j,k)*(this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
+                          this%kappa(i-1,j,k)*(this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2 + &
+                          this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
+                          this%kappa(i+1,j-1,k)*(this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 +  &
+                          this%kappa(i-1,j-1,k)*(this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
+                          this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
+                          this%kappa(i-1,j+1,k)*(this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2 + &
+                          this%kappa(i+1,j+1,k)*(this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2
 
 
-      !       enddo
-      !     enddo
-      !   enddo
+             enddo
+          enddo
+         enddo
          
          
-      !         where (weight .LE. eps) 
+               where (weight .LE. eps) 
 
-      !             updatedKappa = eps
+                   updatedKappa = eps
 
-      !          elsewhere
+                elsewhere
 
-      !              updatedKappa = kappaSum/weight
+                    updatedKappa = kappaSum/weight
 
-      !         endwhere
-
-      !    this%kappa = updatedKappa         
-      !  enddo
+               endwhere
+          this%kappa = updatedKappa         
+        enddo
         
 
        endif
 
-       
+!       endif
      !  where( (this%material(1)%VF .LE. 1d-6) .OR. (this%material(1)%VF .GE. (1-1d-6)))
 
      !     this%kappa = 0
@@ -5622,6 +5730,15 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !TODO: Compute surface tension force and store in this%surfaceTension_f
         !this%kappa = one/0.4
 !        this%kappa=-1.0_rkind /0.4_rkind
+!        where( sqrt((x-1)**2.0_rkind + (y-1)**2.0_rkind) .GE. eps)
+
+!              this%kappa = -1 / sqrt((x-1)**2.0_rkind + (y-1)**2.0_rkind)
+
+!        elsewhere
+
+!              this%kappa = -eps
+
+!        endwhere
 	this%surfaceTension_f(:,:,:,1) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,1)
 	this%surfaceTension_f(:,:,:,2) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,2)
         this%surfaceTension_f(:,:,:,3) = -this%surfaceTension_coeff*this%kappa*gradVF(:,:,:,3)

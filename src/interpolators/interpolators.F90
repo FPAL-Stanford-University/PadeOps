@@ -784,9 +784,9 @@ contains
             end if
         case (2)
             if (present(bc1) .AND. present(bcn)) then
-            call this%zci06 % iN2F3(fN,fF,this%ysz(1),this%ysz(3),bc1,bcn)
+            call this%zci06 % iN2F3(fN,fF,this%zsz(1),this%zsz(2),bc1,bcn)
             else
-            call this%zci06 % iN2F3(fN,fF,this%ysz(1),this%ysz(3))
+            call this%zci06 % iN2F3(fN,fF,this%zsz(1),this%zsz(2))
             end if
         case (3)
             call GracefulExit("Case doesn't exist",453)

@@ -610,7 +610,7 @@ contains
           E_IO = VTK_VAR_XML(NC_NN=nn,varname='tag',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
           if( allocated(tmp1) ) deallocate(tmp1)
 
-         if((mix%use_surfaceTension)  ) then
+!         if((mix%use_surfaceTension)  ) then
             call update_halo(mix%kappa,tmp1,1,gp,.FALSE.)
             E_IO = VTK_VAR_XML(NC_NN=nn,varname='kappa',var=tmp1(1:nx2-nx1+1,1:ny2-ny1+1,1:nz2-nz1+1))
             if( allocated(tmp1) ) deallocate(tmp1)
@@ -752,7 +752,7 @@ contains
 !            if( allocated(tmp1) ) deallocate(tmp1)
 
        
-       endif
+!       endif
 
 
 
@@ -910,7 +910,7 @@ contains
 
 
 
-            if((mix%use_surfaceTension) ) then
+!            if((mix%use_surfaceTension) ) then
                 E_IO = PVTK_VAR_XML(varname='kappa', tp='Float64') 
                 E_IO = PVTK_VAR_XML(varname='maskKappa', tp='Float64')
                 E_IO = PVTK_VAR_XML(varname='fmask', tp='Float64')
@@ -944,7 +944,7 @@ contains
              !   E_IO = PVTK_VAR_XML(varname='surfaceTension_fxz', tp='Float64')
              !   E_IO = PVTK_VAR_XML(varname='surfaceTension_fxy', tp='Float64')
              !   E_IO = PVTK_VAR_XML(varname='surfaceTension_fyz', tp='Float64')
-           endif
+!           endif
 
 
             E_IO = PVTK_DAT_XML(var_location='node',var_block_action='close')
