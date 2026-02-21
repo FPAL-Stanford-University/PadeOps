@@ -394,14 +394,14 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
 
         sigma1 = -1500 ! -2400 ! -80000
 
-        where(yphys .LE. -0.75)
-           sponge(:,:,:,1) = sigma1*( (yphys + 0.75)/0.25)**2.0
+        where(yphys .LE. -0.90)
+           sponge(:,:,:,1) = sigma1*( (yphys + 0.90)/0.1)**2.0
         elsewhere
            sponge(:,:,:,1) = 0
         endwhere
 
-        where(yphys .GE. 0.75)
-           sponge(:,:,:,2) = sigma1*( (yphys- 0.75)/0.25)**2.0 
+        where(yphys .GE. 0.90)
+           sponge(:,:,:,2) = sigma1*( (yphys- 0.90)/0.1)**2.0 
         elsewhere
            sponge(:,:,:,2) = 0
         endwhere
@@ -515,7 +515,6 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
         ! speed of sound
         a0   = sqrt((gamma*(p_amb+p_infty) + 4.0d0/3.0d0*mu)/rho_0)
         a0_2   = sqrt((gamma*(p_amb+p_infty_2) + 4.0d0/3.0d0*mu_2)/rho_0_2)
-        print *, 
      !   delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximatethickness of erf profile
      !   yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
      !   Lr    = 24.0/(yphys(1,ny,1) - yphys(1,1,1))

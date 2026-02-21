@@ -37,100 +37,41 @@ module SolidGrid
     integer, parameter :: syy_index    = 15
     integer, parameter :: syz_index    = 16
     integer, parameter :: szz_index    = 17
-    integer, parameter :: rhoint_index = 18
-    integer, parameter :: uint_index   = 19
-    integer, parameter :: vint_index   = 20
-    integer, parameter :: wint_index   = 21
-    integer, parameter :: pint_index   = 22
-    integer, parameter :: eint_index   = 23
-    integer, parameter :: qyint_index  = 24
-    integer, parameter :: tauxyint_index   = 25
-    integer, parameter :: tauyyint_index   = 26
-    integer, parameter :: tauyzint_index   = 27
-    integer, parameter :: xflux_x_index       = 28
-    integer, parameter :: xflux_y_index       = 29
-    integer, parameter :: xflux_z_index       = 30
-    integer, parameter :: yflux_x_index       = 31
-    integer, parameter :: yflux_y_index       = 32
-    integer, parameter :: yflux_z_index       = 33
-    integer, parameter :: zflux_x_index       = 34
-    integer, parameter :: zflux_y_index       = 35
-    integer, parameter :: zflux_z_index       = 36
-    integer, parameter :: xflux_e_index       = 37
-    integer, parameter :: yflux_e_index       = 38
-    integer, parameter :: zflux_e_index       = 39
-    integer, parameter :: uJ_index            = 40
-    integer, parameter :: vJ_index            = 41
-    integer, parameter :: wJ_index            = 42
-    integer, parameter :: keJ_index           = 43
-    integer, parameter :: eJ_index            = 44
-    integer, parameter :: tauxx_index         = 45
-    integer, parameter :: tauyy_index         = 46
-    integer, parameter :: tauzz_index         = 47
-    integer, parameter :: tauxy_index         = 48
-    integer, parameter :: tauyx_index         = 49
-    integer, parameter :: tauxz_index         = 50
-    integer, parameter :: tauzx_index         = 51
-    integer, parameter :: tauyz_index         = 52
-    integer, parameter :: tauzy_index         = 53
-    integer, parameter :: tauxxe_index        = 54
-    integer, parameter :: tauyye_index        = 55
-    integer, parameter :: tauzze_index        = 56
-    integer, parameter :: tauxye_index        = 57
-    integer, parameter :: tauyxe_index        = 58
-    integer, parameter :: tauyze_index        = 59
-    integer, parameter :: tauzye_index        = 60
-    integer, parameter :: tauxze_index        = 61
-    integer, parameter :: tauzxe_index        = 62
-    integer, parameter :: dudx_index          = 63
-    integer, parameter :: dudy_index          = 64
-    integer, parameter :: dudz_index          = 65
-    integer, parameter :: dvdx_index          = 66
-    integer, parameter :: dvdy_index          = 67
-    integer, parameter :: dvdz_index          = 68
-    integer, parameter :: dwdx_index          = 69
-    integer, parameter :: dwdy_index          = 70
-    integer, parameter :: dwdz_index          = 71 
-    integer, parameter  :: tauSum_index       = 72
-    integer, parameter  :: esum_index         = 73
-    integer, parameter  :: esumJ_index        = 74
-    integer, parameter  :: pmix_index         = 75
-    integer, parameter  :: intP_index         = 76
-    integer, parameter  :: qDiv_index         = 77
-    integer, parameter  :: pEvolve_index      = 78
-    integer, parameter  :: VFEvolve_index     = 79
-    integer, parameter  :: pError_index       = 80
-    integer, parameter  :: VFError_index      = 81
-    integer, parameter  :: pJ_index           = 82
-    integer, parameter  :: tauRho_index       = 83
-    integer, parameter  :: metric_exact_index = 84
-    integer, parameter  :: metric_index       = 85
-    integer, parameter  :: metric_N2F_index   = 86
-    integer, parameter  :: metric_half_index  = 87
-    integer, parameter  :: uref_index         = 88
-    integer, parameter  :: dudy2_index        = 89
-    integer, parameter  :: dvfdy_index        = 90
-    integer, parameter  :: drhody_index       = 91
-    integer, parameter  :: dmudy_index        = 92
-    integer, parameter  :: fsw_index          = 93
-    integer, parameter  :: divgrad_index      = 94
-    integer, parameter  :: eLAD_index         = 95
-    integer, parameter  :: rhoe_index         = 96
-    integer, parameter  :: VFint_index        = 97
-    integer, parameter  :: m1int_index        = 98
-    integer, parameter  :: m2int_index        = 99
-    integer, parameter  :: rhouheur_index     = 100
-    integer, parameter  :: rhovheur_index     = 101
-    integer, parameter  :: rhowheur_index     = 102
-    integer, parameter  :: rhoeheur_index     = 103
-    integer, parameter  :: m1heur_index       = 104
-    integer, parameter  :: m2heur_index       = 105
-    integer, parameter  :: VFheur_index       = 106
-    integer, parameter  :: entropy_index      = 107
-    integer, parameter  :: discreteKE_index   = 108 
-    integer, parameter  :: puKE_index         = 109 
-    integer, parameter  :: surfTen_index      = 110
-    integer, parameter  :: nfields = 110
+    integer, parameter :: uint_index   = 18
+    integer, parameter :: vint_index   = 19
+    integer, parameter :: wint_index   = 20
+    integer, parameter :: uJ_index            = 21
+    integer, parameter :: vJ_index            = 22
+    integer, parameter :: wJ_index            = 23
+    integer, parameter :: keJ_index           = 24
+    integer, parameter :: eJ_index            = 25
+    integer, parameter :: tauxx_index         = 26
+    integer, parameter :: tauyy_index         = 27
+    integer, parameter :: tauzz_index         = 28
+    integer, parameter :: tauxy_index         = 29
+    integer, parameter :: tauyx_index         = 30
+    integer, parameter :: tauxz_index         = 31
+    integer, parameter :: tauzx_index         = 32
+    integer, parameter :: tauyz_index         = 33
+    integer, parameter :: tauzy_index         = 34
+    integer, parameter :: dudx_index          = 35
+    integer, parameter :: dudy_index          = 36
+    integer, parameter :: dudz_index          = 37
+    integer, parameter :: dvdx_index          = 38
+    integer, parameter :: dvdy_index          = 39
+    integer, parameter :: dvdz_index          = 40
+    integer, parameter :: dwdx_index          = 41
+    integer, parameter :: dwdy_index          = 42
+    integer, parameter :: dwdz_index          = 43 
+    integer, parameter  :: tauSum_index       = 44
+    integer, parameter  :: metric_exact_index = 45
+    integer, parameter  :: metric_index       = 46
+    integer, parameter  :: metric_N2F_index   = 47
+    integer, parameter  :: metric_half_index  = 48
+    integer, parameter  :: uref_index         = 49
+    integer, parameter  :: m1int_index        = 50
+    integer, parameter  :: m2int_index        = 51
+    integer, parameter  :: nfields = 51
 
     integer, parameter :: mom_index = 1
     integer, parameter :: TE_index = mom_index+3
@@ -1031,7 +972,6 @@ contains
         this%mu   => this%fields(:,:,:,  mu_index)  
         this%bulk => this%fields(:,:,:,bulk_index)  
         this%kap  => this%fields(:,:,:, kap_index)   
-        this%pmix => this%fields(:,:,:,pmix_index) 
         this%devstress => this%fields(:,:,:,sxx_index:szz_index)
         this%sxx  => this%fields(:,:,:, sxx_index)   
         this%sxy  => this%fields(:,:,:, sxy_index)   
@@ -1039,36 +979,15 @@ contains
         this%syy  => this%fields(:,:,:, syy_index)   
         this%syz  => this%fields(:,:,:, syz_index)   
         this%szz  => this%fields(:,:,:, szz_index)   
-        this%rho_int => this%fields(:,:,:, rhoint_index)
         this%u_int => this%fields(:,:,:, uint_index)
         this%v_int => this%fields(:,:,:, vint_index)
         this%w_int => this%fields(:,:,:, wint_index)
-        this%p_int => this%fields(:,:,:, pint_index)
-        this%e_int => this%fields(:,:,:, eint_index)
-        this%qy_int => this%fields(:,:,:, qyint_index)
-        this%tauxy_int => this%fields(:,:,:, tauxyint_index)
-        this%tauyy_int => this%fields(:,:,:, tauyyint_index)
-        this%tauyz_int => this%fields(:,:,:, tauyzint_index)
-        this%xflux_x   => this%fields(:,:,:, xflux_x_index)
-        this%xflux_y   => this%fields(:,:,:, xflux_y_index)
-        this%xflux_z   => this%fields(:,:,:, xflux_z_index)
-        this%yflux_x   => this%fields(:,:,:, yflux_x_index)
-        this%yflux_y   => this%fields(:,:,:, yflux_y_index)
-        this%yflux_z   => this%fields(:,:,:, yflux_z_index)
-        this%zflux_x   => this%fields(:,:,:, zflux_x_index)
-        this%zflux_y   => this%fields(:,:,:, zflux_y_index)
-        this%zflux_z   => this%fields(:,:,:, zflux_z_index)
-        this%xflux_e   => this%fields(:,:,:, xflux_e_index)
-        this%yflux_e   => this%fields(:,:,:, yflux_e_index)
-        this%zflux_e   => this%fields(:,:,:, zflux_e_index)
         this%uJ        => this%fields(:,:,:, uJ_index)
         this%vJ        => this%fields(:,:,:, vJ_index)
         this%wJ        => this%fields(:,:,:, wJ_index)
         this%keJ       => this%fields(:,:,:, keJ_index)
         this%eJ        => this%fields(:,:,:,eJ_index)
-        this%pJ        => this%fields(:,:,:,pJ_index)
         this%uref      => this%fields(:,:,:,uref_index)
-        this%tauRho    => this%fields(:,:,:,tauRho_index) 
         this%tauxx     => this%fields(:,:,:,tauxx_index)
         this%tauyy     => this%fields(:,:,:,tauyy_index)
         this%tauzz     => this%fields(:,:,:,tauzz_index)
@@ -1078,18 +997,8 @@ contains
         this%tauzx     => this%fields(:,:,:,tauzx_index)
         this%tauyz     => this%fields(:,:,:,tauyz_index)
         this%tauzy     => this%fields(:,:,:,tauzy_index)
-        this%tauxxe    => this%fields(:,:,:,tauxxe_index)
-        this%tauyye    => this%fields(:,:,:,tauyye_index)
-        this%tauzze    => this%fields(:,:,:,tauzze_index)
-        this%tauxye    => this%fields(:,:,:,tauxye_index)
-        this%tauyxe    => this%fields(:,:,:,tauyxe_index)
-        this%tauyze    => this%fields(:,:,:,tauyze_index)
-        this%tauzye    => this%fields(:,:,:,tauzye_index)
-        this%tauxze    => this%fields(:,:,:,tauxze_index)
-        this%tauzxe    => this%fields(:,:,:,tauzxe_index)
         this%dudx      => this%fields(:,:,:,dudx_index)
         this%dudy      => this%fields(:,:,:,dudy_index)
-        this%dudy2      => this%fields(:,:,:,dudy2_index)
         this%dudz      => this%fields(:,:,:,dudz_index)
         this%dvdx      => this%fields(:,:,:,dvdx_index)
         this%dvdy      => this%fields(:,:,:,dvdy_index)
@@ -1098,39 +1007,12 @@ contains
         this%dwdy      => this%fields(:,:,:,dwdy_index) 
         this%dwdz      => this%fields(:,:,:,dwdz_index)
         this%tauSum    => this%fields(:,:,:,tauSum_index)
-        this%esum      => this%fields(:,:,:,esum_index)
-        this%esumJ     => this%fields(:,:,:,esumJ_index)
-        this%intP      => this%fields(:,:,:,intP_index)
-        this%qDiv      => this%fields(:,:,:,qDiv_index)
-        this%pEvolve   => this%fields(:,:,:,pEvolve_index)
-        this%VFEvolve  => this%fields(:,:,:,VFEvolve_index)
-        this%pError    => this%fields(:,:,:,pError_index)
-        this%VFError   => this%fields(:,:,:,VFError_index)       
         this%metric    => this%fields(:,:,:,metric_index)
         this%metric_exact    => this%fields(:,:,:,metric_exact_index)
         this%metric_half => this%fields(:,:,:,metric_half_index)
         this%metric_N2F  => this%fields(:,:,:,metric_N2F_index) 
-        this%dmudy     => this%fields(:,:,:, dmudy_index)
-        this%drhody    => this%fields(:,:,:,drhody_index)
-        this%dvfdy     => this%fields(:,:,:,dvfdy_index)
-        this%fsw       => this%fields(:,:,:,fsw_index)
-        this%divgrad   => this%fields(:,:,:,divgrad_index)
-        this%eLAD      => this%fields(:,:,:,eLAD_index)
-        this%rhoe      => this%fields(:,:,:,rhoe_index)
-        this%VF_int    => this%fields(:,:,:,VFint_index)
         this%m1_int    => this%fields(:,:,:,m1int_index)
         this%m2_int    => this%fields(:,:,:,m2int_index)
-        this%rhouHeur  => this%fields(:,:,:,rhouheur_index)
-        this%rhovHeur  => this%fields(:,:,:,rhovheur_index)
-        this%rhowHeur  => this%fields(:,:,:,rhowheur_index)
-        this%rhoeHeur  => this%fields(:,:,:,rhoeheur_index)
-        this%m1Heur    => this%fields(:,:,:,m1heur_index)
-        this%m2Heur    => this%fields(:,:,:,m2heur_index)
-        this%VFHeur    => this%fields(:,:,:,VFheur_index)
-        this%entropy   => this%fields(:,:,:,entropy_index)
-        this%discreteKE => this%fields(:,:,:,discreteKE_index)
-        this%puKE      => this%fields(:,:,:,puKE_index)
-        this%SurfTenDiff => this%fields(:,:,:,surfTen_index)
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
@@ -1193,99 +1075,40 @@ contains
         varnames(15) = 'Syy'
         varnames(16) = 'Syz'
         varnames(17) = 'Szz'
-        varnames(18) = 'rhoint'
-        varnames(19) = 'uint'
-        varnames(20) = 'vint'
-        varnames(21) = 'wint'  
-        varnames(22) = 'pint'
-        varnames(23) = 'eint'
-        varnames(24) = 'qyint'
-        varnames(25) = 'tauxyint'
-        varnames(26) = 'tauyyint' 
-        varnames(27) = 'tauyzint'
-        varnames(28) = 'xflux_x'
-        varnames(29) = 'xflux_y'
-        varnames(30) = 'xflux_z'
-        varnames(31) = 'yflux_x'      
-        varnames(32) = 'yflux_y' 
-        varnames(33) = 'yflux_z'          
-        varnames(34) = 'zflux_x'      
-        varnames(35) = 'zflux_y' 
-        varnames(36) = 'zflux_z'
-        varnames(37) = 'xflux_e'      
-        varnames(38) = 'yflux_e' 
-        varnames(39) = 'zflux_e' 
-        varnames(40) = 'uJ'
-        varnames(41) = 'vJ'
-        varnames(42) = 'wJ'
-        varnames(43) = 'keJ'
-        varnames(44) = 'eJ'  
-        varnames(45) = 'tauxx'
-        varnames(46) = 'tauyy'
-        varnames(47) = 'tauzz'
-        varnames(48) = 'tauxy'
-        varnames(49) = 'tauyx'
-        varnames(50) = 'tauxz'
-        varnames(51) = 'tauzx'
-        varnames(52) = 'tauyz'
-        varnames(53) = 'tauzy'
-        varnames(54) = 'tauxxe'
-        varnames(55) = 'tauyye'
-        varnames(56) = 'tauzze'
-        varnames(57) = 'tauxye'
-        varnames(58) = 'tauyxe'
-        varnames(59) = 'tauyze'
-        varnames(60) = 'tauzye'
-        varnames(61) = 'tauxze'
-        varnames(62) = 'tauzxe'
-        varnames(63) = 'dudx'
-        varnames(64) = 'dudy'
-        varnames(65) = 'dudz'
-        varnames(66) = 'dvdx'
-        varnames(67) = 'dvdy'
-        varnames(68) = 'dvdz'
-        varnames(69) = 'dwdx'
-        varnames(70) = 'dwdy'
-        varnames(71) = 'dwdz'
-        varnames(72) = 'tauSum'
-        varnames(73) = 'esum'
-        varnames(74) = "esumJ"
-        varnames(75) = "pmix2"
-        varnames(76) = "intP"
-        varnames(77) = "qDiv"
-        varnames(78) = "pEvolve"
-        varnames(79) = "VFEvolve"
-        varnames(80) = "pError"
-        varnames(81) = "VFError"
-        varnames(82) = "pJ"
-        varnames(83) = 'tauRho'
-        varnames(84) = 'metric_exact'
-        varnames(85) = 'metric'
-        varnames(86) = 'metric_N2F'
-        varnames(87) = 'metric_half'
-        varnames(88) = 'uref'
-        varnames(89) = 'dudy2'
-        varnames(90) = 'dvfdy'
-        varnames(91) = 'drhody'
-        varnames(92) = 'dmudy'
-        varnames(93) = 'fsw'
-        varnames(94) = 'divgrad'
-        varnames(95) = 'eLAD'
-        varnames(96) = 'rhoe'
-        varnames(97) = 'VFint'
-        varnames(98) = 'm1int'
-        varnames(99) = 'm2int'
-        varnames(100) = 'rhouHeur'
-        varnames(101) = 'rhovHeur'
-        varnames(102) = 'rhowHeur'
-        varnames(103) = 'rhoeHeur'
-        varnames(104) = 'm1Heur'
-        varnames(105) = 'm2Heur'
-        varnames(106) = 'VFHeur'
-        varnames(107) = 'entropy_term'
-        varnames(108) = 'discrete_KE'
-        varnames(109) = 'puKE'
-        varnames(110) = 'surfTenDiff'
+        varnames(18) = 'uint'
+        varnames(19) = 'vint'
+        varnames(20) = 'wint'  
+        varnames(21) = 'uJ'
+        varnames(22) = 'vJ'
+        varnames(23) = 'wJ'
+        varnames(24) = 'keJ'
+        varnames(25) = 'eJ'  
+        varnames(26) = 'tauxx'
+        varnames(27) = 'tauyy'
+        varnames(28) = 'tauzz'
+        varnames(29) = 'tauxy'
+        varnames(30) = 'tauyx'
+        varnames(31) = 'tauxz'
+        varnames(32) = 'tauzx'
+        varnames(33) = 'tauyz'
+        varnames(34) = 'tauzy'
+        varnames(35) = 'dudx'
+        varnames(36) = 'dudy'
+        varnames(37) = 'dudz'
+        varnames(38) = 'dvdx'
+        varnames(39) = 'dvdy'
+        varnames(40) = 'dvdz'
+        varnames(41) = 'dwdx'
+        varnames(42) = 'dwdy'
+        varnames(43) = 'dwdz'
+        varnames(44) = 'tauSum'
+        varnames(45) = 'metric_exact'
+        varnames(46) = 'metric'
+        varnames(47) = 'metric_N2F'
+        varnames(48) = 'metric_half'
+        varnames(49) = 'uref'
+        varnames(50) = 'm1int'
+        varnames(51) = 'm2int'
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
@@ -1351,8 +1174,6 @@ contains
         nullify(this%wJ)
         nullify(this%keJ)
         nullify(this%eJ)
-        nullify(this%pJ)
-        nullify(this%tauRho)
         nullify(this%tauxx)
         nullify(this%tauyy)
         nullify(this%tauzz)
@@ -1362,15 +1183,6 @@ contains
         nullify(this%tauzx)
         nullify(this%tauyz)
         nullify(this%tauzy)
-        nullify(this%tauxxe)
-        nullify(this%tauyye)
-        nullify(this%tauzze)
-        nullify(this%tauxye)
-        nullify(this%tauyxe)
-        nullify(this%tauyze)
-        nullify(this%tauzye)
-        nullify(this%tauxze)
-        nullify(this%tauzxe)
         nullify(this%dudx)
         nullify(this%dudy)
         nullify(this%dudz)
@@ -1381,26 +1193,11 @@ contains
         nullify(this%dwdy)
         nullify(this%dwdz)
         nullify(this%tauSum)
-        nullify(this%esum)
-        nullify(this%esumJ)
-        nullify(this%pmix)
-        nullify(this%intP)
-        nullify(this%qDiv)
-        nullify(this%pEvolve)
-        nullify(this%VFEvolve)
-        nullify(this%VFError)
-        nullify(this%pError)
         nullify(this%metric)
         nullify(this%metric_exact)
         nullify(this%metric_half)
         nullify(this%metric_N2F)
         nullify(this%uref)
-        nullify(this%dudy2)
-        nullify(this%fsw)
-        nullify(this%divgrad)
-        nullify(this%eLAD)
-        nullify(this%rhoe)
-        nullify(this%VF_int)
         nullify(this%m1_int)
         nullify(this%m2_int)
 
@@ -1674,7 +1471,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 5.0, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 10.0, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1683,7 +1480,7 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 12.0
+       L = 14.0
 
        y_half = this%y + 0.5*this%dy
         
@@ -1788,7 +1585,6 @@ contains
             EtaSum = EtaSum + this%mix%material(i)%eh*this%mix%material(i)%rhom*eta(:,:,:,i)
          enddo
 
-         this%esum = esum
 
        if(.NOT. this%use_Stagg) then
 
@@ -1846,8 +1642,6 @@ contains
 
          end if
 
-         this%esumJ = esumJ
-         this%intP = this%p
 
     end subroutine
 
@@ -1905,7 +1699,7 @@ contains
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
         this%mix%deltakap = 1
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
             ehmix = this%e
@@ -1917,7 +1711,7 @@ contains
 
 !        call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         ! compute species artificial conductivities and diffusivities
-        call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w, duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+        call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
         do imat = 1,2
                call this%mix%material(imat)%getLAD_VF(this%rho,this%sos,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy)
                call this%mix%material(imat)%getYsLAD(this%rho,this%sos,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -2052,7 +1846,6 @@ contains
                 ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
 !                call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
 
-                call this%entropy_discreteKE()
                 if( this%Stretch1Dy) then               
                    call this%viz%WriteViz(this%decomp, this%meshstretch, this%fields, this%mix, this%tsim)
                 else
@@ -2117,6 +1910,7 @@ contains
 
         end do
 
+         call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
     end subroutine
 
     subroutine advance_RK45(this)
@@ -2142,16 +1936,11 @@ contains
         integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
         real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
-        real(rkind) :: Ystime, VFtime, consvTime, intsharp, u_max, u_min,rhoYs_min, rhoYs_max,tmod,Ut
+        real(rkind) ::cputime, Ystime, VFtime, consvTime, intsharp, u_max, u_min,rhoYs_min, rhoYs_max,tmod,Ut
         
         character(len=clen) :: charout
 
 
-        allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
-        ! Get artificial properties for initial conditions
-        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
-        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
-        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
 
 
         call this%get_conserved()
@@ -2161,27 +1950,6 @@ contains
      
 
        do isub = 1,  RK45_steps
-
-!           Ut =mod(0.6*this%tsim,2.0)
-!           eta = mod(this%y - Ut, 2.0)
-!           tmp = (half)*(erf( (eta+0.5_rkind)/(6.0*this%dy) ) - erf((eta-0.5_rkind)/(6.0*this%dy)))
-
-!                 this%mix%material(1)%VF = 1d-12 + (one-two*1d-12)*tmp !  + 1d-9*(noise2-0.5)
-!                 this%mix%material(2)%VF =  1 - this%mix%material(1)%VF
-
-!            do i = 1,3
-!                call this%filter(this%u_int, this%fil, 1,-this%x_bc,this%y_bc,this%z_bc)
-!                call this%filter(this%v_int, this%fil, 1,this%x_bc,-this%y_bc,this%z_bc)
-!               call this%filter(this%w_mid(:,:,:,i), this%fil, 1,this%x_bc,this%y_bc,-this%z_bc)
-!                call this%filter(this%p_mid(:,:,:,i), this%fil, 1,this%x_bc,this%y_bc,-this%z_bc)
-!                call this%filter(this%p_mid(:,:,:,i), this%fil,1,this%x_bc,this%y_bc,-this%z_bc) 
-!                do imat = 1,2
-!                   call this%filter(this%mix%material(imat)%VF_mid(:,:,:,i),this%fil, 1,this%x_bc,this%y_bc,-this%z_bc)
-!                   call this%filter(this%mix%material(imat)%rhoYs_mid(:,:,:,i),this%fil,1,this%x_bc,this%y_bc,-this%z_bc)
-!                enddo
-!            enddo
-
-
 
 
             if(this%use_CnsrvSurfaceTension) then
@@ -2194,8 +1962,9 @@ contains
                 if(this%mix%ns.ne.2) then
                     call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
                 endif
-
+                
                 call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%x,this%y,isub)
+
 ! Compute surface tension terms for momentum and energy equations
 
             endif
@@ -2211,10 +1980,8 @@ contains
              this%mix%material(i)%deltakap = this%mix%deltakap
 
             enddo        
-!            call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc)
+!            call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc) 
             call this%getFaces()
-            call this%mix%get_entropy()
-
             !!!!!!!!!!!!!!!!!!!!!! COMMENTED OUT G STUFF !!!!!!!!!!!!!!!!!!!!!!
             !call this%get_conserved_g()
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2234,20 +2001,11 @@ contains
             end if
             ! Pre-compute stress, LAD, J, etc.
             call this%mix%getSOS(this%rho,this%p,this%sos)
-            call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,this%y_bc,this%z_bc)
-            call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc,-this%y_bc,this%z_bc)
-            call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,this%y_bc,-this%z_bc)
-            this%dudy = dudy
-            call this%gradient(this%rho, tmp1, tmp2, tmp3,  this%x_bc,this%y_bc,-this%z_bc)
-            this%drhody = tmp2
-            call this%gradient(this%mu, tmp1, tmp2, tmp3,  this%x_bc,this%y_bc,-this%z_bc)
-            this%dmudy = tmp2
-            call this%laplacian(this%u,this%dudy2, this%x_bc,this%y_bc,this%z_bc)
 
-            call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,duidxj,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+            call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
 
-            call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
-            call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
+!            call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
+!            call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
 
 
             if(this%intSharp) then
@@ -2345,8 +2103,8 @@ contains
                call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_int,this%v_int,this%w_int,this%sos,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
             endif
 
-
             if(this%pEqb) then
+
 
                if(this%use_Stagg) then
                   call divergence(this%decomp,this%der,this%u,this%v,this%w,divu,this%x_bc,this%y_bc,this%z_bc)
@@ -2369,7 +2127,6 @@ contains
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc)
 ! Hydrodynamic energy
             end if
-
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             !if (.NOT. this%PTeqb) then
 
@@ -2471,7 +2228,7 @@ contains
                ! do i=1,2
 
                !    call this%mix%equilibrateTemperature(this%rho, this%e, this%p, this%T, isub, RK45_steps)
-               call this%mix%equilibratePressureTemperature_new(this%rho,this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
+!               call this%mix%equilibratePressureTemperature_new(this%rho,this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
                !     call this%mix%pressureLiquidGas(this%rho, this%e, this%p)
                !call this%mix%get_pmix(this%p)                         ! Get mixture pressure
                !call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
@@ -2552,8 +2309,6 @@ contains
 !        call this%FilDiffHeuristic()  
 
         this%step = this%step + 1
-        nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz)
-        deallocate( duidxj )
     end subroutine
 
     subroutine getFaces( this)
@@ -2657,6 +2412,7 @@ contains
       tmp = this%w_mid(:,:,:,3)
       tmp3 = af(:,:,:,3)
 
+      if(nz .GT. 1 ) then
       call transpose_y_to_z(tmp,ztmp1,this%decomp)
       call transpose_y_to_z(tmp3,ztmp2,this%decomp)
       call transpose_y_to_z(peff(:,:,:,3),ztmp3,this%decomp)
@@ -2674,12 +2430,9 @@ contains
 
     !  call transpose_z_to_y(ztmp1,tmp,this%decomp)
       this%w_int(:,:,:) = tmp
-
+      endif
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      this%pEvolve = this%w_mid(:,:,:,3) - this%w_int
-      this%pError  = this%v_mid(:,:,:,2) - this%v_int
  
-      this%VF_int =  this%mix%material(2)%VF_mid(:,:,:,2)
       this%m1_int = this%mix%material(1)%rhoYs_mid(:,:,:,2)
       this%m2_int = this%mix%material(2)%rhoYs_mid(:,:,:,2)
 
@@ -2735,14 +2488,14 @@ contains
         rhokappafil = this%mix%material(1)%rhodiff*(this%mix%kappa)**2
         call this%filter(rhofil, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
-        dtYs1 = 0.75_rkind * delta**2 / (P_MAXVAL( rhofil   ) + eps) 
+        dtYs1 = 0.7_rkind * delta**2 / (P_MAXVAL( rhofil   ) + eps) 
         dtYs2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff  ) + eps)
         dtVF1 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff  ) + eps)
         dtVF2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff  ) + eps)
 
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	dtCurv = 0.75_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)  ! (P_MAXVAL(rhokappafil ) + eps) ! (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
+	dtCurv =dtYs1 ! 0.7_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)  ! (P_MAXVAL(rhokappafil ) + eps) ! (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then
           ! filter3D(this%
@@ -2765,7 +2518,6 @@ contains
             dtkap  = one / ( (P_MAXVAL(this%kap*this%T/(this%rho*delta**4)))**(third) + eps) ! Cook (2009) formulation
         end if
 
-        dteKap  = one / ( (P_MAXVAL(this%eLAD*this%T/(this%rho*delta**4)))**(third) + eps)
         dtkap     = 0.2_rkind * dtkap! * this%CFL
         !dtkap     = 0.2_rkind * dtkap !/ 5.0! test
 
@@ -2864,9 +2616,6 @@ contains
              else if ( this%dt > dtkap ) then
                  this%dt = dtkap
                  stability = 'conductive'
-             else if ( this%dt > dteKap ) then
-                 this%dt = dteKap
-                 stability = 'e conductive '
              else if ( this%dt > dtdiff ) then
                  this%dt = dtdiff
                  stability = 'diffusive'
@@ -2911,11 +2660,6 @@ contains
                this%dt = dtkap
                write(str,'(ES10.3E3)') 1.0D0-dtkap/dtCFL
                stability = 'conductive: '//trim(str)//' CFL loss fraction'
-            endif
-             if ( this%dt > dteKap ) then
-               this%dt = dteKap
-               write(str,'(ES10.3E3)') 1.0D0-dteKap/dtCFL
-               stability = 'e conductive: '//trim(str)//' CFL loss fraction'
             endif
 
             if ( this%dt > dtdiff ) then
@@ -3144,14 +2888,6 @@ contains
         tau13 = this%mu*(2*cos(2*z_half)*sin(4*this%x) - cos(4*z_half)*sin(this%x))
         tau31 = this%mu*(2*cos(2*this%z)*sin(4*x_half) - cos(4*this%z)*sin(x_half)) 
         
-        this%tauxx = tauxx; this%tauxxe = tau11; 
-        this%tauxy = tauxy; this%tauxye = tau12;
-        this%tauyx = tauyx; this%tauyxe = tau21;
-        this%tauyy = tauyy; this%tauyye = tau22; 
-        this%tauyz = tauyz; this%tauyze = tau23;
-        this%tauzy = tauzy; this%tauzye = tau32;
-        this%tauxz = tauxz; this%tauxze = tau13;
-        this%tauzx = tauzx; this%tauzxe = tau31;
     end subroutine
 
     subroutine getRHS(this, rhs, divu, viscwork)
@@ -3180,10 +2916,6 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, 3) :: J,Frho,Fenergy, Fp, yMetric_F2N_int, De_int,rho_int, eLADcoef,gradrhoh,rhoh,gradp
         real(rkind) :: g = -0.1
 
-        !this%u = sin(2*this%y)*sin(4*this%x)
-        !this%v = 0
-        !this%w = cos(4*this%y)*cos(this%x)
-        !sin(2*this%y)*sin(4*this%x); this%v = 0; this%w =  0; !cos(4*this%y)*cos(this%x); this%w = 0;
 
         if(this%use_Stagg) then
 
@@ -3227,21 +2959,6 @@ contains
            endif
 
 
-           call gradient(this%decomp,this%derCD06,this%u, tmp1, dudy, tmp3,  -this%x_bc,  this%y_bc,this%z_bc)
-           this%dudy = dudy
-           call gradient(this%decomp,this%derCD06,dudy, tmp1, tmp2, tmp3,  -this%x_bc,  this%y_bc,this%z_bc)
-           this%dudy2 = tmp2
-
-           call gradient(this%decomp,this%derCD06,this%mix%material(1)%VF, tmp1, tmp2, tmp3,  -this%x_bc,  this%y_bc,this%z_bc)
-           this%dvfdy = tmp2
-
-           call gradient(this%decomp,this%derCD06,this%rho, tmp1, tmp2, tmp3,  -this%x_bc,  this%y_bc,this%z_bc)
-           this%drhody = tmp2
-
-           call gradient(this%decomp,this%derCD06,this%mu, tmp1, tmp2, tmp3,  -this%x_bc,  this%y_bc,this%z_bc)
-           this%dmudy = tmp2
-
-        
            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! GET STAGGERED DERIVATIVES !!!!!!!!!!!!!!!!!!!!
            dudx_s => duidxj_s(:,:,:,1); dudy_s => duidxj_s(:,:,:,2); dudz_s => duidxj_s(:,:,:,3);
            dvdx_s => duidxj_s(:,:,:,4); dvdy_s => duidxj_s(:,:,:,5); dvdz_s => duidxj_s(:,:,:,6);
@@ -3275,59 +2992,11 @@ contains
 
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))* 4_rkind)
-!        call this%LAD%get_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
-
-!       call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))* 4_rkind)
 
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Conductivity LAD        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        rhoeJ = 0
-!       do i = 1,2
 
-!         rhoh = this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*(this%p_mid + this%mix%material(i)%hydro%Pinf)
-!         call gradFV_N2Fx(this%decomp,this%derStagg,this%rho*this%e,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!         call gradFV_N2Fy(this%decomp,this%derStagg,this%rho*this%e,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!         call gradFV_N2Fz(this%decomp,this%derStagg,this%rho*this%e,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!         call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))* 4_rkind )
-
-!
-!         call interpolateFV_x(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!         call interpolateFV_y(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!         call interpolateFV_z(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!         call divergenceFV(this%decomp,this%derStagg,eLADcoef(:,:,:,1)*drhoedx,eLADcoef(:,:,:,2)*drhoedy,eLADcoef(:,:,:,3)*drhoedz,rhoeJ,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!         call divergenceFV(this%decomp,this%derStagg,this%mix%material(i)%VF_mid(:,:,:,1)*eLADcoef(:,:,:,1)*drhoedx,this%mix%material(i)%VF_mid(:,:,:,2)*eLADcoef(:,:,:,2)*drhoedy,this%mix%material(i)%VF_mid(:,:,:,3)*eLADcoef(:,:,:,3)*drhoedz,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!         rhoeJ = rhoeJ + tmp
-!     enddo
-
-
-!       call gradFV_N2Fx(this%decomp,this%derStagg,this%T,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call gradFV_N2Fy(this%decomp,this%derStagg,this%T,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call gradFV_N2Fz(this%decomp,this%derStagg,this%T,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!       call interpolateFV_x(this%decomp,this%interpMid,this%kap,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call interpolateFV_y(this%decomp,this%interpMid,this%kap,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!       call interpolateFV_z(this%decomp,this%interpMid,this%kap,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!       call divergenceFV(this%decomp,this%derStagg,eLADcoef(:,:,:,1)*drhoedx,eLADcoef(:,:,:,2)*drhoedy,eLADcoef(:,:,:,3)*drhoedz,rhoeJ,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!       do i = 1,2
-
-!          rhoh = this%mix%material(i)%hydro%onebygam_m1*this%mix%material(i)%hydro%gam*(this%p_mid + this%mix%material(i)%hydro%Pinf)
-!         call gradFV_N2Fx(this%decomp,this%derStagg,rhoh,drhoedx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)       
-!         call gradFV_N2Fy(this%decomp,this%derStagg,rhoh,drhoedy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!         call gradFV_N2Fz(this%decomp,this%derStagg,rhoh,drhoedz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!          call interpolateFV_x(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!          call interpolateFV_y(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!          call interpolateFV_z(this%decomp,this%interpMid,this%eLAD,eLADcoef(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!         call divergenceFV(this%decomp,this%derStagg,this%mix%material(i)%VF_mid(:,:,:,1)*this%mix%material(i)%adiff_stagg(:,:,:,1)*drhoedx,this%mix%material(i)%VF_mid(:,:,:,2)*this%mix%material(i)%adiff_stagg(:,:,:,2)*drhoedy,this%mix%material(i)%VF_mid(:,:,:,3)*this%mix%material(i)%adiff_stagg(:,:,:,3)*drhoedz,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!         rhoeJ = rhoeJ + tmp
-!     enddo
-
-        !call this%LAD%get_P_conductivity(this%rho,this%p,this%e,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy. conductivity 
             ! is assumed a function of only hydrostatic energy
@@ -3390,13 +3059,10 @@ contains
            !call this%CheckTau(tauxx,tauyy,tauzz,tauxy,tauyx,tauyz,tauzy,tauxz,tauzx)
 
         endif 
-        call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)
-        call this%mix%get_qmix(qx, qy, qz)                     ! Get only species diffusion fluxes if PTeqb, else, everything
         if (this%PTeqb) then
           call this%get_q(qx, qy, qz)            ! add artificial thermal conduction fluxes
         end if
 
-        !call this%get_qLAD(qx,qy,qz,this%qDiv)
         rhs = zero
 
         if(this%use_Stagg) then
@@ -3476,18 +3142,13 @@ contains
 
           
           if( this%LADInt .OR. this%LADN2F) then
-           !  call interpolateFV(this%decomp,this%interpMid,half*(this%u**2 + this%v**2 + this%w**2),ke_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-            ! call interpolateFV(this%decomp,this%interpMid,this%v,v_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-            ! call interpolateFV(this%decomp,this%interpMid,this%w,w_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-           ! ke_int = half*(u_int**2 + v_int**2 + w_int**2)
              ke_int = half*(this%u_mid*this%u_mid + this%v_mid*this%v_mid + this%w_mid*this%w_mid)
              call divergenceFV(this%decomp,this%derStagg,this%u_mid(:,:,:,1)*Frho(:,:,:,1),this%u_mid(:,:,:,2)*Frho(:,:,:,2),this%u_mid(:,:,:,3)*Frho(:,:,:,3),this%uJ,this%periodicx, this%periodicy, this%periodicz,this%x_bc,this%y_bc,this%z_bc)
              call divergenceFV(this%decomp,this%derStagg,this%v_mid(:,:,:,1)*Frho(:,:,:,1),this%v_mid(:,:,:,2)*Frho(:,:,:,2),this%v_mid(:,:,:,3)*Frho(:,:,:,3),this%vJ,this%periodicx, this%periodicy, this%periodicz,this%x_bc,this%y_bc,this%z_bc)
              call divergenceFV(this%decomp,this%derStagg,this%w_mid(:,:,:,1)*Frho(:,:,:,1),this%w_mid(:,:,:,2)*Frho(:,:,:,2),this%w_mid(:,:,:,3)*Frho(:,:,:,3),this%wJ,this%periodicx, this%periodicy, this%periodicz,this%x_bc,this%y_bc,this%z_bc)
              call divergenceFV(this%decomp,this%derStagg,ke_int(:,:,:,1)*Frho(:,:,:,1),ke_int(:,:,:,2)*Frho(:,:,:,2),ke_int(:,:,:,3)*Frho(:,:,:,3),this%keJ,this%periodicx, this%periodicy, this%periodicz,this%x_bc,this%y_bc,this%z_bc)
              call divergenceFV(this%decomp,this%derStagg,Fenergy(:,:,:,1),Fenergy(:,:,:,2),Fenergy(:,:,:,3),this%eJ,this%periodicx, this%periodicy, this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!            call divergenceFV(this%decomp,this%derStagg,Fp(:,:,:,1),Fp(:,:,:,2),Fp(:,:,:,3),this%pJ,this%periodicx,this%periodicy, this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 
            else
 
@@ -3609,7 +3270,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call this%getPhysicalProperties()
         !call
         !this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call  this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%fsw,this%divgrad,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
+        call  this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
 
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy.
@@ -4113,39 +3774,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         u_int = this%u_mid(:,:,:,1) !this%u_mid(:,:,:,1) !spec_int*rhou_int !this%u_mid(:,:,:,1)
         v_int = this%v_mid(:,:,:,1)
         w_int = this%w_mid(:,:,:,1)
-!        call interpolateFV_x(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)      
-!        umag=sqrt(v_int**2 + u_int**2) 
-!        call transpose_y_to_x(this%rho*(this%sos+sqrt( this%u*this%u + this%v*this%v)),xtmp1,this%decomp) 
-!        call transpose_y_to_x(this%Wcnsrv(:,:,:,TE_index)/this%rho,xtmp2)
-!        call transpose_y_to_x(this%Wcnsrv(:,:,:,mom_index)/this%rho,xtmp3)
-!        call transpose_y_to_x(this%Wcnsrv(:,:,:,mom_index+1)/this%rho,xtmp4)
-!        do i = 1,this%nx-1
-!
-!          delptmp(i,:,:)=xtmp2(i+1,:,:) - xtmp2(i,:,:)
-!          clocaltmp(i,:,:) = max(xtmp1(i,:,:),xtmp1(i+1,:,:))
-!          rhoutmp(i,:,:) = xtmp3(i+1,:,:) - xtmp3(i,:,:)
-!          rhovtmp(i,:,:) = xtmp4(i+1,:,:) - xtmp4(i,:,:)
-!        enddo
-!
-!
-!        delptmp(this%nx,:,:) = xtmp2(1,:,:) - xtmp2(this%nx,:,:) 
-!        rhoutmp(this%nx,:,:) = xtmp3(1,:,:) - xtmp3(this%nx,:,:)
-!        rhovtmp(this%nx,:,:) = xtmp4(1,:,:) - xtmp4(this%nx,:,:)
-!
-!        sos1 = this%mix%material(1)%hydro%gam*( 1 + this%mix%material(1)%hydro%Pinf) / (this%mix%material(1)%hydro%gam - 1_rkind  )
-!        sos2 = this%mix%material(2)%hydro%gam*( 1 + this%mix%material(2)%hydro%Pinf) / (this%mix%material(2)%hydro%gam - 1_rkind  )
-!        soslocal =  (sos1+sos2)/2_rkind
-!        clocaltmp(this%nx,:,:) = max(xtmp1(this%nx,:,:),xtmp1(1,:,:))
-!
-!        call transpose_x_to_y(delptmp,delp,this%decomp)
-!        call transpose_x_to_y(clocaltmp,clocal,this%decomp)
-!        call transpose_x_to_y(rhoutmp,delrhou,this%decomp)
-!        call transpose_x_to_y(rhovtmp,delrhov,this%decomp)
-!        call gradFV_N2Fx(this%decomp,this%derStagg,this%p,gradp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call gradFV_N2Fx(this%decomp,this%derStagg,this%mix%material(1)%VF,gradVFx,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        call this%gradient(this%mix%material(1)%VF,tmp1,tmp2,tmp3,this%x_bc,this%y_bc,this%z_bc)
-!        call interpolateFV_x(this%decomp,this%interpMid,tmp2,gradVFy,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!        gradVF = sqrt( gradVFx**2 + gradVFy**2 )**2
  
         call interpolateFV_x(this%decomp,this%interpMid02,this%p, pbar,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rho_int =0.0 ! this%rho_mid(:,:,:,1)

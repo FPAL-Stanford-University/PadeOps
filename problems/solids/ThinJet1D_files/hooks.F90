@@ -17,7 +17,7 @@ module ThinJet1d_data
     real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, vL, vR, uL, uR
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
-    real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3, alpha4,alpha2, alpha,mu1,mu2
+    real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3, alpha4,alpha2, alpha,mu1,mu2,mu_ratio
     real(rkind) :: kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2, v_disturb, epsP = 0, epsRho = 0,l
     real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, Nrho = 1, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, epsilonk = 0
     integer     :: kos_sh,kos_sh2,pointy, pointx
@@ -171,8 +171,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -2*pi
-                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 5
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx 
+                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 5d0 
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -213,14 +213,14 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
     logical :: periodicx,periodicy,periodicz
     integer :: ioUnit,i,iy
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, eta2, yphys, u_perturb,KE,deltal,aa0,aa1,aa2,bb0,bb1,bb2,s
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, eta2, yphys, u_perturb,KE
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2)) :: v_perturb
     real(rkind), dimension(decomp%ysz(2),5) :: phi_i,phi_r, p_perturbr, p_perturbi, Dphi_i, Dphi_r
     real(rkind), dimension(decomp%ysz(2),2,5) :: p_disturb, rho_disturb
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3),4) :: phi_i3, phi_r3,phi_i_int, phi_r_int
     real(rkind), dimension(8) :: fparams
     real(rkind), dimension(4) :: alphai, phase
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE, yn,s, aa0,aa1,aa2,bb0,bb1,bb2, deltal,factor
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2,dx1
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
@@ -246,7 +246,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
                           diff_c_ge,diff_c_ge_2,diff_c_gp,diff_c_gp_2,diff_c_gt,diff_c_gt_2,alpha,epsP, epsRho, &
-                          v0, alpha4, v_disturb, alpha3, alpha2,v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho,pointy, pointx, epsilonk, mu1, mu2,l       
+                          v0, alpha4, v_disturb, alpha3, alpha2,v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho,pointy, pointx, epsilonk, mu1, mu2,l, mu_ratio       
 
    ! call MPI_Comm_RANK(MPI_COMM_WORLD, rank, ierr)
    ! call MPI_Comm_SIZE(MPI_COMM_WORLD, totalproc, ierr)
@@ -310,29 +310,57 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 !        Lr    = 24.0/(yphys(1,ny,1) - yphys(1,1,1))
 !        yphys = Lr*yphys
         eta2 = y ! yphys !eta !-delta_rho
-        tmp = 0.5*( erf( (y+1)/delta_rho ) - erf( (y-1)/delta_rho ) ) 
+        tmp = 0.5_rkind*( erf( (y+1)/delta_rho ) - erf( (y-1)/delta_rho ) ) 
         mix%material(1)%VF = tmp
         mix%material(1)%p = p_amb
         p = p_amb
-        deltal = 2_rkind/3_rkind*mu2/mu1 + l
-        aa0 = v0*(1_rkind + 1_rkind/3_rkind*(mu2/mu1)/deltal - v0_2*(1/3)*(mu2/mu1)/deltal  )
-        aa2 = (v0_2-v0)*(mu2/mu1)/deltal
-        bb0 = v0_2*(1-l/deltal) + v0*(l/deltal)
-        bb1 = (v0_2 - v0)*(2*l/deltal)
-        bb2 = - (v0_2 - v0)*l/deltal
 
-        where(abs(y) .le. 1_rkind)
-           u = aa0 + aa2*y**2.0
-        elsewhere(y .gt. 1_rkind  .AND. y .le. (1+l) )
-           s = (y - 1)/l
-           u= bb0+bb1*s+bb2*s*s
-        elsewhere( y .lt. -1_rkind .AND. y .gt.-(1+l) )
-           s = (y + 1)/l
-           u = bb0 - bb1*s + bb2*s*s
-        elsewhere
-           u = v0_2
-        endwhere
+        deltal = mu_ratio*2.0_rkind/3.0_rkind + l
+        factor = mu_ratio/deltal
+        aa0 = v0*(1_rkind + ( 1.0_rkind/3.0_rkind )*factor) - v0_2*(1.0_rkind/3.0_rkind)*factor  
+        aa2 = (v0_2-v0)*(mu_ratio)/deltal
+        bb0 = v0_2*(1.0_rkind-l/deltal) + v0*(l/deltal)
+        bb1 = (v0_2 - v0)*(2.0_rkind*l/deltal)
+        bb2 = -1.0_rkind*(v0_2 - v0)*l/deltal
+        print *, " mu_ratio = ", mu_ratio
+        print *, " l = ", l
+        print *, " a = ", aa0
+        print *, " a2 = ", aa2
+        print *, " b0 = ", bb0
+        print *, " b1 = ", bb1 
+        print *, " b2 = ", bb2
+        print *, " delta = ", deltal
+        print *, " factor = ", factor
+        print *, " v0     = ", v0
+        print *, " v0_2   = ", v0_2
 
+        u = v0_2 
+        do i = 1, nx
+           do j = 1,ny
+              do k = 1,nz
+           yn = y(i,j,k)    ! nondimensional coordinate
+
+           if (abs(yn) <= 1.0_rkind) then
+              ! inside liquid sheet
+              u(i,j,k) = aa0 + aa2 * yn**2_rkind
+
+           else if (yn > 1.0_rkind .and. yn <= (1.0_rkind + l)) then
+              ! upper gas layer
+              s = (yn - 1.0_rkind) / l
+              u(i,j,k) = bb0 + bb1 * s + bb2 * s**2_rkind
+
+           else if (yn < -1.0_rkind .and. yn >= -(1.0_rkind + l)) then
+              ! lower gas layer
+              s = (yn + 1.0_rkind) / l
+              u(i,j,k) = bb0 - bb1 * s + bb2 * s**2_rkind
+
+           else
+              ! far gas
+              u(i,j,k) = v0_2
+           end if
+         end do 
+        end do
+       end do
            uref = u
            v = 0
            w = 0
@@ -364,7 +392,15 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         YsR  = mix%material(1)%Ys(1,decomp%ysz(2),1)
         VFL  = mix%material(1)%VF(1,1,1)
         VFR  = mix%material(1)%VF(1,decomp%ysz(2),1)
- 
+
+        print *, " rhoL = ", rhoL
+        print *, " rhoR = ", rhoR
+        print *, " uL   = ", uL
+        print *, " uR   = ", uR
+        print *, " YsL  = ", YsL
+        print *, " YsR  = ", YsR
+        print *, " VFL  = ", VFL
+        print *, " VFR  = ", VFR 
         
     end associate
 
@@ -409,7 +445,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         print *, "yphys"
       
 
-        sigma1 = -80000 ! -2400 ! -80000
+        sigma1 = -100000 ! -2400 ! -80000
 
         where(yphys .LE. -3.5)
            sponge(:,:,:,1) = sigma1*( (yphys + 3.5)/1.5)**2.0
@@ -438,12 +474,12 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
           mix%material(i)%Ys_ref(2) = mix%material(i)%Ys(1,ny,1)*rho(1,ny,1)
         enddo
 
-    !    print *, "rhou ", rhou
-    !    print *, "rhov ", rhov
-    !    print *, "rhow ", rhow
-    !    print *, "rhoe ", rhoe
-    !    print *, "VF ", mix%material(1)%VF_ref
-    !    print *, "Ys ", mix%material(1)%Ys_ref
+        print *, "rhou ", rhou
+        print *, "rhov ", rhov
+        print *, "rhow ", rhow
+        print *, "rhoe ", rhoe
+        print *, "VF ", mix%material(1)%VF_ref
+        print *, "Ys ", mix%material(1)%Ys_ref
         end associate
 
 end subroutine

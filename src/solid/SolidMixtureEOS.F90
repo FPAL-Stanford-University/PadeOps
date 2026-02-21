@@ -1764,11 +1764,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
     end subroutine
 
     ! Subroutine to get species art. conductivities and diffusivities
-    subroutine getLAD(this,rho,p,e,u,v,w,duidxj,sos,detady,dy_stretch,use_gTg,strainHard,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,tfloor,dt)
+    subroutine getLAD(this,rho,p,e,u,v,w,sos,detady,dy_stretch,use_gTg,strainHard,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,tfloor,dt)
          use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz,filter3D
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos,p,u,v,w,detady,dy_stretch  ! Mixture density and speed of sound
-        real(rkind),dimension(this%nxp, this%nyp,this%nzp,9), target, intent(in)  :: duidxj
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical, intent(in) :: periodicx, periodicy, periodicz
         real(rkind), intent(in) :: tfloor,dt
@@ -1813,19 +1812,14 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !               call this%LAD%get_diffusivity(this%material(i)%Ys, this%material(i)%Ji(:,:,:,1), &
 !                                         this%material(i)%Ji(:,:,:,2), this%material(i)%Ji(:,:,:,3), &
             else
-                this%material(i)%adiff = 0
-                this%material(i)%rhodiff = 0
+               this%material(i)%adiff = 0
+               this%material(i)%rhodiff = 0
                this%material(i)%outdiff = 0
-                call gradient(this%decomp,this%der,this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3))
-                call gradient(this%decomp,this%der,this%material(i)%VF,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3))
-                call divergence(this%decomp,this%der,u,v,w,divu,x_bc,y_bc,z_bc)
-                Ys_fil=this%material(i)%Ys
-                VF_fil=this%material(i)%VF
-                call filter3D(this%decomp, this%fil, Ys_fil, 1,x_bc,y_bc,z_bc)       
-                call filter3D(this%decomp, this%fil, VF_fil, 1,x_bc,y_bc,z_bc)
+!                call gradient(this%decomp,this%der,this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3))
+!                call gradient(this%decomp,this%der,this%material(i)%VF,gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3))
 !                call this%LAD%get_diffusivity_5eqn(rho,this%material(i)%VF,rho*this%material(i)%Ys,u,v,w,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),minYs(i),this%intSharp_cut,cVF,this%material(i)%adiff,this%material(i)%rhodiff,this%material(i)%outdiff,this%material(i)%rhodiff_stagg,this%material(i)%adiff_stagg,x_bc,y_bc, z_bc,detady,dy_stretch)
 !               call this%LAD%get_diffusivity_Aslani(rho,this%material(i)%VF,rho*this%material(i)%Ys,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc)
-                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1),gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,VF_fil,Ys_fil,this%deltakap,this%kappaNoFil,divu)
+                call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,umag,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,this%deltakap,this%kappaNoFil)
 
 !                 do d = 1,3
 !                    call this%LAD%get_diffusivity_5eqnOG(rho_int(:,:,:,d),this%material(i)%VF_mid(:,:,:,d),this%material(i)%rhoYs_mid(:,:,:,d),gradrYs(:,:,:,1),gradrYs(:,:,:,2),gradrYs(:,:,:,3),gradphi(:,:,:,1), gradphi(:,:,:,2),gradphi(:,:,:,3),umag,duidxj,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff_stagg(:,:,:,d),this%material(i)%rhodiff_stagg(:,:,:,d),x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0)
@@ -3113,14 +3107,6 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                        H = 0
                      endwhere
 
-                    where(( this%material(i)%VF_mid(:,:,:,d) .GE. 1) )
-                       HVF = abs( this%material(i)%VF_mid(:,:,:,d) -1 )
-                    elsewhere( (this%material(i)%VF_mid(:,:,:,d) .LE. 0 ) )
-                       HVF = abs(this%material(i)%VF_mid(:,:,:,d) )
-                    elsewhere
-                       HVF = 0
-                     endwhere
-
 
    !                  where(( this%material(i)%Ys .GE. 1)  )
    !                    H = abs( this%material(i)%Ys -1 )
@@ -3132,8 +3118,6 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                     call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc) 
                     call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc)
-                    call filter3D(this%decomp, this%gfil, HVF,iflag,x_bc,y_bc,z_bc)
-                    call filter3D(this%decomp, this%gfil, HVF,iflag,x_bc,y_bc,z_bc)
  
                   where( abs(H) .GT. 1d-6 )
                       HYs = 0_rkind
@@ -3141,11 +3125,6 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                       HYs = 1_rkind
                   endwhere
 
-                  where( abs(HVF) .GT. 1d-6 )
-                      HVF2 = 0_rkind
-                  elsewhere
-                      HVF2 = 1_rkind
-                  endwhere
 
 !                   where( abs(H) .GT. 1d-12)
 !                           HYs = H/P_MAXVAL(H)
@@ -5110,7 +5089,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            enddo
 
            call gradFV_x(this%decomp,this%derStagg,xi_int(:,:,:,1),gradxi(:,:,:,1),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-           call gradFV_y(this%decomp,this%derStagg,xi_int(:,:,:,2),gradxi(:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+          call gradFV_y(this%decomp,this%derStagg,xi_int(:,:,:,2),gradxi(:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
            call gradFV_z(this%decomp,this%derStagg,xi_int(:,:,:,3),gradxi(:,:,:,3),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
            GVFmag =  sqrt( gradxi(:,:,:,1)**two + gradxi(:,:,:,2)**two +gradxi(:,:,:,3)**two )

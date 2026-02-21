@@ -4762,19 +4762,9 @@ contains
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
         integer :: i
-         call this%getSpeciesDensity(rho,rhom)
          call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,this%rhoYs_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV(this%decomp,this%interpMid,this%VF,this%VF_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV(this%decomp,this%interpMid,this%rhom,this%rho_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-!         this%VF_mid = this%rhoYs_mid/this%rho_mid
-!         do i = 1,3
-!          call filter3D(this%decomp, this%fil, this%VF_mid(:,:,:,i), 1, x_bc, y_bc, z_bc)
-!          call filter3D(this%decomp, this%fil, this%rhoYs_mid(:,:,:,i), 1, x_bc,y_bc, z_bc)
-!         enddo
-!         this%rhoYs_mid = this%rho_mid*this%VF_mid
-      !   call interpolateFV(this%decomp,this%interpMid,rho,this%rho_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV(this%decomp,this%interpMid,this%Ys,this%Ys_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
     end subroutine
     subroutine getYsLAD(this,rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -4803,39 +4793,10 @@ contains
            call this%getSpeciesDensity(rho,rhom)
            
 
-!          VF_bound = 0.0
-
-!          VF_bound = max(VF_bound, (md1 - this%VF)/md1 )
-!          VF_bound = max(VF_bound, (this%VF - (one - md1) ) / md1 )
-
-
-!          VF_bound = VF_bound*P_MAXVAL(sos)*(dx*dy*dy)**(1.0/3.0)
-!           where((this%VF .GE. 1d-6 ) .AND. (this%VF .LE. (1-1d-6) ) )
-
-!            VF_bound = 0.0
-
-
-!          endwhere
-!           call filter3D(this%decomp, this%gfil, VF_bound, 1, x_bc, y_bc,z_bc)
-
-!          VF_bound = sos*(dx*dy*dy)**(1.0/3.0)*erf( ( 0.5 - this%VF )**20.0_rkind ) / 0.0000010761_rkind
-
-!          this%rhodiff =this%rhodiff +VF_bound
-
-
            call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-   !       call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dYdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-   !       call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dYdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-   !       call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dYdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-           call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call interpolateFV(this%decomp,this%interpMid,this%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV(this%decomp,this%interpMid,sos,sos_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV(this%decomp,this%interpMid,this%VF,VF_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
-    !       rhodiff_int   = 1d3*sos_int*( half*(abs(VF_int)-(one) + abs((VF_int)-(one))) )*(dx*dy*dx)**(1.0/3.0)
-!           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
            rhodiff_fil1 = rhodiff_int(:,:,:,1)!*this%rhoYs_mid(:,:,:,1)
            rhodiff_fil2 = rhodiff_int(:,:,:,2)!*this%rhoYs_mid(:,:,:,2)
@@ -4851,19 +4812,8 @@ contains
            call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
 
-!           call filter3D(this%decomp, this%gfil, m_fil(:,:,:,1), 1, x_bc,y_bc,z_bc)
-!           call filter3D(this%decomp, this%gfil, m_fil(:,:,:,2), 1,x_bc,y_bc,z_bc)
-!           call filter3D(this%decomp, this%gfil, m_fil(:,:,:,3), 1,x_bc,y_bc,z_bc)
-!
-!           rhodiff_fil1 = abs(rhodiff_fil1/m_fil(:,:,:,1) )
-!           rhodiff_fil2 = abs(rhodiff_fil2/m_fil(:,:,:,2) ) 
-!           rhodiff_fil3 = abs(rhodiff_fil3/m_fil(:,:,:,3) )
-!           call divergenceFV(this%decomp,this%derStagg,rhodiff_int(:,:,:,1)*dYdx_x,rhodiff_int(:,:,:,2)*dYdy_y,rhodiff_int(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
             call divergenceFV(this%decomp,this%derStagg,rhodiff_fil1*dYdx_x,rhodiff_fil2*dYdy_y,rhodiff_fil3*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!            call divergenceFV(this%decomp,this%derStagg,this%elastic%rho0*rhodiff_fil1*dYdx_x,this%elastic%rho0*rhodiff_fil2*dYdy_y,this%elastic%rho0*rhodiff_fil3*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-!            call divergenceFV(this%decomp,this%derStagg,this%rhodiff_stagg(:,:,:,1)*dYdx_x,this%rhodiff_stagg(:,:,:,2)*dYdy_y,this%rhodiff_stagg(:,:,:,3)*dYdz_z,this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         else
 
            call gradient(this%decomp,this%der,rho*this%Ys,dYdx,dYdy,dYdz,x_bc,y_bc,z_bc)
@@ -5406,17 +5356,7 @@ contains
            call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call divergenceFV(this%decomp,this%derStagg,-umid*this%VF_mid(:,:,:,1),-vmid*this%VF_mid(:,:,:,2),-wmid*this%VF_mid(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-!           call divergenceFV(this%decomp,this%derStagg,u*0.0,v,w,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!           call divergenceFV(this%decomp,this%derStagg,-u*0.0,-v*this%VF_mid(:,:,:,2),-w*this%VF_mid(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           call gradFV_x(this%decomp,this%derStagg,this%VF_mid(:,:,:,1),dVFdx,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call gradFV_y(this%decomp,this%derStagg,this%VF_mid(:,:,:,2),dVFdy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call gradFV_z(this%decomp,this%derStagg,this%VF_mid(:,:,:,3),dVFdz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!          call gradient(this%decomp,this%der,this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
-
-!           rhsVF = 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx + v*dVFdy + w*dVFdz) + this%vfLAD !+ src*div_u ! - (1-alpha)*(this%VF*divu_node + u*dVFdx + v*dVFdy + w*dVFdz)di
-!           this%advectVF =  ( 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx +v*dVFdy + w*dVFdz) )
-!           rhsVF = div_uVF + this%vfLAD + this%VF*div_u 
             rhsVF = div_uVF + this%vfLAD + this%VF*div_u  ! + this%intSharp_aDiffFV
             this%advectVF = div_uVF + this%VF*div_u
         endif
@@ -5452,27 +5392,11 @@ contains
 
           VF_bound = 0.0
 
-!          VF_bound = max(VF_bound, (md1 - this%VF)/md1 )
-!          VF_bound = max(VF_bound, (this%VF - (one - md1) ) / md1 )
-
-!          VF_bound = VF_bound*P_MAXVAL(sos)*(dx*dy*dy)**(1.0/3.0)
-         
-!          where((this%VF .GE. 1d-6 ) .AND. (this%VF .LE. (1-1d-6) ) )
-
-!            VF_bound = 0.0
-
-
-!          endwhere
-!          call filter3D(this%decomp, this%gfil, VF_bound, 1, x_bc, y_bc,z_bc)
-!          VF_bound = sos*(dx*dy*dy)**(1.0/3.0)*erf( ( 0.5 - this%VF )**20.0_rkind ) / 0.0000010761_rkind
-!          this%adiff =this%adiff+VF_bound
-!          this%rhodiff = this%adiff
 
           call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dVFdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dVFdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dVFdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call interpolateFV(this%decomp,this%interpMid,sos,sos_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
            adiff_fil1 = adiff_int(:,:,:,1)
            adiff_fil2 = adiff_int(:,:,:,2)
@@ -5483,30 +5407,12 @@ contains
            call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
            call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
- 
-
-!          do i = 1,3
-!          outVF(:,:,:,i) =( ( 0.5_rkind*(abs(this%VF_mid(:,:,:,i))-(1.0_rkind) + abs((this%VF_mid(:,:,:,i))-(1.0_rkind))))*abs(sos_int(:,:,:,i))*(dx*dy*dy)**(1.0/3.0) )
-!          outYs(:,:,:,i) =( ( 0.5_rkind*(abs(this%Ys_mid(:,:,:,i))-(1.0_rkind) + abs((this%Ys_mid(:,:,:,i))-(1.0_rkind))))*abs(sos_int(:,:,:,i))*(dx*dy*dy)**(1.0/3.0) )
-!          enddo
-!        do i = 1,3
-!          call filter3D(this%decomp, this%gfil, outVF(:,:,:,i), 1, x_bc, y_bc, z_bc)
-!          call filter3D(this%decomp, this%gfil, outYs(:,:,:,i), 1, x_bc, y_bc,z_bc)
-!        enddo
-
-!          do i = 1,3
-!          adiff_int(:,:,:,i) = max(100_rkind*outVF(:,:,:,i),100_rkind*outYs(:,:,:,i))
-!          enddo
-!          this%rhodiff_stagg = adiff_int
-!          this%adiff_stagg   = adiff_int
-!          call divergenceFV(this%decomp,this%derStagg,adiff_int(:,:,:,1)*dVFdx_x,adiff_int(:,:,:,2)*dVFdy_y,adiff_int(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
            call divergenceFV(this%decomp,this%derStagg,adiff_fil1*dVFdx_x,adiff_fil2*dVFdy_y,adiff_fil3*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
            this%adiff_stagg(:,:,:,1) = adiff_fil1
            this%adiff_stagg(:,:,:,2) = adiff_fil2
            this%adiff_stagg(:,:,:,3) = adiff_fil3
-!          call divergenceFV(this%decomp,this%derStagg,this%adiff_stagg(:,:,:,1)*dVFdx_x,this%adiff_stagg(:,:,:,2)*dVFdy_y,this%adiff_stagg(:,:,:,3)*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
         else
 

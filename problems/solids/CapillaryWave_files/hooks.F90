@@ -10,7 +10,7 @@ module CapillaryWave_data
     logical     :: sharp = .FALSE.
     real(rkind) :: p1,p2,rho1,rho2,u1,u2,g11_1,g11_2,grho1,grho2,a1,a2
     real(rkind) :: rho1_2,rho2_2,u1_2,u2_2,g11_1_2,g11_2_2,grho1_2,grho2_2,a1_2,a2_2
-    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, vL, vR
+    real(rkind) :: rhoL, rhoR, YsL, YsR, VFL, VFR, vL, vR,uR,uL
     real(rkind) :: yield = one, yield2 = one, eta0k = 0.4_rkind
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
     real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3, alpha4
@@ -19,7 +19,7 @@ module CapillaryWave_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 6.28318530718, Lx = 6.28318530718, interface_init = 0.5, kwave = 2*3.14, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 12.5663706144, Lx = 6.28318530718, interface_init = 0.5, kwave = 2*3.14, ksize = 10d0, etasize = 0.5d0,delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0, sos_ratio=1d0
 
     type(filters) :: mygfil
 
@@ -165,8 +165,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1     + i - 1, rkind ) * dx 
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
+                    y(i,j,k) = real( iy1     + j - 1, rkind ) * dy
+                    z(i,j,k) = real( iz1     + k - 1, rkind ) * dz
                 end do
             end do
         end do
@@ -175,30 +175,37 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
 end subroutine
 
-subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz)
+subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz, x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
-    use SolidGrid,        only: u_index,v_index,w_index,rho_index
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index, uref_index,p_index
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
     use SolidMixtureMod,  only: solid_mixture
+    use operators,        only: grady, divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x, gradFV_y, gradFV_z
     use DerivativesMod,   only: derivatives
- 
+    use DerivativesStaggeredMod, only: derivativesStagg
+    use InterpolatorsMod,        only: interpolators
+    use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
     use CapillaryWave_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
     type(decomp_info),               intent(in)    :: decomp
     type(derivatives),               intent(in)    :: der
+    type(derivativesStagg),          intent(in)    :: derStagg
+    type(interpolators),             intent(in)    :: interpMid
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     type(solid_mixture),             intent(inout) :: mix
     real(rkind),                     intent(inout) :: tstop, dt, tviz
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
 
-    integer :: ioUnit
+    logical :: periodicx,periodicy,periodicz
+    integer :: ioUnit,i,iy
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, eta2
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac
@@ -218,7 +225,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
                           kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2,kos_sh2, &
                           eta_det_ge,eta_det_ge_2,eta_det_gp,eta_det_gp_2,eta_det_gt,eta_det_gt_2, &
                           diff_c_ge,diff_c_ge_2,diff_c_gp,diff_c_gp_2,diff_c_gt,diff_c_gt_2, &
-                          v0, alpha4, v_disturb, alpha3, v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho
+                          v0, alpha4, v_disturb, alpha3, v0_2, tau0, tau0_2, eta0k, ksize, etasize, p_mu, p_mu2, Nrho,sos_ratio
     
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -231,7 +238,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
                   "gaussian", "gaussian", "gaussian" )
 
     associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w => fields(:,:,:,w_index), &
-                 rho => fields(:,:,:,rho_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+                 p=> fields(:,:,:,p_index), rho => fields(:,:,:,rho_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
         
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem. Check the input file.",928)
@@ -274,7 +281,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
 
         delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-        eta =(x-interface_init+eta0k*cos(y - dy/2))
+        eta =(y-interface_init+eta0k*cos(x - dx/2))
 
 	tmp = (half ) * ( one - erf( (eta)/(delta_rho) ) )
 	
@@ -301,7 +308,7 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         !set mixture pressure (uniform)
 	mix%material(1)%p  = p_amb
         mix%material(2)%p  = mix%material(1)%p
-
+        p  = p_amb
         ! Set initial values of g (inverse deformation gradient)
         mix%material(1)%g11 = one;  mix%material(1)%g12 = zero; mix%material(1)%g13 = zero
         mix%material(1)%g21 = zero; mix%material(1)%g22 = one;  mix%material(1)%g23 = zero
@@ -312,14 +319,18 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
         mix%material(2)%g31 = zero; mix%material(2)%g32 = zero; mix%material(2)%g33 = one
 
         !Stuff for boundary conditions
+        !Stuff for boundary conditions
         rhoL = rho(1,1,1)
-        rhoR = rho(decomp%ysz(1),1,1)
-        vL = v(1,1,1)
-        vR = v(decomp%ysz(1),1,1)
+        rhoR = rho(1,decomp%ysz(2),1)
+        uL = 0
+        uR = 0
+        vL = 0 !v(1,1,1)
+        vR = 0 !v(1,decomp%ysz(2),1)
         YsL  = mix%material(1)%Ys(1,1,1)
-        YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
+        YsR  = mix%material(1)%Ys(1,decomp%ysz(2),1)
         VFL  = mix%material(1)%VF(1,1,1)
-        VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
+        VFR  = mix%material(1)%VF(1,decomp%ysz(2),1)
+
 
         !TODO: delete this block
         !Set gt and gp to identity
@@ -342,6 +353,118 @@ subroutine initfields(decomp,der,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tvi
     end associate
 
 end subroutine
+
+subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index,e_index, uref_index
+    use decomp_2d,        only: decomp_info, nrank
+    use exits,            only: GracefulExit
+    use SolidMixtureMod,  only: solid_mixture
+    use CapillaryWave_data
+
+    implicit none
+    type(decomp_info),               intent(in)    :: decomp
+    real(rkind),                     intent(in)    :: dx,dy,dz
+    type(solid_mixture),             intent(inout) :: mix
+    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:,:), intent(inout):: sponge
+    real(rkind), dimension(2), intent(inout) :: rhou, rhov,rhow,rhoe
+    integer :: ioUnit,i,iy
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
+    integer, dimension(2) :: iparams
+    real(rkind) :: a0, a0_2, sigma1, sigma2
+    integer :: nx,ny,nz,k,ix,j
+    integer :: ierr, rank,fh, filesize, chunksize, offset, offset2,totalproc
+    integer, allocatable :: data(:), recvbuf(:)
+
+
+        associate(u => fields(:,:,:,u_index), v => fields(:,:,:,v_index),w => fields(:,:,:,w_index),uref => fields(:,:,:,uref_index), rho => fields(:,:,:,rho_index), e => fields(:,:,:,e_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+        nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
+       
+        sigma1 = -100.0_rkind ! -2400 ! -80000
+
+        where(y .LE. 1.0_rkind)
+          sponge(:,:,:,1) = sigma1*( (y -1.0_rkind)/1.0_rkind)**2.0_rkind
+        elsewhere
+           sponge(:,:,:,1) = 0_rkind
+        endwhere
+
+        where(y .GE. 11.5663706144_rkind)
+           sponge(:,:,:,2) = sigma1*( (y- 11.5663706144_rkind)/1.0_rkind)**2.0_rkind 
+        elsewhere
+           sponge(:,:,:,2) = 0_rkind
+        endwhere
+
+        rhou(1) =0 !rho(1,1,1)*uL !uref(1,1,1)
+        rhou(2) =0 !rho(1,ny,1)*uR !ref(1,ny,1)
+        rhov(1) = 0 !-1.060981230880199d-5 !rho(1,1,1)*v(1,1,1)
+        rhov(2) = 0 !2.175685479370164d-08
+        rhow(1) = rho(1,1,1)*w(1,1,1)
+        rhow(2) = rho(1,ny,1)*w(1,ny,1)
+        rhoe(1) = rho(1,1,1)*(e(1,1,1) ) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
+        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) )!1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
+        do i = 1,2
+          mix%material(i)%VF_ref(1) = mix%material(i)%VF(1,1,1)
+          mix%material(i)%VF_ref(2) = mix%material(i)%VF(1,ny,1)
+          mix%material(i)%Ys_ref(1) = mix%material(i)%Ys(1,1,1)*rho(1,1,1)
+          mix%material(i)%Ys_ref(2) = mix%material(i)%Ys(1,ny,1)*rho(1,ny,1)
+        enddo
+       
+        end associate
+
+end subroutine
+
+subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index, uref_index
+    use decomp_2d,        only: decomp_info, nrank
+    use exits,            only: GracefulExit
+    use StiffGasEOS,      only: stiffgas
+    use Sep1SolidEOS,     only: sep1solid
+    use SolidMixtureMod,  only: solid_mixture
+    use operators,        only: grady,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x,gradFV_y, gradFV_z
+    use DerivativesMod,   only: derivatives
+    use DerivativesStaggeredMod, only: derivativesStagg
+    use InterpolatorsMod,        only: interpolators
+    use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
+    use CapillaryWave_data
+
+    implicit none
+    character(len=*),                intent(in)    :: inputfile
+    type(decomp_info),               intent(in)    :: decomp
+    type(derivatives),               intent(in)    :: der
+    type(derivativesStagg),          intent(in)    :: derStagg
+    type(interpolators),             intent(in)    :: interpMid
+    real(rkind),                     intent(in)    :: dx,dy,dz
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    type(solid_mixture),             intent(inout) :: mix
+    real(rkind),                     intent(inout) :: tstop, dt, tviz
+    real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+    integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+
+    logical :: periodicx,periodicy,periodicz
+    integer :: ioUnit,i,iy
+    real(rkind), dimension(8) :: fparams
+    real(rkind), dimension(4) :: alphai, phase
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys, u_perturb, KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
+    integer, dimension(2) :: iparams
+    real(rkind) :: a0, a0_2,dx1
+    logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
+    logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
+
+    associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w =>fields(:,:,:,w_index), uref => fields(:,:,:,uref_index),rho => fields(:,:,:,rho_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+
+    end associate
+
+end subroutine
+
+
 
 subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount,x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind,clen
@@ -529,11 +652,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     type(solid_mixture),             intent(inout) :: mix
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
-    integer :: nx, i, j
+    integer :: nx, i, j,ny
     real(rkind) :: dx, xspng, tspng, xspngR, xspngL
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR
     
     nx = decomp%ysz(1)
+    ny = decomp%ysz(2)
 
 
     
@@ -553,75 +677,76 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
 
-        if(decomp%yst(1)==1) then
-          if(x_bc(1)==0) then
-              rho( 1,:,:) = rhoL
-              u  ( 1,:,:) = zero
-              v  ( 1,:,:) = vL
-              w  ( 1,:,:) = zero
-              mix%material(1)%p(1,:,:) = p_amb
-              mix%material(2)%p(1,:,:) = p_amb
-              
-              mix%material(1)%VF ( 1,:,:) = VFL
-              mix%material(2)%VF ( 1,:,:) = one - VFL
-              mix%material(1)%Ys ( 1,:,:) = YsL
-              mix%material(2)%Ys ( 1,:,:) = one - YsL
+                 if(decomp%yst(2)==1) then
+          if(y_bc(1)==0) then
+              rho( :,1,:) = rhoL
+              u  ( :,1,:) = uL
+              v  ( :,1,:) = vL !v(:,2,:)
+              w  ( :,1,:) = zero
+              mix%material(1)%p(:,1,:) =  p_amb !mix%material(1)%p(:,2,:)
+              mix%material(2)%p(:,1,:) =  p_amb !mix%material(2)%p(:,2,:)
+              p(:,1,:) = p_amb
+              mix%material(1)%VF ( :,1,:) = VFL
+              mix%material(2)%VF ( :,1,:) = one - VFL
+              mix%material(1)%Ys ( :,1,:) = YsL
+              mix%material(2)%Ys ( :,1,:) = one - YsL
           end if
         endif
 
-        if(decomp%yen(1)==decomp%xsz(1)) then
-          if(x_bc(2)==0) then
-              rho( nx,:,:) = rhoR
-              u  ( nx,:,:) = zero
-              v  ( nx,:,:) = vR
-              w  ( nx,:,:) = zero
-              mix%material(1)%p(nx,:,:) = p_amb
-              mix%material(2)%p(nx,:,:) = p_amb
-              
-              mix%material(1)%VF ( nx,:,:) = VFR
-              mix%material(2)%VF ( nx,:,:) = one - VFR
-              mix%material(1)%Ys ( nx,:,:) = YsR
-              mix%material(2)%Ys ( nx,:,:) = one - YsR
+        if(decomp%yen(2)==decomp%ysz(2)) then
+          if(y_bc(2)==0) then
+              rho( :,ny,:) = rhoR
+              u  ( :,ny,:) = uR
+              v  ( :,ny,:) = vR !v(:,ny-1,:)
+              w  ( :,ny,:) = zero
+              mix%material(1)%p(:,ny,:) =  p_amb !mix%material(1)%p(:,ny-1,:)
+              mix%material(2)%p(:,ny,:) =  p_amb !mix%material(2)%p(:,ny-1,:)
+              p(:,ny,:) = p_amb
+              mix%material(1)%VF ( :,ny,:) = VFR
+              mix%material(2)%VF ( :,ny,:) = one - VFR
+              mix%material(1)%Ys ( :,ny,:) = YsR
+              mix%material(2)%Ys ( :,ny,:) = one - YsR
           end if
         endif
+
 
         ! apply sponge at left and right boundaries to damp outgoing waves
-        xspngL = 0.15d0*Lx
-        xspngR = 0.85d0*Lx
-        tspng = 0.03d-3
-        dx = x(2,1,1) - x(1,1,1)
-        dumL = half*(one - tanh( (x-xspngL)/(tspng) ))
-        dumR = half*(one + tanh( (x-xspngR)/(tspng) ))
-        dum  = dumL+dumR
+!       xspngL = 0.15d0*Lx
+!       xspngR = 0.85d0*Lx
+!       tspng = 0.03d-3
+!       dx = x(2,1,1) - x(1,1,1)
+!       dumL = half*(one - tanh( (x-xspngL)/(tspng) ))
+!       dumR = half*(one + tanh( (x-xspngR)/(tspng) ))
+!       dum  = dumL+dumR
 
-        do i=1,4
-            tmp = u
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            u = u + dum*(tmp - u)
+ !      do i=1,4
+!           tmp = u
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           u = u + dum*(tmp - u)
 
-            tmp = v
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            v = v + dum*(tmp - v)
+!           tmp = v
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           v = v + dum*(tmp - v)
 
-            tmp = w
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            w = w + dum*(tmp - w)
+!           tmp = w
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           w = w + dum*(tmp - w)
 
-            tmp = e
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            e = e + dum*(tmp - e)
+!           tmp = e
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           e = e + dum*(tmp - e)
 
-            tmp = rho
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            rho = rho + dum*(tmp - rho)
+!           tmp = rho
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           rho = rho + dum*(tmp - rho)
 
-            tmp = mix%material(1)%p
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
+!           tmp = mix%material(1)%p
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           mix%material(1)%p = mix%material(1)%p + dum*(tmp - mix%material(1)%p)
 
-            tmp = mix%material(2)%p
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
+!           tmp = mix%material(2)%p
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           mix%material(2)%p = mix%material(2)%p + dum*(tmp - mix%material(2)%p)
 
             ! TODO: delete tmp = mix%material(1)%pe
             ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
@@ -631,14 +756,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
             ! TODO: delete mix%material(2)%pe = mix%material(2)%pe + dum*(tmp - mix%material(2)%pe)
 
-            do j = 1,9
-                tmp = mix%material(1)%g(:,:,:,j)
-                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-                mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
+!           do j = 1,9
+!               tmp = mix%material(1)%g(:,:,:,j)
+!               call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!               mix%material(1)%g(:,:,:,j) = mix%material(1)%g(:,:,:,j) + dum*(tmp - mix%material(1)%g(:,:,:,j))
 
-                tmp = mix%material(2)%g(:,:,:,j)
-                call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-                mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
+!               tmp = mix%material(2)%g(:,:,:,j)
+!               call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!               mix%material(2)%g(:,:,:,j) = mix%material(2)%g(:,:,:,j) + dum*(tmp - mix%material(2)%g(:,:,:,j))
 
                 ! TODO: delete tmp = mix%material(1)%g_t(:,:,:,j)
                 ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
@@ -655,7 +780,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
                 ! TODO: delete tmp = mix%material(2)%g_p(:,:,:,j)
                 ! TODO: delete call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
                 ! TODO: delete mix%material(2)%g_p(:,:,:,j) = mix%material(2)%g_p(:,:,:,j) + dum*(tmp - mix%material(2)%g_p(:,:,:,j))
-            end do
+!           end do
 
             !mca add for stability
 
@@ -663,23 +788,23 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
             !call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
             !T = T + dum*(tmp - T)
 
-            tmp = mix%material(1)%T
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%T = mix%material(1)%T + dum*(tmp - mix%material(1)%T)
+!           tmp = mix%material(1)%T
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           mix%material(1)%T = mix%material(1)%T + dum*(tmp - mix%material(1)%T)
 
-            tmp = mix%material(2)%T
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%T = mix%material(2)%T + dum*(tmp - mix%material(2)%T)
+!           tmp = mix%material(2)%T
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           mix%material(2)%T = mix%material(2)%T + dum*(tmp - mix%material(2)%T)
 
-            tmp = mix%material(1)%Ys
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(1)%Ys = mix%material(1)%Ys + dum*(tmp - mix%material(1)%Ys)
+!           tmp = mix%material(1)%Ys
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           mix%material(1)%Ys = mix%material(1)%Ys + dum*(tmp - mix%material(1)%Ys)
 
-            tmp = mix%material(2)%Ys
-            call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
-            mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
+!           tmp = mix%material(2)%Ys
+!           call filter3D(decomp,mygfil,tmp,1,x_bc,y_bc,z_bc)
+!           mix%material(2)%Ys = mix%material(2)%Ys + dum*(tmp - mix%material(2)%Ys)
 
-        end do
+!       end do
 
     end associate
 end subroutine

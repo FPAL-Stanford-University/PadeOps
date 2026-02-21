@@ -224,6 +224,14 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     !nteger(kind=MPI_OFFSET_KIND) :: disp
     !nteger(kind=MPI_STATUS_SIZE) :: status(MPI_STATUS_SIZE)
     logical :: flag
+    integer :: j, k, ios, iunit
+    character(len=256) :: infile
+    integer :: xs, xe    ! local x bounds from 2decomp
+    real(rkind), allocatable :: row(:)
+    integer :: ys, ye
+    integer :: ix_global, local_ix
+    integer :: nx_global, ny_global, nz_local
+    integer :: ix_start, nx_local,ix_end
 
     ! Initialize MPI
     !all MPI_Init(ierr)
@@ -322,11 +330,50 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         !set mixture Volume fraction
         !eta = (x - 1)**2 + (y - 0.75)**2
 
-!        open (unit=8, file="P.txt", status='old', action='read' )
+        infile = 'P.txt'
 
-!        do ix = 1,nx
-!          read(8,*) p(ix,:)
+        ! --- Begin drop-in replacement for reading P.txt ---
+
+        ! global sizes
+        nx_global = decomp%ysz(2)   ! total Nx in MATLAB file
+        ny_global = decomp%ysz(2)   ! full Ny
+        nz_local  = decomp%zsz(3)   ! your local nz
+        
+        ! local x-slab info (from decomp)
+        ix_start = decomp%yst(1)    ! global index of first x for this rank
+        nx_local = decomp%ysz(1)    ! local number of x-points
+        ix_end   = decomp%yen(1)
+        ! temporary row buffer for reading one x-line
+        
+        allocate(row(ny_global))
+        
+        ! unique file unit per rank
+        iunit = 98
+        
+!        infile = 'P.txt'
+!        open(unit=iunit, file=infile, status='old', action='read', iostat=ios)
+!        if (ios /= 0) stop 'Error opening P.txt'
+!        
+!        ! loop over all x in file
+!        do ix_global = 1, nx_global
+!            read(iunit, *, iostat=ios) row(:)
+!            if (ios /= 0) stop 'Error reading P.txt'
+!        
+!            if (ix_global >= ix_start .and. ix_global <= ix_end) then
+!                 local_ix = ix_global - ix_start + 1
+!                 fields(local_ix, 1:ny, 1, p_index) = row(:)
+!              end if
+!        
 !        end do
+!        
+!        close(iunit)
+!        deallocate(row)
+
+!       open (unit=8, file="P.txt", status='old', action='read' )
+
+!       do ix = 1,nx
+!         read(8,*) p(ix,:,1)
+!       end do
 
         !Read in whole file
 !       open (unit=12, file="Fx.txt", status='old', action='read' )

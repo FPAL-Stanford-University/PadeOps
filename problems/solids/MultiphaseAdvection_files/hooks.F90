@@ -5,8 +5,8 @@ module MultiphaseAdvection_data
     use DerivativesStaggeredMod, only: derivativesStagg
     implicit none
 
-    real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 10._rkind, rho_0 = one, p_amb = 0.1_rkind
-    real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 10._rkind, rho_0_2 = one, eta_det_ge = one,eta_det_ge_2 = one, eta_det_gp = one,eta_det_gp_2 = one, eta_det_gt = one,eta_det_gt_2 = one,diff_c_ge = one,diff_c_ge_2 = one, diff_c_gp = one,diff_c_gp_2 = one, diff_c_gt = one,diff_c_gt_2 = one,v0
+    real(rkind) :: p_infty = one, Rgas = one, gamma = 1.4_rkind, mu = 0._rkind, rho_0 = one, p_amb = 0.1_rkind
+    real(rkind) :: p_infty_2 = one, Rgas_2 = one, gamma_2 = 1.4_rkind, mu_2 = 0._rkind, rho_0_2 = one, eta_det_ge = one,eta_det_ge_2 = one, eta_det_gp = one,eta_det_gp_2 = one, eta_det_gt = one,eta_det_gt_2 = one,diff_c_ge = one,diff_c_ge_2 = one, diff_c_gp = one,diff_c_gp_2 = one, diff_c_gt = one,diff_c_gt_2 = one,v0
     real(rkind) :: minVF = 0.2_rkind, thick = one
     real(rkind) :: rhoRatio = 1.0, pRatio = 2.0
     logical     :: sharp = .FALSE.
@@ -165,7 +165,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1  + i - 1, rkind ) * dx - 0.5 !- two  ! x \in (-2,4]
                     y(i,j,k) = real( iy1  + j - 1, rkind ) * dy - 0.5
-                    z(i,j,k) = real( iz1  + k - 1, rkind ) * dz
+                    z(i,j,k) = real( iz1  + k - 1, rkind ) * dz - 0.5
                 end do
             end do
         end do
@@ -306,8 +306,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
 
         ! ! speed of sound
-         a1 = sqrt((gamma*(p1+p_infty) + 4.0d0/3.0d0*mu)/rho1)
-         a2 = sqrt((gamma_2*(p2+p_infty_2) + 4.0d0/3.0d0*mu)/rho2)
+         a1 = sqrt((gamma*(p_amb+p_infty) + 4.0d0/3.0d0*mu)/rho1)
+         a2 = sqrt((gamma_2*(p_amb+p_infty_2) + 4.0d0/3.0d0*mu)/rho2)
 
         ! if (nrank == 0) then
         !     print*, '----Shock Initialization-----'
@@ -380,7 +380,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         u   = v0 !+ (noise-0.5)*1d-6 !(u2-u1)*dum
         v   = 0
-        w   = zero
+        w   = 0
 
         
 
@@ -388,8 +388,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         !tmp = half * ( one - erf((0.25 - (x-interface_init)*(x-interface_init) - (y-3.0_rkind)*(y-3.0_rkind))/(thick*dx) ) )
         !tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) - (y-0.5)*(y-0.5))/(thick*dx) ) )
 
-        print *, "tmp"
-        tmp =  half * ( one - erf((625.0_rkind/7921.0_rkind  - x*x -(y)*(y))/(thick*dx) ) ) 
+        !tmp =  half * ( one - erf((625.0_rkind/7921.0_rkind-z*z -(y*y)-x*x)/(thick*dy) ) )
+        tmp =  half * ( one - erf((625.0_rkind/7921.0_rkind  - y*y -(x)*(x))/(thick*dy) ) ) 
         !tmp = half * ( one + tanh((sqrt(x*x  + y*y) - 0.25_rkind) /(3_rkind*thick*dx/16_rkind) ))
         ! tmp = half * ( one - erf((0.25_rkind**2 - (x-0.5)*(x-0.5)-(y-0.5)*(y-0.5))/(thick*dx) ) )
         ! tmp = half * ( one - erf((0.35**2 - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
@@ -414,10 +414,10 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%p  = p_amb ! + (noise-0.5)*1d-7   !66666dum + p1*(one-dum)
         mix%material(2)%p  = mix%material(1)%p
 
-        mix%material(1)%VF = minVF + (one-two*minVF)*tmp ! +  (noise-0.5)*1d-5
+        mix%material(1)%VF = minVF + (one-two*minVF)*tmp  +  (noise-0.5)*1d-5
         mix%material(2)%VF = one - mix%material(1)%VF
-        mix%material(1)%rhom = rho_0
-        mix%material(2)%rhom = rho_0_2
+!       mix%material(1)%rhom = rho_0
+!       mix%material(2)%rhom = rho_0_2
 
         rho = rho_0*mix%material(1)%VF + rho_0_2*mix%material(2)%VF ! + (noise-0.5)*1d-7
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho !+ (noise2-0.5)*1d-5

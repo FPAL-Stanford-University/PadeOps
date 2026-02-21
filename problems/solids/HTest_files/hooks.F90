@@ -1,4 +1,4 @@
-module Advection_data
+module HTest_data
     use kind_parameters,  only: rkind
     use constants,        only: one,two,eight,three,six,sixth,zero,pi
     use FiltersMod,       only: filters
@@ -16,11 +16,11 @@ module Advection_data
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
     real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e
     real(rkind) :: kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2
-    real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, Nvel = 0, p_disturb = 0.1, width = 0.9d0;
+    real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, Nvel = 0, p_disturb = 0.1, width = 0.5d0;
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 2.0, Lx = 2.0, interface_init = 0.5, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
+    real(rkind) :: Ly = 1.0, Lx = 2.0, interface_init = 0.5, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0, delta = 0.0125D0, delta_rho = 0.0125D0 
 
     type(filters) :: mygfil
 
@@ -132,7 +132,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
     use decomp_2d,        only: decomp_info
     use exits,            only: warning
 
-    use Advection_data
+    use HTest_data
 
     implicit none
 
@@ -166,7 +166,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1 - 1 + i - 1, rkind ) * dx - 1.0
-                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy - 1
+                    y(i,j,k) = real( iy1 - 1 + j - 1, rkind ) * dy - 0.5
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -189,7 +189,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     use DerivativesStaggeredMod, only: derivativesStagg
     use InterpolatorsMod,        only: interpolators
 
-    use Advection_data
+    use HTest_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -206,7 +206,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
     integer :: ioUnit
     logical :: periodicx,periodicy,periodicz
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, tmp2,tmpeta, noise,noise2,noise3
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, eta, tmp2,tmpeta, noise,noise2,noise3,noiseH
     real(rkind), dimension(8) :: fparams
     real(rkind) :: fac, Lr, STRETCH_RATIO = 1.5
     integer, dimension(2) :: iparams
@@ -278,12 +278,11 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%plast = plastic ; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
-        ! Set up smearing function for VF based on interface location and thickness
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
    !    tmpeta = atanh( 2.0*y / ( 1.0 + 1.0 / STRETCH_RATIO) )
    !    Lr =  Ly /( tmpeta(1, ny,1) - tmpeta(1,1,1))
 
-        eta = x !tmpeta ! - interface_init
+        eta = x !- eta0k*sin(2.0_rkind*kwave*pi*y) !tmpeta ! - interface_init
         !eta =(x-interface_init)
         !eta = x-interface_init
         !delta_rho = Nvel * dx !converts from Nrho to approximate thickness of erf profile
@@ -297,14 +296,30 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         tmp = (half)*(erf( (eta+width)/(thick*dx) ) - erf( (eta-width)/(thick*dx)))
         !tmp = half*((1 + tanh( (eta +width) / (thick*dy))) - (1 + tanh( (eta-width) / (thick*dy))) )
         !set mixture Volume fraction
-        mix%material(1)%VF = minVF + (one-two*minVF)*tmp  + 1d-7*(noise2-0.5) ! + (noise-0.5)*1d-7
+
+        
+        mix%material(1)%VF = minVF + (one-two*minVF)*tmp !  + 1d-9*(noise2-0.5) ! + (noise-0.5)*1d-7
         mix%material(2)%VF =  1 - mix%material(1)%VF
+
+!        where( mix%material(1)%VF .LE. 1d-6 .OR. mix%material(1)%VF .GE. 1-1d-6)
+                noiseH = (noise-0.5)*1d-7
+!        elsewhere
+!                noiseH = 0
+!        endwhere
+
+!        where( mix%material(1)%Ys .LE. 1d-6 .OR. mix%material(1)%Ys .GE. 1-1d-6)
+                noise3 = (noise2-0.5)*1d-7
+!        elsewhere
+!        endwhere
+
 
         !Set density profile and mass fraction based on volume fraction
         rho = rho_0*tmp + rho_0_2*(1-tmp) !mix%material(1)%VF + rho_0_2*mix%material(2)%VF
-        mix%material(1)%Ys =  mix%material(1)%VF * rho_0 / rho
+        mix%material(1)%Ys =  mix%material(1)%VF * rho_0 / rho + noise3
         mix%material(2)%Ys = one - mix%material(1)%Ys ! Enforce sum to unity
 
+        mix%material(1)%VF = mix%material(1)%VF+noiseH
+        mix%material(2)%VF = 1-mix%material(1)%VF
         u = v0 ! + 0.5*(-v0)*tanh((x+0.25)/(3*dx))
         v = 0 !+ 1d-9*(noise-0.5)
         w = 0
@@ -382,7 +397,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use SolidMixtureMod,  only: solid_mixture
-    use Advection_data
+    use HTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -418,7 +433,7 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
     use DerivativesStaggeredMod, only: derivativesStagg
     use InterpolatorsMod,        only: interpolators
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
-    use Advection_data
+    use HTest_data
 
     implicit none
     character(len=*),                intent(in)    :: inputfile
@@ -467,7 +482,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use operators,        only: curl
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
 
-    use Advection_data
+    use HTest_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -508,7 +523,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        end if
 
        if (decomp%ysz(2) == 1) then
-           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Advection_"//trim(str)//"_", vizcount, ".dat"
+           write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/HTest_"//trim(str)//"_", vizcount, ".dat"
 
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED')
            write(outputunit,'(4ES27.16E3)') tsim, minVF, thick, rho_0_2/rho_0
@@ -559,7 +574,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
        xspike = P_MAXVAL(xspike_proc)
        xbubbl = P_MINVAL(xbubbl_proc)
            
-       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/Advection_statistics.dat"
+       write(outputfile,'(2A,I4.4,A)') trim(outputdir),"/HTest_statistics.dat"
 
        if (vizcount == 0) then
            open(unit=outputunit, file=trim(outputfile), form='FORMATTED', status='REPLACE')
@@ -632,7 +647,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     use SolidMixtureMod,  only: solid_mixture
     use operators,        only: filter3D
 
-    use Advection_data
+    use HTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -837,7 +852,7 @@ subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim)
     use reductions,       only: P_MAXVAL
     use SolidMixtureMod,  only: solid_mixture
 
-    use Advection_data
+    use HTest_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -880,7 +895,7 @@ subroutine hook_mixture_source(decomp,mesh,fields,mix,tsim,rhs)
     use decomp_2d,        only: decomp_info
     use SolidMixtureMod,  only: solid_mixture
 
-    use Advection_data
+    use HTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -906,7 +921,7 @@ subroutine hook_material_g_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Ys,V
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Advection_data
+    use HTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -926,7 +941,7 @@ subroutine hook_material_mass_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w,Y
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Advection_data
+    use HTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -946,7 +961,7 @@ subroutine hook_material_energy_source(decomp,hydro,elastic,x,y,z,tsim,rho,u,v,w
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Advection_data
+    use HTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -966,7 +981,7 @@ subroutine hook_material_VF_source(decomp,hydro,elastic,x,y,z,tsim,u,v,w,Ys,VF,p
     use StiffGasEOS,      only: stiffgas
     use Sep1SolidEOS,     only: sep1solid
 
-    use Advection_data
+    use HTest_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
