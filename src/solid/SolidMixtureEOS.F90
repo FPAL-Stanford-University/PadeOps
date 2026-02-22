@@ -2319,7 +2319,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !this%material(2)%vfLAD_grad = 1/species_e*(- gradrhoE + Beta*gradp) 
     end subroutine
 
-    subroutine getLAD_5eqn(this,rho,p,e,Frho,Fenergy,Fp,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz)
+    subroutine getLAD_5eqn(this,rho,p,e,p_int,Frho,Fenergy,Fp,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
         use operators, only: divergence,gradient,filter3D, interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz, interpolateMax,interpolateFV_x,interpolateFV_F2Ny
         use constants,       only: zero,epssmall,eps,one,two,third,half
@@ -2327,11 +2327,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         use reductions, only : P_MAXVAL
         class(solid_mixture), intent(inout) :: this
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: p_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(out) :: Frho, Fenergy, Fp
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: hi
         real(rkind), intent(in) :: dx,dy,dz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,p,e
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradRYs, gradVF,gradRYs_int, gradVF_int, rhodiff_int, p_int,adiff_int, hi_int, rhom_int,rho_int,gradYs_int,outdiff_int, Ysdiff_int, VF_int, esum, gamsum, e_int, Ys_int, gradH
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradRYs, gradVF,gradRYs_int, gradVF_int, rhodiff_int,adiff_int, hi_int, rhom_int,rho_int,gradYs_int,outdiff_int, Ysdiff_int, VF_int, esum, gamsum, e_int, Ys_int, gradH
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: dRYdx_x,dRYdy_y,dRdz_z,dVFdx_x,dVFdy_y,dVFdz_z, rhom,tmp,adiff_fil1,adiff_fil2,adiff_fil3,rhodiff_fil1,rhodiff_fil2,rhodiff_fil3
          
         integer :: i, imat
@@ -2341,105 +2342,45 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         Fenergy = 0.0
         Fp      = 0.0
         if( this%LADInt ) then
-          do i = 1,this%ns
+!          do i = 1,this%ns
 
-            call this%material(i)%get_enthalpy(hi)
-            call this%material(i)%getSpeciesDensity(rho, rhom)
-            call gradient(this%decomp,this%der,this%material(i)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3))
-            call gradient(this%decomp,this%der,rho*this%material(i)%Ys,gradRYs(:,:,:,1),gradRYs(:,:,:,2),gradRYs(:,:,:,3))
-
-            call interpolateFV_x(this%decomp,this%interpMid,gradVF(:,:,:,1),gradVF_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call interpolateFV_y(this%decomp,this%interpMid,gradVF(:,:,:,2),gradVF_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call interpolateFV_z(this%decomp,this%interpMid,gradVF(:,:,:,3),gradVF_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-            call interpolateFV_x(this%decomp,this%interpMid,gradRYs(:,:,:,1),gradRYs_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call interpolateFV_y(this%decomp,this%interpMid,gradRYs(:,:,:,2),gradRYs_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call interpolateFV_z(this%decomp,this%interpMid,gradRYs(:,:,:,3),gradRYs_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-            call interpolateFV(this%decomp,this%interpMid,this%material(i)%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)         
-            call interpolateFV(this%decomp,this%interpMid,this%material(i)%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call interpolateFV(this%decomp,this%interpMid,p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call interpolateFV(this%decomp,this%interpMid,rhom*hi,hi_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
- 
-            do imat = 1,3
-!             Frho(:,:,:,imat)    = Frho(:,:,:,imat) + rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*this%material(i)%elastic%rho0 !gradRYs_int(:,:,:,imat) !   + this%material(i)%rhodiff*gradRYs(:,:,:,imat) !Fenergy(:,:,:,imat)    = Fenergy(:,:,:,imat) + hi*this%material(i)%rhodiff*gradRYs(:,:,:,imat)
-             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*( (p_int(:,:,:,imat) + this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1) 
-             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )
-            enddo
-          !this%material(i)%rhodiff*gradVF(:,:,:,imat)*( (p + this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1
-          enddo 
+!            call this%material(i)%get_enthalpy(hi)
+!            call this%material(i)%getSpeciesDensity(rho, rhom)
+!            call gradient(this%decomp,this%der,this%material(i)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3))
+!            call gradient(this%decomp,this%der,rho*this%material(i)%Ys,gradRYs(:,:,:,1),gradRYs(:,:,:,2),gradRYs(:,:,:,3))
+!
+!            call interpolateFV_x(this%decomp,this%interpMid,gradVF(:,:,:,1),gradVF_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!            call interpolateFV_y(this%decomp,this%interpMid,gradVF(:,:,:,2),gradVF_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!            call interpolateFV_z(this%decomp,this%interpMid,gradVF(:,:,:,3),gradVF_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!
+!            call interpolateFV_x(this%decomp,this%interpMid,gradRYs(:,:,:,1),gradRYs_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!            call interpolateFV_y(this%decomp,this%interpMid,gradRYs(:,:,:,2),gradRYs_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!            call interpolateFV_z(this%decomp,this%interpMid,gradRYs(:,:,:,3),gradRYs_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!
+!            call interpolateFV(this%decomp,this%interpMid,this%material(i)%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)         
+!            call interpolateFV(this%decomp,this%interpMid,this%material(i)%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!            call interpolateFV(this%decomp,this%interpMid,p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!            call interpolateFV(this%decomp,this%interpMid,rhom*hi,hi_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+! 
+!            do imat = 1,3
+!!             Frho(:,:,:,imat)    = Frho(:,:,:,imat) + rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*this%material(i)%elastic%rho0 !gradRYs_int(:,:,:,imat) !   + this%material(i)%rhodiff*gradRYs(:,:,:,imat) !Fenergy(:,:,:,imat)    = Fenergy(:,:,:,imat) + hi*this%material(i)%rhodiff*gradRYs(:,:,:,imat)
+!             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + rhodiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*( (p_int(:,:,:,imat) + this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1) 
+!             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )
+!            enddo
+!          !this%material(i)%rhodiff*gradVF(:,:,:,imat)*( (p + this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1
+!          enddo 
 
         elseif(this%LADN2F) then
 
-          hi = 0 
 
           do i = 1,this%ns
 
-             hi = hi + this%material(i)%VF*(this%material(i)%hydro%gam*p + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1
-
-          end do 
-
-          do i = 1,this%ns
-           call this%material(i)%getSpeciesDensity(rho, rhom)
-           call this%material(i)%get_enthalpy(hi)
-           ! call gradient(this%decomp,this%der,this%material(i)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3))
-           ! call gradient(this%decomp,this%der,rho*this%material(i)%Ys,gradRYs(:,:,:,1),gradRYs(:,:,:,2),gradRYs(:,:,:,3))
-           hi = (this%material(i)%hydro%gam*p + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1
-
-            call gradFV_N2Fx(this%decomp,this%derStagg,this%material(i)%VF,gradVF_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call gradFV_N2Fy(this%decomp,this%derStagg,this%material(i)%VF,gradVF_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call gradFV_N2Fz(this%decomp,this%derStagg,this%material(i)%VF,gradVF_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-!            call gradFV_N2Fx(this%decomp,this%derStagg,hi,gradH(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!            call gradFV_N2Fy(this%decomp,this%derStagg,hi,gradH(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!            call gradFV_N2Fz(this%decomp,this%derStagg,hi,gradH(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-            call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%material(i)%Ys,gradRYs_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%material(i)%Ys,gradRYs_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%material(i)%Ys,gradRYs_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-
-           call interpolateFV(this%decomp,this%interpMid,this%material(i)%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV(this%decomp,this%interpMid,this%material(i)%rhodiff,rhodiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV(this%decomp,this%interpMid,rho,rho_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
             
-           adiff_fil1 = adiff_int(:,:,:,1)
-           adiff_fil2 = adiff_int(:,:,:,2)
-           adiff_fil3 = adiff_int(:,:,:,3)
-          call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
-
-           adiff_int(:,:,:,1) = adiff_fil1
-           adiff_int(:,:,:,2) = adiff_fil2
-           adiff_int(:,:,:,3) = adiff_fil3
-            
-           rhodiff_fil1 = rhodiff_int(:,:,:,1)
-           rhodiff_fil2 = rhodiff_int(:,:,:,2)
-           rhodiff_fil3 = rhodiff_int(:,:,:,3)
-
-          call filter3D(this%decomp, this%gfil, rhodiff_fil1, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, rhodiff_fil1, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, rhodiff_fil2, 1, x_bc,y_bc,z_bc)
-          call filter3D(this%decomp, this%gfil, rhodiff_fil3, 1, x_bc,y_bc,z_bc)
-
-           rhodiff_int(:,:,:,1) = rhodiff_fil1 !*rho_int(:,:,:,1)
-           rhodiff_int(:,:,:,2) = rhodiff_fil2 !*rho_int(:,:,:,2)
-           rhodiff_int(:,:,:,3) = rhodiff_fil3 !*rho_int(:,:,:,3)
-
-            call interpolateFV(this%decomp,this%interpMid,p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-            call interpolateFV(this%decomp,this%interpMid,hi,hi_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
             do imat = 1,3
            
              if( .NOT. this%LADMass_Consv) then
 
-                Frho(:,:,:,imat)    = Frho(:,:,:,imat) + ( rhodiff_int(:,:,:,imat)*gradRYs_int(:,:,:,imat) )
+                Frho(:,:,:,imat)    = Frho(:,:,:,imat) + (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradYs(:,:,:,imat) )
              else
                 
                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + this%J_phi(:,:,:,imat,i)
@@ -2447,7 +2388,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
              endif
 
              if( .NOT. this%LADMass_Consv) then
-              Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) +  (adiff_int(:,:,:,imat)*gradVF_int(:,:,:,imat)) *((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 ) 
+              Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) +  (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradVF(:,:,:,imat)) *((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 ) 
              
 
              else
@@ -5204,9 +5145,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         !for example, to take the gradient of the volume fraction of species # 1
 
        if( this%use_Stagg) then
-           call interpolateFV_x(this%decomp,this%interpMid,this%material(1)%VF,VF_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV_y(this%decomp,this%interpMid,this%material(1)%VF,VF_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call interpolateFV_z(this%decomp,this%interpMid,this%material(1)%VF,VF_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!           call interpolateFV_x(this%decomp,this%interpMid,this%material(1)%VF,VF_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!           call interpolateFV_y(this%decomp,this%interpMid,this%material(1)%VF,VF_int(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!           call interpolateFV_z(this%decomp,this%interpMid,this%material(1)%VF,VF_int(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           VF_int = this%material(1)%VF_mid
            call gradFV_x(this%decomp,this%derStagg,VF_int(:,:,:,1),gradVF(:,:,:,1),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
            call gradFV_y(this%decomp,this%derStagg,VF_int(:,:,:,2),gradVF(:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 !           call interpolateFV_x(this%decomp,this%interpMid,this%material(1)%p,p_int(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)

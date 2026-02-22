@@ -19,7 +19,7 @@ module Laplace_data
     integer     :: kos_sh,kos_sh2
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0D0, Lx = 1.0D0, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 = 1d0, v0_2 = 1d0, tau0 =1d0, R = 0.2d0
+    real(rkind) :: Ly = 2.0D0, Lx = 2.0D0, interface_init = 0.75_rkind,Tp = 4d0, shock_init = 0.6_rkind, kwave = 4.0_rkind,  v0 =1d0, v0_2 = 1d0, tau0 =1d0, R = 0.4d0
     real(rkind) :: tau0_2=1d0, Nvel=1d0, etasize=1d0, ksize =1d0, delta_rho = 1d0, Nrho = 1d0, delta = 1d0
 
 
@@ -294,7 +294,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = sqrt((x - 0.5)**2 + (y - 0.5)**2)
+	eta = sqrt((x - 1.0)**2 + (y - 1.0)**2)
         eta2 = sqrt((x-1.1)**2 + (y - 1.1)**2)
         !mp = half * ( one - erf((R**2 -(x-1_rkind)*(x-1_rkind) - (y-1_rkind)*(y-1_rkind))/(thick*dx)) )	
         tmp = 1/ (1+exp( (eta - R)/(thick*dx)) )

@@ -1979,18 +1979,9 @@ contains
              
              this%mix%material(i)%deltakap = this%mix%deltakap
 
-            enddo        
-!            call this%mix%filter(1, this%x_bc, this%y_bc, this%z_bc) 
-            call this%getFaces()
-            !!!!!!!!!!!!!!!!!!!!!! COMMENTED OUT G STUFF !!!!!!!!!!!!!!!!!!!!!!
-            !call this%get_conserved_g()
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            enddo       
 
-!            if ( nancheck(this%fields(:,:,:,rho_index),i,j,k) ) then
-!              write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution rho at substep ", isub, " of step ", this%step+1, " at (",i+this%decomp%yst(1)-1,", ",j+this%decomp%yst(2)-1,", ",k+this%decomp%yst(3)-1,") of Wcnsrv"
- 
-!              call GracefulExit(charout,4909)
-!            end if
+            call this%getFaces()
 
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
@@ -2004,8 +1995,9 @@ contains
 
             call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
 
-!            call this%mix%get_J(this%rho)                                          ! Compute diffusive mass fluxes
-!            call this%mix%get_q(this%x_bc,this%y_bc,this%z_bc)                     ! Compute diffusive thermal fluxes (including enthalpy diffusion)
+            do imat = 1,this%mix%ns
+                call this%mix%material(imat)%LAD_Quant(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            enddo
 
 
             if(this%intSharp) then
@@ -3138,7 +3130,7 @@ contains
         else
          
           ke = half*( this%u**2 + this%v**2 + this%w**2 )
-          call this%mix%getLAD_5eqn(this%rho,this%p,this%e,Frho,Fenergy,Fp,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz)
+          call this%mix%getLAD_5eqn(this%rho,this%p,this%e,this%p_mid,Frho,Fenergy,Fp,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz)
 
           
           if( this%LADInt .OR. this%LADN2F) then

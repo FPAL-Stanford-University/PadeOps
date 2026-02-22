@@ -62,7 +62,7 @@ module SolidMod
         real(rkind), dimension(:,:,:),   pointer     :: rg32,rgt32,rgp32
         real(rkind), dimension(:,:,:),   pointer     :: rg33,rgt33,rgp33
         
-        real(rkind), dimension(:,:,:,:), allocatable :: devstress
+        real(rkind), dimension(:,:,:,:), allocatable :: devstress,gradYs,gradVF
         real(rkind), dimension(:,:,:),   pointer     :: sxx
         real(rkind), dimension(:,:,:),   pointer     :: sxy
         real(rkind), dimension(:,:,:),   pointer     :: sxz
@@ -165,6 +165,7 @@ module SolidMod
         procedure :: getLAD_VF
         procedure :: getYsLAD
         procedure :: getFaces
+        procedure :: LAD_Quant
         final     :: destroy
 
     end type
@@ -517,7 +518,13 @@ contains
         this%syy  => this%devstress(:,:,:,4)   
         this%syz  => this%devstress(:,:,:,5)   
         this%szz  => this%devstress(:,:,:,6)   
-        
+       
+        if( allocated( this%gradYs ) ) deallocate( this%gradYs )
+        allocate( this%gradYs(this%nxp,this%nyp,this%nzp,3) )
+
+        if( allocated( this%gradVF ) ) deallocate( this%gradVF )
+        allocate( this%gradVF(this%nxp,this%nyp,this%nzp,3) )
+ 
         ! Allocate mrray to store contraction of deviatoric stress
         if( allocated( this%modDevSigma ) ) deallocate( this%modDevSigma )
         allocate( this%modDevSigma(this%nxp,this%nyp,this%nzp) )
@@ -828,7 +835,8 @@ contains
                              nullify( this%syy ); nullify( this%syz )
                                                   nullify( this%szz )
         if( allocated( this%devstress ) ) deallocate( this%devstress )
-
+        if( allocated( this%gradVF ) ) deallocate( this%gradVF )
+        if( allocated( this%gradYs ) ) deallocate( this%gradYs )
         nullify( this%g11 ); nullify( this%g12 ); nullify( this%g13 )
         nullify( this%g21 ); nullify( this%g22 ); nullify( this%g23 )
         nullify( this%g31 ); nullify( this%g32 ); nullify( this%g33 )
@@ -5061,7 +5069,7 @@ contains
            else
 
                if( .NOT. this%LADMass_Consv ) then
-                  call this%getYsLAD(rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+             !     call this%getYsLAD(rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
                endif
            endif
 
@@ -5142,7 +5150,7 @@ contains
            else
 
                 if( .NOT. this%LADMass_Consv ) then
-                  call this%getYsLAD(rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                !  call this%getYsLAD(rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
                endif
 
 
@@ -5351,7 +5359,7 @@ contains
 
         else
 
-           call this%getLAD_VF(rho,sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
+           !call this%getLAD_VF(rho,sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
 
            call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
            call divergenceFV(this%decomp,this%derStagg,-umid*this%VF_mid(:,:,:,1),-vmid*this%VF_mid(:,:,:,2),-wmid*this%VF_mid(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -5360,6 +5368,52 @@ contains
             rhsVF = div_uVF + this%vfLAD + this%VF*div_u  ! + this%intSharp_aDiffFV
             this%advectVF = div_uVF + this%VF*div_u
         endif
+
+
+    end subroutine
+
+    subroutine LAD_Quant(this,rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        use operators, only: gradient,divergence, interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z, divergenceFV,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz,interpolateMax,filter3D
+        use constants, only: one
+        use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
+        class(solid), intent(inout)  :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+        logical :: periodicx,periodicy,periodicz
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2,tmp3, tmp4, tmp5, tmp6,rhocsq1, rhocsq2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx, dVFdy, dVFdz,adiff_fil1, adiff_fil2, adiff_fil3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx_x,dVFdy_y,dVFdz_z, rhom,dYdx_x,dYdy_y,dYdz_z,ysLAD,VF_bound
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rhodiff_int,adiff_int, rhom_int,outVF,outYs,sos_int
+        integer :: i
+        real(rkind) :: md1 = (1d-6)**(0.5)
+
+          call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,this%gradVF(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,this%gradVF(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,this%gradVF(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+          call gradFV_N2Fx(this%decomp,this%derStagg,rho*this%Ys,this%gradYs(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,this%gradYs(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,this%gradYs(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+          adiff_fil1 = adiff_int(:,:,:,1)
+          adiff_fil2 = adiff_int(:,:,:,2)
+          adiff_fil3 = adiff_int(:,:,:,3)
+          call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
+          call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
+
+          this%adiff_stagg(:,:,:,1) = adiff_fil1
+          this%adiff_stagg(:,:,:,2) = adiff_fil2
+          this%adiff_stagg(:,:,:,3) = adiff_fil3
+
+          call divergenceFV(this%decomp,this%derStagg,adiff_fil1*this%gradVF(:,:,:,1),adiff_fil2*this%gradVF(:,:,:,2),adiff_fil3*this%gradVF(:,:,:,3),this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call divergenceFV(this%decomp,this%derStagg,adiff_fil1*this%gradYs(:,:,:,1),adiff_fil2*this%gradYs(:,:,:,2),adiff_fil3*this%gradYs(:,:,:,3),this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+
 
 
     end subroutine
@@ -5393,26 +5447,8 @@ contains
           VF_bound = 0.0
 
 
-          call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,dVFdx_x,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,dVFdy_y,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,dVFdz_z,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call interpolateFV(this%decomp,this%interpMid,this%adiff,adiff_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-           adiff_fil1 = adiff_int(:,:,:,1)
-           adiff_fil2 = adiff_int(:,:,:,2)
-           adiff_fil3 = adiff_int(:,:,:,3)
-           call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
-           call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
-           call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
-           call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
-           call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
-           call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)
-
            call divergenceFV(this%decomp,this%derStagg,adiff_fil1*dVFdx_x,adiff_fil2*dVFdy_y,adiff_fil3*dVFdz_z,this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           this%adiff_stagg(:,:,:,1) = adiff_fil1
-           this%adiff_stagg(:,:,:,2) = adiff_fil2
-           this%adiff_stagg(:,:,:,3) = adiff_fil3
 
         else
 
@@ -5478,7 +5514,7 @@ contains
        else
 
       !   if( .NOT. this%LADMass_Consv) then
-         call this%getLAD_VF(rho,sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
+      !   call this%getLAD_VF(rho,sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
       !   else
       !      this%vfLAD = 0.!0
       !   endif
