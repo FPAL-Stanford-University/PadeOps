@@ -1951,7 +1951,6 @@ contains
 
        do isub = 1,  RK45_steps
 
-
             if(this%use_CnsrvSurfaceTension) then
                 call this%mix%get_surfaceTensionPE(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
             endif
@@ -1962,9 +1961,11 @@ contains
                 if(this%mix%ns.ne.2) then
                     call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
                 endif
-                
-                call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%x,this%y,isub)
 
+                call tic()                
+                call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%x,this%y,isub)
+                call toc(cputime)
+                call message(3,"Surface Tension time (in seconds)",cputime)
 ! Compute surface tension terms for momentum and energy equations
 
             endif
@@ -1981,8 +1982,10 @@ contains
 
             enddo       
 
+            call tic()
             call this%getFaces()
-
+            call toc(cputime)
+            call message(3,"Faces time (in seconds)",cputime)
 
             if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
                 call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
@@ -1993,11 +1996,14 @@ contains
             ! Pre-compute stress, LAD, J, etc.
             call this%mix%getSOS(this%rho,this%p,this%sos)
 
+            call tic()
             call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
 
             do imat = 1,this%mix%ns
                 call this%mix%material(imat)%LAD_Quant(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
             enddo
+            call toc(cputime)
+            call message(3,"LAD time (in seconds)",cputime)
 
 
             if(this%intSharp) then
@@ -2022,7 +2028,11 @@ contains
                this%mix%intSharp_hFV = zero
                this%mix%intSharp_kFV = zero
              
+               call tic()
                call this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p) !this%u_mid,this%v_mid,this%w_mid,this%p_mid)
+               call toc(cputime)
+               call message(3,"Interface Sharpening Time (in seconds)",cputime)
+
        else      
                   ! !debug
                    do imat=1,this%mix%ns
@@ -2060,11 +2070,14 @@ contains
             ! Update total mixture conserved variables
 
 
+            call tic()
             if (this%useNC) then
               call this%getRHS_NC(rhs,divu, viscwork)
             else
               call this%getRHS(rhs,divu,viscwork)
             endif
+            call toc(cputime)
+            call message(3,"RHS time (in seconds)",cputime)
 
 
             !!!!!!!!!!!!!! UNCOMMENT            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2084,6 +2097,7 @@ contains
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
+            call tic()
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             if(this%use_Stagg) then
                 
@@ -2094,7 +2108,10 @@ contains
             else
                call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_int,this%v_int,this%w_int,this%sos,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
             endif
+            call toc(cputime)
+            call message(3,"Ys time (in seconds)",cputime)
 
+            call tic()
             if(this%pEqb) then
 
 
@@ -2119,6 +2136,8 @@ contains
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc)
 ! Hydrodynamic energy
             end if
+            call toc(cputime)
+            call message(3,"VF time (in seconds)",cputime)
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             !if (.NOT. this%PTeqb) then
 
@@ -2886,6 +2905,7 @@ contains
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
         use operators, only: divergence,gradient,divergenceFV, interpolateFV, interpolateFV_x, interpolateFV_y, interpolateFV_z,gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz,interpolateMax,gradFV_x,gradFV_y
         use exits,      only: message,nancheck,GracefulExit
+        use timer,      only: tic,toc
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv), intent(out) :: rhs
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),     intent(out) :: divu
@@ -2906,9 +2926,10 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: ke,tmp,dJ,drhodx,drhody,drhodz, uJ, vJ, wJ, keJ, eJ, Fbody, tmp1,tmp2, tmp3, rhoeJ
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: drhoedx,drhoedy, drhoedz,dedx,dedz,dedy, eKap,dedx_n, dedy_n, dedz_n
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, 3) :: J,Frho,Fenergy, Fp, yMetric_F2N_int, De_int,rho_int, eLADcoef,gradrhoh,rhoh,gradp
-        real(rkind) :: g = -0.1
+        real(rkind) :: g = -0.1, cputime
 
 
+        call tic()
         if(this%use_Stagg) then
 
            dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
@@ -2979,13 +3000,16 @@ contains
            call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
            call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
         endif
-
+        call toc(cputime)
+           call message(4, "Viscous Stress Stuff", cputime)
         divu = dudx + dvdy + dwdz
 
+        call tic()
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
         call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))* 4_rkind)
-
+        call toc(cputime)
+        call message(4, "Viscous Stress LAD ", cputime)
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Conductivity LAD        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        rhoeJ = 0
 
@@ -3057,6 +3081,7 @@ contains
 
         rhs = zero
 
+        call tic()
         if(this%use_Stagg) then
 
               call this%getRHS_xStagg(              rhs,&
@@ -3088,7 +3113,8 @@ contains
                                                  qz )
            !print '(a,4(e21.14,1x))', 'rhsz: ', rhs(179,1,1,1:4)
         endif
-
+        call toc(cputime)
+        call message(4, "RHS Stuff", cputime)
         if(this%intSharp .AND. this%intSharp_cpl) then
            !calculate kinetic energy for intSharp terms
             ke = half*( this%u**2 + this%v**2 + this%w**2 ) 
@@ -3132,7 +3158,7 @@ contains
           ke = half*( this%u**2 + this%v**2 + this%w**2 )
           call this%mix%getLAD_5eqn(this%rho,this%p,this%e,this%p_mid,Frho,Fenergy,Fp,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz)
 
-          
+          call tic()
           if( this%LADInt .OR. this%LADN2F) then
 
              ke_int = half*(this%u_mid*this%u_mid + this%v_mid*this%v_mid + this%w_mid*this%w_mid)
@@ -3158,6 +3184,8 @@ contains
 
           this%eJ = rhoeJ
         endif
+        call toc(cputime)
+        call message(4, "LAD RHS consistency ", cputime)
 
 !       print *, "rhow_ref1", this%rhow_ref
 !       print *, "rhoe_ref", this%rhoe_ref
