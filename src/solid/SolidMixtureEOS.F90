@@ -2740,7 +2740,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
     end subroutine
 
-    subroutine get_intSharp_clean2(this,rho,ke_mid,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w,p)
+    subroutine get_intSharp_clean2(this,rho,ke_mid,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w,p,uFVint,vFVint,wFVint,pFVint)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
         use operators, only: divergence,gradient,filter3D,interpolateFV_x,interpolateFV_y, interpolateFV_z, gradFV_N2Fx, gradFV_N2Fy,gradFV_N2Fz
         use constants,       only: zero,epssmall,eps,one,two,third,half,pi
@@ -2750,13 +2750,13 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: dx,dy,dz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,p
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3),   intent(in) :: ke_mid
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradVF,gradVFdiff,fv_f,fv_h,tmp4, gradphi, fv_k, Db_int,hDiff,kDiff,uDiff
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3),   intent(in) :: ke_mid,uFVint,vFVint,wFVint,pFVint
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradVF,gradVFdiff,fv_f,fv_h,tmp4, gradphi, fv_k,Db_int,hDiff,kDiff,uDiff,NMint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: rhoi,VFbound,hi,spf_a,spf_r
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint,gradxi,VFint,uFVint,vFVint,wFVint,gFVint,gtFVint,gpFVint,rhoFVint, kerne,gradFVFV, gradFV_N2F,rhoYsint,OOB_mask_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint,gradxi,VFint,gFVint,gtFVint,gpFVint,rhoFVint, kerne,gradFVFV, gradFV_N2F,rhoYsint,OOB_mask_int
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: uFVint_6,vFVint_6,wFVint_6,rhoFVint_6,gradrhoYs,keFV_int
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint, rhoiFVint_local,pFVint, intDiff,hiFVint_6, rhoiFVint_6, pFVint_6,rhoantiDiffFVint
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint, gradXi_FV
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint, rhoiFVint_local, intDiff,hiFVint_6, rhoiFVint_6, pFVint_6,rhoantiDiffFVint
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: gradVF_FV,gradVFint, gradXi_FV
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom,Db,H,OOB_mask,Hl,Hh,HYs,HVF,xi_mask,HVF2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: gradVF_x,gradVF_y, gradVF_z,tmp1,tmp2,tmp3,tmp1_i,tmp2_i,tmp3_i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i,VF_RHS_i, Kij_coeff_i
@@ -2873,79 +2873,44 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
             
              !interpolate nodes to faces: ( i, j, k ) -> ( i+1/2, j+1/2, k+1/2 )
+
+             if(.NOT. this%usePhiForm) then
               call interpolateFV(this,this%material(i)%VF,VFint,periodicx,periodicy,periodicz,this%x_bc, this%y_bc, this%z_bc)
+             endif
               !TODO: make sure these BCS for surface normal are correct
-              call interpolateFV(this,norm(:,:,:,1),NMint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
-              call interpolateFV(this,norm(:,:,:,2),NMint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
-              call interpolateFV(this,norm(:,:,:,3),NMint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
+              call interpolateFV_x(this%decomp,this%interpMid02,norm(:,:,:,1),NMint(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+              call interpolateFV_y(this%decomp,this%interpMid02,norm(:,:,:,2),NMint(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+              call interpolateFV_z(this%decomp,this%interpMid02,norm(:,:,:,3),NMint(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-             call interpolateFV(this,u,uFVint,periodicx,periodicy,periodicz,-this%x_bc, this%y_bc,this%z_bc)
-             call interpolateFV(this,v,vFVint,periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
-             call interpolateFV(this,w,wFVint,periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
-             call interpolateFV(this,rho,rhoFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-!              call interpolateFV_6(this,u,uFVint_6,periodicx,periodicy,periodicz,-this%x_bc,this%y_bc,this%z_bc)
-!              call interpolateFV_6(this,v,vFVint_6,periodicx,periodicy,periodicz,this%x_bc,-this%y_bc,this%z_bc)
-!              call interpolateFV_6(this,w,wFVint_6,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,-this%z_bc)
-!              call interpolateFV_6(this,rho,rhoFVint_6,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+              rhoFVint = this%material(1)%rhoYs_mid + this%material(2)%rhoYs_mid
 
-              if(useRhoLocal) then !use local component density --- recommended
-                 call interpolateFV(this,rhoi(:,:,:,i),rhoiFVint(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              else
-                 call interpolateFV(this,rhoi(:,:,:,i)*zero+this%material(i)%elastic%rho0,rhoiFVint(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              endif
+              rhoiFVint(:,:,:,1,i) = this%material(i)%elastic%rho0
+              rhoiFVint(:,:,:,2,i) = this%material(i)%elastic%rho0
+              rhoiFVint(:,:,:,3,i) = this%material(i)%elastic%rho0
 
               call interpolateFV(this,rhoi(:,:,:,i),rhoiFVint_local(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              
-            !  where( this%material(i)%rhodiff .ge. 1d-9 )
-            !        H = 0
-            !  elsewhere
-            !        H = 1
-            !  endwhere
+          
 
               if (this%usePhiForm) then
                  call interpolateFV(this,this%xi,phiint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!                 do q = 1,3
-
-!                     antiDiffFVint(:,:,:,q,i) =-this%intSharp_gam*this%material(i)%VF_mid(:,:,:,q)*(1_rkind - this%material(i)%VF_mid(:,:,:,q) )*norm(:,:,:,q)
-
-!                 enddo
                       
                  antiDiffFVint(:,:,:,1,i) =  -this%intSharp_gam*(0.25*(1.0-(tanh((1.0-2.0*this%intSharp_cut)* phiint(:,:,:,1)/(2.0*this%intSharp_eps)))**2) &
-                                             -0.5*(1.0+tanh((1-2*this%intSharp_cut)*phiint(:,:,:,1)/(2.0*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,1,1)
+                                             -0.5*(1.0+tanh((1-2*this%intSharp_cut)*phiint(:,:,:,1)/(2.0*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,1)
                  antiDiffFVint(:,:,:,2,i) =  -this%intSharp_gam*(0.25*(1.0-(tanh((1-2*this%intSharp_cut)* phiint(:,:,:,2)/(2.0 *this%intSharp_eps)))**2) &
-                                             -0.5*(1.0 +tanh((1.0 -2.0*this%intSharp_cut)*phiint(:,:,:,2)/(2.0*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,2,2)
+                                             -0.5*(1.0 +tanh((1.0 -2.0*this%intSharp_cut)*phiint(:,:,:,2)/(2.0*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,2)
                  antiDiffFVint(:,:,:,3,i) =  -this%intSharp_gam*(0.25*(1.0-(tanh((1.0-2.0*this%intSharp_cut)* phiint(:,:,:,3)/(2.0*this%intSharp_eps)))**2) &
-                                             -0.5*(1+tanh((1.0-2.0*this%intSharp_cut)*phiint(:,:,:,3)/(2.0*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,3,3)
+                                             -0.5*(1+tanh((1.0-2.0*this%intSharp_cut)*phiint(:,:,:,3)/(2.0*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,3)
 
 
                  rhoantiDiffFVint(:,:,:,:,i) = rhoiFVint(:,:,:,:,i)*antiDiffFVint(:,:,:,:,i)
-            !    call divergenceFV(this,antiDiffFVint(:,:,:,:,i),this%antidiff,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
               else   
 
-                 if(this%intSharp_d02) then !which FD VF gradient to interpolate
-                 !not used
-                 !TODO: make sure these BCS for gradVF are correct
-                   call interpolateFV(this,gradVF(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
-                   call interpolateFV(this,gradVF(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
-                   call interpolateFV(this,gradVF(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
-
-                 else
-                 !used in high order version
-                 !TODO: make sure these BCS for gradVF are correct
-
-
-                   call interpolateFV_6(this,gradVFdiff(:,:,:,1),gradVFint(:,:,:,:,1),periodicx,periodicy,periodicz,-this%x_bc,this%y_bc, this%z_bc)
-                   call interpolateFV_6(this,gradVFdiff(:,:,:,2),gradVFint(:,:,:,:,2),periodicx,periodicy,periodicz,this%x_bc,-this%y_bc, this%z_bc)
-                   call interpolateFV_6(this,gradVFdiff(:,:,:,3),gradVFint(:,:,:,:,3),periodicx,periodicy,periodicz,this%x_bc, this%y_bc,-this%z_bc)
-                 endif
-  
              
                  !calculate antiDiffFVint term
-                  antiDiffFVint(:,:,:,1,i) = -this%intSharp_gam * (VFint(:,:,:,1)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,1))*NMint(:,:,:,1,1)
-                  antiDiffFVint(:,:,:,2,i) = -this%intSharp_gam * (VFint(:,:,:,2)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,2))*NMint(:,:,:,2,2)
-                  antiDiffFVint(:,:,:,3,i) = -this%intSharp_gam * (VFint(:,:,:,3)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,3))*NMint(:,:,:,3,3)
+                  antiDiffFVint(:,:,:,1,i) = -this%intSharp_gam * (VFint(:,:,:,1)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,1))*NMint(:,:,:,1)
+                  antiDiffFVint(:,:,:,2,i) = -this%intSharp_gam * (VFint(:,:,:,2)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,2))*NMint(:,:,:,2)
+                  antiDiffFVint(:,:,:,3,i) = -this%intSharp_gam * (VFint(:,:,:,3)-this%intSharp_cut)*(one-this%intSharp_cut-VFint(:,:,:,3))*NMint(:,:,:,3)
 
                endif
 
@@ -2955,9 +2920,6 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                 call gradFV_N2Fy(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
                 call gradFV_N2Fz(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-!                call gradFV_N2Fx(this%decomp,this%derStaggd02,rho*this%material(i)%Ys,gradrhoYs(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!                call gradFV_N2Fy(this%decomp,this%derStaggd02,rho*this%material(i)%Ys,gradrhoYs(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!                call gradFV_N2Fz(this%decomp,this%derStaggd02,rho*this%material(i)%Ys,gradrhoYs(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
  
               else
                call gradFV_N2Fx(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -2970,40 +2932,6 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               antiDiffFVint(:,:,:,2,i) = antiDiffFVint(:,:,:,2,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,2))
               antiDiffFVint(:,:,:,3,i) = antiDiffFVint(:,:,:,3,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,3))
 
-
-                 !call
-                 !divergenceFV(this,gradFVFV,this%intdiff,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-!              where(abs( this%deltakap) .GE. 1.5 .OR. this%tag .GE. 1  )
-!                 antiDiffFVint(:,:,:,1,i) =0.0_rkind*antiDiffFVint(:,:,:,1,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,1))
-!                 antiDiffFVint(:,:,:,2,i) =0.0_rkind*antiDiffFVint(:,:,:,2,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,2))
-!                 antiDiffFVint(:,:,:,3,i) =0.0_rkind*antiDiffFVint(:,:,:,3,i) + this%intSharp_gam * (this%intSharp_eps * gradFV_N2F(:,:,:,3))
-!                 this%tag = this%tag + 1
-!              elsewhere
-!                this%tag = this%tag +  0
-!
-!              endwhere
-!              rhoantiDiffFVint(:,:,:,1,i) = rhoantiDiffFVint(:,:,:,1,i) + this%intSharp_gam * (this%intSharp_eps * gradrhoYs(:,:,:,1))
-!              rhoantiDiffFVint(:,:,:,2,i) = rhoantiDiffFVint(:,:,:,2,i) + this%intSharp_gam * (this%intSharp_eps * gradrhoYs(:,:,:,2))
-!              rhoantiDiffFVint(:,:,:,3,i) = rhoantiDiffFVint(:,:,:,3,i) + this%intSharp_gam * (this%intSharp_eps * gradrhoYs(:,:,:,3))
-
-!             if(this%intSharp_msk) then
-!                where(( (this%material(i)%Ys .lt. cut_off) .OR. (this%material(i)%VF .lt. cut_off)  ) .AND. (abs(this%kappa*4*max(abs(this%material(i)%Ys*(1-this%material(i)%Ys)), abs(this%material(i)%VF*(1-this%material(i)%VF))) ) .lt. 0.075))
-!                  antiDiffFVint(:,:,:,1,i) = zero
-!                elsewhere(( (this%material(i)%Ys .gt. one-cut_off) .OR. (this%material(i)%VF .gt. one-cut_off)   ) .AND. (abs(this%kappa*4*max(abs(this%material(i)%Ys*(1-this%material(i)%Ys)),abs(this%material(i)%VF*(1-this%material(i)%VF))) ) .lt. 0.075 ) )
-!                   antiDiffFVint(:,:,:,1,i) = zero
-!                endwhere
-!                where(((this%material(i)%Ys .lt. cut_off) .OR. (this%material(i)%VF .lt. cut_off)  ) .AND. (abs(this%kappa*4*max(abs(this%material(i)%Ys*(1-this%material(i)%Ys)), abs(this%material(i)%VF*(1-this%material(i)%VF))) ) .lt. 0.075 ) )
-!                   antiDiffFVint(:,:,:,2,i) = zero
-!                elsewhere( ( (this%material(i)%Ys .gt. one-cut_off) .OR. (this%material(i)%VF .gt. one-cut_off)) .AND. (abs(this%kappa*4*max(abs(this%material(i)%Ys*(1-this%material(i)%Ys)), abs(this%material(i)%VF*(1-this%material(i)%VF))) ) .lt. 0.075 ) )
-!                   antiDiffFVint(:,:,:,2,i) = zero
-!                endwhere
-!                where( ((this%material(i)%Ys .lt. cut_off) .OR. (this%material(i)%VF .lt. cut_off)) .AND. (abs(this%kappa*4*max(abs(this%material(i)%Ys*(1-this%material(i)%Ys)), abs(this%material(i)%VF*(1-this%material(i)%VF))) ) .lt. 0.075 ) )
-!                   antiDiffFVint(:,:,:,3,i) = zero
-!                elsewhere( ((this%material(i)%Ys .gt. one-cut_off) .OR. (this%material(i)%VF .gt. one-cut_off)) .AND. (abs(this%kappa*4*max(abs(this%material(i)%Ys*(1-this%material(i)%Ys)), abs(this%material(i)%VF*(1-this%material(i)%VF))) ) .lt. 0.075 ) )
-!                   antiDiffFVint(:,:,:,3,i) = zero
-!                endwhere
-!             endif 
 
 
            if(this%intSharp_msk) then
@@ -3077,45 +3005,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                      antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(Hl*Hh*(HYs))
 !!
                   enddo
-!
-!
-!
-
-!                 do d = 1,3
-!                    Hl = 1_rkind/2_rkind*(1_rkind - tanh((this%material(i)%VF_mid(:,:,:,d)-1d-4)/(1.5_rkind*(dx*dy*dz)**1_rkind/3_rkind) ))
-!                    Hh = 1_rkind/2_rkind*(1_rkind - tanh((this%material(i)%VF_mid(:,:,:,d)-(1d0-1d-4))/(1.5_rkind*(dx*dy*dz)**1_rkind/3_rkind) )) 
-!                    antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*(1-Hl-Hh) 
-!                 enddo
-!                where(( (this%material(i)%Ys .lt. cut_offY) .OR.(this%material(i)%VF .lt. cut_off)  ))
-! !                 OOB_mask = 1_rkind
-!                 antiDiffFVint(:,:,:,1,i) = zero
-!                elsewhere(( (this%material(i)%Ys .gt. one-cut_offY) .OR.(this%material(i)%VF .gt. one-cut_off)   )) 
-! !                  OOB_mask = 1_rkind
-!                  antiDiffFVint(:,:,:,1,i) = zero
-!                endwhere
-!                where(((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)  )  )
-! !                  OOB_mask = 1_rkind
-!                  antiDiffFVint(:,:,:,2,i) = zero
-!                elsewhere( ( (this%material(i)%Ys.gt. one-cut_offY) .OR. (this%material(i)%VF .gt. one-cut_off)) )
-! !                  OOB_mask = 1_rkind
-!                  antiDiffFVint(:,:,:,2,i) = zero
-!                endwhere
-!                where( ((this%material(i)%Ys .lt. cut_offY) .OR. (this%material(i)%VF .lt. cut_off)) )
-! !                  OOB_mask = 1_rkind
-!                  antiDiffFVint(:,:,:,3,i) = zero
-!                elsewhere( ((this%material(i)%Ys .gt. one-cut_offY) .OR. (this%material(i)%VF.gt. one-cut_off)))
-! !                  OOB_mask = 1_rkind
-!                  antiDiffFVint(:,:,:,3,i) = zero
-!                endwhere
-                 this%antidiff = antiDiffFVint(:,:,:,1,i)
             endif
 
-!             call filter3D(this%decomp, this%gfil, OOB_mask,iflag, x_bc,y_bc,z_bc)
-!             call interpolateFV(this,OOB_mask,OOB_mask_int,periodicx,periodicy,periodicz,-this%x_bc,this%y_bc,this%z_bc)
-
-!             antiDiffFVint(:,:,:,1,i) = (1_rkind-OOB_mask_int(:,:,:,1))*antiDiffFVint(:,:,:,1,i)
-!             antiDiffFVint(:,:,:,2,i) = (1_rkind-OOB_mask_int(:,:,:,2))*antiDiffFVint(:,:,:,2,i)
-!             antiDiffFVint(:,:,:,3,i) = (1_rkind-OOB_mask_int(:,:,:,3))*antiDiffFVint(:,:,:,3,i)
             
  
              if(i.eq.this%ns) then
@@ -3155,8 +3046,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
                     endif
 
-                       call interpolateFV(this,this%material(i)%p,pFVint(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-                       hiFVint(:,:,:,:,i) = (this%material(i)%hydro%gam*pFVint(:,:,:,:,i) + this%material(i)%hydro%gam*this%material(i)%hydro%PInf)*this%material(i)%hydro%onebygam_m1
+                       hiFVint(:,:,:,:,i) = (this%material(i)%hydro%gam*pFVint + this%material(i)%hydro%gam*this%material(i)%hydro%PInf)*this%material(i)%hydro%onebygam_m1
 
               enddo
             
@@ -3175,8 +3065,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
               enddo
 
-              call divergenceFV(this,fv_h,this%intSharp_hFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-              call divergenceFV(this,fv_k,this%intSharp_kFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+              call divergenceFV(this,fv_h+fv_k,this%intSharp_hFV,dx,dy,dz,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
     end subroutine
 

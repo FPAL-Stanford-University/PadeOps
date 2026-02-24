@@ -2029,7 +2029,7 @@ contains
                this%mix%intSharp_kFV = zero
              
                call tic()
-               call this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p) !this%u_mid,this%v_mid,this%w_mid,this%p_mid)
+               call this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
                call toc(cputime)
                call message(3,"Interface Sharpening Time (in seconds)",cputime)
 
@@ -3123,7 +3123,7 @@ contains
            rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) + this%mix%intSharp_fFV(:,:,:,1) ! + this%mix%intSharp_fDiffFV(:,:,:,1)
            rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) + this%mix%intSharp_fFV(:,:,:,2) !+ this%mix%intSharp_fDiffFV(:,:,:,2)
            rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) + this%mix%intSharp_fFV(:,:,:,3) !+ this%mix%intSharp_fDiffFV(:,:,:,3)
-           rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%mix%intSharp_hFV + this%mix%intSharp_kFV !+ this%mix%intSharp_hDiffFV + this%mix%intSharp_kDiffFV
+           rhs(:,:,:,TE_index   ) = rhs(:,:,:,TE_index   ) + this%mix%intSharp_hFV !+ this%mix%intSharp_kFV !+ this%mix%intSharp_hDiffFV + this%mix%intSharp_kDiffFV
 
         endif
 
@@ -3154,11 +3154,11 @@ contains
           keJ = ke*dJ
 
         else
-         
+        
+          call tic() 
           ke = half*( this%u**2 + this%v**2 + this%w**2 )
           call this%mix%getLAD_5eqn(this%rho,this%p,this%e,this%p_mid,Frho,Fenergy,Fp,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz)
 
-          call tic()
           if( this%LADInt .OR. this%LADN2F) then
 
              ke_int = half*(this%u_mid*this%u_mid + this%v_mid*this%v_mid + this%w_mid*this%w_mid)
