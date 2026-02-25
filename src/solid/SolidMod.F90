@@ -5058,30 +5058,12 @@ contains
 
        else
 
-!         call interpolateFV_x(this%decomp,this%interpMid,u*rho*this%Ys,tmp1,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!         call interpolateFV_y(this%decomp,this%interpMid,v*rho*this%Ys,tmp2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!         call interpolateFV_z(this%decomp,this%interpMid,w*rho*this%Ys,tmp3,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call divergenceFV(this%decomp,this%derStagg,-umid*this%rhoYs_mid(:,:,:,1),-vmid*this%rhoYs_mid(:,:,:,2),-wmid*this%rhoYs_mid(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!         call divergenceFV(this%decomp,this%derStagg,-tmp1,-tmp2,-tmp3,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
-           if( .NOT. this%twoPhaseLAD) then
-
-               call divergence(this%decomp,this%der,-this%Ji(:,:,:,1),-this%Ji(:,:,:,2),-this%Ji(:,:,:,3),this%YsLAD,-x_bc,-y_bc,-z_bc)
-           else
-
-               if( .NOT. this%LADMass_Consv ) then
-             !     call this%getYsLAD(rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-               endif
-           endif
-
-!          call wenoInterpx(this%decomp,rho*this%Ys,mlx,mrx,x_bc)
-!          call wenoInterpy(this%decomp,rho*this%Ys,mly,mry,x_bc)
-!          call wenoInterpx(this%decomp,u,ulx,urx,x_bc)
-!          call wenoInterpy(this%decomp,v,vly,vry,x_bc)
-!          tmpx = 0.5*(mlx*ulx+mrx*urx) - 0.5*max(abs(ulx),abs(urx))*(mrx-mlx)
-!          tmpy = 0.5*(mly*vly+mry*vry) - 0.5*max(abs(vly),abs(vry))*(mry-mly)
-!          call divergenceFV(this%decomp,this%derStagg,-tmpx,-tmpy,-0_rkind*tmpx,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         tmp1 = -umid*this%rhoYs_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
+         tmp2 = -vmid*this%rhoYs_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
+         tmp3 = -vmid*this%rhoYs_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
+         call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 !
-           rhsYs = tmp + this%intSharp_RFV + this%YsLAD !+ this%intSharp_RDiffFV
+           rhsYs = tmp + this%intSharp_RFV  !+ this%intSharp_RDiffFV
 
            this%u_int = u_int
            this%v_int = v_int
@@ -5155,11 +5137,15 @@ contains
 
 
            endif
-           tmp =0.0 
-           call divergenceFV(this%decomp,this%derStagg,-umid*this%rhoYs_mid(:,:,:,1),-vmid*this%rhoYs_mid(:,:,:,2),-wmid*this%rhoYs_mid(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           tmp =0.0
+           tmp1 = -umid*this%rhoYs_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
+           tmp2 = -vmid*this%rhoYs_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
+           tmp3 = -vmid*this%rhoYs_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
+ 
+           call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 !          call divergenceFV(this%decomp,this%derStagg,-u*0.0,-v*this%rhoYs_mid(:,:,:,1),-w*this%rhoYs_mid(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-           rhsYs=tmp + this%YsLAD
+           rhsYs=tmp 
 
            this%u_int = u_int
            this%v_int = v_int
@@ -5362,11 +5348,14 @@ contains
            !call this%getLAD_VF(rho,sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
 
            call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           call divergenceFV(this%decomp,this%derStagg,-umid*this%VF_mid(:,:,:,1),-vmid*this%VF_mid(:,:,:,2),-wmid*this%VF_mid(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+           tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg*this%gradVF(:,:,:,1)
+           tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg*this%gradVF(:,:,:,2)
+           tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg*this%gradVF(:,:,:,3)
+           call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
 
-            rhsVF = div_uVF + this%vfLAD + this%VF*div_u  ! + this%intSharp_aDiffFV
-            this%advectVF = div_uVF + this%VF*div_u
+
+            rhsVF = div_uVF +  this%VF*div_u  ! + this%intSharp_aDiffFV
         endif
 
 
@@ -5410,8 +5399,8 @@ contains
           this%adiff_stagg(:,:,:,2) = adiff_fil2
           this%adiff_stagg(:,:,:,3) = adiff_fil3
 
-          call divergenceFV(this%decomp,this%derStagg,adiff_fil1*this%gradVF(:,:,:,1),adiff_fil2*this%gradVF(:,:,:,2),adiff_fil3*this%gradVF(:,:,:,3),this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-          call divergenceFV(this%decomp,this%derStagg,adiff_fil1*this%gradYs(:,:,:,1),adiff_fil2*this%gradYs(:,:,:,2),adiff_fil3*this%gradYs(:,:,:,3),this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!          call divergenceFV(this%decomp,this%derStagg,adiff_fil1*this%gradVF(:,:,:,1),adiff_fil2*this%gradVF(:,:,:,2),adiff_fil3*this%gradVF(:,:,:,3),this%vfLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!          call divergenceFV(this%decomp,this%derStagg,adiff_fil1*this%gradYs(:,:,:,1),adiff_fil2*this%gradYs(:,:,:,2),adiff_fil3*this%gradYs(:,:,:,3),this%YsLAD,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
 
 
@@ -5522,7 +5511,10 @@ contains
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Compact Scheme          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
          call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call divergenceFV(this%decomp,this%derStagg,-umid*this%VF_mid(:,:,:,1),-vmid*this%VF_mid(:,:,:,2),-wmid*this%VF_mid(:,:,:,3),div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg*this%gradVF(:,:,:,1)
+         tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg*this%gradVF(:,:,:,2)
+         tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg*this%gradVF(:,:,:,3)
+         call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Skew Symmetric          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !           call gradFV_x(this%decomp,this%derStagg,this%VF_mid(:,:,:,1),dVFdx,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -5540,7 +5532,7 @@ contains
 !          tmpx = 0.5*(vflx*ulx+vfrx*urx) - 0.5*max(abs(ulx),abs(urx))*(vfrx-vflx)
 !          tmpy = 0.5*(vfly*vly+vfry*vry) - 0.5*max(abs(vly),abs(vry))*(vfry-vfly)
 !          call divergenceFV(this%decomp,this%derStagg,-tmpx,-tmpy,-0_rkind*tmpx,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
-          rhsVF = div_uVF + this%vfLAD + this%VF*div_u  + this%intSharp_aFV ! + this%intSharp_aDiffFV
+          rhsVF = div_uVF + this%VF*div_u  + this%intSharp_aFV ! + this%intSharp_aDiffFV
           this%advectVF = div_uVF + this%VF*div_u
       endif
 
