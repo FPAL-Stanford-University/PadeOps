@@ -3084,17 +3084,17 @@ contains
 
         if(this%use_Stagg) then
 
-              call this%getRHS_xStagg(              rhs&
+              call this%getRHS_xStagg(              rhs,&
                                       tauxx,tauxy,tauxz,&
-                                       Frho,Fenergy, qx )
+                                       Frho(:,:,:,1),Fenergy(:,:,:,1), qx )
 
               call this%getRHS_yStagg(              rhs,&
                                       tauxy,tauyy,tauyz,&
-                                        Frho,Fenergy,qy )
+                                        Frho(:,:,:,2),Fenergy(:,:,:,2),qy )
 
               call this%getRHS_zStagg(              rhs,&
                                       tauxz,tauyz,tauzz,&
-                                        Frho,Fenergy,qz )
+                                        Frho(:,:,:,3),Fenergy(:,:,:,3),qz )
 
 
 
@@ -3780,7 +3780,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, ncnsrv),intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxx,tauxy,tauxz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qx
-        real(rkind), dimension(this%nxp, this%nyp, this%nzp,3), intent(in) :: Frho,Fenergy
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: Frho,Fenergy
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE, u_int,v_int, w_int, p_int, tauxx_int, tauxy_int,tauxz_int, qx_int, e_int, rho_int, rhodiff_int, rhoe_prim, gam, num, t_int, KE,e_prim,p4, Eint,gradu,gradp,gradup, UU, kef,gradm1,gradm2,gradrhou,clocal, delp,gradVFx,gradVFy,UV,umag,soslocal,sos1,sos2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int,spe_int, rhoYs_int, den,gradRYs, tauRho_mid, rhom, rhom_int,ke_int,sos_int,Mu_int,Mv_int,Mw_int,H_int,delrhou,delrhov,pbar,GVFmag_x
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: u_int6, rho_int6, t_int6, u_int8, t_int8, rho_int8,spec_int,tmp1,tmp2,tmp3
@@ -3850,13 +3850,13 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
             call interpolateFV_x(this%decomp,this%interpMid,GVFmag,GVFmag_x,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         endif
         flux = 0.0
-        buff = rhou_int + p_int - tauxx - !- this%CP*gradVF*clocal*this%dx**2*delrhou
+        buff = rhou_int + p_int - tauxx - Frho*u_int !- this%CP*gradVF*clocal*this%dx**2*delrhou
 
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux  
         this%xflux_x = flux
         flux =0.0
-        buff =rhov_int - tauxy !- this%CP*gradVF*clocal*this%dx**2*delrhov !y-momentum
+        buff =rhov_int - tauxy - Frho*v_int !- this%CP*gradVF*clocal*this%dx**2*delrhov !y-momentum
 
 
         !endif
@@ -3865,7 +3865,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%xflux_y = flux
 
-        buff = rhow_int  - tauxz !z-momentum
+        buff = rhow_int  - tauxz - Frho*w_int !z-momentum
         flux = 0.0
 
         !endif
@@ -3876,21 +3876,21 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
 
         !!!!!!!!!!!!!! add back in KE         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        buff = H_int  -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz) !  - this%CP*gradVF*clocal*this%dx**2*delp 
+        buff = H_int  -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz) - 0.5*(u_int*u_int +v_int*v_int + w_int*w_int)*Frho - Fenergy        !  - this%CP*gradVF*clocal*this%dx**2*delp 
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux  ! - gradup ! -0.5*( gradu*this%p + this%v*gradp)    
        this%xflux_e = flux
  
     end subroutine
 
-    subroutine getRHS_yStagg( this,  rhs, tauxy,tauyy,tauyz, qy)
+    subroutine getRHS_yStagg( this,  rhs, tauxy,tauyy,tauyz,Frho,Fenergy,qy)
         use operators, only: gradFV_y,interpolateFV_y,gradFV_N2Fx,gradFV_N2Fy,gradient
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp, this%nzp,ncnsrv),intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: tauxy,tauyy,tauyz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qy
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: Frho,Fenergy
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: VF_int,M_int
-
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff, flux,TE,u_int,v_int, w_int, p_int, tauxy_int, tauyy_int,tauyz_int, qy_int, e_int,rho_int, gam, num, rhoe_prim, KE, e_prim,gradu,gradup, UU, kef,delp,cl,cr,clocal,gradVFx,gradVFy,UV,VV,tmp1,tmp2,tmp3,umag,soslocal,sos1,sos2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int,rhow_int, rhoe_int, spe_int, rhoYs_int, den,ke_int,p4,Eint, up_int, cpressure, gradcpressure, gradp,sos_int, H_int, Mu_int,delrhou,delrhov,Mv_int,Mw_int,pbar,GVFmag,GVFmag_y
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: EfluxI,rhouI,rhovI,rhovvI,rhouvI
@@ -3955,14 +3955,14 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
 
         flux = 0.0
-        buff = rhou_int  - tauxy   !x-momentum 
+        buff = rhou_int  - tauxy - Frho*u_int  !x-momentum 
         
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux 
         this%yflux_x = flux
 
         flux = 0.0
-        buff = rhov_int - tauyy + p_int  
+        buff = rhov_int - tauyy + p_int  - Frho*v_int
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 !        call this%filter(gradp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         !endif
@@ -3970,7 +3970,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         this%yflux_y = flux
 
         flux = 0.0
-        buff = rhow_int  - tauyz !z-momentum
+        buff = rhow_int  - tauyz - Frho*w_int !z-momentum
 
         !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3979,19 +3979,13 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         flux = 0.0
 
-        call gradFV_y(this%decomp,this%derStagg,rhou_int,UV,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call gradFV_y(this%decomp,this%derStagg,rhov_int,VV,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call gradFV_y(this%decomp,this%derStagg,this%p,gradp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-
-
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Add back in KE         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        buff = H_int- (tauyy)*v_int - u_int*tauxy -w_int*tauyz  
+        buff = H_int- (tauyy)*v_int - u_int*tauxy -w_int*tauyz - 0.5_rkind*(u_int*u_int+v_int*v_int + w_int*w_int)*Frho - Fenergy 
 
         !endif
 
 
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        call gradFV_y(this%decomp,this%derStagg,v_int,gradu,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux 
         this%yflux_e = flux
 
@@ -3999,12 +3993,13 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
     end subroutine
 
    
-    subroutine getRHS_zStagg( this,  rhs, tauxz,tauyz,tauzz, qz)
+    subroutine getRHS_zStagg( this,  rhs, tauxz,tauyz,tauzz,Frho,Fenergy,qz)
         use operators, only: gradFV_z, interpolateFV_z,gradient
         class(sgrid), target, intent(inout) :: this
         real(rkind), dimension(this%nxp, this%nyp,this%nzp,ncnsrv),intent(inout) :: rhs
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) ::tauxz,tauyz,tauzz
         real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: qz
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp), intent(in) :: Frho,Fenergy
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: buff,flux,TE,u_int,v_int, w_int, p_int, tauxz_int, tauzz_int, tauyz_int, qz_int,e_int,rho_int,KE
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhou_int,rhov_int, rhow_int, rhoe_int, spe_int, rhoYs_int, den,  num,gam,rhoe_prim,GVFmag,GVFmag_z
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: Mu_int,Mv_int,Mw_int,H_int,pbar
@@ -4063,20 +4058,20 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         H_int = KE + rhoe_prim + pbar*(this%w_int - w_int)
         flux = 0.0
-        buff = rhou_int  - tauxz !x-momentum
+        buff = rhou_int  - tauxz -Frho*u_int
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%zflux_x = flux 
 
         flux = 0.0
-        buff = rhov_int   - tauyz !y-momentum
+        buff = rhov_int   - tauyz -Frho*v_int
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%zflux_y = flux
 
         flux = 0.0
-        buff = rhow_int + p_int   - tauzz !z-momentum
+        buff = rhow_int + p_int   - tauzz -Frho*w_int !z-momentum
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
@@ -4084,7 +4079,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
 
 
-        buff = KE + rhoe_prim  - tauzz*w_int - u_int*tauxz-v_int*tauyz  ! + this%pu_mid(:,:,:,3)+w_int*rho_int*this%ke_mid(:,:,:,3) ! + qz
+        buff = KE + rhoe_prim  - tauzz*w_int - u_int*tauxz-v_int*tauyz  - 0.5_rkind*(u_int*u_int + v_int*v_int + w_int*w_int)*Frho - Fenergy
         !buff = ( TE + p_int )*w_int
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)

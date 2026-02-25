@@ -5348,9 +5348,9 @@ contains
            !call this%getLAD_VF(rho,sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
 
            call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg*this%gradVF(:,:,:,1)
-           tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg*this%gradVF(:,:,:,2)
-           tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg*this%gradVF(:,:,:,3)
+           tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
+           tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
+           tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
            call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
 
@@ -5511,9 +5511,9 @@ contains
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Compact Scheme          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
          call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg*this%gradVF(:,:,:,1)
-         tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg*this%gradVF(:,:,:,2)
-         tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg*this%gradVF(:,:,:,3)
+         tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
+         tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
+         tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
          call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Skew Symmetric          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
