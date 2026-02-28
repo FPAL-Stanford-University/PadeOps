@@ -896,7 +896,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         
   ! apply sponge at left and right boundaries to damp outgoing waves
         yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
-        Lr    = 12
+        Lr    = 16
         yphys = Lr*yphys
 
         yspngL = -0.85 !250

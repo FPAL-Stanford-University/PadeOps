@@ -1471,7 +1471,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 10.0, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 16.0, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1480,7 +1480,7 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 14.0
+       L = 16.0
 
        y_half = this%y + 0.5*this%dy
         
@@ -1949,7 +1949,7 @@ contains
         pmix  = zero
      
 
-       do isub = 1,  RK45_steps
+       do isub = 1, RK45_steps
 
             if(this%use_CnsrvSurfaceTension) then
                 call this%mix%get_surfaceTensionPE(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
@@ -2081,7 +2081,7 @@ contains
 
 
             !!!!!!!!!!!!!! UNCOMMENT            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!          this%Wcnsrv = RK3_B(isub)*(this%Wcnsrv + this%dt*rhs) + RK3_A(isub)*Qtmp
+!           this%Wcnsrv = RK3_B(isub)*(this%Wcnsrv + this%dt*rhs) + RK3_A(isub)*Qtmp
             Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
             this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
@@ -2153,12 +2153,13 @@ contains
            ! this%mix%material(1)%eh = 1
            ! this%mix%material(2)%eh = 1
 
-!            this%tsim = RK3_B(isub)*( this%tsim + this%dt)  + RK3_A(isub)*Qtmpt
+!           this%tsim = RK3_B(isub)*( this%tsim + this%dt)  + RK3_A(isub)*Qtmpt
 
             
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
            
+             call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix,this%tsim)
 
              
 !            if(this%tsim .GE. 0.11) then
@@ -2218,21 +2219,21 @@ contains
            ! this%e = 1
            ! this%mix%material(1)%eh = 1
            ! this%mix%material(2)%eh = 1            
-            if ( nancheck(this%fields(:,:,:,rho_index),i,j,k) ) then
-              write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution rho at substep ", isub, " of step ",this%step+1, " at(",i+this%decomp%yst(1)-1,", ",j+this%decomp%yst(2)-1,", ",k+this%decomp%yst(3)-1,") of rho"
-              call GracefulExit(charout,4909)
-            end if
-
-            if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
-                call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
-                !write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in
-                !solution (Wcnsrv) at substep ", isub, " of step ", this%step+1,
-                !" at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
-                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at substep ", isub, " of step ", this%step+1, " at(",i+this%decomp%yst(1)-1,", ",j+this%decomp%yst(2)-1,", ",k+this%decomp%yst(3)-1,", ",l,") of Wcnsrv"
-                call GracefulExit(trim(charout), 999)
-            end if
-
-            call this%mix%checkNaN()
+!            if ( nancheck(this%fields(:,:,:,rho_index),i,j,k) ) then
+!              write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution rho at substep ", isub, " of step ",this%step+1, " at(",i+this%decomp%yst(1)-1,", ",j+this%decomp%yst(2)-1,", ",k+this%decomp%yst(3)-1,") of rho"
+!              call GracefulExit(charout,4909)
+!            end if
+!
+!            if ( nancheck(this%Wcnsrv,i,j,k,l) ) then
+!                call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
+!                !write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in
+!                !solution (Wcnsrv) at substep ", isub, " of step ", this%step+1,
+!                !" at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+!                write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at substep ", isub, " of step ", this%step+1, " at(",i+this%decomp%yst(1)-1,", ",j+this%decomp%yst(2)-1,", ",k+this%decomp%yst(3)-1,", ",l,") of Wcnsrv"
+!                call GracefulExit(trim(charout), 999)
+!            end if
+!
+!            call this%mix%checkNaN()
             
             if (this%PTeqb) then
                !call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T, isub)
@@ -2313,7 +2314,7 @@ contains
             !this%u = 0.7
             !this%p = 1
             !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)     
-
+ 
 
          end do
         
@@ -2325,6 +2326,8 @@ contains
     subroutine getFaces( this)
         use decomp_2d,  only: nrank
         use operators, only: interpolateFV,interpolateFV_x,interpolateFV_F2Ny,interpolateFV_y,interpolateFV_F2Nx,filter3D,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz
+        use timer, only: tic, toc
+        use exits,      only: message,nancheck,GracefulExit
         class(sgrid), target, intent(inout) :: this
         integer :: i,j,k,iflag = one, nx,nz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int,sos_int,VFbar,kappabar,gradp,gradVF,peff,peff_fil
@@ -2332,7 +2335,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2, tmpfil,tmp3,psi,Gam,psi_safe,c1,rhom1,tmp1,mask1,mask2,mask3
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4,xtmp5
         real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2,ztmp3,ztmp4,ztmp5
-        real(rkind) :: e = 1d-10,ref_ratio=1d3, rho_ratio
+        real(rkind) :: e = 1d-10,ref_ratio=1d3, rho_ratio, cputime
 
           
 
@@ -2506,7 +2509,7 @@ contains
 
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	dtCurv =dtYs1 ! 0.7_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)  ! (P_MAXVAL(rhokappafil ) + eps) ! (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
+	dtCurv = 0.7_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)  ! (P_MAXVAL(rhokappafil ) + eps) ! (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then
           ! filter3D(this%

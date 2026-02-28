@@ -1175,6 +1175,8 @@ contains
         real(rkind) :: a_np_2, b_np_2
         real(rkind) :: a_np_1, b_np_1, c_np_1, d_np_1
         integer     :: i,j,k
+        if (this%n /= size(f,3)) stop "Z operator: this%n != size(f,3)"
+
         select case (this%periodic)
         case (.TRUE.)
             a06 = a06d1 * this%onebydx
@@ -1284,7 +1286,7 @@ contains
 
                                  RHS(i,j,1) = zero
 
-                                 RHS(i,j,2) = a06*( f(i,j,2) - f(j,j,1) ) &
+                                 RHS(i,j,2) = a06*( f(i,j,2) - f(i,j,1) ) &
                                             + b06*(f(i,j,3) - f(i,j,1) )
 
                                  RHS(i,j,3) = a06*( f(i,j,3) - f(i,j,2) ) &
