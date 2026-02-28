@@ -302,9 +302,6 @@ contains
         this%y_bc = y_bc
         this%z_bc = z_bc
 
-         print *, " solidmod skew mass ", this%skew_mass
-         print *, " solidmod skew Ys   ", this%skew_Ys
-         print *, " solidmod skew VF   ", this%skew_VF
 
         ! Assume everything is in Y decomposition
         this%nxp = decomp%ysz(1)
@@ -5001,80 +4998,15 @@ contains
         real(rkind),                                          intent(in)  :: dx,dy,dz
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: tmp,tmp1, tmp2,tmp3,u_int,v_int,w_int,dYdx,dYdy,dYdz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)  :: Ys_int,rho_int, rhoYs_int, rhodiff_int,tmpy,tmpx,ulx,urx,vly,vry,mly,mlx,mrx,mry
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x,dYdy_y,dYdz_z
-        real(rkind) :: tmp_min, int_min, lad_min
-        if(.NOT. this%use_Stagg) then
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: tmp,tmp1,tmp2,tmp3
 
-
-          if(.NOT. this%twoPhaseLAD) then
- 
-             rhsYs = -rho*this%Ys
-        
-             tmp1 = rhsYs*u 
-             tmp2 = rhsYs*v
-             tmp3 = rhsYs*w 
-        
-             !original terms
-             call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
-             call divergence(this%decomp,this%der, this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),this%YsLAD,-x_bc, -y_bc, -z_bc)        
-          else
-
-             tmp1 = rhsYs*u 
-             tmp2 = rhsYs*v 
-             tmp3 = rhsYs*w 
-             call gradient(this%decomp,this%der,this%Ys,dYdx, dYdy, dYdz,x_bc,y_bc,z_bc)
-             !original terms
-             call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)                
-             call divergence(this%decomp,this%der,this%diff*dYdx,this%diff*dYdy,this%diff*dYdz,this%YsLAD,-x_bc,-y_bc,-z_bc)
-             
-
-
-          endif
-
-          rhsYs = rhsYs + this%YsLAD
-
-          if(this%intSharp_spf) then
-             rhsYs = rhsYs + this%intSharp_R(:,:,:,1) !ignore components 2 and 3 when not in divergence form
-
-             !high order VF bounds diffusion terms
-             call divergence(this%decomp,this%der,this%intSharp_RDiff(:,:,:,1),this%intSharp_RDiff(:,:,:,2),this%intSharp_RDiff(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
-             rhsYs = rhsYs + tmp
-
-         else
-            !low order terms
-            call divergence(this%decomp,this%derD02,this%intSharp_R(:,:,:,1),this%intSharp_R(:,:,:,2),this%intSharp_R(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
-            rhsYs = rhsYs + tmp
-           
-            !high order terms
-            call divergence(this%decomp,this%der,this%intSharp_RDiff(:,:,:,1),this%intSharp_RDiff(:,:,:,2),this%intSharp_RDiff(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
-            rhsYs = rhsYs + tmp
-           
-            !FV terms
-            rhsYs = rhsYs + this%intSharp_RFV
-           
-         endif
-
-       else
-
-         tmp1 = -umid*this%rhoYs_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
-         tmp2 = -vmid*this%rhoYs_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
-         tmp3 = -vmid*this%rhoYs_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
+         tmp=0.0
+         tmp1 = -umid*this%rhoYs_mid(:,:,:,1)! + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
+         tmp2 = -vmid*this%rhoYs_mid(:,:,:,2)! + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
+         tmp3 = -wmid*this%rhoYs_mid(:,:,:,3)! + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
          call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!
-           rhsYs = tmp + this%intSharp_RFV  !+ this%intSharp_RDiffFV
 
-           this%u_int = u_int
-           this%v_int = v_int
-           this%w_int = w_int
-           this%Ys_int = Ys_int
-           this%rho_int = rho_int
-           this%fluxYs = rhsYs
-
-       endif
-
-
+         rhsYs = tmp + this%intSharp_RFV  !+ this%intSharp_RDiffFV
     end subroutine
 
     subroutine getRHS_Ys(this,rho,u,v,w,umid,vmid,wmid,sos,rhsYs,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha)
@@ -5086,76 +5018,18 @@ contains
         real(rkind),                                          intent(in)     :: alpha 
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: vcon,tmp,tmp1, tmp2,tmp3,u_int,v_int, w_int,flux, dYdx, dYdy, dYdz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dYdx_x, dYdy_y,dYdz_z,drYdx,drYdy,drYdz,divu_node
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: drdx,drdy,drdz,drsdx,drsdy,drsdz,divuY, divur
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: divuVF,divurs,rhom, dVFdx,dVFdy,dVFdz,divuphi
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rho_int, Ys_int,rhoYs_int, rhodiff_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,tmp1,tmp2,tmp3
     
 
-       ! vcon = 100
-        if(.NOT. this%use_Stagg) then
-
-            if(.NOT. this%twoPhaseLAD) then
-
-             rhsYs = -rho*this%Ys
-
-             tmp1 = rhsYs*u
-             tmp2 = rhsYs*v
-             tmp3 = rhsYs*w
-
-             !original terms
-             call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)    !mass fraction equation is anti-symmetric
-!             call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),this%YsLAD,-x_bc, -y_bc,-z_bc)
-
-           else
-
-             tmp1 = rhsYs*u
-             tmp2 = rhsYs*v
-             tmp3 = rhsYs*w
-
-             call gradient(this%decomp,this%der,this%Ys,dYdx, dYdy,dYdz,x_bc,y_bc,z_bc)
-             call divergence(this%decomp,this%der,tmp1,tmp2,tmp3,rhsYs,-x_bc,-y_bc,-z_bc)
-             call divergence(this%decomp,this%der,this%diff*dYdx,this%diff*dYdy,this%diff*dYdz,this%YsLAD,-x_bc,-y_bc,-z_bc)
-          endif
-
-          rhsYs = rhsYs + this%YsLAD
-
-
-       else 
-
-
-            if( .NOT. this%twoPhaseLAD) then
-
-             call divergence(this%decomp,this%der,-this%Ji(:,:,:,1),-this%Ji(:,:,:,2),-this%Ji(:,:,:,3),this%YsLAD,-x_bc,-y_bc,-z_bc)
-
-           else
-
-                if( .NOT. this%LADMass_Consv ) then
-                !  call this%getYsLAD(rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-               endif
-
-
-           endif
            tmp =0.0
-           tmp1 = -umid*this%rhoYs_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
-           tmp2 = -vmid*this%rhoYs_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
-           tmp3 = -vmid*this%rhoYs_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
+           tmp1 = -umid*this%rhoYs_mid(:,:,:,1)! + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
+           tmp2 = -vmid*this%rhoYs_mid(:,:,:,2)! + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
+           tmp3 = -wmid*this%rhoYs_mid(:,:,:,3)! + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
  
            call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!          call divergenceFV(this%decomp,this%derStagg,-u*0.0,-v*this%rhoYs_mid(:,:,:,1),-w*this%rhoYs_mid(:,:,:,3),tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
            rhsYs=tmp 
 
-           this%u_int = u_int
-           this%v_int = v_int
-           this%w_int = w_int
-           this%Ys_int = Ys_int
-           this%rho_int = rho_int
-           this%fluxYs = rhsYs
-
-
-       endif
     end subroutine
 
     subroutine YsUpwind(this,Ys_int,v)
@@ -5305,58 +5179,17 @@ contains
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind),           intent(in) :: alpha
 
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2, tmp3, tmp4, tmp5, tmp6,rhocsq1, rhocsq2
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: div_u,div_uVF,u_int, v_int, w_int, dVFdx, dVFdy, dVFdz,divu_node, kapila
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx_x, dVFdy_y,dVFdz_z, VF_fil,ufil,vfil,wfil
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int,divu_d,divuVF_d, uVF_int, vVF_int, wVF_int, adiff_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2, tmp3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: div_u,div_uVF
         integer :: iflag = one 
-        if(.NOT. this%use_Stagg) then
-          ! Add C/rhom to Fsource
-          !--call this%getSpeciesDensity(rho,tmp1)  !-- use this%rhom
-          call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)    ! mass fraction equation is anti-symmetric
-          
-          call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
 
-          call divergence(this%decomp,this%der,-u*this%VF,-v*this%VF,-w*this%VF,tmp4,x_bc,y_bc,z_bc) 
-  !        call divergence(this%decomp,this%der,-u*this%VF,-v*0.0,-w*this%VF,tmp4,x_bc,y_bc,z_bc)
-          call divergence(this%decomp,this%der,u,v,w,tmp5,x_bc,y_bc,z_bc)
-        
+         call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         tmp1 = -umid*this%VF_mid(:,:,:,1) ! + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
+         tmp2 = -vmid*this%VF_mid(:,:,:,2) ! + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
+         tmp3 = -wmid*this%VF_mid(:,:,:,3) !+ this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
+         call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-          if (this%useAkshayForm) then
-           
-
-             if(this%pEqb) then
-                 rhsVF = src - rhsVF/this%rhom
-             else
-                 rhsVF = -rhsVF/this%rhom
-             endif
-           
-              !if(.not. this%includeSources) rhsVF = zero
-
-              !Original terms
-              rhsVF = rhsVF + u*tmp1 + v*tmp2 + w*tmp3
-
-          else
-           !   call secondder(this%VF,tmp4,tmp5,tmp6,[0,0],[0,0],[0,0])
- 
-           
-                  rhsVF = this%VF*tmp5 + tmp4 !-rhsVF/this%rhom ! + this%physmu*(tmp4 + tmp5 + tmp6)
-          endif 
-
-        else
-
-           !call this%getLAD_VF(rho,sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
-
-           call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-           tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
-           tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
-           tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
-           call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-
-
-
-            rhsVF = div_uVF +  this%VF*div_u  ! + this%intSharp_aDiffFV
-        endif
+         rhsVF = div_uVF +  this%VF*div_u  ! + this%intSharp_aDiffFV
 
 
     end subroutine
@@ -5369,13 +5202,13 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
         logical :: periodicx,periodicy,periodicz
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2,tmp3, tmp4, tmp5, tmp6,rhocsq1, rhocsq2
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx, dVFdy, dVFdz,adiff_fil1, adiff_fil2, adiff_fil3
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: dVFdx_x,dVFdy_y,dVFdz_z, rhom,dYdx_x,dYdy_y,dYdz_z,ysLAD,VF_bound
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rhodiff_int,adiff_int, rhom_int,outVF,outYs,sos_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2,tmp3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: adiff_fil1,adiff_fil2, adiff_fil3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: adiff_int
         integer :: i
-        real(rkind) :: md1 = (1d-6)**(0.5)
 
+          this%gradVF = 0.0
+          this%gradYs  = 0.0
           call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,this%gradVF(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,this%gradVF(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,this%gradVF(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -5461,80 +5294,15 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int,adiff_int
         logical :: periodicx,periodicy,periodicz
 
-        if(.NOT. this%use_Stagg) then
-          ! Add C/rhom to Fsource
-          call divergence(this%decomp,this%der,this%Ji(:,:,:,1),this%Ji(:,:,:,2),this%Ji(:,:,:,3),rhsVF,-x_bc,-y_bc,-z_bc)
-       
-          !if(.not. this%includeSources) rhsVF = zero
-          call gradient(this%decomp,this%der,-this%VF,tmp1,tmp2,tmp3,x_bc,y_bc,z_bc)
-          call divergence(this%decomp,this%der,-u*this%VF,-v*this%VF,-w*this%VF,tmp4,x_bc,y_bc,z_bc)
-          call divergence(this%decomp,this%der,u,v,w,tmp5,x_bc,y_bc,z_bc)
-
-
-          if(this%useAkshayForm) then
-
-             if(this%pEqb) then
-                 rhsVF = src - rhsVF/this%rhom
-             else
-                 rhsVF = -rhsVF/this%rhom
-             endif
-
-             !if(.not. this%includeSources) rhsVF = zero
-           
-             rhsVF = -rhsVF/this%rhom + u*tmp1 + v*tmp2 + w*tmp3
-
-          else
-             rhsVF = tmp4 +this%VF*tmp5  ! - rhsVF/this%rhom
-
-          endif
-  
-          call divergence(this%decomp,this%derD02,this%intSharp_a(:,:,:,1),this%intSharp_a(:,:,:,2),this%intSharp_a(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc)
-          ! mass fraction equation is anti-symmetric
-          rhsVF = rhsVF + tmp
-           
-          !high order terms
-          call divergence(this%decomp,this%der,this%intSharp_aDiff(:,:,:,1),this%intSharp_aDiff(:,:,:,2),this%intSharp_aDiff(:,:,:,3),tmp,-x_bc,-y_bc,-z_bc)
-          ! mass fraction equation is anti-symmetric
-          rhsVF = rhsVF + tmp
-           
-          !FV terms
-          rhsVF = rhsVF + this%intSharp_aFV
-
-       else
-
-      !   if( .NOT. this%LADMass_Consv) then
-      !   call this%getLAD_VF(rho,sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
-      !   else
-      !      this%vfLAD = 0.!0
-      !   endif
-
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Compact Scheme          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
          call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
-         tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
-         tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
+         tmp1 = -umid*this%VF_mid(:,:,:,1)! + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
+         tmp2 = -vmid*this%VF_mid(:,:,:,2)! + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
+         tmp3 = -wmid*this%VF_mid(:,:,:,3)! + this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
          call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Skew Symmetric          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!           call gradFV_x(this%decomp,this%derStagg,this%VF_mid(:,:,:,1),dVFdx,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!           call gradFV_y(this%decomp,this%derStagg,this%VF_mid(:,:,:,2),dVFdy,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!           call gradFV_z(this%decomp,this%derStagg,this%VF_mid(:,:,:,3),dVFdz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-!          rhsVF = 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx + v*dVFdy + w*dVFdz) + this%vfLAD + this%intSharp_aFV
-!          this%advectVF =  ( 0.5*this%VF*div_u + 0.5*div_uVF - 0.5*(u*dVFdx +v*dVFdy + w*dVFdz) )
-
-         
-          !!!!!!!!!!!!!!!!!!!!!!!!!! WENO           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   
-!          call wenoInterpx(this%decomp,this%VF,vflx,vfrx,x_bc)
-!          call wenoInterpy(this%decomp,this%VF,vfly,vfry,x_bc)
-!          call wenoInterpx(this%decomp,u,ulx,urx,x_bc)
-!          call wenoInterpy(this%decomp,v,vly,vry,x_bc)
-!          tmpx = 0.5*(vflx*ulx+vfrx*urx) - 0.5*max(abs(ulx),abs(urx))*(vfrx-vflx)
-!          tmpy = 0.5*(vfly*vly+vfry*vry) - 0.5*max(abs(vly),abs(vry))*(vfry-vfly)
-!          call divergenceFV(this%decomp,this%derStagg,-tmpx,-tmpy,-0_rkind*tmpx,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc) 
-          rhsVF = div_uVF + this%VF*div_u  + this%intSharp_aFV ! + this%intSharp_aDiffFV
-          this%advectVF = div_uVF + this%VF*div_u
-      endif
+         rhsVF = div_uVF + this%VF*div_u  + this%intSharp_aFV ! + this%intSharp_aDiffFV
 
     end subroutine
 

@@ -1712,10 +1712,11 @@ contains
 !        call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
         ! compute species artificial conductivities and diffusivities
         call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
-        do imat = 1,2
-               call this%mix%material(imat)%getLAD_VF(this%rho,this%sos,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy)
-               call this%mix%material(imat)%getYsLAD(this%rho,this%sos,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        enddo
+!       do imat = 1,2
+
+!              call this%mix%material(imat)%getLAD_VF(this%rho,this%sos,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy)
+!              call this%mix%material(imat)%getYsLAD(this%rho,this%sos,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       enddo
 
         nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
         deallocate( duidxj )
@@ -2074,7 +2075,7 @@ contains
             if (this%useNC) then
               call this%getRHS_NC(rhs,divu, viscwork)
             else
-              call this%getRHS(rhs,divu,viscwork)
+             call this%getRHS(rhs,divu,viscwork)
             endif
             !call toc(cputime)
             !call message(3,"RHS time (in seconds)",cputime)
@@ -2159,7 +2160,6 @@ contains
             Qtmpt = this%dt + RK45_A(isub)*Qtmpt
             this%tsim = this%tsim + RK45_B(isub)*Qtmpt
            
-             call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix,this%tsim)
 
              
 !            if(this%tsim .GE. 0.11) then
@@ -2398,6 +2398,7 @@ contains
      this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2) *  ( peff(:,this%nyp,:,2) - 0.5_rkind*(peff(:,1,:,2) + peff(:,this%nyp-1,:,2) ) ) !(peff(:,this%nyp,:,2) - peff_fil(:,this%nyp,:,2))
      this%v_int(:,1,:) = this%v_mid(:,1,:,2) - af(:,1,:,2) * ( peff(:,1,:,2) - 0.5_rkind*(peff(:,2,:,2) + peff(:,this%nyp,:,2) ) ) !(peff(:,1,:,2) - peff_fil(:,1,:,2)
 
+     this%v_int = this%v_mid(:,:,:,2)
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! X Correction      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       tmp1 = this%u_mid(:,:,:,1)
       tmp2 = af(:,:,:,1) 
@@ -2420,7 +2421,7 @@ contains
 
       !/this%dx *( ( xtmp3(1,:,:) - xtmp3(nx,:,:) ) + this%surfaceTension_coeff*xtmp4(nx,:,:)*( xtmp5(1,:,:) - xtmp5(nx,:,:) )  )
       call transpose_x_to_y(xtmp1,tmp1,this%decomp)
-      this%u_int(:,:,:) = tmp1
+      this%u_int(:,:,:) = this%u_mid(:,:,:,1) ! tmp1
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  Z Correction !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       tmp = this%w_mid(:,:,:,3)
@@ -2442,8 +2443,8 @@ contains
       ztmp1(:,:,nz) = ztmp1(:,:,nz) - ztmp2(:,:,nz) * ( ztmp3(:,:,nz)   - 0.5_rkind*(ztmp3(:,:,1) + ztmp3(:,:,nz-1) ))
       ztmp1(:,:,1) = ztmp1(:,:,1) - ztmp2(:,:,1) * ( ztmp3(:,:,1)        - 0.5_rkind*(ztmp3(:,:,nz) + ztmp3(:,:,nz) ))
 
-    !  call transpose_z_to_y(ztmp1,tmp,this%decomp)
-      this%w_int(:,:,:) = tmp
+      call transpose_z_to_y(ztmp1,tmp,this%decomp)
+      this%w_int(:,:,:) = this%w_mid(:,:,:,3) !tmp
       endif
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  
@@ -3853,14 +3854,13 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
             call interpolateFV_x(this%decomp,this%interpMid,GVFmag,GVFmag_x,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         endif
         flux = 0.0
-        buff = rhou_int + p_int - tauxx - Frho*u_int !- this%CP*gradVF*clocal*this%dx**2*delrhou
+        buff = rhou_int + p_int - tauxx !- Frho*u_int !- this%CP*gradVF*clocal*this%dx**2*delrhou
 
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux  
         this%xflux_x = flux
         flux =0.0
-        buff =rhov_int - tauxy - Frho*v_int !- this%CP*gradVF*clocal*this%dx**2*delrhov !y-momentum
-
+        buff =rhov_int - tauxy !- Frho*v_int !- this%CP*gradVF*clocal*this%dx**2*delrhov !y-momentum
 
         !endif
 
@@ -3868,7 +3868,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%xflux_y = flux
 
-        buff = rhow_int  - tauxz - Frho*w_int !z-momentum
+        buff = rhow_int  - tauxz !- Frho*w_int !z-momentum
         flux = 0.0
 
         !endif
@@ -3879,10 +3879,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
 
         !!!!!!!!!!!!!! add back in KE         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        buff = H_int  -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz) - 0.5*(u_int*u_int +v_int*v_int + w_int*w_int)*Frho - Fenergy        !  - this%CP*gradVF*clocal*this%dx**2*delp 
+        buff = H_int  -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz) !- 0.5_rkind*(u_int*u_int +v_int*v_int + w_int*w_int)*Frho - Fenergy        !  - this%CP*gradVF*clocal*this%dx**2*delp 
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux  ! - gradup ! -0.5*( gradu*this%p + this%v*gradp)    
-       this%xflux_e = flux
  
     end subroutine
 
@@ -3947,25 +3946,16 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        H_int = KE*this%v_int +( p_int / rho_int + rhoe_prim)*Mv_int + pbar*(this%v_int - v_int)
 
 
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        GVFmag_y=0
-        if(this%use_CnsrvSurfaceTension) then
-            call gradient(this%decomp,this%derD06,this%mix%material(1)%VF,gradVF(:,:,:,1),gradVF(:,:,:,2),gradVF(:,:,:,3))
-            GVFmag = this%surfaceTension_coeff*sqrt(gradVF(:,:,:,1)**2.0_rkind + gradVF(:,:,:,2)**2.0_rkind + gradVF(:,:,:,3)**2.0_rkind )
-            call interpolateFV_y(this%decomp,this%interpMid,GVFmag,GVFmag_y,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        endif
-
-
 
         flux = 0.0
-        buff = rhou_int  - tauxy - Frho*u_int  !x-momentum 
+        buff = rhou_int  - tauxy !- Frho*u_int  !x-momentum 
         
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux 
         this%yflux_x = flux
 
         flux = 0.0
-        buff = rhov_int - tauyy + p_int  - Frho*v_int
+        buff = rhov_int - tauyy + p_int  !- Frho*v_int
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 !        call this%filter(gradp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         !endif
@@ -3973,7 +3963,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         this%yflux_y = flux
 
         flux = 0.0
-        buff = rhow_int  - tauyz - Frho*w_int !z-momentum
+        buff = rhow_int  - tauyz !- Frho*w_int !z-momentum
 
         !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3983,7 +3973,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Add back in KE         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        buff = H_int- (tauyy)*v_int - u_int*tauxy -w_int*tauyz - 0.5_rkind*(u_int*u_int+v_int*v_int + w_int*w_int)*Frho - Fenergy 
+        buff = H_int- (tauyy)*v_int - u_int*tauxy -w_int*tauyz !- 0.5_rkind*(u_int*u_int+v_int*v_int + w_int*w_int)*Frho - Fenergy 
 
         !endif
 
@@ -4061,20 +4051,20 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         H_int = KE + rhoe_prim + pbar*(this%w_int - w_int)
         flux = 0.0
-        buff = rhou_int  - tauxz -Frho*u_int
+        buff = rhou_int  - tauxz !-Frho*u_int
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%zflux_x = flux 
 
         flux = 0.0
-        buff = rhov_int   - tauyz -Frho*v_int
+        buff = rhov_int   - tauyz !-Frho*v_int
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%zflux_y = flux
 
         flux = 0.0
-        buff = rhow_int + p_int   - tauzz -Frho*w_int !z-momentum
+        buff = rhow_int + p_int   - tauzz !-Frho*w_int !z-momentum
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
@@ -4082,7 +4072,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
 
 
-        buff = KE + rhoe_prim  - tauzz*w_int - u_int*tauxz-v_int*tauyz  - 0.5_rkind*(u_int*u_int + v_int*v_int + w_int*w_int)*Frho - Fenergy
+        buff = KE + rhoe_prim  - tauzz*w_int - u_int*tauxz-v_int*tauyz  !- 0.5_rkind*(u_int*u_int + v_int*v_int + w_int*w_int)*Frho - Fenergy
         !buff = ( TE + p_int )*w_int
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
