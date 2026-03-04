@@ -2107,7 +2107,7 @@ contains
              
             !   call this%mix%material(1)%update_specYs(isub,this%dt,this%rho,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)  
             else
-               call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_int,this%v_int,this%w_int,this%sos,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
+               call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_mid,this%v_mid,this%w_mid,this%sos,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
             endif
             !call toc(cputime)
             !call message(3,"Ys time (in seconds)",cputime)
@@ -2132,7 +2132,7 @@ contains
 !               this%update_P(Qtmpp,isub,this%dt,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_int,this%v_int,this%w_int,this%sos,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
             elseif(this%pRelax) then
-                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_mid(:,:,:,1),this%v_mid(:,:,:,2),this%w_mid(:,:,:,3),this%sos,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
+                call this%mix%update_VF(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_int,this%v_int,this%w_int,this%sos,this%x,this%y,this%z,this%tsim,divu,Fsource,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew)
 ! Volume Fraction
                 call this%mix%update_eh(isub,this%dt,this%rho,this%u,this%v,this%w,this%x,this%y,this%z,this%tsim,divu,viscwork,Fsource,this%devstress,this%x_bc,this%y_bc,this%z_bc)
 ! Hydrodynamic energy
@@ -2375,16 +2375,16 @@ contains
       call gradFV_N2Fy(this%decomp,this%derStaggd02,this%p,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       call gradFV_N2Fz(this%decomp,this%derStaggd02,this%p,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       call interpolateFV(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      this%mix%material(2)%Ys_mid = 1.0 - this%mix%material(1)%Ys_mid
-      this%mix%material(2)%VF_mid = 1.0 - this%mix%material(1)%VF_mid
+      this%mix%material(2)%Ys_mid = 1.0_rkind - this%mix%material(1)%Ys_mid
+      this%mix%material(2)%VF_mid = 1.0_rkind - this%mix%material(1)%VF_mid
 
-      mask1 = (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**0.3_rkind    ! (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**(0.3_rkind)
-      mask2 = (1_rkind/0.6598_rkind)*abs(VFbar(:,:,:,2)*(1-VFbar(:,:,:,2)))**0.3_rkind   ! (1_rkind/0.6598_rkind)*( abs(VFbar(:,:,:,2)*(1-VFbar(:,:,:,2)) ) )**(0.3_rkind)
-      mask3 = (1_rkind/0.6598_rkind)*abs(VFbar(:,:,:,3)*(1-VFbar(:,:,:,3)))**0.3_rkind 
+      mask1 = (1.0_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1.0_rkind-VFbar(:,:,:,1)) ) )**0.3_rkind    ! (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**(0.3_rkind)
+      mask2 = (1.0_rkind/0.6598_rkind)*abs(VFbar(:,:,:,2)*(1.0_rkind-VFbar(:,:,:,2)))**0.3_rkind   ! (1_rkind/0.6598_rkind)*( abs(VFbar(:,:,:,2)*(1-VFbar(:,:,:,2)) ) )**(0.3_rkind)
+      mask3 = (1.0_rkind/0.6598_rkind)*abs(VFbar(:,:,:,3)*(1.0_rkind-VFbar(:,:,:,3)))**0.3_rkind 
 
-      af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))*this%sos_ratio*rho_ratio  * ( (sqrt( this%u_mid(:,:,:,1)**2 + this%v_mid(:,:,:,1)**2 + this%w_mid(:,:,:,1 )**2 )) /sos_int(:,:,:,1) )**2  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
-      af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,2)**2 + this%v_mid(:,:,:,2)**2 + this%w_mid(:,:,:,2 )**2  ) ) /sos_int(:,:,:,2))**2
-      af(:,:,:,3) =this%CP*mask3*this%dt/(this%rho_mid(:,:,:,3))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,3)**2 + this%v_mid(:,:,:,3)**2 + this%w_mid(:,:,:,3 )**2  ) ) /sos_int(:,:,:,3))**2
+      af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))*this%sos_ratio*rho_ratio  * ( (sqrt( this%u_mid(:,:,:,1)**2.0_rkind + this%v_mid(:,:,:,1)**2.0_rkind + this%w_mid(:,:,:,1 )**2.0_rkind )) /sos_int(:,:,:,1) )**2.0_rkind  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
+      af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,2)**2.0_rkind + this%v_mid(:,:,:,2)**2.0_rkind + this%w_mid(:,:,:,2 )**2.0_rkind  ) ) /sos_int(:,:,:,2))**2.0_rkind
+      af(:,:,:,3) =this%CP*mask3*this%dt/(this%rho_mid(:,:,:,3))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,3)**2.0_rkind + this%v_mid(:,:,:,3)**2.0_rkind + this%w_mid(:,:,:,3 )**2.0_rkind  ) ) /sos_int(:,:,:,3))**2.0_rkind
 
       peff = ( gradp + this%surfaceTension_coeff*kappabar*gradVF )
 
@@ -2397,8 +2397,7 @@ contains
 
      this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2) *  ( peff(:,this%nyp,:,2) - 0.5_rkind*(peff(:,1,:,2) + peff(:,this%nyp-1,:,2) ) ) !(peff(:,this%nyp,:,2) - peff_fil(:,this%nyp,:,2))
      this%v_int(:,1,:) = this%v_mid(:,1,:,2) - af(:,1,:,2) * ( peff(:,1,:,2) - 0.5_rkind*(peff(:,2,:,2) + peff(:,this%nyp,:,2) ) ) !(peff(:,1,:,2) - peff_fil(:,1,:,2)
-
-     this%v_int = this%v_mid(:,:,:,2)
+     !this%v_int =this%v_mid(:,:,:,2)
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! X Correction      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       tmp1 = this%u_mid(:,:,:,1)
       tmp2 = af(:,:,:,1) 
@@ -2421,7 +2420,7 @@ contains
 
       !/this%dx *( ( xtmp3(1,:,:) - xtmp3(nx,:,:) ) + this%surfaceTension_coeff*xtmp4(nx,:,:)*( xtmp5(1,:,:) - xtmp5(nx,:,:) )  )
       call transpose_x_to_y(xtmp1,tmp1,this%decomp)
-      this%u_int(:,:,:) = this%u_mid(:,:,:,1) ! tmp1
+      this%u_int(:,:,:) = tmp1
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  Z Correction !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       tmp = this%w_mid(:,:,:,3)
@@ -2444,10 +2443,10 @@ contains
       ztmp1(:,:,1) = ztmp1(:,:,1) - ztmp2(:,:,1) * ( ztmp3(:,:,1)        - 0.5_rkind*(ztmp3(:,:,nz) + ztmp3(:,:,nz) ))
 
       call transpose_z_to_y(ztmp1,tmp,this%decomp)
-      this%w_int(:,:,:) = this%w_mid(:,:,:,3) !tmp
+      this%w_int(:,:,:) =  tmp
       endif
+      
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- 
       this%m1_int = this%mix%material(1)%rhoYs_mid(:,:,:,2)
       this%m2_int = this%mix%material(2)%rhoYs_mid(:,:,:,2)
 
@@ -3800,20 +3799,20 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         w_int = this%w_mid(:,:,:,1)
  
         call interpolateFV_x(this%decomp,this%interpMid02,this%p, pbar,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-        rho_int =0.0 ! this%rho_mid(:,:,:,1)
-        num = 0
-        gam = 0
-        KE = 0
-        den = 0.0
+        rho_int =0.0d0
+        num = 0d0
+        gam = 0d0
+        KE = 0d0
+        den = 0.0d0
 
-        rhou_int = 0.0
-        rhov_int = 0.0
-        rhow_int = 0.0
-        rhoe_prim = 0.0
+        rhou_int = 0.0d0
+        rhov_int = 0.0d0
+        rhow_int = 0.0d0
+        rhoe_prim = 0.0d0
 
-        Mu_int = 0
-        Mv_int = 0
-        Mw_int = 0
+        Mu_int = 0d0
+        Mv_int = 0d0
+        Mw_int = 0.0d0
 
         do i = 1,2
             
@@ -3835,7 +3834,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        rhou_int = Mu_int*u_int
        rhov_int = Mu_int*v_int
        rhow_int = Mu_int*w_int
-       KE  = 0.5_rkind*rho_int*(u_int**2 + v_int**2 + w_int**2) ! ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int
+       KE  = 0.5_rkind*rho_int*(u_int*u_int + v_int*v_int + w_int*w_int) ! ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int
 
       do i = 1,2
 
@@ -3907,15 +3906,15 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        sos_int = (this%sos + sqrt( this%u*this%u + this%v*this%v))*this%rho
        p_int = this%p_mid(:,:,:,2)
        call interpolateFV_y(this%decomp,this%interpMid02,this%p,pbar,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-       rho_int = 0.0
-       rhoe_prim = 0.0
-       num = 0.0
-       gam = 0.0
-       den = 0.0
+       rho_int = 0.0d0
+       rhoe_prim = 0.0d0
+       num = 0.0d0
+       gam = 0.0d0
+       den = 0.0d0
 
-       Mu_int = 0.0
-       Mv_int = 0.0
-       Mw_int = 0.0
+       Mu_int = 0.0d0
+       Mv_int = 0.0d0
+       Mw_int = 0.0d0
 
         do i = 1,2
 
@@ -3934,7 +3933,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        rhou_int = Mv_int*u_int
        rhov_int = Mv_int*v_int
        rhow_int = Mv_int*w_int
-       KE  = 0.5*rho_int*(u_int**2 + v_int**2 + w_int**2 ) !  0.5_rkind* ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int 
+       KE  = 0.5_rkind*rho_int*(u_int*u_int + v_int*v_int + w_int*w_int ) !  0.5_rkind* ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int 
 
     
         do i = 1,2
@@ -3970,7 +3969,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
         this%yflux_z = flux
 
-        flux = 0.0
+        flux = 0.0d0
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Add back in KE         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         buff = H_int- (tauyy)*v_int - u_int*tauxy -w_int*tauyz !- 0.5_rkind*(u_int*u_int+v_int*v_int + w_int*w_int)*Frho - Fenergy 
@@ -4007,19 +4006,19 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        p_int = this%p_mid(:,:,:,3)
 
        call interpolateFV_z(this%decomp,this%interpMid02,this%p, pbar,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-       rho_int = 0.0
-       rhoe_prim = 0.0
-       num = 0.0
-       gam = 0.0
-       den = 0.0
+       rho_int = 0.0d0
+       rhoe_prim = 0.0d0
+       num = 0.0d0
+       gam = 0.0d0
+       den = 0.0d0
 
-       Mu_int = 0.0
-       Mv_int = 0.0
-       Mw_int = 0.0
-       rhou_int = 0.0
-       rhov_int = 0.0
-       rhow_int = 0.0
-       KE = 0
+       Mu_int = 0.0d0
+       Mv_int = 0.0d0
+       Mw_int = 0.0d0
+       rhou_int = 0.0d0
+       rhov_int = 0.0d0
+       rhow_int = 0.0d0
+       KE = 0.0d0
         do i = 1,2
 
            VF_int(:,:,:,i) = this%mix%material(i)%VF_mid(:,:,:,3)
@@ -4028,9 +4027,9 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
            Mu_int = Mu_int + M_int(:,:,:,i)*u_int !tmp1
            Mv_int = Mv_int + M_int(:,:,:,i)*v_int !tmp2
-           Mw_int = Mw_int + M_int(:,:,:,i)*w_int
+           Mw_int = Mw_int + M_int(:,:,:,i)*this%w_int
 
-           KE = KE+ 0.5*(u_int**2.0 + v_int**2.0 + w_int**2.0 )*this%w_int*this%mix%material(i)%rhoYs_mid(:,:,:,3)
+           KE = KE+ 0.5_rkind*(u_int*u_int + v_int*v_int + w_int*w_int )*this%w_int*this%mix%material(i)%rhoYs_mid(:,:,:,3)
            rhou_int = rhou_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*u_int*w_int
            rhov_int = rhov_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*v_int*w_int
            rhow_int = rhow_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*w_int*this%w_int !this%w_int

@@ -744,24 +744,24 @@ contains
         !abs((Ys-minYs)-(one-minYs))) )*(this%dy*this%dx*this%dz)**(1/3)
  
         if(this%yMetric) then
-           Yslow = max(0*Ys, (1d-5-Ys) /(1d-5 + 1d-14) )
-           Yshigh = max(0*Ys, (Ys-1+1d-5) /(1d-5 + 1d-14) )
+           Yslow = max(0d0*Ys, (1d-5-Ys) /(1d-5 + 1d-14) )
+           Yshigh = max(0d0*Ys, (Ys-1+1d-5) /(1d-5 + 1d-14) )
 !           Yslow = max(0*Ys, (-Ys) )
 !           Yshigh = max(0*Ys, Ys-1 )
 
-           outb = this%CY*(dy_stretch*this%dx*this%dz)**(1/3) *(sos)*max(Yslow,Yshigh) !*max(0d0*rho+1d0,abs(log(rho+1e-16))) !(half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) !(umag+ sos)
+           outb = this%CY*(dy_stretch*this%dx*this%dz)**(1.0_rkind/3.0_rkind) *(sos)*max(Yslow,Yshigh) !*max(0d0*rho+1d0,abs(log(rho+1e-16))) !(half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) !(umag+ sos)
 !            outb = this%CY*(dy_stretch*this%dx*this%dz)**(1/3) *(sos)*( half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) ! *(sos+umag) !*(this%dy*this%dx*this%dz)**(1/3)
  
            delta = min(dy_stretch,this%dx,this%dz)   !(dy_stretch*this%dx*this%dz)**(1/3)
         else
 
 
-           Yslow = max(0*Ys, (1d-5-Ys) /(1d-5 + 1d-14) )
-           Yshigh = max(0*Ys, (Ys-1+1d-5) /(1d-5 + 1d-14) )
+           Yslow = max(0d0*Ys, (1d-5-Ys) /(1d-5 + 1d-14) )
+           Yshigh = max(0d0*Ys, (Ys-1+1d-5) /(1d-5 + 1d-14) )
 !           Yslow = max(0*Ys, (-Ys) )
 !           Yshigh = max(0*Ys, Ys-1 )
 
-           outb = this%CY*(this%dy*this%dx*this%dz)**(1/3) *(sos)*max(Yslow,Yshigh)
+           outb = this%CY*(this%dy*this%dx*this%dz)**(1.0_rkind/3.0_rkind) *(sos)*max(Yslow,Yshigh)
 !         outb = this%CY*(this%dy*this%dx*this%dz)**(1/3) *(sos)*( half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) ! *(sos+umag) !*(this%dy*this%dx*this%dz)**(1/3)
            delta = min(this%dy,this%dx,this%dz) ! (this%dy*this%dx*this%dz)**(1/3)
         endif
@@ -884,18 +884,18 @@ contains
         !minVF)*(1-H3))*(this%dy*this%dx*this%dz)**(1/3) ! half*(abs(Ys)-one +
         !abs(Ys-one)) )*ytmp4 ! CY partof diff
         if(this%yMetric) then
-           VFlow = max(0*VF, (1d-5-VF)/(1d-5 + 1d-14) )
-           VFhigh = max(0*VF, (VF-1+1d-5) /(1d-5 + 1d-14) )
+           VFlow = max(0d0*VF, (1d-5-VF)/(1d-5 + 1d-14) )
+           VFhigh = max(0d0*VF, (VF-1+1d-5) /(1d-5 + 1d-14) )
 !            VFlow = max(0*VF, (-VF) )
 !            VFhigh = max(0*VF, VF-1 )
            ytmp5 = this%Cvf2*(dy_stretch*this%dx*this%dz)**(1/3)*(sos)*max(VFlow,VFhigh) !( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *(sos + umag)
 !           ytmp5 = this%Cvf2*(dy_stretch*this%dx*this%dz)**(1/3)*(sos)*( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) )
         else
-           VFlow = max(0*VF, (1d-5-VF)/(1d-5 + 1d-14) )
-           VFhigh = max(0*VF, (VF-1+1d-5) /(1d-5 + 1d-14) )
+           VFlow = max(0d0*VF, (1d-5-VF)/(1d-5 + 1d-14) )
+           VFhigh = max(0d0*VF, (VF-1+1d-5) /(1d-5 + 1d-14) )
 !            VFlow = max(0*VF, (-VF) )
 !            VFhigh = max(0*VF, VF-1 )
-         ytmp5 = this%Cvf2*(this%dy*this%dx*this%dz)**(1/3)*(sos)*max(VFlow,VFhigh) 
+         ytmp5 = this%Cvf2*(this%dy*this%dx*this%dz)**(1.0_rkind/3.0_rkind)*(sos)*max(VFlow,VFhigh) 
 
 !         ytmp5 = this%Cvf2*(this%dy*this%dx*this%dz)**(1/3)*(sos)*( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *( sos+umag) ! ( (this%dy*abs(dVFdy) + this%dx*abs(dVFdx) + this%dz*abs(dVFdz)) / (sqrt(ytmp1 + ytmp2 + ytmp3)+ real(1.0D-32,rkind)) ) !*(this%dy*this%dx*this%dz)**(1/3)
 

@@ -209,7 +209,7 @@ contains
                 
     end subroutine
 
-    subroutine interpolateFV(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    subroutine interpolateFV(decomp,interpMid,nodes,faces,periodicx,periodicy,periodicz,x_bc_,y_bc_,z_bc_)
         !interpolates from Nodes to faces for fnite volume treatment of terms
         !in interface advection
         type(decomp_info), intent(in) :: decomp
@@ -217,7 +217,8 @@ contains
         real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3)), intent(in) :: nodes
         real(rkind), dimension(size(nodes,1),size(nodes,2),size(nodes,3), 3), intent(out) :: faces
         logical, intent(in) :: periodicx,periodicy,periodicz
-        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        integer, dimension(2), optional, intent(in) :: x_bc_, y_bc_, z_bc_
+        integer, dimension(2) :: x_bc, y_bc, z_bc
         real(rkind),dimension(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)) :: xbuf,xint
         real(rkind),dimension(decomp%zsz(1),decomp%zsz(2),decomp%zsz(3)) :: zbuf,zint
         integer :: i,j,k, one = 1,nx,ny,nz
@@ -227,6 +228,11 @@ contains
         zbuf = 0.0
         xint = 0.0
         zint = 0.0
+
+        x_bc = 0; if (present(x_bc_)) x_bc = x_bc_
+        y_bc = 0; if (present(y_bc_)) y_bc = y_bc_
+        z_bc = 0; if (present(z_bc_)) z_bc = z_bc_
+
 
         ! i+1/2 faces
         if(decomp%xsz(1).gt. one) then

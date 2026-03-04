@@ -386,7 +386,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         !tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
         !tmp = half * ( one - erf((0.25 - (x-interface_init)*(x-interface_init) - (y-3.0_rkind)*(y-3.0_rkind))/(thick*dx) ) )
-        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5)*(x-0.5) - (y-0.5)*(y-0.5))/(thick*dx) ) )
+        tmp = half * ( one - erf((625.0_rkind/7921.0_rkind - (x-0.5_rkind)*(x-0.5_rkind) - (y-0.5_rkind)*(y-0.5_rkind))/(thick*dx) ) )
 
         !tmp =  half * ( one - erf((625.0_rkind/7921.0_rkind-z*z -(y*y)-x*x)/(thick*dy) ) )
         
@@ -415,8 +415,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%p  = p_amb ! + (noise-0.5)*1d-7   !66666dum + p1*(one-dum)
         mix%material(2)%p  = mix%material(1)%p
 
-        mix%material(2)%VF = tmp  !+  (noise-0.5)*1d-5
-        mix%material(1)%VF = one - mix%material(2)%VF
+        mix%material(1)%VF = minVF + (one-two*minVF)*tmp
+        mix%material(2)%VF = one - mix%material(1)%VF
 !       mix%material(1)%rhom = rho_0
 !       mix%material(2)%rhom = rho_0_2
 

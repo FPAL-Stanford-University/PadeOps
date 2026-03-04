@@ -2644,7 +2644,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: dx,dy,dz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,p
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3),   intent(in) :: ke_mid,uFVint,vFVint,wFVint,pFVint
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: ke_mid,uFVint,vFVint,wFVint,pFVint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradVF,gradVFdiff,fv_f,fv_h,tmp4, gradphi, fv_k,Db_int,hDiff,kDiff,uDiff
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: rhoi,VFbound,hi,spf_a,spf_r
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint,gradxi,VFint, gradFV_N2F,rhoFVint,NMint
@@ -2680,12 +2680,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
              if(this%usePhiForm) then
              !! Construct Psi
              where( this%material(i)%VF .GE. 1-this%intSharp_cut)
-                 this%xi(:,:,:,i) = this%intSharp_eps*log( (1-2*this%intSharp_cut + e )/ (e))*(1/(1-2*this%intSharp_cut))
+                 this%xi(:,:,:,i) = this%intSharp_eps*log( (one-two*this%intSharp_cut + e )/ (e))*(one/(one-two*this%intSharp_cut))
 
              elsewhere( this%material(i)%VF .LE. this%intSharp_cut )
-                 this%xi(:,:,:,i) = this%intSharp_eps*log( ( e )/ (1-2*this%intSharp_cut + e))*(1/(1-2*this%intSharp_cut))
+                 this%xi(:,:,:,i) = this%intSharp_eps*log( ( e )/ (one-two*this%intSharp_cut + e))*(one/(one-two*this%intSharp_cut))
              elsewhere
-                 this%xi(:,:,:,i) = this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( this%material(i)%VF - this%intSharp_cut + e )/ (1 - this%intSharp_cut - this%material(i)%VF + e) )
+                 this%xi(:,:,:,i) = this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( this%material(i)%VF - this%intSharp_cut + e )/ (one - this%intSharp_cut - this%material(i)%VF + e) )
 
              endwhere
 
@@ -2778,10 +2778,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !              call interpolateFV(this,rhoi(:,:,:,i)*zero+this%material(i)%elastic%rho0,rhoiFVint(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 !              call interpolateFV(this,rhoi(:,:,:,i),rhoiFVint_local(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-!               call interpolateFV(this,p,pFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-!               call interpolateFV(this,u,uFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-!               call interpolateFV(this,v,vFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
- !              call interpolateFV(this,w,wFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+               !call interpolateFV(this,p,pFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+               !call interpolateFV(this,u,uFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+               !call interpolateFV(this,v,vFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+               !call interpolateFV(this,w,wFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
 
 
