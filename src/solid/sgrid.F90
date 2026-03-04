@@ -1471,7 +1471,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 16.0, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 5.0, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1480,33 +1480,33 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 16.0
+       L = 16.0d0
 
-       y_half = this%y + 0.5*this%dy
+       y_half = this%y + 0.5_rkind*this%dy
         
        this%eta1 = this%x
        this%eta3 = this%z
-       this%xMetric = 1
-       this%zMetric = 1
-       this%xMetric_half = 1
-       this%zMetric_half = 1
-       tmpeta = atanh( 2.0*this%y / ( 1.0 + 1.0 / STRETCH_RATIO) )
+       this%xMetric = 1.0_rkind
+       this%zMetric = 1.0_rkind
+       this%xMetric_half = 1.0_rkind
+       this%zMetric_half = 1.0_rkind
+       tmpeta = atanh( 2.0_rkind*this%y / ( 1.0_rkind + 1.0_rkind / STRETCH_RATIO) )
        Lr =  L /( tmpeta(1, ny,1) - tmpeta(1,1,1))
 
        this%eta2 = Lr*tmpeta
        tmpeta2 = Lr*tmpeta
        call this%der_nostretch%ddy(tmpeta2, tmp2, this%y_bc(1),this%y_bc(2))
-       this%yMetric = 1/tmp2
+       this%yMetric = 1.0_rkind/tmp2
        call interpolateFV_y(this%decomp,this%interpMid,this%eta2,eta2_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         
        call gradFV_y(this%decomp,this%derStagg_stretch,eta2_int,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)     
-       this%yMetric_F2N = 1 / tmp 
+       this%yMetric_F2N = 1.0_rkind / tmp 
        call gradFV_N2Fy(this%decomp,this%derStagg_stretch,this%eta2,tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-       this%yMetric_half = 1.0 / tmp3
-       this%yMetric_half(:,this%nyp,:) = 1.0
+       this%yMetric_half = 1.0_rkind / tmp3
+       this%yMetric_half(:,this%nyp,:) = 1.0_rkind
         
        call this%der_nostretch%d2dy2(this%eta2,tmpdy2,this%y_bc(1),this%y_bc(2))
-       this%yLADMetric = 1.0 / tmpdy2
+       this%yLADMetric = 1.0_rkind / tmpdy2
        this%dy_stretch(:,2:this%nyp-1,:) = abs((this%eta2(:,3:this%nyp,:)-this%eta2(:,1:this%nyp-2,:))/2)
        this%dy_stretch(:,1,:) = abs((this%eta2(:,2,:)-this%eta2(:,1,:)))
        this%dy_stretch(:,this%nyp,:) = abs((this%eta2(:,this%nyp,:)-this%eta2(:,this%nyp-1,:)) )
@@ -2499,17 +2499,17 @@ contains
         !print *, "sosmax"
         !print *, P_MAXVAL( this%sos)
         rhofil = this%mix%material(1)%rhodiff
-        rhokappafil = this%mix%material(1)%rhodiff*(this%mix%kappa)**2
+        rhokappafil = this%mix%material(1)%rhodiff*(this%mix%kappa)**2.0_rkind
         call this%filter(rhofil, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
-        dtmu   = 0.2_rkind * delta**2 / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
-        dtYs1 = 0.7_rkind * delta**2 / (P_MAXVAL( rhofil   ) + eps) 
+        dtmu   = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
+        dtYs1 = 0.7_rkind * delta**2.0_rkind / (P_MAXVAL( rhofil   ) + eps) 
         dtYs2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff  ) + eps)
         dtVF1 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff  ) + eps)
         dtVF2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff  ) + eps)
 
-        dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
-        dtbulk = 0.2_rkind * delta**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	dtCurv = 0.7_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)  ! (P_MAXVAL(rhokappafil ) + eps) ! (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
+        dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
+        dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
+	dtCurv = 0.7_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2.0_rkind   ) + eps)  ! (P_MAXVAL(rhokappafil ) + eps) ! (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then
           ! filter3D(this%
@@ -2929,7 +2929,7 @@ contains
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: ke,tmp,dJ,drhodx,drhody,drhodz, uJ, vJ, wJ, keJ, eJ, Fbody, tmp1,tmp2, tmp3, rhoeJ
         real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: drhoedx,drhoedy, drhoedz,dedx,dedz,dedy, eKap,dedx_n, dedy_n, dedz_n
         real(rkind), dimension(this%nxp, this%nyp, this%nzp, 3) :: J,Frho,Fenergy, Fp, yMetric_F2N_int, De_int,rho_int, eLADcoef,gradrhoh,rhoh,gradp
-        real(rkind) :: g = -0.1, cputime
+        real(rkind) :: g = -0.1d0, cputime
 
 
         !call tic()
@@ -3853,13 +3853,13 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
             call interpolateFV_x(this%decomp,this%interpMid,GVFmag,GVFmag_x,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         endif
         flux = 0.0
-        buff = rhou_int + p_int - tauxx !- Frho*u_int !- this%CP*gradVF*clocal*this%dx**2*delrhou
+        buff = rhou_int + p_int - tauxx - Frho*u_int !- this%CP*gradVF*clocal*this%dx**2*delrhou
 
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux  
         this%xflux_x = flux
         flux =0.0
-        buff =rhov_int - tauxy !- Frho*v_int !- this%CP*gradVF*clocal*this%dx**2*delrhov !y-momentum
+        buff =rhov_int - tauxy - Frho*v_int !- this%CP*gradVF*clocal*this%dx**2*delrhov !y-momentum
 
         !endif
 
@@ -3867,7 +3867,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%xflux_y = flux
 
-        buff = rhow_int  - tauxz !- Frho*w_int !z-momentum
+        buff = rhow_int  - tauxz - Frho*w_int !z-momentum
         flux = 0.0
 
         !endif
@@ -3878,7 +3878,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
 
         !!!!!!!!!!!!!! add back in KE         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        buff = H_int  -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz) !- 0.5_rkind*(u_int*u_int +v_int*v_int + w_int*w_int)*Frho - Fenergy        !  - this%CP*gradVF*clocal*this%dx**2*delp 
+        buff = H_int  -( tauxx)*u_int - (v_int*tauxy - w_int*tauxz) - 0.5_rkind*(u_int*u_int +v_int*v_int + w_int*w_int)*Frho - Fenergy        !  - this%CP*gradVF*clocal*this%dx**2*delp 
         call gradFV_x(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:, TE_index  ) = rhs(:,:,:, TE_index  ) - flux  ! - gradup ! -0.5*( gradu*this%p + this%v*gradp)    
  
@@ -3947,14 +3947,14 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
 
         flux = 0.0
-        buff = rhou_int  - tauxy !- Frho*u_int  !x-momentum 
+        buff = rhou_int  - tauxy - Frho*u_int  !x-momentum 
         
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux 
         this%yflux_x = flux
 
         flux = 0.0
-        buff = rhov_int - tauyy + p_int  !- Frho*v_int
+        buff = rhov_int - tauyy + p_int  - Frho*v_int
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 !        call this%filter(gradp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         !endif
@@ -3962,7 +3962,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         this%yflux_y = flux
 
         flux = 0.0
-        buff = rhow_int  - tauyz !- Frho*w_int !z-momentum
+        buff = rhow_int  - tauyz - Frho*w_int !z-momentum
 
         !endif
         call gradFV_y(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -3972,7 +3972,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0d0
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Add back in KE         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        buff = H_int- (tauyy)*v_int - u_int*tauxy -w_int*tauyz !- 0.5_rkind*(u_int*u_int+v_int*v_int + w_int*w_int)*Frho - Fenergy 
+        buff = H_int- (tauyy)*v_int - u_int*tauxy -w_int*tauyz - 0.5_rkind*(u_int*u_int+v_int*v_int + w_int*w_int)*Frho - Fenergy 
 
         !endif
 
@@ -4050,20 +4050,20 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
 
         H_int = KE + rhoe_prim + pbar*(this%w_int - w_int)
         flux = 0.0
-        buff = rhou_int  - tauxz !-Frho*u_int
+        buff = rhou_int  - tauxz - Frho*u_int
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index  ) = rhs(:,:,:,mom_index  ) - flux
         this%zflux_x = flux 
 
         flux = 0.0
-        buff = rhov_int   - tauyz !-Frho*v_int
+        buff = rhov_int   - tauyz - Frho*v_int
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+1) = rhs(:,:,:,mom_index+1) - flux
         this%zflux_y = flux
 
         flux = 0.0
-        buff = rhow_int + p_int   - tauzz !-Frho*w_int !z-momentum
+        buff = rhow_int + p_int   - tauzz - Frho*w_int !z-momentum
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         rhs(:,:,:,mom_index+2) = rhs(:,:,:,mom_index+2) - flux
@@ -4071,7 +4071,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
 
 
-        buff = KE + rhoe_prim  - tauzz*w_int - u_int*tauxz-v_int*tauyz  !- 0.5_rkind*(u_int*u_int + v_int*v_int + w_int*w_int)*Frho - Fenergy
+        buff = KE + rhoe_prim  - tauzz*w_int - u_int*tauxz-v_int*tauyz  - 0.5_rkind*(u_int*u_int + v_int*v_int + w_int*w_int)*Frho - Fenergy
         !buff = ( TE + p_int )*w_int
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)

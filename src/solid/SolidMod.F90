@@ -4922,7 +4922,7 @@ contains
         endif
 
         ! advance sub-step
-        if(isub==1) this%QtmpYs = 0 ! this%consrv(:,:,:,1)                   ! not really needed, since RK45_A(1) = 0
+        if(isub==1) this%QtmpYs = 0d0 ! this%consrv(:,:,:,1)                   ! not really needed, since RK45_A(1) = 0
 !        this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
          this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
          this%consrv(:,:,:,1) = this%consrv(:,:,:,1)  + RK45_B(isub)*this%QtmpYs
@@ -5000,10 +5000,10 @@ contains
         logical :: periodicx,periodicy,periodicz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)    :: tmp,tmp1,tmp2,tmp3
 
-         tmp=0.0
-         tmp1 = -umid*this%rhoYs_mid(:,:,:,1)! + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
-         tmp2 = -vmid*this%rhoYs_mid(:,:,:,2)! + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
-         tmp3 = -wmid*this%rhoYs_mid(:,:,:,3)! + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
+         tmp=0.0d0
+         tmp1 = -umid*this%rhoYs_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
+         tmp2 = -vmid*this%rhoYs_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
+         tmp3 = -wmid*this%rhoYs_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
          call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
          rhsYs = tmp + this%intSharp_RFV  !+ this%intSharp_RDiffFV
@@ -5021,10 +5021,10 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,tmp1,tmp2,tmp3
     
 
-           tmp =0.0
-           tmp1 = -umid*this%rhoYs_mid(:,:,:,1)! + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
-           tmp2 = -vmid*this%rhoYs_mid(:,:,:,2)! + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
-           tmp3 = -wmid*this%rhoYs_mid(:,:,:,3)! + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
+           tmp =0.0d0
+           tmp1 = -umid*this%rhoYs_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradYs(:,:,:,1)
+           tmp2 = -vmid*this%rhoYs_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradYs(:,:,:,2)
+           tmp3 = -wmid*this%rhoYs_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradYs(:,:,:,3)
  
            call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,tmp,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
@@ -5138,7 +5138,7 @@ contains
 
         dx = x(2,1,1)-x(1,1,1)
         dy = y(1,2,1)-y(1,1,1)
-        rhsVF = 0
+        rhsVF = 0d0
 
         if(this%PTeqb) then
             call GracefulExit("update_VF shouldn't be called with PTeqb. Exiting.",4809)
@@ -5158,7 +5158,7 @@ contains
         !  enddo
         endif
         ! advance sub-step
-        if(isub==1) this%QtmpVF =0 ! this%VF                   ! not really needed, since RK45_A(1) = 0
+        if(isub==1) this%QtmpVF =0d0 ! this%VF                   ! not really needed, since RK45_A(1) = 0
   !      this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
         this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
         this%VF = this%VF  + RK45_B(isub)*this%QtmpVF
@@ -5184,9 +5184,9 @@ contains
         integer :: iflag = one 
 
          call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         tmp1 = -umid*this%VF_mid(:,:,:,1) ! + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
-         tmp2 = -vmid*this%VF_mid(:,:,:,2) ! + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
-         tmp3 = -wmid*this%VF_mid(:,:,:,3) !+ this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
+         tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
+         tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
+         tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
          call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
          rhsVF = div_uVF +  this%VF*div_u  ! + this%intSharp_aDiffFV
@@ -5207,8 +5207,8 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: adiff_int
         integer :: i
 
-          this%gradVF = 0.0
-          this%gradYs  = 0.0
+          this%gradVF = 0.0d0
+          this%gradYs  = 0.0d0
           call gradFV_N2Fx(this%decomp,this%derStagg,this%VF,this%gradVF(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fy(this%decomp,this%derStagg,this%VF,this%gradVF(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fz(this%decomp,this%derStagg,this%VF,this%gradVF(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
@@ -5297,9 +5297,9 @@ contains
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Compact Scheme          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
          call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         tmp1 = -umid*this%VF_mid(:,:,:,1)! + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
-         tmp2 = -vmid*this%VF_mid(:,:,:,2)! + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
-         tmp3 = -wmid*this%VF_mid(:,:,:,3)! + this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
+         tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
+         tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
+         tmp3 = -wmid*this%VF_mid(:,:,:,3) + this%adiff_stagg(:,:,:,3)*this%gradVF(:,:,:,3)
          call divergenceFV(this%decomp,this%derStagg,tmp1,tmp2,tmp3,div_uVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
          rhsVF = div_uVF + this%VF*div_u  + this%intSharp_aFV ! + this%intSharp_aDiffFV

@@ -2679,7 +2679,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
              if(this%usePhiForm) then
              !! Construct Psi
-             where( this%material(i)%VF .GE. 1-this%intSharp_cut)
+             where( this%material(i)%VF .GE. 1.0_rkind-this%intSharp_cut)
                  this%xi(:,:,:,i) = this%intSharp_eps*log( (one-two*this%intSharp_cut + e )/ (e))*(one/(one-two*this%intSharp_cut))
 
              elsewhere( this%material(i)%VF .LE. this%intSharp_cut )
@@ -2788,12 +2788,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
               if (this%usePhiForm) then
                  call interpolateFV(this,this%xi,phiint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
                       
-                 antiDiffFVint(:,:,:,1,i) =  -this%intSharp_gam*(0.25*(1.0-(tanh((1.0-2.0*this%intSharp_cut)* phiint(:,:,:,1)/(2.0*this%intSharp_eps)))**2) &
-                                             -0.5*(1.0+tanh((1-2*this%intSharp_cut)*phiint(:,:,:,1)/(2.0*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)* NMint(:,:,:,1)
-                 antiDiffFVint(:,:,:,2,i) =  -this%intSharp_gam*(0.25*(1.0-(tanh((1-2*this%intSharp_cut)* phiint(:,:,:,2)/(2.0 *this%intSharp_eps)))**2) &
-                                             -0.5*(1.0 +tanh((1.0-2.0*this%intSharp_cut)*phiint(:,:,:,2)/(2.0*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)* NMint(:,:,:,2)
-                 antiDiffFVint(:,:,:,3,i) =  -this%intSharp_gam*(0.25*(1.0-(tanh((1.0-2.0*this%intSharp_cut)* phiint(:,:,:,3)/(2.0*this%intSharp_eps)))**2) &
-                                             -0.5*(1+tanh((1.0-2.0*this%intSharp_cut)*phiint(:,:,:,3)/(2.0*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,3)
+                 antiDiffFVint(:,:,:,1,i) = -this%intSharp_gam*(0.25_rkind*(1.0_rkind-(tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,1)/(2.0_rkind*this%intSharp_eps)))**2.0_rkind) &
+                                             -0.5_rkind*(1.0_rkind+tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,1)/(2.0_rkind*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)* NMint(:,:,:,1)
+                 antiDiffFVint(:,:,:,2,i) =  -this%intSharp_gam*(0.25_rkind*(1.0_rkind-(tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)* phiint(:,:,:,2)/(2.0_rkind*this%intSharp_eps)))**2.0_rkind) &
+                                             -0.5_rkind*(1.0_rkind+tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,2)/(2.0_rkind*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)* NMint(:,:,:,2)
+                 antiDiffFVint(:,:,:,3,i) = -this%intSharp_gam*(0.25_rkind*(1.0_rkind-(tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,3)/(2.0_rkind*this%intSharp_eps)))**2.0_rkind) &
+                                             -0.5_rkind*(1.0_rkind+tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,3)/(2.0_rkind*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,3)
 
 
                  rhoantiDiffFVint(:,:,:,:,i) = rhoiFVint(:,:,:,:,i)*antiDiffFVint(:,:,:,:,i)

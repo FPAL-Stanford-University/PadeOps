@@ -1,7 +1,7 @@
 module LADMod
 
     use kind_parameters, only: rkind
-    use constants,       only: zero,half,one
+    use constants,       only: zero,half,one,third
     use decomp_2d,       only: decomp_info, transpose_y_to_x, transpose_x_to_y, transpose_y_to_z, transpose_z_to_y
     use DerivativesMod,  only: derivatives
     use DerivativesStaggeredMod, only: derivativesStagg
@@ -691,7 +691,6 @@ contains
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind),intent(in)  :: rho0,dt
         real(rkind), intent(in) :: minYs, minVF
-        real(rkind), dimension(:,:,:), pointer::dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask,dil,omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta,mdiffstar,barrier,VFhigh,VFlow,Yslow,Yshigh,Curvstar,divustar,lnYsstar,lnYs
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: HVF_outb,HYs_outb,Ys_bound,HYs, HVF,Hbound,Hthresh,Hthresh1
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) ::xtmp1,xtmp2,xtmp3,xtmp4
@@ -749,7 +748,7 @@ contains
 !           Yslow = max(0*Ys, (-Ys) )
 !           Yshigh = max(0*Ys, Ys-1 )
 
-           outb = this%CY*(dy_stretch*this%dx*this%dz)**(1.0_rkind/3.0_rkind) *(sos)*max(Yslow,Yshigh) !*max(0d0*rho+1d0,abs(log(rho+1e-16))) !(half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) !(umag+ sos)
+           outb = this%CY*(dy_stretch*this%dx*this%dz)**(third) *(sos)*max(Yslow,Yshigh) !*max(0d0*rho+1d0,abs(log(rho+1e-16))) !(half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) !(umag+ sos)
 !            outb = this%CY*(dy_stretch*this%dx*this%dz)**(1/3) *(sos)*( half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) ! *(sos+umag) !*(this%dy*this%dx*this%dz)**(1/3)
  
            delta = min(dy_stretch,this%dx,this%dz)   !(dy_stretch*this%dx*this%dz)**(1/3)
@@ -761,7 +760,7 @@ contains
 !           Yslow = max(0*Ys, (-Ys) )
 !           Yshigh = max(0*Ys, Ys-1 )
 
-           outb = this%CY*(this%dy*this%dx*this%dz)**(1.0_rkind/3.0_rkind) *(sos)*max(Yslow,Yshigh)
+           outb = this%CY*(this%dy*this%dx*this%dz)**(third) *(sos)*max(Yslow,Yshigh)
 !         outb = this%CY*(this%dy*this%dx*this%dz)**(1/3) *(sos)*( half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) ! *(sos+umag) !*(this%dy*this%dx*this%dz)**(1/3)
            delta = min(this%dy,this%dx,this%dz) ! (this%dy*this%dx*this%dz)**(1/3)
         endif
@@ -888,75 +887,25 @@ contains
            VFhigh = max(0d0*VF, (VF-1+1d-5) /(1d-5 + 1d-14) )
 !            VFlow = max(0*VF, (-VF) )
 !            VFhigh = max(0*VF, VF-1 )
-           ytmp5 = this%Cvf2*(dy_stretch*this%dx*this%dz)**(1/3)*(sos)*max(VFlow,VFhigh) !( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *(sos + umag)
+           ytmp5 = this%Cvf2*(dy_stretch*this%dx*this%dz)**(third)*(sos)*max(VFlow,VFhigh) !( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *(sos + umag)
 !           ytmp5 = this%Cvf2*(dy_stretch*this%dx*this%dz)**(1/3)*(sos)*( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) )
         else
            VFlow = max(0d0*VF, (1d-5-VF)/(1d-5 + 1d-14) )
            VFhigh = max(0d0*VF, (VF-1+1d-5) /(1d-5 + 1d-14) )
 !            VFlow = max(0*VF, (-VF) )
 !            VFhigh = max(0*VF, VF-1 )
-         ytmp5 = this%Cvf2*(this%dy*this%dx*this%dz)**(1.0_rkind/3.0_rkind)*(sos)*max(VFlow,VFhigh) 
+         ytmp5 = this%Cvf2*(this%dy*this%dx*this%dz)**(third)*(sos)*max(VFlow,VFhigh) 
 
 !         ytmp5 = this%Cvf2*(this%dy*this%dx*this%dz)**(1/3)*(sos)*( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *( sos+umag) ! ( (this%dy*abs(dVFdy) + this%dx*abs(dVFdx) + this%dz*abs(dVFdz)) / (sqrt(ytmp1 + ytmp2 + ytmp3)+ real(1.0D-32,rkind)) ) !*(this%dy*this%dx*this%dz)**(1/3)
 
         endif
        
-!       call this%filter(adiffstar, x_bc, y_bc, z_bc)
-!       call this%filter(ytmp5, x_bc, y_bc, z_bc)
-
-!        adiff = max(adiffstar, ytmp5 )
-        ! Filter each part
-        VF_bound = 0.0
-
-        VF_bound = max(0.0, (1_rkind-VF/1e-3) )
-        VF_bound = VF_bound+ max(0.0, (1_rkind-(1_rkind-VF)/1e-3)) 
-
-        if(this%yMetric) then
-            VF_bound = VF_bound*P_MAXVAL(sos)*(this%dx*dy_stretch*this%dy)**(1.0/3.0)
-        else
-            VF_bound = VF_bound*P_MAXVAL(sos)*(this%dx*this%dy*this%dy)**(1.0/3.0)
-        endif
-
-        Ys_bound = 0.0
-
-        Ys_bound = max(0.0, (1_rkind-Ys/1e-4) )
-        Ys_bound = Ys_bound+ max(0.0, (1_rkind-(1_rkind-Ys)/1e-4))
-
-        if(this%yMetric) then
-            Ys_bound = Ys_bound*P_MAXVAL(sos)*(this%dx*dy_stretch*this%dy)**(1.0/3.0)
-        else
-            Ys_bound = Ys_bound*P_MAXVAL(sos)*(this%dx*this%dy*this%dy)**(1.0/3.0)
-        endif
-
-
-!       where((VF .GE. 1d-6 ) .AND. (VF .LE. (1-1d-6) ) )
-
-!           VF_bound = 0.0
-
-
-!       endwhere
-
-!        call this%filter(VF_bound, x_bc, y_bc, z_bc)
-
-!        VF_bound = this%Cdiff*VF_bound
-!        Ys_bound = this%Cdiff*Ys_bound
- 
-       
         HighVF = lnYsstar
         OOBVF  = Curvstar
-        barrier = max(rhodiff,adiffstar) + max(outb,ytmp5)
-!       adiff = max(rhodiff, adiffstar,this%Cdiff*Curvstar)  + max(outb, ytmp5)
         rhodiff =( max(rhodiff, adiffstar,this%Cdiff*Curvstar) + max(outb, ytmp5) )
-!        call this%filter(rhodiff, x_bc, y_bc, z_bc)
-!        call this%filter(rhodiff, x_bc, y_bc, z_bc)
-
-!        rhodiff = this%Cdiff*Hthresh*barrier*( 1d-4 / ( abs(VF) + 1d-12 ) ) &
-!                  + this%Cdiff*Hthresh1*barrier*( 1d-4 / (abs(1 - VF ) + 1d-12 ) )  + (1-max(Hthresh,Hthresh1))*rhodiff 
-!       rhodiff = min(rhodiff,0.5*delta**2/(2d-5))
         adiff   =  rhodiff ! max(rhodiff, adiffstar,outb,ytmp5) !,VF_bound) ! max(adiffstar,ytmp5,VF_bound) ! rhodiff
 
         
-!        call this%filter(adiff, x_bc, y_bc, z_bc)
 
     end subroutine
     
