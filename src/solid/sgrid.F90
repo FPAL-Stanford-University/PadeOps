@@ -2371,9 +2371,9 @@ contains
 
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!     Calculate Pressure Gradients and Coefficients       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
-      call gradFV_N2Fx(this%decomp,this%derStaggd02,this%p,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)           
-      call gradFV_N2Fy(this%decomp,this%derStaggd02,this%p,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fz(this%decomp,this%derStaggd02,this%p,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fx(this%decomp,this%derStagg,this%p,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)           
+      call gradFV_N2Fy(this%decomp,this%derStagg,this%p,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fz(this%decomp,this%derStagg,this%p,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       call interpolateFV(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       this%mix%material(2)%Ys_mid = 1.0_rkind - this%mix%material(1)%Ys_mid
       this%mix%material(2)%VF_mid = 1.0_rkind - this%mix%material(1)%VF_mid
@@ -3218,10 +3218,11 @@ contains
          ! enddo
         endif
 
+
        !!!!!!!!!!!!!!!!!!!!!!!!!!!! GRAVITY        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       ! rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) - this%rho*0.1
-       ! rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) - this%rho*this%v*0.1
-       ! call hook_mixture_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
+       ! rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + this%rho*this%g
+       ! rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%rho*this%g*(this%v)
+
  
     end subroutine
 

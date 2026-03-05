@@ -2679,7 +2679,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
              if(this%usePhiForm) then
              !! Construct Psi
-             where( this%material(i)%VF .GE. 1.0_rkind-this%intSharp_cut)
+             where( this%material(i)%VF .GE. one-this%intSharp_cut)
                  this%xi(:,:,:,i) = this%intSharp_eps*log( (one-two*this%intSharp_cut + e )/ (e))*(one/(one-two*this%intSharp_cut))
 
              elsewhere( this%material(i)%VF .LE. this%intSharp_cut )
@@ -2831,11 +2831,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            if(this%intSharp_msk) then
 
                   if(i == 1) then
-                     xiLow = abs(this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (1 - this%intSharp_cut - 4d-5 + e) ) )
-                     xiHigh = abs(this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (1 - this%intSharp_cut - 1d-2 + e) ) )                 
+                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 4d-5 + e) ) )
+                     
+                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-2 + e) ) )                 
                   else
-                     xiLow = abs(this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (1 - this%intSharp_cut - 1d-2 + e) ) )
-                     xiHigh = abs(this%intSharp_eps*(1/(1-2*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (1 - this%intSharp_cut - 4d-5 + e) ) )      
+                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-2 + e) ) )
+                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 4d-5 + e) ) )      
 
                   endif
 
@@ -2843,31 +2844,31 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                   do d = 1,3
 
 !
-                    where((this%xi(:,:,:,i)-xiHigh) .GE. 1.5*dx  )
+                    where((this%xi(:,:,:,i)-xiHigh) .GE. 1.5_rkind*dx  )
                        Hh = 0_rkind
-                    elsewhere(((this%xi(:,:,:,i)-xiHigh) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)-xiHigh) .GT. -1.5*dx ) )
-                       Hh = 1 - 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +  1_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5*dx)) )
+                    elsewhere(((this%xi(:,:,:,i)-xiHigh) .LT. 1.5_rkind*dx ) .OR. ((this%xi(:,:,:,i)-xiHigh) .GT. -1.5_rkind*dx ) )
+                       Hh = 1.0_rkind - 1.0_rkind/2.0_rkind*(1.0_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +1.0_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5_rkind*dx)) )
                     elsewhere
-                       Hh = 1_rkind
+                       Hh = 1.0_rkind
 
                     endwhere
 !!
-                    where((this%xi(:,:,:,i)+xiLow) .GE. 1.5*dx  )
-                       Hl = 1_rkind
-                    elsewhere(((this%xi(:,:,:,i)+xiLow) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)+xiLow) .GT. -1.5*dx ) )
-                       Hl = 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +  1_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5*dx)) )
+                    where((this%xi(:,:,:,i)+xiLow) .GE. 1.5_rkind*dx  )
+                       Hl = 1.0_rkind
+                    elsewhere(((this%xi(:,:,:,i)+xiLow) .LT. 1.5_rkind*dx ) .OR. ((this%xi(:,:,:,i)+xiLow) .GT. -1.5_rkind*dx ) )
+                       Hl = 1.0_rkind/2.0_rkind*(1.0_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) + 1.0_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5_rkind*dx)) )
                     elsewhere
-                       Hl = 0_rkind
+                       Hl = 0.0_rkind
 
                     endwhere
 
-                    where(( this%material(i)%rhoYs_mid(:,:,:,d)/rhoFVint(:,:,:,d) .GE. 1) )
+                    where(( this%material(i)%rhoYs_mid(:,:,:,d)/rhoFVint(:,:,:,d) .GE. 1.0_rkind) )
 !!                     
-                       H = abs( this%material(i)%rhoYs_mid(:,:,:,d)/rhoFVint(:,:,:,d) -1 )
-                    elsewhere( (this%material(i)%rhoYs_mid(:,:,:,d)/rhoFVint(:,:,:,d) .LE. 0 ) )
+                       H = abs( this%material(i)%rhoYs_mid(:,:,:,d)/rhoFVint(:,:,:,d) -1.0_rkind )
+                    elsewhere( (this%material(i)%rhoYs_mid(:,:,:,d)/rhoFVint(:,:,:,d) .LE. 0.0_rkind ) )
                        H = abs(this%material(i)%rhoYs_mid(:,:,:,d) /rhoFVint(:,:,:,d) )
                     elsewhere
-                       H = 0
+                       H = 0.0d0
                      endwhere
 
 
@@ -2883,9 +2884,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                     call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc)
  
                   where( abs(H) .GT. 1d-6 )
-                      HYs = 0_rkind
+                      HYs = 0.0_rkind
                   elsewhere
-                      HYs = 1_rkind
+                      HYs = 1.0_rkind
                   endwhere
 
 
@@ -2896,7 +2897,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !                   endwhere
 !                    HYs = exp(-( abs(H) / 5d-7)**2_rkind)
                      this%intdiff =  HYs                
-                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*((HYs))
+                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*((Hh*Hl*HYs))
 !!
                   enddo
             endif
@@ -5034,12 +5035,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 	if (this%use_gradXi) then
 
                
-          where( this%material(1)%VF .GE. 1-cut_off)
-                 this%xi(:,:,:,1) = this%intSharp_eps*log( ( 1-2*cut_off+ e )/ (e))*(1/(1-2*cut_off))
+          where( this%material(1)%VF .GE. one-cut_off)
+                 this%xi(:,:,:,1) = this%intSharp_eps*log( ( one-two*cut_off+ e )/ (e))*(one/(one-two*cut_off))
           elsewhere( this%material(1)%VF .LE. cut_off )
-                 this%xi(:,:,:,1)  = this%intSharp_eps*log( ( e) / (1 -2*cut_off + e))*(1/(1-2*cut_off))
+                 this%xi(:,:,:,1)  = this%intSharp_eps*log( ( e) / (one -two*cut_off + e))*(one/(one-two*cut_off))
           elsewhere
-                 this%xi(:,:,:,1)  = this%intSharp_eps*(1/(1-2*cut_off))*log( (this%material(1)%VF - cut_off + e )/ (1 - cut_off -this%material(1)%VF + e) )
+                 this%xi(:,:,:,1)  = this%intSharp_eps*(one/(one-two*cut_off))*log( (this%material(1)%VF - cut_off + e )/ (one - cut_off -this%material(1)%VF + e) )
           endwhere
 
           call filter3D(this%decomp, this%gfil,this%xi(:,:,:,1),iflag,x_bc,y_bc,z_bc)
@@ -5290,26 +5291,26 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                      i = 1
 
 
-                      weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-                        (this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
-                        (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-                        (this%recvL_VF(j)*(1-this%recvL_VF(j)))**2 + &
-                        (this%recvL_VF(j+1)*(1-this%recvL_VF(j+1)))**2 +  &
-                        (this%recvL_VF(j-1)*(1-this%recvL_VF(j-1)))**2 + &
-                        (this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2 + &
-                        (this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 + &
-                        (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2
+                      weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**two + &
+                        (this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**two + &
+                        (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**two + &
+                        (this%recvL_VF(j)*(1-this%recvL_VF(j)))**two + &
+                        (this%recvL_VF(j+1)*(1-this%recvL_VF(j+1)))**two +  &
+                        (this%recvL_VF(j-1)*(1-this%recvL_VF(j-1)))**two + &
+                        (this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**two + &
+                        (this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**two + &
+                        (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**two
 
 
-                       kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-                          this%kappa(i+1,j,k)*(this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
-                          this%kappa(i+1,j-1,k)*(this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 + &
-                          this%recvL_kappa(j)*(this%recvL_VF(j)*(1-this%recvL_VF(j)))**2 + &
-                          this%recvL_kappa(j+1)*(this%recvL_VF(j+1)*(1-this%recvL_VF(j+1)))**2 +  &
-                          this%recvL_kappa(j-1)*(this%recvL_VF(j-1)*(1-this%recvL_VF(j-1)))**2 + &
-                          this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-                          this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-                          this%kappa(i+1,j+1,k)*(this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2
+                       kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**two + &
+                          this%kappa(i+1,j,k)*(this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**two + &
+                          this%kappa(i+1,j-1,k)*(this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**two + &
+                          this%recvL_kappa(j)*(this%recvL_VF(j)*(1-this%recvL_VF(j)))**two + &
+                          this%recvL_kappa(j+1)*(this%recvL_VF(j+1)*(1-this%recvL_VF(j+1)))**two +  &
+                          this%recvL_kappa(j-1)*(this%recvL_VF(j-1)*(1-this%recvL_VF(j-1)))**two + &
+                          this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**two + &
+                          this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**two + &
+                          this%kappa(i+1,j+1,k)*(this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**two
                  enddo
               enddo
 
@@ -5318,26 +5319,26 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                      i = this%nxp
 
 
-                      weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-                        (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-                        (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-                        (this%recvR_VF(j)*(1-this%recvR_VF(j)))**2 + &
-                        (this%recvR_VF(j+1)*(1-this%recvR_VF(j+1)))**2 +  &
-                        (this%recvR_VF(j-1)*(1-this%recvR_VF(j-1)))**2 + &
-                        (this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
-                        (this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2 + &
-                        (this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2
+                      weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**two + &
+                        (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**two + &
+                        (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**two + &
+                        (this%recvR_VF(j)*(1-this%recvR_VF(j)))**two + &
+                        (this%recvR_VF(j+1)*(1-this%recvR_VF(j+1)))**two +  &
+                        (this%recvR_VF(j-1)*(1-this%recvR_VF(j-1)))**two + &
+                        (this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**two + &
+                        (this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**two + &
+                        (this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**two
 
 
-                       kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-                          this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-                          this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-                          this%recvR_kappa(j)*(this%recvR_VF(j)*(1-this%recvR_VF(j)))**2 + &
-                          this%recvR_kappa(j+1)*(this%recvR_VF(j+1)*(1-this%recvR_VF(j+1)))**2 +  &
-                          this%recvR_kappa(j-1)*(this%recvR_VF(j-1)*(1-this%recvR_VF(j-1)))**2 + &
-                          this%kappa(i-1,j,k)*(this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2 + &
-                          this%kappa(i-1,j-1,k)*(this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
-                          this%kappa(i-1,j+1,k)*(this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2
+                       kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**two + &
+                          this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**two + &
+                          this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**two + &
+                          this%recvR_kappa(j)*(this%recvR_VF(j)*(1-this%recvR_VF(j)))**two + &
+                          this%recvR_kappa(j+1)*(this%recvR_VF(j+1)*(1-this%recvR_VF(j+1)))**two +  &
+                          this%recvR_kappa(j-1)*(this%recvR_VF(j-1)*(1-this%recvR_VF(j-1)))**two + &
+                          this%kappa(i-1,j,k)*(this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**two + &
+                          this%kappa(i-1,j-1,k)*(this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**two + &
+                          this%kappa(i-1,j+1,k)*(this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**two
 
                  enddo
               enddo
@@ -5349,26 +5350,26 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
             do i = 2, (this%nxp-1)
                             
                               
-               weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-                        (this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
-                        (this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2 + &
-                        (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-                        (this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 +  &
-                        (this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
-                        (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-                        (this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2 + &
-                        (this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2 
+               weight(i,j,k) = (this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**two + &
+                        (this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**two + &
+                        (this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**two + &
+                        (this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**two + &
+                        (this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**two +  &
+                        (this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**two + &
+                        (this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**two + &
+                        (this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**two + &
+                        (this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**two 
                
                 
-               kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**2 + &
-                          this%kappa(i+1,j,k)*(this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**2 + &
-                          this%kappa(i-1,j,k)*(this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**2 + &
-                          this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**2 + &
-                          this%kappa(i+1,j-1,k)*(this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**2 +  &
-                          this%kappa(i-1,j-1,k)*(this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**2 + &
-                          this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**2 + &
-                          this%kappa(i-1,j+1,k)*(this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**2 + &
-                          this%kappa(i+1,j+1,k)*(this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**2
+               kappaSum(i,j,k) = this%kappa(i,j,k)*(this%material(1)%VF(i,j,k)*(1-this%material(1)%VF(i,j,k)))**two + &
+                          this%kappa(i+1,j,k)*(this%material(1)%VF(i+1,j,k)*(1-this%material(1)%VF(i+1,j,k)))**two + &
+                          this%kappa(i-1,j,k)*(this%material(1)%VF(i-1,j,k)*(1-this%material(1)%VF(i-1,j,k)))**two + &
+                          this%kappa(i,j-1,k)*(this%material(1)%VF(i,j-1,k)*(1-this%material(1)%VF(i,j-1,k)))**two + &
+                          this%kappa(i+1,j-1,k)*(this%material(1)%VF(i+1,j-1,k)*(1-this%material(1)%VF(i+1,j-1,k)))**two +  &
+                          this%kappa(i-1,j-1,k)*(this%material(1)%VF(i-1,j-1,k)*(1-this%material(1)%VF(i-1,j-1,k)))**two + &
+                          this%kappa(i,j+1,k)*(this%material(1)%VF(i,j+1,k)*(1-this%material(1)%VF(i,j+1,k)))**two + &
+                          this%kappa(i-1,j+1,k)*(this%material(1)%VF(i-1,j+1,k)*(1-this%material(1)%VF(i-1,j+1,k)))**two + &
+                          this%kappa(i+1,j+1,k)*(this%material(1)%VF(i+1,j+1,k)*(1-this%material(1)%VF(i+1,j+1,k)))**two
 
 
              enddo
