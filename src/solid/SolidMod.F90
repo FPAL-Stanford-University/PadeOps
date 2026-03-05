@@ -4922,12 +4922,12 @@ contains
         endif
 
         ! advance sub-step
-        if(isub==1) this%QtmpYs = 0d0 ! this%consrv(:,:,:,1)                   ! not really needed, since RK45_A(1) = 0
+        if(isub==1) this%QtmpYs =  this%consrv(:,:,:,1)                   ! not really needed, since RK45_A(1) = 0
 !        this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
-         this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
-         this%consrv(:,:,:,1) = this%consrv(:,:,:,1)  + RK45_B(isub)*this%QtmpYs
+         !this%QtmpYs  = dt*rhsYs + RK45_A(isub)*this%QtmpYs
+         !this%consrv(:,:,:,1) = this%consrv(:,:,:,1)  + RK45_B(isub)*this%QtmpYs
 
-   !     this%consrv(:,:,:,1) = RK3_B(isub)*(this%consrv(:,:,:,1) + dt*rhsYs)  + RK3_A(isub)*this%QtmpYs
+         this%consrv(:,:,:,1) = RK3_B(isub)*(this%consrv(:,:,:,1) + dt*rhsYs)  + RK3_A(isub)*this%QtmpYs
     end subroutine
 
     subroutine update_specYs(this,isub,dt,rho,u,v,w,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,sponge,alpha)
@@ -5158,11 +5158,11 @@ contains
         !  enddo
         endif
         ! advance sub-step
-        if(isub==1) this%QtmpVF =0d0 ! this%VF                   ! not really needed, since RK45_A(1) = 0
-  !      this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
-        this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
-        this%VF = this%VF  + RK45_B(isub)*this%QtmpVF
-       ! this%VF = RK3_B(isub)*(this%VF + dt*rhsVF) + RK3_A(isub)*this%QtmpVF
+        if(isub==1) this%QtmpVF = this%VF                   ! not really needed, since RK45_A(1) = 0
+        !this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
+        !this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
+        !this%VF = this%VF  + RK45_B(isub)*this%QtmpVF
+        this%VF = RK3_B(isub)*(this%VF + dt*rhsVF) + RK3_A(isub)*this%QtmpVF
   !     call filter3D(this%decomp, this%fil, this%VF, iflag,x_bc,y_bc, z_bc)
 
     end subroutine

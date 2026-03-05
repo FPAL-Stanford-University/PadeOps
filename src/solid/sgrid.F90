@@ -1945,12 +1945,12 @@ contains
 
 
         call this%get_conserved()
-        Qtmp  = zero !this%Wcnsrv
-        Qtmpt = zero !this%tsim
+        Qtmp  = this%Wcnsrv
+        Qtmpt = this%tsim
         pmix  = zero
      
 
-       do isub = 1, RK45_steps
+       do isub = 1, RK3_steps
 
             if(this%use_CnsrvSurfaceTension) then
                 call this%mix%get_surfaceTensionPE(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w)
@@ -2082,9 +2082,9 @@ contains
 
 
             !!!!!!!!!!!!!! UNCOMMENT            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!           this%Wcnsrv = RK3_B(isub)*(this%Wcnsrv + this%dt*rhs) + RK3_A(isub)*Qtmp
-            Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
-            this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
+           this%Wcnsrv = RK3_B(isub)*(this%Wcnsrv + this%dt*rhs) + RK3_A(isub)*Qtmp
+            !Qtmp  = this%dt*rhs  + RK45_A(isub)*Qtmp
+            !this%Wcnsrv = this%Wcnsrv + RK45_B(isub)*Qtmp
 
            !!!!!!!!!!!!!!!!!!! UNCOMMENT       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             ! calculate sources if they are needed
@@ -2154,11 +2154,11 @@ contains
            ! this%mix%material(1)%eh = 1
            ! this%mix%material(2)%eh = 1
 
-!           this%tsim = RK3_B(isub)*( this%tsim + this%dt)  + RK3_A(isub)*Qtmpt
+           this%tsim = RK3_B(isub)*( this%tsim + this%dt)  + RK3_A(isub)*Qtmpt
 
             
-            Qtmpt = this%dt + RK45_A(isub)*Qtmpt
-            this%tsim = this%tsim + RK45_B(isub)*Qtmpt
+!           Qtmpt = this%dt + RK45_A(isub)*Qtmpt
+!           this%tsim = this%tsim + RK45_B(isub)*Qtmpt
            
 
              
