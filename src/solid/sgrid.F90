@@ -2479,32 +2479,10 @@ contains
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz   &
                  + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) + one/(this%dz**2) ))
 
-
         !dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy +  &
         !       + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2)  ))
-        !print *, "u maxval"
-        !print *, P_MAXVAL( ABS(this%u)/this%dx )
-        !print *, "v maxval"
-        !print *, P_MAXVAL( ABS(this%v)/this%dy )
-        !print *, "w maxval"
-        !print *, P_MAXVAL( ABS(this%w)/this%dz )        
-        !print *, "sos"
-        !print *, P_MAXVAL( this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) +one/(this%dz**2) ) )
-        !print *, "dy"
-        !print *, this%dy
-        !print *, "dx"
-        !print *, this%dx
-        !print *, "dz"
-        !print *, this%dz
-        !print *, "sosmax"
-        !print *, P_MAXVAL( this%sos)
-        rhokappafil = this%mix%material(1)%rhodiff*(this%mix%kappa)**2.0_rkind
-        call this%filter(rhofil, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         dtmu   = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
         dtYs1 = 0.5_rkind * delta**2.0_rkind / (max(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,2)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,3))) + eps) 
-        dtYs2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff  ) + eps)
-        dtVF1 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff  ) + eps)
-        dtVF2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff  ) + eps)
 
         !dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
@@ -2524,22 +2502,7 @@ contains
 
               !  end if
 	end if
-        ! species specific
-        call this%mix%get_dt(this%rho, delta, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast)
 
-        if (this%PTeqb) then
-            !dtkap  = delta**2 / (P_MAXVAL( this%kap*this%T/(this%rho*this%sos**2)) + eps)   ! Cook (2007) formulation
-            dtkap  = one / ( (P_MAXVAL(this%kap*this%T/(this%rho*delta**4)))**(third) + eps) ! Cook (2009) formulation
-        end if
-
-        dtkap     = 0.2_rkind * dtkap! * this%CFL
-        !dtkap     = 0.2_rkind * dtkap !/ 5.0! test
-
-        dtdiff    = 0.2_rkind * dtdiff! * this%CFL
-        dtdiff_g  = 0.2_rkind * dtdiff_g! * this%CFL
-        dtdiff_gt = 0.2_rkind * dtdiff_gt! * this%CFL
-        dtdiff_gp = 0.2_rkind * dtdiff_gp! * this%CFL
-        
         if(this%intSharp) then
 
            if(this%intSharp_gam.lt.-0.5) then !maximize intSharp_gam without restricting time step, based on CFL
@@ -2576,25 +2539,12 @@ contains
               !print*,this%intSharp_gam,this%mix%intSharp_gam
            endif
 
-           ! if (this%step .LE. this%st_limit) then
-           !    !this%mix%intSharp_gam = zero
-           !    this%mix%intSharp_gam = this%mix%intSharp_gam * 1.0D-2
-           !    if (nrank.eq.0) print*,"limiting intSharp_gam"
-           ! endif
-           ! ! ! this%mix%intSharp_gam = zero
-           ! ! ! if (nrank.eq.0) print*,"limiting intSharp_gam"
-              
-
            dtSharp_diff =  delta**2 / (P_MAXVAL( 6*this%mix%intSharp_gam*this%mix%intSharp_eps) + eps)*this%CFL !based on diffusivity in VF sharpening equation 
 
-           !dtSharp_diff = delta**2/(2.0*this%mix%intSharp_gam*this%mix%intSharp_eps)!from Suhas Jain, Mani, Moin JCP 2020 -- not work
 
            dtSharp_bound = one/eps
            if(this%intSharp_msk) then
               do i=1,this%mix%ns
-                 !dtSharp_bound = min(dtSharp_bound, 0.2_rkind * delta**2 / (P_MAXVAL( this%mix%intSharp_gam*this%mix%intSharp_eps*this%mix%VFboundDiff(:,:,:,i)) + eps))! * this%CFL !based on VF out of bounds diffusivity in VF sharpening equation 
-                 !dtSharp_bound = min(dtSharp_bound, 0.2_rkind * delta**2 / (P_MAXVAL( this%mix%intSharp_gam*this%mix%intSharp_eps*this%mix%VFboundDiff(:,:,:,i)) + eps))! * this%CFL !based on VF out of bounds diffusivity in VF sharpening equation 
-                 !dtSharp_bound = min(dtSharp_bound, 0.2_rkind * delta**2 / (P_MAXVAL( this%mix%intSharp_dif*this%mix%intSharp_gam*this%intSharp_eps*this%mix%VFboundDiff(:,:,:,i)) + eps))! * this%CFL !based on VF out of bounds diffusivity in VF sharpening equation 
                  dtSharp_bound = min(dtSharp_bound, 0.2_rkind * delta**2 / (P_MAXVAL( this%intSharp_dif*this%mix%intSharp_gam*this%intSharp_eps*this%mix%VFboundDiff(:,:,:,i)) + eps))! * this%CFL !based on VF out of bounds diffusivity in VF sharpening equation 
               enddo
            endif
@@ -2618,30 +2568,9 @@ contains
              else if ( this%dt > dtYs1 ) then
                  this%dt = dtYs1
                  stability = 'Ys1'
-             else if ( this%dt > dtYs2) then
-                 this%dt = dtYs2
-                 stability = 'Ys2'
-             else if ( this%dt > dtVF1 ) then
-                 this%dt = dtVF1
-                 stability = 'VF1'
-             else if ( this%dt > dtVF2) then
-                 this%dt = dtVF2
-                 stability = 'VF2'
-             else if ( this%dt > dtkap ) then
-                 this%dt = dtkap
-                 stability = 'conductive'
              else if ( this%dt > dtdiff ) then
                  this%dt = dtdiff
                  stability = 'diffusive'
-             else if ( this%dt > dtdiff_g ) then
-                 this%dt = dtdiff_g
-                 stability = 'diffusive g'
-             else if ( this%dt > dtdiff_gt ) then
-                 this%dt = dtdiff
-                 stability = 'diffusive g_t'
-             else if ( this%dt > dtplast ) then
-                 this%dt = dtplast
-                 stability = 'plastic'
               else if ( this%dt > dtSponge ) then
                  this%dt = dtplast
                  stability = 'sponge'
@@ -2670,31 +2599,11 @@ contains
                write(str,'(ES10.3E3)') 1.0D0-dtbulk/dtCFL
                stability = 'bulk: '//trim(str)//' CFL loss fraction'
             endif
-            if ( this%dt > dtkap ) then
-               this%dt = dtkap
-               write(str,'(ES10.3E3)') 1.0D0-dtkap/dtCFL
-               stability = 'conductive: '//trim(str)//' CFL loss fraction'
-            endif
 
             if ( this%dt > dtdiff ) then
                this%dt = dtdiff
                write(str,'(ES10.3E3)') 1.0D0-dtdiff/dtCFL
                stability = 'diffusive: '//trim(str)//' CFL loss fraction'
-            endif
-            if ( this%dt > dtdiff_g ) then
-               this%dt = dtdiff_g
-               write(str,'(ES10.3E3)') 1.0D0-dtdiff_g/dtCFL
-               stability = 'diffusive g: '//trim(str)//' CFL loss fraction'
-            endif
-            if ( this%dt > dtdiff_gt ) then
-               this%dt = dtdiff_gt
-               write(str,'(ES10.3E3)') 1.0D0-dtdiff_gt/dtCFL
-               stability = 'diffusive g_t: '//trim(str)//' CFL loss fraction'
-            endif
-            if ( this%dt > dtdiff_gp ) then
-               this%dt = dtdiff_gp
-               write(str,'(ES10.3E3)') 1.0D0-dtdiff_gp/dtCFL
-               stability = 'diffusive g_p: '//trim(str)//' CFL loss fraction'
             endif
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then	
 	    if ( this%dt > dtsigma ) then
@@ -2703,11 +2612,6 @@ contains
                stability = 'surfaceTension: '//trim(str)//' CFL loss fraction'
             endif
 	endif
-            if ( this%dt > dtplast ) then
-               this%dt = dtplast
-               write(str,'(ES10.3E3)') 1.0D0-dtplast/dtCFL
-               stability = 'plastic: '//trim(str)//' CFL loss fraction'
-            end if
             if (this%intSharp) then
                if ( this%dt > dtSharp_diff ) then
                   this%dt = dtSharp_diff
@@ -2720,17 +2624,6 @@ contains
                   stability = 'sharp a-diff: '//trim(str)//' CFL loss fraction'
                end if
                
-               if(this%intSharp_msk) then
-
-                  if ( this%dt > dtSharp_bound ) then
-                      this%dt = dtSharp_bound
-                      !write(str2,'(F25.18)') dtCFL
-                      !write(str,'(F6.2)') 1.0D2*dtSharp_bound/dtCFL
-                      !stability = 'Sharp VF bounds: '//trim(str)//'%'//' '//trim(str2)
-                      write(str,'(ES10.3E3)') 1.0D0-dtSharp_bound/dtCFL
-                      stability = 'sharp VF bounds: '//trim(str)//' CFL loss fraction'
-                  end if
-               end if
             end if
 
             if (this%step .LE. this%st_limit) then
