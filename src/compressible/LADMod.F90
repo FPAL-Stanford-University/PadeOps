@@ -777,20 +777,20 @@ contains
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         call transpose_y_to_x(kappa,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
-        !all this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
+        !call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         xtmp1 = xtmp2*this%dx**5
         call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
         Curvstar = ytmp4
 
         call transpose_y_to_z(kappa,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,x_bc(1),x_bc(2))
-        !all this%der%d2dz2(ztmp2,ztmp1,x_bc(1),x_bc(2))
+        !call this%der%d2dz2(ztmp2,ztmp1,x_bc(1),x_bc(2))
         ztmp1 = ztmp2*this%dz**5
         call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
         Curvstar = Curvstar +ytmp4
 
         call this%der%d2dy2(kappa,ytmp4,y_bc(1),y_bc(2))
-        !all this%der%d2dy2(kappa,ytmp5,y_bc(1),y_bc(2))
+        !call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
        if(this%yMetric) then
           ytmp5 = (detady**2)*ytmp4*dy_stretch**5
           Curvstar =    Curvstar + ytmp5 !* ( dy_stretch   * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )

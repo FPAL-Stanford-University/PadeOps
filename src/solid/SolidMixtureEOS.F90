@@ -2832,12 +2832,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            if(this%intSharp_msk) then
 
                   if(i == 1) then
-                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one -  this%intSharp_cut - 4d-5 + e) ) )
+                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-5 - this%intSharp_cut + e )/ (one -  this%intSharp_cut - 1d-5 + e) ) )
                      
                      xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-3 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-3 + e) ) )                 
                   else
                      xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-3 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-3 + e) ) )
-                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 4d-5 + e) ) )      
+                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-5 + e) ) )      
 
                   endif
 
@@ -2910,6 +2910,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 
                   H = HYs*Hh*Hl
+                   call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc)
 !                   where( abs(H) .GT. 1d-12)
 !                           HYs = H/P_MAXVAL(H)
 !                   elsewhere
@@ -2917,8 +2918,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !                   endwhere
 !                    HYs = exp(-( abs(H) / 5d-7)**2_rkind)
                      this%intdiff =  HYs                
-                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*Hh*Hl*HYs
-!!
+                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*H
                   enddo
             endif
 
