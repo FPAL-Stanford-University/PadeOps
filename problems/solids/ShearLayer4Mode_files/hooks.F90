@@ -174,9 +174,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -2*pi
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi
                     y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz  -2*pi
+                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz  -pi
                 end do
             end do
         end do
@@ -223,7 +223,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 
 
-    real(rkind) :: Lr, STRETCH_RATIO = 10.0
+    real(rkind) :: Lr, STRETCH_RATIO = 10.0d0
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: eta,tmp
     ! --- Variables for Eigenfunction Initialization ---
 
@@ -273,8 +273,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         delta_rho = Nrho * 2.0_rkind*pi/384.0_rkind * 0.275d0
         !delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
-        eta = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
-        Lr    = 14.0/(eta(1,ny,1) - eta(1,1,1))
+        eta = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
+        Lr    = 14.0d0/(eta(1,ny,1) - eta(1,1,1))
         eta = Lr*eta
 
 
@@ -394,7 +394,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
           do l = 1, bnum_modes
             alpha_dim = alpha_modes(q) / delta_ref
             beta_dim  = beta_modes(l) / delta_ref
-            current_phase = 2.0_rkind * pi * sin( real(q)*1.37 + real(l)*3.81 )**2
+            current_phase = 2.0_rkind * pi * sin( real(q)*1.37d0 + real(l)*3.81d0)**2d0
             do k = 1, nz
                 do j = 1, ny
                     do i = 1, nx
@@ -491,21 +491,21 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
 
         
         nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
-        yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
-        Lr    = 14.0/(yphys(1,ny,1) - yphys(1,1,1))
+        yphys = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
+        Lr    = 14.0d0/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
       
 
-        sigma1 = -5000 ! -2400 ! -80000
+        sigma1 = -5000d0 ! -2400 ! -80000
 
-        where(yphys .LE. -6.0)
-           sponge(:,:,:,1) = sigma1*( (yphys + 6.0)/1.0)**2.0
+        where(yphys .LE. -6.0d0)
+           sponge(:,:,:,1) = sigma1*( (yphys + 6.0d0)/1.0d0)**2.0d0
         elsewhere
-           sponge(:,:,:,1) = 0
+           sponge(:,:,:,1) = 0d0
         endwhere
 
-        where(yphys .GE. 6.0)
-           sponge(:,:,:,2) = sigma1*( (yphys- 6.0)/1.0)**2.0 / 5
+        where(yphys .GE. 6.0d0)
+           sponge(:,:,:,2) = sigma1*( (yphys- 6.0d0)/1.0d0)**2.0d0 / 5d0
         elsewhere
            sponge(:,:,:,2) = 0
         endwhere
@@ -516,8 +516,8 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         rhov(2) = 0 !2.175685479370164d-08
         rhow(1) = rho(1,1,1)*w(1,1,1)
         rhow(2) = rho(1,ny,1)*w(1,ny,1)
-        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5*(uref(1,1,1)**2)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
-        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5*(uref(1,ny,1))**2) !1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
+        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5d0*(uref(1,1,1)**2d0)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
+        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5d0*(uref(1,ny,1))**2d0) !1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
         do i = 1,2
           mix%material(i)%VF_ref(1) = mix%material(i)%VF(1,1,1)
           mix%material(i)%VF_ref(2) = mix%material(i)%VF(1,ny,1) 

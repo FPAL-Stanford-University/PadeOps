@@ -378,8 +378,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         !dum = half * ( one - erf( (x-shock_init)/(5.0*dx) ) )
         dum = half * ( one - erf( (x-shock_init)/(thick*dx) ) )
         u1  = 0
-        u2  = 68.5176
-        u   = 68.5176*dum
+        u2  = 68.5176d0
+        u   = 68.5176d0*dum
         v   = zero
         w   = zero
 
@@ -410,7 +410,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp
         mix%material(2)%VF = one - mix%material(1)%VF
 
-        rhom2 = 1.32479*dum + 1.0*(one-dum)
+        rhom2 = 1.32479d0*dum + 1.0d0*(one-dum)
         rhom = rhom2*mix%material(1)%VF + rho_0_2*mix%material(2)%VF
         rho = rhom
         mix%material(2)%Ys = mix%material(2)%VF * rho_0_2 / rhom
@@ -421,14 +421,14 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         !    tmp = rho_0*mix%material(1)%VF*mix%material(1)%g11 + rho_0_2*mix%material(2)%g11*(one-mix%material(1)%VF) ! Mixture density
         !end if
 
-        rhoL = 1.32479 !(1,1,1)
+        rhoL = 1.32479d0 !(1,1,1)
         rhoR = 1.0d-3 !ecomp%ysz(1),1,1)
         YsL  = mix%material(1)%Ys(1,1,1)
         YsR  = mix%material(1)%Ys(decomp%ysz(1),1,1)
         VFL  = mix%material(1)%VF(1,1,1)
         VFR  = mix%material(1)%VF(decomp%ysz(1),1,1)
         PL   = p2
-        VL   = 68.5176
+        VL   = 68.5176d0
 
         ! !gt should be same as g
         ! mix%material(1)%gt11 = one;  mix%material(1)%gt12 = zero; mix%material(1)%gt13 = zero
@@ -985,7 +985,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
        end if
     endif
 
-     xspng = -two + 0.25
+     xspng = -two + 0.25d0
      tspng = 0.1_rkind
      dx = x(2,1,1) - x(1,1,1)
      dum = half*(one - tanh( (x-xspng)/(tspng) ))

@@ -166,8 +166,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1  + i - 1, rkind ) * dx -2.0  ! x \in (-2,4]
-                    y(i,j,k) = real( iy1  + j - 1, rkind ) * dy - 2.0
+                    x(i,j,k) = real( ix1  + i - 1, rkind ) * dx -2.0_rkind  ! x \in (-2,4]
+                    y(i,j,k) = real( iy1  + j - 1, rkind ) * dy - 2.0_rkind
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -321,7 +321,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
         Lr    = Lx/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = y !Lr*yphys
-	eta = sqrt(((x )**2)/(1.25)**2 + ((yphys )**2)/(0.8)**2)
+	eta = sqrt(((x )**2.0_rkind)/(1.25_rkind)**2.0_rkind + ((yphys )**2.0_rkind)/(0.8_rkind)**2.0_rkind)
 
         !eta = ((x-2)**2 + (y-0.5)**2)	
 

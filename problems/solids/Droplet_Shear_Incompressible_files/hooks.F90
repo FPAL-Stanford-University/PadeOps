@@ -296,9 +296,9 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
        ! tmp = half * ( one - erf( (x-(interface_init+eta0k/(2.0_rkind*pi*kwave)*sin(2.0_rkind*kwave*pi*y)))/(thick*dx) ) )
 	!	delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
 	!delta_rho = Nrho*0.275d0
-	eta = (x - 0.5)**2 + (y - 0.75)**2
+	eta = (x - 0.5_rkind)**2.0_rkind + (y - 0.75_rkind)**2.0_rkind
 
-	tmp = (half-minVF)  * ( one + tanh( (eta-(R**2))/(thick*dx) ) )
+	tmp = (half-minVF)  * ( one + tanh( (eta-(R**2.0_rkind))/(thick*dx) ) )
 	
 	!set mixture Volume fraction
 	!eta = (x - 0.5)**2 + (y - 0.75)**2

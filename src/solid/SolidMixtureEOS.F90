@@ -2644,7 +2644,8 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), intent(in) :: dx,dy,dz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,p
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: ke_mid,uFVint,vFVint,wFVint,pFVint
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: ke_mid
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: uFVint,vFVint,wFVint,pFVint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradVF,gradVFdiff,fv_f,fv_h,tmp4, gradphi, fv_k,Db_int,hDiff,kDiff,uDiff
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: rhoi,VFbound,hi,spf_a,spf_r
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint,gradxi,VFint, gradFV_N2F,rhoFVint,NMint
@@ -2653,7 +2654,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom,Db,H,OOB_mask,Hl,Hh,HYs,HVF,xi_mask,HVF2
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: gradVF_x,gradVF_y, gradVF_z,tmp1,tmp2,tmp3,tmp1_i,tmp2_i,tmp3_i
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i,VF_RHS_i, Kij_coeff_i
-        real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-16, intSharp_exp = -1.0D0,gradDiff,md1,md2,cut_off=1d-4,cut_offY=1d-4,xiLow,xiHigh !, intSharp_tnh = 0.1
+        real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-32, intSharp_exp = -1.0D0,gradDiff,md1,md2,cut_off=1d-4,cut_offY=1d-4,xiLow,xiHigh !, intSharp_tnh = 0.1
 !1.0D-2
         integer :: i,j,ii,jj,kk,iflag = one,im,jm,km,k,q,d
         logical :: useTiwari = .FALSE., useRhoYsbound = .FALSE., useTotalRho = .FALSE.
@@ -2778,22 +2779,22 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !              call interpolateFV(this,rhoi(:,:,:,i)*zero+this%material(i)%elastic%rho0,rhoiFVint(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 !              call interpolateFV(this,rhoi(:,:,:,i),rhoiFVint_local(:,:,:,:,i),periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
-               !call interpolateFV(this,p,pFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-               !call interpolateFV(this,u,uFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-               !call interpolateFV(this,v,vFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
-               !call interpolateFV(this,w,wFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!               call interpolateFV(this,p,pFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!               call interpolateFV(this,u,uFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!               call interpolateFV(this,v,vFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+!               call interpolateFV(this,w,wFVint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
 
 
 
               if (this%usePhiForm) then
-                 call interpolateFV(this,this%xi,phiint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
+                 call interpolateFV(this,this%xi(:,:,:,i),phiint,periodicx,periodicy,periodicz,this%x_bc,this%y_bc,this%z_bc)
                       
-                 antiDiffFVint(:,:,:,1,i) = -this%intSharp_gam*(0.25_rkind*(1.0_rkind-(tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,1)/(2.0_rkind*this%intSharp_eps)))**2.0_rkind) &
-                                             -0.5_rkind*(1.0_rkind+tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,1)/(2.0_rkind*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)* NMint(:,:,:,1)
-                 antiDiffFVint(:,:,:,2,i) =  -this%intSharp_gam*(0.25_rkind*(1.0_rkind-(tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)* phiint(:,:,:,2)/(2.0_rkind*this%intSharp_eps)))**2.0_rkind) &
-                                             -0.5_rkind*(1.0_rkind+tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,2)/(2.0_rkind*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)* NMint(:,:,:,2)
-                 antiDiffFVint(:,:,:,3,i) = -this%intSharp_gam*(0.25_rkind*(1.0_rkind-(tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,3)/(2.0_rkind*this%intSharp_eps)))**2.0_rkind) &
-                                             -0.5_rkind*(1.0_rkind+tanh((1.0_rkind-2.0_rkind*this%intSharp_cut)*phiint(:,:,:,3)/(2.0_rkind*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,3)
+                 antiDiffFVint(:,:,:,1,i) = -this%intSharp_gam*(half*half*(one-(tanh((one-two*this%intSharp_cut)*phiint(:,:,:,1)/(two*this%intSharp_eps)))**two) &
+                                             -half*(one+tanh((one-two*this%intSharp_cut)*phiint(:,:,:,1)/(two*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)* NMint(:,:,:,1)
+                 antiDiffFVint(:,:,:,2,i) =  -this%intSharp_gam*(half*half*(one-(tanh((one-two*this%intSharp_cut)*phiint(:,:,:,2)/(two*this%intSharp_eps)))**two) &
+                                             -half*(one+tanh((one-two*this%intSharp_cut)*phiint(:,:,:,2)/(two*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut)* NMint(:,:,:,2)
+                 antiDiffFVint(:,:,:,3,i) =  -this%intSharp_gam*(half*half*(one-(tanh((one-two*this%intSharp_cut)*phiint(:,:,:,3)/(two*this%intSharp_eps)))**two) &
+                                             -half*(one+tanh((one-two*this%intSharp_cut)*phiint(:,:,:,3)/(two*this%intSharp_eps)))*this%intSharp_cut+this%intSharp_cut) * NMint(:,:,:,3)
 
 
                  rhoantiDiffFVint(:,:,:,:,i) = rhoiFVint(:,:,:,:,i)*antiDiffFVint(:,:,:,:,i)
@@ -2831,11 +2832,11 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            if(this%intSharp_msk) then
 
                   if(i == 1) then
-                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 4d-5 + e) ) )
+                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one -  this%intSharp_cut - 4d-5 + e) ) )
                      
-                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-2 + e) ) )                 
+                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-3 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-3 + e) ) )                 
                   else
-                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-2 + e) ) )
+                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-3 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-3 + e) ) )
                      xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 4d-5 + e) ) )      
 
                   endif
@@ -2843,35 +2844,53 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                   !                  this%intdiff =  antiDiffFVint(:,:,:,1,i)
                   do d = 1,3
 
-!
-                    where((this%xi(:,:,:,i)-xiHigh) .GE. 1.5_rkind*dx  )
+                    where((this%xi(:,:,:,i)-xiHigh) .GE. 1.5*dx  )
                        Hh = 0_rkind
-                    elsewhere(((this%xi(:,:,:,i)-xiHigh) .LT. 1.5_rkind*dx ) .OR. ((this%xi(:,:,:,i)-xiHigh) .GT. -1.5_rkind*dx ) )
-                       Hh = 1.0_rkind - 1.0_rkind/2.0_rkind*(1.0_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +1.0_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5_rkind*dx)) )
+                    elsewhere(((this%xi(:,:,:,i)-xiHigh) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)-xiHigh) .GT. -1.5*dx ) )
+                       Hh = 1 - 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +  1_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5*dx)) )
                     elsewhere
-                       Hh = 1.0_rkind
+                       Hh = 1_rkind
 
                     endwhere
 !!
-                    where((this%xi(:,:,:,i)+xiLow) .GE. 1.5_rkind*dx  )
-                       Hl = 1.0_rkind
-                    elsewhere(((this%xi(:,:,:,i)+xiLow) .LT. 1.5_rkind*dx ) .OR. ((this%xi(:,:,:,i)+xiLow) .GT. -1.5_rkind*dx ) )
-                       Hl = 1.0_rkind/2.0_rkind*(1.0_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) + 1.0_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5_rkind*dx)) )
+                    where((this%xi(:,:,:,i)+xiLow) .GE. 1.5*dx  )
+                       Hl = 1_rkind
+                    elsewhere(((this%xi(:,:,:,i)+xiLow) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)+xiLow) .GT. -1.5*dx ) )
+                       Hl = 1_rkind/2_rkind*(1_rkind + this%xi(:,:,:,i)/(1.5_rkind*dx) +  1_rkind/pi*sin(pi*this%xi(:,:,:,i)/(1.5*dx)) )
                     elsewhere
-                       Hl = 0.0_rkind
+                       Hl = 0_rkind
 
                     endwhere
-
-                    where(( this%material(i)%rhoYs_mid(:,:,:,d)/rhoFVint(:,:,:,d) .GE. 1.0_rkind) )
+!
+!                    where((phiint(:,:,:,d)-xiHigh) .GE. 1.5_rkind*dx  )
+!                       Hh = zero
+!                    elsewhere(((phiint(:,:,:,d)-xiHigh) .LT. 1.5_rkind*dx ) .OR. ((phiint(:,:,:,d)-xiHigh) .GT. -1.5_rkind*dx ) )
+!
+!                       Hh = one - half*(one + phiint(:,:,:,d)/(1.5_rkind*dx) +one/pi*sin(pi*phiint(:,:,:,d)/(1.5_rkind*dx)) )
+!                    elsewhere
+!                       Hh = one
+!
+!                    endwhere
+!!!
+!                    where((phiint(:,:,:,d)+xiLow) .GE. 1.5_rkind*dx  )
+!                       Hl = one
+!                    elsewhere(((phiint(:,:,:,d)+xiLow) .LT. 1.5_rkind*dx ) .OR. ((phiint(:,:,:,d)+xiLow) .GT. -1.5_rkind*dx ) )
+!                       Hl = half*(one + phiint(:,:,:,d)/(1.5_rkind*dx) + one/pi*sin(pi*phiint(:,:,:,d)/(1.5_rkind*dx)) )
+!                    elsewhere
+!                       Hl = zero
+!
+!                    endwhere
+!
+                    where(( this%material(i)%Ys_mid(:,:,:,d) .GE. one) )
 !!                     
-                       H = abs( this%material(i)%rhoYs_mid(:,:,:,d)/rhoFVint(:,:,:,d) -1.0_rkind )
-                    elsewhere( (this%material(i)%rhoYs_mid(:,:,:,d)/rhoFVint(:,:,:,d) .LE. 0.0_rkind ) )
-                       H = abs(this%material(i)%rhoYs_mid(:,:,:,d) /rhoFVint(:,:,:,d) )
+                       H = abs( this%material(i)%Ys_mid(:,:,:,d) -one )
+                    elsewhere( (this%material(i)%Ys_mid(:,:,:,d) .LE. zero ) )
+                       H = abs(this%material(i)%Ys_mid(:,:,:,d) )
                     elsewhere
-                       H = 0.0d0
-                     endwhere
+                       H = zero
+                    endwhere
 
-
+!
    !                  where(( this%material(i)%Ys .GE. 1)  )
    !                    H = abs( this%material(i)%Ys -1 )
    !                 elsewhere( (this%material(i)%Ys .LE. 0 ) )
@@ -2884,12 +2903,13 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                     call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc)
  
                   where( abs(H) .GT. 1d-6 )
-                      HYs = 0.0_rkind
+                      HYs = zero
                   elsewhere
-                      HYs = 1.0_rkind
+                      HYs = one
                   endwhere
 
 
+                  H = HYs*Hh*Hl
 !                   where( abs(H) .GT. 1d-12)
 !                           HYs = H/P_MAXVAL(H)
 !                   elsewhere
@@ -2897,7 +2917,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !                   endwhere
 !                    HYs = exp(-( abs(H) / 5d-7)**2_rkind)
                      this%intdiff =  HYs                
-                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*((Hh*Hl*HYs))
+                     antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i)*Hh*Hl*HYs
 !!
                   enddo
             endif

@@ -169,7 +169,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
                     x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi
-                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
+                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5_rkind
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz - 2*pi/3.0 
                 end do
             end do
@@ -217,7 +217,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     real(rkind), dimension(decomp%ysz(1), decomp%ysz(2),decomp%ysz(3),6) :: phi_i3, phi_r3,phi_i_int, phi_r_int
     real(rkind), dimension(8) :: fparams
     real(rkind), dimension(6) :: alphai, phase
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0_rkind, int_KE
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2,dx1
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
@@ -304,8 +304,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         dx1 = (2*pi/4)*(1/32)
         
         delta_rho = Nrho * 2.0_rkind*pi/384.0_rkind * 0.275d0 !converts from Nrho to approximate thickness of erf profile
-        yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
-        Lr    = 16.0/(yphys(1,ny,1) - yphys(1,1,1))
+        yphys = atanh(2.0_rkind*y /(1.0_rkind + 1.0_rkind/STRETCH_RATIO))
+        Lr    = 16.0_rkind/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
         eta2 = yphys !eta !-delta_rho
 
@@ -467,21 +467,21 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
 
         
         nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
-        yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
+        yphys = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
         Lr    = 16d0/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
       
 
-        sigma1 = -20000 ! -2400 ! -80000
+        sigma1 = -20000d0 ! -2400 ! -80000
 
-        where(yphys .LE. -6.5)
-           sponge(:,:,:,1) = sigma1*( (yphys + 6.5)/1.5)**2.0
+        where(yphys .LE. -6.5d0)
+           sponge(:,:,:,1) = sigma1*( (yphys + 6.5d0)/1.5d0)**2.0d0
         elsewhere
            sponge(:,:,:,1) = 0
         endwhere
 
-        where(yphys .GE. 6.5)
-           sponge(:,:,:,2) = sigma1*( (yphys- 6.5)/1.5)**2.0 / 5
+        where(yphys .GE. 6.5d0)
+           sponge(:,:,:,2) = sigma1*( (yphys- 6.5d0)/1.5d0)**2.0d0 / 5d0
         elsewhere
            sponge(:,:,:,2) = 0
         endwhere
@@ -492,8 +492,8 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         rhov(2) = 0 !2.175685479370164d-08
         rhow(1) = 0 !rho(1,1,1)*w(1,1,1)
         rhow(2) = 0 !rho(1,ny,1)*w(1,ny,1)
-        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5*(uL**2)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
-        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5*uR**2)!1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
+        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5_rkind*(uL*uL)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
+        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5_rkind*uR*uR)!1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
         do i = 1,2
           mix%material(i)%VF_ref(1) = mix%material(i)%VF(1,1,1)
           mix%material(i)%VF_ref(2) = mix%material(i)%VF(1,ny,1) 

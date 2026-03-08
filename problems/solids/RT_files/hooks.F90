@@ -168,8 +168,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -0.5
-                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 1.0
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -0.5d0
+                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 1.0d0
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz
                 end do
             end do
@@ -311,7 +311,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         !set mixture Volume fraction
         mix%material(1)%VF = minVF + (one-two*minVF)*tmp
-        mix%material(2)%VF = 1 - mix%material(1)%VF
+        mix%material(2)%VF = 1d0 - mix%material(1)%VF
         !Set density profile and mass fraction based on volume fraction
         rho = rho_0*mix%material(1)%VF + rho_0_2*mix%material(2)%VF
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
@@ -319,7 +319,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         p(:,ny,:) = p_amb
         do j = ny-1,1,-1
-        p(:,j,:) = p(:,j+1,:) +0.5*( rho(:,j,:)+rho(:,j+1,:))*(y(:,j+1,:)-y(:,j,:))*0.1 
+        p(:,j,:) = p(:,j+1,:) +0.5d0*( rho(:,j,:)+rho(:,j+1,:))*(y(:,j+1,:)-y(:,j,:))*0.1d0
         enddo
         mix%material(1)%p = p
         mix%material(2)%p  = mix%material(1)%p 
@@ -392,18 +392,18 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         yphys = y ! Lr*yphys
       
 
-        sigma1 = -1500 ! -2400 ! -80000
+        sigma1 = -1500d0 ! -2400 ! -80000
 
-        where(yphys .LE. -0.90)
-           sponge(:,:,:,1) = sigma1*( (yphys + 0.90)/0.1)**2.0
+        where(yphys .LE. -0.90d0)
+           sponge(:,:,:,1) = sigma1*( (yphys + 0.90d0)/0.1d0)**2.0d0
         elsewhere
-           sponge(:,:,:,1) = 0
+           sponge(:,:,:,1) = 0d0
         endwhere
 
-        where(yphys .GE. 0.90)
-           sponge(:,:,:,2) = sigma1*( (yphys- 0.90)/0.1)**2.0 
+        where(yphys .GE. 0.90d0)
+           sponge(:,:,:,2) = sigma1*( (yphys- 0.90d0)/0.1d0)**2.0d0 
         elsewhere
-           sponge(:,:,:,2) = 0
+           sponge(:,:,:,2) = 0d0
         endwhere
 
         rhou(1) = rho(1,1,1)*uL !uref(1,1,1)
@@ -412,8 +412,8 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         rhov(2) = 0 !2.175685479370164d-08
         rhow(1) = rho(1,1,1)*w(1,1,1)
         rhow(2) = rho(1,ny,1)*w(1,ny,1)
-        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5*(uL**2)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
-        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5*uR**2)!1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
+        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5d0*(uL**2)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
+        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5d0*uR**2)!1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
         do i = 1,2
           mix%material(i)%VF_ref(1) = mix%material(i)%VF(1,1,1)
           mix%material(i)%VF_ref(2) = mix%material(i)%VF(1,ny,1) 

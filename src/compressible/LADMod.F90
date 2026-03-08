@@ -761,7 +761,7 @@ contains
 !           Yshigh = max(0*Ys, Ys-1 )
 
            outb = this%CY*(this%dy*this%dx*this%dz)**(third) *(sos)*max(Yslow,Yshigh)
-!         outb = this%CY*(this%dy*this%dx*this%dz)**(1/3) *(sos)*( half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) ! *(sos+umag) !*(this%dy*this%dx*this%dz)**(1/3)
+!         outb = this%CY*(this%dy*this%dx*this%dz)**(third) *(sos)*( half*(abs(Ys-1d-5)-(one) + abs((Ys-1d-5)-(one))) ) ! *(sos+umag) !*(this%dy*this%dx*this%dz)**(1/3)
            delta = min(this%dy,this%dx,this%dz) ! (this%dy*this%dx*this%dz)**(1/3)
         endif
         
@@ -775,21 +775,24 @@ contains
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         !                           Curv                                    !
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-          call transpose_y_to_x(kappa,xtmp1,this%decomp)
+        call transpose_y_to_x(kappa,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
+        !all this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
         xtmp1 = xtmp2*this%dx**5
         call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
         Curvstar = ytmp4
 
         call transpose_y_to_z(kappa,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,x_bc(1),x_bc(2))
+        !all this%der%d2dz2(ztmp2,ztmp1,x_bc(1),x_bc(2))
         ztmp1 = ztmp2*this%dz**5
         call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
         Curvstar = Curvstar +ytmp4
 
         call this%der%d2dy2(kappa,ytmp4,y_bc(1),y_bc(2))
+        !all this%der%d2dy2(kappa,ytmp5,y_bc(1),y_bc(2))
        if(this%yMetric) then
-          ytmp5 = (detady**4)*ytmp4*dy_stretch**5
+          ytmp5 = (detady**2)*ytmp4*dy_stretch**5
           Curvstar =    Curvstar + ytmp5 !* ( dy_stretch   * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )
         else
           ytmp5 = ytmp4*this%dy**5
@@ -896,7 +899,7 @@ contains
 !            VFhigh = max(0*VF, VF-1 )
          ytmp5 = this%Cvf2*(this%dy*this%dx*this%dz)**(third)*(sos)*max(VFlow,VFhigh) 
 
-!         ytmp5 = this%Cvf2*(this%dy*this%dx*this%dz)**(1/3)*(sos)*( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *( sos+umag) ! ( (this%dy*abs(dVFdy) + this%dx*abs(dVFdx) + this%dz*abs(dVFdz)) / (sqrt(ytmp1 + ytmp2 + ytmp3)+ real(1.0D-32,rkind)) ) !*(this%dy*this%dx*this%dz)**(1/3)
+!        ytmp5 = this%Cvf2*(this%dy*this%dx*this%dz)**(third)*(sos)*( half*(abs(VF-1d-5)-(one) + abs((VF-1d-5)-(one))) ) ! *( sos+umag) ! ( (this%dy*abs(dVFdy) + this%dx*abs(dVFdx) + this%dz*abs(dVFdz)) / (sqrt(ytmp1 + ytmp2 + ytmp3)+ real(1.0D-32,rkind)) ) !*(this%dy*this%dx*this%dz)**(1/3)
 
         endif
        

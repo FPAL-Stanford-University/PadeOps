@@ -1471,7 +1471,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 5.0, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 5.0d0, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -2371,9 +2371,9 @@ contains
 
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!     Calculate Pressure Gradients and Coefficients       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
-      call gradFV_N2Fx(this%decomp,this%derStagg,this%p,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)           
-      call gradFV_N2Fy(this%decomp,this%derStagg,this%p,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fz(this%decomp,this%derStagg,this%p,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fx(this%decomp,this%derStaggd04,this%p,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)           
+      call gradFV_N2Fy(this%decomp,this%derStaggd04,this%p,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fz(this%decomp,this%derStaggd04,this%p,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       call interpolateFV(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       this%mix%material(2)%Ys_mid = 1.0_rkind - this%mix%material(1)%Ys_mid
       this%mix%material(2)%VF_mid = 1.0_rkind - this%mix%material(1)%VF_mid
@@ -2498,18 +2498,18 @@ contains
         !print *, this%dz
         !print *, "sosmax"
         !print *, P_MAXVAL( this%sos)
-        rhofil = this%mix%material(1)%rhodiff
         rhokappafil = this%mix%material(1)%rhodiff*(this%mix%kappa)**2.0_rkind
         call this%filter(rhofil, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
         dtmu   = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
-        dtYs1 = 0.7_rkind * delta**2.0_rkind / (P_MAXVAL( rhofil   ) + eps) 
+        dtYs1 = 0.5_rkind * delta**2.0_rkind / (max(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,2)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,3))) + eps) 
         dtYs2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff  ) + eps)
         dtVF1 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff  ) + eps)
         dtVF2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff  ) + eps)
 
-        dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
+        !dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	dtCurv = 0.7_rkind   / (P_MAXVAL(rhofil*(this%mix%kappa)**2.0_rkind   ) + eps)  ! (P_MAXVAL(rhokappafil ) + eps) ! (P_MAXVAL(rhofil*(this%mix%kappa)**2   ) + eps)
+	dtCurv = 0.5_rkind   /(max(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)*(this%mix%kappa)**2.0_rkind),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,2)*(this%mix%kappa)**2.0_rkind),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,3)*(this%mix%kappa)**2.0_rkind)) + eps)
+
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then
           ! filter3D(this%
