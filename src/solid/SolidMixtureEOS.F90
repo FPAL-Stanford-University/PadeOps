@@ -2240,7 +2240,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: hi
         real(rkind), intent(in) :: dx,dy,dz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,p,e
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradRYs, gradVF,gradRYs_int, gradVF_int, rhodiff_int,adiff_int, hi_int, rhom_int,rho_int,gradYs_int,outdiff_int, Ysdiff_int, VF_int, esum, gamsum, e_int, Ys_int, gradH
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradRYs, gradVF,gradRYs_int, gradVF_int, rhodiff_int,adiff_int, hi_int, rhom_int,rho_int,gradYs_int,outdiff_int, Ysdiff_int, VF_int, esum, gamsum, e_int, Ys_int, gradH,gradp
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: dRYdx_x,dRYdy_y,dRdz_z,dVFdx_x,dVFdy_y,dVFdz_z, rhom,tmp,adiff_fil1,adiff_fil2,adiff_fil3,rhodiff_fil1,rhodiff_fil2,rhodiff_fil3
          
         integer :: i, imat
@@ -2280,6 +2280,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         elseif(this%LADN2F) then
 
+          call gradFV_N2Fx(this%decomp,this%derStagg,p,gradp(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call gradFV_N2Fy(this%decomp,this%derStagg,p,gradp(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+          call gradFV_N2Fz(this%decomp,this%derStagg,p,gradp(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
 
           do i = 1,this%ns
 
@@ -2290,7 +2294,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradYs(:,:,:,imat) )
 
 
-                Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) +  (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradVF(:,:,:,imat)) *((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 ) 
+                Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradVF(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 ) + this%material(i)%adiff_stagg(:,:,:,imat)*gradp(:,:,:,imat)*this%material(i)%VF_mid(:,:,:,imat)*this%material(i)%hydro%onebygam_m1*this%material(i)%hydro%gam
              
 
             enddo
@@ -2299,6 +2303,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
         else
 
+                
            do i = 1,this%ns
 
             call this%material(i)%get_enthalpy(hi)
@@ -2309,7 +2314,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
             do imat = 1,3
              Frho(:,:,:,imat)    = Frho(:,:,:,imat) + this%material(i)%rhodiff*gradRYs(:,:,:,imat)
-             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + this%material(i)%adiff*gradVF(:,:,:,imat)*( (this%material(i)%hydro%gam*p +this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1 )
+             Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + this%material(i)%adiff*gradVF(:,:,:,imat)*( (this%material(i)%hydro%gam*p+this%material(i)%hydro%Pinf*this%material(i)%hydro%gam)*this%material(i)%hydro%onebygam_m1 ) 
             enddo
           enddo
 

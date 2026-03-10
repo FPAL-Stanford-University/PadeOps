@@ -792,10 +792,10 @@ contains
         call this%der%d2dy2(kappa,ytmp4,y_bc(1),y_bc(2))
         !call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
        if(this%yMetric) then
-          ytmp5 = (detady**2)*ytmp4*dy_stretch**5
+          ytmp5 = (detady**2)*ytmp4*dy_stretch**4
           Curvstar =    Curvstar + ytmp5 !* ( dy_stretch   * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )
         else
-          ytmp5 = ytmp4*this%dy**5
+          ytmp5 = ytmp4*this%dy**4
           Curvstar =    Curvstar + ytmp5
         endif
         Curvstar = sos*abs(log(abs(rho+1d-16)) ) * abs(Curvstar) !*abs( 1 - 4*abs(VF*(1-VF)) )
@@ -903,8 +903,8 @@ contains
 
         endif
        
-        HighVF = lnYsstar
-        OOBVF  = Curvstar
+        HighVF = Curvstar
+        OOBVF  = ytmp5
         rhodiff =( max(rhodiff, adiffstar,this%Cdiff*Curvstar) + max(outb, ytmp5) )
         adiff   =  rhodiff ! max(rhodiff, adiffstar,outb,ytmp5) !,VF_bound) ! max(adiffstar,ytmp5,VF_bound) ! rhodiff
 

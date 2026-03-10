@@ -225,14 +225,1583 @@ module SolidGrid
             procedure          :: gradient 
             procedure          :: secondder
             procedure          :: advance_RK45
+            procedure          :: advance_RK45_profiled
             procedure          :: simulate
             procedure          :: update_p
             procedure          :: getRHS_P
             procedure          :: checkTau
-            procedure, private :: get_dt(stability)
-            procedure, private  :: get_dtlocal(stability)
+            procedure, private :: get_dt
+            procedure, private :: get_dtlocal
+            procedure, private :: get_primitive
+            procedure, private :: get_primitive_g
+            procedure, private :: get_conserved
+            procedure, private :: get_conserved_g
+            procedure, private :: post_bc
+            procedure, private :: post_bc_2
+            procedure, private :: getRHS
+            procedure, private :: getRHS_NC
+            procedure, private :: getRHS_xStagg
+            procedure, private :: getRHS_yStagg
+            procedure, private :: getRHS_zStagg
+            procedure, private :: getRHS_x
+            procedure, private :: getRHS_y
+            procedure, private :: getRHS_z
+            procedure          :: filter
+            procedure          :: getPhysicalProperties
+            procedure, private :: get_tau
+            procedure, private :: get_tauStagg
+            procedure, private :: get_q
+            procedure          :: coordinateTransform
+            procedure          :: getFaces
+            procedure, private :: dumpRestartFile
+            procedure, private :: readRestartFile
+            procedure          :: FilteringHeuristic
+            procedure          :: BicubicMetric
+            procedure          :: FilteringHeuristicHighOrder
+            procedure          :: fourthder
+            procedure          :: LocalDiffHeuristic
+            procedure          :: FilDiffHeuristic
+            procedure          :: entropy_discreteKE
+            procedure          :: profile_transpose_simple
+!            procedure          :: sixthder
+end type
+
+contains
+    subroutine init(this, inputfile )
+        use reductions, only: P_MAXVAL
+        use exits,      only: message, warning, nancheck, GracefulExit
+        class(sgrid),target, intent(inout) :: this
+        character(len=clen), intent(in) :: inputfile  
+
+        integer :: nx, ny, nz
+        integer :: ns = 1
+        character(len=clen) :: outputdir
+        character(len=clen) :: inputdir
+        character(len=clen) :: vizprefix = "sgrid"
+        real(rkind) :: tviz = zero
+        character(len=clen), dimension(nfields) :: varnames
+        logical :: periodicx = .true. 
+        logical :: periodicy = .true. 
+        logical :: periodicz = .true.
+        character(len=clen) :: derivative_x = "cd10"  
+        character(len=clen) :: derivative_y = "cd10" 
+        character(len=clen) :: derivative_z = "cd10"
+        character(len=clen) :: derivativeStagg_x = "d02" !default behavior for FV schemes is 2nd Order    
+        character(len=clen) :: derivativeStagg_y = "d02" !default behavior for FV schemes is 2nd Order    
+        character(len=clen) :: derivativeStagg_z = "d02" !default behavior for FV schemes is 2nd Order    
+        character(len=clen) :: interpolator_x = "ei02"   !default behavior for FV schemes is 2nd Order    
+        character(len=clen) :: interpolator_y = "ei02"   !default behavior for FV schemes is 2nd Order    
+        character(len=clen) :: interpolator_z = "ei02"   !default behavior for FV schemes is 2nd Order    
+        character(len=clen) :: filter_x = "cf90"  
+        character(len=clen) :: filter_y = "cf90" 
+        character(len=clen) :: filter_z = "cf90"
+        integer :: prow = 0, pcol = 0 
+        integer :: i, j, k, itmp(3) 
+        integer :: ioUnit
+        real(rkind) :: gam = 1.4_rkind
+        real(rkind) :: q = 0
+        real(rkind) :: Rgas = one
+        real(rkind) :: PInf = zero
+        real(rkind) :: shmod = zero
+        integer :: nsteps = -1
+        real(rkind) :: dt = -one
+        real(rkind) :: tstop = one
+        real(rkind) :: CFL = -one
+        logical :: SkewSymm = .FALSE.
+        real(rkind) :: Cmu = 0.002_rkind
+        real(rkind) :: Cbeta = 0.5_rkind
+        real(rkind) :: CbetaP = 0.0_rkind
+        real(rkind) :: Ckap = 0.01_rkind
+        real(rkind) :: CkapP = 0.0_rkind
+        real(rkind) :: Ce = 0._rkind
+        real(rkind) :: Cdiff = 0.003_rkind
+        real(rkind) :: CY = 100._rkind
+        real(rkind) :: Cvf1 = 0
+        real(rkind) :: Cvf2 = 0
+        real(rkind) :: Crho = 0
+        real(rkind) :: Cln  = 0
+        real(rkind) :: Cdiff_g = 0.003_rkind
+        real(rkind) :: Cdiff_gt = 0.003_rkind
+        real(rkind) :: Cdiff_gp = 0.003_rkind
+        real(rkind) :: Cdiff_pe = 0.003_rkind
+        real(rkind) :: Cdiff_pe_2 = 100._rkind
+        real(rkind) :: CP = 0_rkind
+        logical     :: useNC = .FALSE.
+        logical     :: PTeqb = .TRUE., pEqb = .false., pRelax = .false., updateEtot = .false., SpongeLayer = .false.
+        logical     :: use_gTg = .FALSE., useOneG = .FALSE., intSharp = .FALSE., usePhiForm = .TRUE., intSharp_cpl = .TRUE., intSharp_cpg = .false., intSharp_cpg_west = .FALSE., intSharp_spf = .FALSE., intSharp_ufv = .TRUE., intSharp_utw = .FALSE., intSharp_d02 = .TRUE., intSharp_msk = .TRUE., intSharp_flt = .FALSE., intSharp_flp = .FALSE., strainHard = .FALSE., cnsrv_g = .FALSE., cnsrv_gt = .FALSE., cnsrv_gp = .FALSE., cnsrv_pe = .FALSE.,useEigenFunction = .FALSE.
+        logical     :: SOSmodel = .FALSE.      ! TRUE => equilibrium model; FALSE => frozen model, Details in Saurel et al. (2009)
+        logical     :: useAkshayForm = .FALSE.,twoPhaseLAD = .FALSE.,LAD5eqn = .FALSE., use_CnsrvSurfaceTension = .FALSE., use_surfaceTension = .FALSE., use_normFV = .false., use_normInt = .false.,use_gradXi = .FALSE., use_gradphi = .FALSE., use_gradVF = .FALSE., use_Stagg = .FALSE., use_FV = .FALSE.,use_D04 = .FALSE., surface_mask = .FALSE., weightedcurvature = .FALSE. , energy_surfTen = .FALSE., use_XiLS = .FALSE., LADN2F = .FALSE., LADInt = .FALSE., Stretch1D = .FALSE., Stretch1Dx = .FALSE., Stretch1Dy = .FALSE., Stretch1Dz = .FALSE., LADMass_Consv = .false.
+        real(rkind) :: surfaceTension_coeff = 0.0d0, R = 1d0, p_amb = 1d0 
+        integer     :: x_bc1 = 0, x_bcn = 0, y_bc1 = 0, y_bcn = 0, z_bc1 = 0, z_bcn = 0    ! 0: general, 1: symmetric/anti-symmetric
+        real(rkind) :: phys_mu1 = 0.0d0, phys_mu2 =0.0d0,Ys_wiggle = 0d0,VF_wiggle = 0d0, uthick = 0, rhothick = 0, pthick = 0,VF_thick = 0, Ys_thick = 0
+        real(rkind) :: phys_bulk1 = 0.0d0, phys_bulk2 =0.0d0
+        real(rkind) :: phys_kap1 = 0.0d0, phys_kap2 =0.0d0
+        integer :: runID = 0,  t_dataDump = 99999, t_restartDump = 99999,numviz 
+        integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1
+        logical :: useRestartFile=.false.
+        logical :: skew_Ys = .false., skew_VF = .false.,skew_mass = .false.
+        real(rkind) :: intSharp_gam = 0.0d0, intSharp_eps = 0.0d0, intSharp_cut = 1.0d-2, intSharp_dif = 1.0d1, intSharp_tnh = 1.0D-2, intSharp_pfloor = 0.0D0, intSharp_tfloor = 0.0D0, XiLS_eps = 0.0, alpha_skew, sos_ratio=1.0d0, g = 0_rkind
+
+        real(rkind) :: filter_alpha = 0.475
+
+        namelist /INPUT/       nx, ny, nz, tstop, dt, CFL, nsteps, &
+                             inputdir, outputdir, vizprefix, tviz, &
+                                  periodicx, periodicy, periodicz, &
+                         derivative_x, derivative_y, derivative_z, &
+          derivativeStagg_x, derivativeStagg_y, derivativeStagg_z, &
+                   interpolator_x, interpolator_y, interpolator_z, &
+                                     filter_x, filter_y, filter_z, &
+                                                       prow, pcol, &
+                                                         SkewSymm, &                                                      
+                                                     filter_alpha, &
+            numviz, useRestartFile, restartFile_TID, restartFile_RID
+ 
+        namelist /IO/ runID,t_restartDump, t_dataDump, ioType
+
+        namelist /SINPUT/  gam, Rgas, PInf, shmod, &
+                           useAkshayForm,twoPhaseLAD,LAD5eqn, useNC, PTeqb, pEqb, pRelax, SOSmodel, use_gTg, updateEtot, useOneG, intSharp, usePhiForm,intSharp_cpl, intSharp_cpg, intSharp_cpg_west, intSharp_spf, intSharp_ufv, intSharp_utw, intSharp_d02, intSharp_msk, intSharp_flt, intSharp_flp, intSharp_gam, intSharp_eps, intSharp_cut, intSharp_dif, intSharp_tnh, intSharp_pfloor, intSharp_tfloor, ns, Cmu, Cbeta, CbetaP, Ckap, CkapP,Cdiff, CY, Cvf1, Cvf2, Crho, Cdiff_g, Cdiff_gt, Cdiff_gp, Cdiff_pe, Cdiff_pe_2,Ce, &
+                           x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
+                           strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
+                           use_CnsrvSurfaceTension, use_surfaceTension, use_normFV, use_normInt, use_gradXi,energy_surfTen,use_gradphi, use_gradVF, use_Stagg, use_FV,use_D04, surface_mask, weightedcurvature, &
+                           surfaceTension_coeff, R,Cln, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, LADMass_Consv, Stretch1D, Stretch1Dx,Stretch1Dy, Stretch1Dz, SpongeLayer, useEigenFunction, alpha_skew, skew_mass, skew_Ys, skew_VF,CP,sos_ratio, g
+
+        ioUnit = 11
+        open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
+        read(unit=ioUnit, NML=INPUT)
+        read(unit=ioUnit, NML=IO)
+        read(unit=ioUnit, NML=SINPUT)
+        close(ioUnit)
+
+
+
+        this%nx = nx
+        this%ny = ny
+        this%nz = nz
+
+
+        this%Ys_wiggle = Ys_wiggle
+        this%VF_wiggle = VF_wiggle
+        this%uthick    = uthick
+        this%rhothick   = rhothick
+        this%pthick     = pthick
+        this%phys_mu1   = phys_mu1
+        this%phys_mu2   = phys_mu2
+        this%phys_bulk1 = phys_bulk1
+        this%phys_bulk2 = phys_bulk2
+        this%phys_kap1 = phys_kap1
+        this%phys_kap2 = phys_kap2
+        this%Ys_thick  = Ys_thick
+        this%VF_thick  = VF_thick
+        this%tsim = zero
+        this%tstop = tstop
+        this%dtfixed = dt
+        this%dt = dt
+        this%CFL = CFL
+
+        this%stepfil = 0
+        this%numfil  = 0
+        this%step = 0
+        this%nsteps = nsteps
+        
+        this%SpongeLayer   = SpongeLayer
+        this%Stretch1Dy    = Stretch1Dy
+        this%Stretch1Dx    = Stretch1Dx
+        this%Stretch1Dz    = Stretch1Dz
+        this%Stretch1D     = Stretch1D
+        this%useAkshayForm = useAkshayForm
+        this%twoPhaseLAD   = twoPhaseLAD
+        this%LAD5eqn       = LAD5eqn
+        this%useEigenFunction = useEigenFunction
+        this%PTeqb  = PTeqb
+        this%pEqb   = pEqb
+        this%pRelax = pRelax
+        this%use_gTg = use_gTg
+        this%updateEtot = updateEtot
+        this%useOneG = useOneG
+        this%useNC = useNC
+        this%intSharp = intSharp
+        this%intSharp_cpl = intSharp_cpl
+        this%intSharp_cpg      = intSharp_cpg
+        this%intSharp_cpg_west = intSharp_cpg_west
+        this%intSharp_spf = intSharp_spf
+        this%intSharp_ufv = intSharp_ufv
+        this%intSharp_utw = intSharp_utw
+        this%intSharp_gam = intSharp_gam
+        this%intSharp_eps = intSharp_eps
+        this%intSharp_cut = intSharp_cut
+        this%intSharp_dif = intSharp_dif
+        this%intSharp_tnh = intSharp_tnh
+        this%intSharp_pfloor = intSharp_pfloor
+        this%intSharp_tfloor = intSharp_tfloor
+        this%intSharp_d02 = intSharp_d02
+        this%intSharp_msk = intSharp_msk
+        this%intSharp_flt = intSharp_flt
+        this%intSharp_flp = intSharp_flp
+        this%usePhiForm   = usePhiForm
+        this%strainHard = strainHard
+        this%cnsrv_g  = cnsrv_g
+        this%cnsrv_gt = cnsrv_gt
+        this%cnsrv_gp = cnsrv_gp
+        this%cnsrv_pe = cnsrv_pe
+        this%alpha_skew = alpha_skew
+        this%sos_ratio  = sos_ratio/this%sos_ref 
+        this%LADMass_Consv        = LADMass_Consv 
+        this%LADInt               = LADInt
+        this%LADN2F               = LADN2F	
+        this%weightedcurvature    = weightedcurvature
+	this%surface_mask 	  = surface_mask
+	this%use_FV  		  = use_FV
+        this%use_Stagg            = use_Stagg
+        this%use_D04              = use_D04
+	this%use_gradphi 	  = use_gradphi
+        this%energy_surfTen       = energy_surfTen
+        this%use_gradXi           = use_gradXi
+        this%use_normFV           = use_normFV
+        this%use_normInt          = use_normInt
+	this%use_gradVF 	  = use_gradVF
+        this%use_surfaceTension   = use_surfaceTension 
+        this%use_CnsrvSurfaceTension = use_CnsrvSurfaceTension 
+        this%use_XiLS             = use_XiLS
+        this%XiLS_eps             = XiLS_eps
+        this%surfaceTension_coeff = surfaceTension_coeff
+        this%R                    = R
+        this%p_amb                = p_amb
+        this%skew_Ys              = skew_Ys
+        this%skew_VF              = skew_VF
+        this%skew_mass            = skew_mass
+        this%CP                   = CP
+        this%g                    = g
+        itmp(1:3) = 0; if(this%PTeqb) itmp(1) = 1; if(this%pEqb) itmp(2) = 1; if(this%pRelax) itmp(3) = 1; 
+
+        if(sum(itmp) .ne. 1) then
+            call GracefulExit("Exactly one among PTeqb, pEqb and pRelax should be true",4634)
+        endif
+
+        if(SOSmodel .and. this%pRelax) then
+            call GracefulExit("Equilibrium sound speed model valid only with PTeqb or pEqb. SOSmodel must be .false. with pRelax",4634)
+        endif
+
+        if(this%useOneG .and. this%use_gTg) then
+            call GracefulExit("Only g formulation supported with single g field for now", 4634)
+        endif
+
+        ! Allocate decomp
+        if ( allocated(this%decomp) ) deallocate(this%decomp)
+        allocate(this%decomp)
+        
+        ! Initialize decomp
+        call decomp_2d_init(nx, ny, nz, prow, pcol)
+        call get_decomp_info(this%decomp)
+        ! Set all the attributes of the abstract grid type         
+        this%outputdir = outputdir 
+        this%useRestartFile = useRestartFile
+        this%restartFile_TID = restartFile_TID
+        this%restartFile_RID = restartFILE_RID
+        this%t_restartDump   = t_restartDump
+        this%t_dataDump      = t_dataDump
+        this%ioType          = ioType
+        this%runID           = runID
+        this%inputdir        = inputdir
+        this%numviz          = numviz
+
+        this%periodicx = periodicx
+        this%periodicy = periodicy
+        this%periodicz = periodicz
+
+        if ( ((x_bc1 /= 0) .AND. (x_bc1 /= 1)) ) call GracefulExit("x_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((x_bcn /= 0) .AND. (x_bcn /= 1)) ) call GracefulExit("x_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((y_bc1 /= 0) .AND. (y_bc1 /= 1)) ) call GracefulExit("y_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((y_bcn /= 0) .AND. (y_bcn /= 1)) ) call GracefulExit("y_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((z_bc1 /= 0) .AND. (z_bc1 /= 1)) ) call GracefulExit("z_bc1 can be only 0 (general) or 1 (symmetric)",4634)
+        if ( ((z_bcn /= 0) .AND. (z_bcn /= 1)) ) call GracefulExit("z_bcn can be only 0 (general) or 1 (symmetric)",4634)
+        this%x_bc = [x_bc1, x_bcn]
+        this%y_bc = [y_bc1, y_bcn]
+        this%z_bc = [z_bc1, z_bcn]
+
+        this%derivative_x = derivative_x    
+        this%derivative_y = derivative_y    
+        this%derivative_z = derivative_z  
+
+        this%filter_x = filter_x    
+        this%filter_y = filter_y    
+        this%filter_z = filter_z  
+        
+        ! Finally, set the local array dimensions
+        this%nxp = this%decomp%ysz(1)
+        this%nyp = this%decomp%ysz(2)
+        this%nzp = this%decomp%ysz(3)
+
+        ! Allocate mesh
+        if ( allocated(this%mesh) ) deallocate(this%mesh) 
+        call alloc_buffs(this%mesh,3,'y',this%decomp)
+
+        ! Associate pointers for ease of use
+        this%x    => this%mesh  (:,:,:, 1) 
+        this%y    => this%mesh  (:,:,:, 2) 
+        this%z    => this%mesh  (:,:,:, 3)
+
+        ! Generate default mesh: X \in [-1, 1), Y \in [-1, 1), Z \in [-1, 1)
+        this%dx = two/nx
+        this%dy = two/ny
+        this%dz = two/nz
+
+        ! Generate default mesh 
+        do k = 1,size(this%mesh,3)
+            do j = 1,size(this%mesh,2)
+                do i = 1,size(this%mesh,1)
+                    this%mesh(i,j,k,1) = -one + (this%decomp%yst(1) - 1 + i - 1)*this%dx           
+                    this%mesh(i,j,k,2) = -one + (this%decomp%yst(2) - 1 + j - 1)*this%dy           
+                    this%mesh(i,j,k,3) = -one + (this%decomp%yst(3) - 1 + k - 1)*this%dz           
+                end do 
+            end do 
+        end do  
+
+        ! Allocate sponge
+        if ( allocated(this%sponge) ) deallocate(this%sponge)
+        allocate(this%sponge(this%nxp,this%nyp,this%nzp,2) )
+
+        ! Go to hooks if a different mesh is desired 
+        call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh)
+
+      
+        if ( allocated(this%der_nostretch) ) deallocate(this%der_nostretch)
+        allocate(this%der_nostretch)
+
+         call this%der_nostretch%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                            derivative_x,  derivative_y,   derivative_z, &
+                              .false.,       .false.,        .false., &
+                              .false.)
+
+        if ( allocated(this%derCD06_nostretch) ) deallocate(this%derCD06_nostretch)
+        allocate(this%derCD06_nostretch)
+
+        call this%derCD06_nostretch%init(                           this%decomp, &
+                             this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                            "cd06",        "cd06",         "cd06",    &
+                              .false.,       .false.,        .false., &
+                              .false.)
+
+
+        if ( allocated(this%derStagg_stretch) ) deallocate(this%derStagg_stretch)
+        allocate(this%derStagg_stretch)
+
+        call this%derStagg_stretch%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+          derivativeStagg_x, derivativeStagg_y, derivativeStagg_z, &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        if ( allocated(this%interpMid) ) deallocate(this%interpMid)
+        allocate(this%interpMid)
+
+        ! Initialize Interpolator
+        call this%interpMid%init(                     this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                   interpolator_x, interpolator_y, interpolator_z, &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        if ( allocated(this%interpMid04) ) deallocate(this%interpMid04)
+        allocate(this%interpMid04)
+
+        ! Initialize Interpolator
+        call this%interpMid04%init(                     this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                           "ci04", "ci04", "ci04", &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        if ( allocated(this%interpMid06) ) deallocate(this%interpMid06)
+        allocate(this%interpMid06)
+
+        ! Initialize Interpolator
+        call this%interpMid06%init(                     this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                           "ci06", "ci06", "ci06", &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        if ( allocated(this%interpMid08) ) deallocate(this%interpMid08)
+        allocate(this%interpMid08)
+
+        ! Initialize Interpolator
+        call this%interpMid08%init(                     this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                           "ci08", "ci08", "ci08", &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        if ( allocated(this%interpMide06) ) deallocate(this%interpMide06)
+        allocate(this%interpMide06)
+
+        ! Initialize Interpolator
+        call this%interpMide06%init(                     this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                           "ei06", "ei06", "ei06", &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+         if ( allocated(this%dy_stretch) ) deallocate(this%dy_stretch)
+         allocate(this%dy_stretch(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%yMetric) ) deallocate(this%yMetric)
+         allocate(this%yMetric(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%xMetric) ) deallocate(this%xMetric)
+         allocate(this%xMetric(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%zMetric) ) deallocate(this%zMetric)
+         allocate(this%zMetric(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%yLADMetric) ) deallocate(this%yLADMetric)
+         allocate(this%yLADMetric(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%yMetric_F2N) ) deallocate(this%yMetric_F2N)
+         allocate(this%yMetric_F2N(this%nxp,this%nyp,this%nzp) )
+
+         if ( allocated(this%yMetric_half) ) deallocate(this%yMetric_half)
+         allocate(this%yMetric_half(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%xMetric_half) ) deallocate(this%xMetric_half)
+         allocate(this%xMetric_half(this%nxp,this%nyp,this%nzp) )
+         if ( allocated(this%zMetric_half) ) deallocate(this%zMetric_half)
+         allocate(this%zMetric_half(this%nxp,this%nyp,this%nzp) )
+
+        if( this%Stretch1Dy ) then
+
+            if ( allocated(this%meshstretch) ) deallocate(this%meshstretch)
+            call alloc_buffs(this%meshstretch,3,'y',this%decomp)
+            this%eta1    => this%meshstretch  (:,:,:, 1)
+            this%eta2    => this%meshstretch  (:,:,:, 2)
+            this%eta3  => this%meshstretch  (:,:,:, 3)
+
+            call this%coordinateTransform(this%dx,this%dy,this%dz)
+        print *, "stretch 1D"
+        endif
+ 
+        ! Allocate der
+        if ( allocated(this%der) ) deallocate(this%der)
+        allocate(this%der)
+        ! Allocate derD02
+        if ( allocated(this%derD02) ) deallocate(this%derD02)
+        allocate(this%derD02)
+        
+        if ( allocated(this%derD04) ) deallocate(this%derD04)
+        allocate(this%derD04)
+        ! Allocate derD06
+        if ( allocated(this%derD06) ) deallocate(this%derD06)
+        allocate(this%derD06)
+         ! Allocate derCD06
+        if ( allocated(this%derCD06) ) deallocate(this%derCD06)
+        allocate(this%derCD06)
+        ! Allocate derStagg
+        if ( allocated(this%derCD04) ) deallocate(this%derCD04)
+        allocate(this%derCD04)
+        if ( allocated(this%derStagg) ) deallocate(this%derStagg)
+        allocate(this%derStagg)
+        if ( allocated(this%derStaggd02) ) deallocate(this%derStaggd02)
+        allocate(this%derStaggd02)
+        if ( allocated(this%derStaggd04) ) deallocate(this%derStaggd04)
+        allocate(this%derStaggd04)
+        if( this%Stretch1Dy) then
+           call this%der%init(                           this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                      derivative_x,  derivative_y,   derivative_z, &
+                           .false.,       .true.,        .false., &
+                           .false.)
+
+           call this%der%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+           ! Initialize derivatives
+           call this%derD02%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d02",  "d02",   "d02", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+
+          call this%derD02%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+          ! Initialize derivatives
+           call this%derD04%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d04",  "d04",   "d04", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+
+           call this%derD04%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+           ! Initialize derivatives
+           call this%derD06%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d06",  "d06",   "d06", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+
+           call this%derD06%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+           ! Initialize derivatives
+           call this%derCD06%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "cd06",  "cd06",   "cd06", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+           call this%derCD06%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+            ! Initialize derivatives
+           call this%derCD04%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "cd04",  "cd04",   "cd04", &
+                              .false.,       .true.,        .false., &
+                              .false.)
+           call this%derCD04%init_gridStretch1D(this%yMetric,this%yMetric_half,this%yLADMetric)
+
+                ! Initialize Staggered derivatives
+           call this%derStagg%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+           derivativeStagg_x, derivativeStagg_y, derivativeStagg_z, &
+                           .false.,       .true.,        .false., &
+                           .false.)
+
+           call this%derStagg%init_gridStretch1D(this%yMetric_F2N,this%yMetric_half,this%yLADMetric)
+
+           ! Initialize Staggered derivatives
+           call this%derStaggd02%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                              "d02", "d02", "d02", &
+                           .false.,       .true.,        .false., &
+                           .false.)
+
+           call this%derStaggd02%init_gridStretch1D(this%yMetric_F2N,this%yMetric_half,this%yLADMetric)
+
+           call this%derStaggd04%init(this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                              "d02", "d02", "d02", &
+                           .false.,       .true.,        .false., &
+                           .false.)
+
+           call this%derStaggd04%init_gridStretch1D(this%yMetric_F2N,this%yMetric_half,this%yLADMetric)
+
+        else 
+        ! Initialize derivatives 
+        call this%der%init(                           this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                      derivative_x,  derivative_y,   derivative_z, &
+                           .false.,       .false.,        .false., &
+                           .false.)      
+
+
+        ! Initialize derivatives 
+        call this%derD02%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d02",  "d02",   "d02", &
+                              .false.,       .false.,        .false., &
+                              .false.)     
+
+
+
+        
+        call this%derD04%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d04",  "d04",   "d04", &
+                              .false.,       .false.,        .false., &
+                              .false.)
+
+ 
+
+ ! Initialize derivatives 
+        call this%derD06%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "d06",  "d06",   "d06", &
+                              .false.,       .false.,        .false., &
+                              .false.)      
+
+        ! Initialize derivatives 
+        call this%derCD06%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "cd06",  "cd06",   "cd06", &
+                              .false.,       .false.,        .false., &
+                              .false.)
+
+        call this%derCD04%init(                           this%decomp, &
+                              this%dx,       this%dy,        this%dz, &
+                            periodicx,     periodicy,      periodicz, &
+                                              "cd04",  "cd04",   "cd04", &
+                              .false.,       .false.,        .false., &
+                              .false.)
+
+
+
+        ! Initialize Staggered derivatives 
+        call this%derStagg%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+          derivativeStagg_x, derivativeStagg_y, derivativeStagg_z, &
+                           .false.,       .false.,        .false., &
+                           .false.)      
+
+
+
+        ! Initialize Staggered derivatives
+        call this%derStaggd02%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                              "d02", "d02", "d02", &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        call this%derStaggd04%init(                      this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                              "d02", "d02", "d02", &
+                           .false.,       .false.,        .false., &
+                           .false.)
+
+        end if
+
+        ! Allocate interpMid
+        if ( allocated(this%interpMid02) ) deallocate(this%interpMid02)
+        allocate(this%interpMid02)
+
+        ! Initialize Interpolator 
+        call this%interpMid02%init(                     this%decomp, &
+                           this%dx,       this%dy,        this%dz, &
+                         periodicx,     periodicy,      periodicz, &
+                                            "ei02", "ei02","ei02", &
+                           .false.,       .false.,        .false., &
+                           .false.)      
+
+        
+
+
+        ! Allocate fil and gfil
+        if ( allocated(this%fil) ) deallocate(this%fil)
+        allocate(this%fil)
+        if ( allocated(this%gfil) ) deallocate(this%gfil)
+        allocate(this%gfil)
+        
+        ! Initialize filters
+        call this%fil%init(                           this%decomp, &
+                         periodicx,     periodicy,      periodicz, &
+                          filter_x,      filter_y,       filter_z ,filter_alpha )     
+        call this%gfil%init(                          this%decomp, &
+                         periodicx,     periodicy,      periodicz, &
+                        "gaussian",    "gaussian",     "gaussian"  )      
+        ! Allocate LAD object
+        if ( allocated(this%LAD) ) deallocate(this%LAD)
+        allocate(this%LAD)
+        !call
+        !this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,Cmu,Ckap,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
+        call this%LAD%init(this%decomp,this%der,this%derStagg,this%interpMid,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1,Cvf2,Ce,Cln,Stretch1Dy)
+
+        ! Allocate mixture
+        if ( allocated(this%mix) ) deallocate(this%mix)
+        allocate(this%mix)      
+  
+
+
+  ! Initialize derivatives
+        call this%mix%init(this%decomp,this%der,this%derD02,this%derStagg,this%derStaggd02,this%derD06,this%derCD06,this%derD04,this%interpMid,this%interpMid02,this%interpMid04,this%use_Stagg,this%LADN2F,this%LADInt,this%LADMass_Consv,this%fil,this%gfil,this%LAD,ns,this%PTeqb,this%pEqb,this%pRelax,SOSmodel,this%use_gTg,this%updateEtot,this%useAkshayForm,this%twoPhaseLAD,this%LAD5eqn,this%useOneG,this%intSharp,this%usePhiForm, this%intSharp_cpl,this%intSharp_cpg,this%intSharp_cpg_west,this%intSharp_spf,this%intSharp_ufv,this%intSharp_utw,this%intSharp_d02,this%intSharp_msk,this%intSharp_flt,this%intSharp_gam,this%intSharp_eps,this%intSharp_cut,this%intSharp_dif,this%intSharp_tnh,this%intSharp_pfloor,this%use_surfaceTension,this%use_normFV,this%use_normInt, this%use_gradXi,this%energy_surfTen, this%use_gradphi, this%use_gradVF, this%surfaceTension_coeff, this%use_FV,this%use_XiLS, this%XiLS_eps, this%use_D04, this%surface_mask, this%weightedcurvature, this%strainHard,this%cnsrv_g,this%cnsrv_gt,this%cnsrv_gp,this%cnsrv_pe,this%x_bc,this%y_bc,this%z_bc,this%SpongeLayer,this%skew_mass,this%skew_Ys,this%skew_VF)
+
+        
+        !allocate(this%mix, source=solid_mixture(this%decomp,this%der,this%fil,this%LAD,ns))
+
+        ! Allocate fields
+        if ( allocated(this%fields) ) deallocate(this%fields) 
+        call alloc_buffs(this%fields,nfields,'y',this%decomp)
+        
+        if ( allocated(this%Wcnsrv) ) deallocate(this%Wcnsrv) 
+        call alloc_buffs(this%Wcnsrv,ncnsrv,'y',this%decomp)
+
+        ! Allocate temporary filter variable
+        if ( allocated(this%filt_tmp) ) deallocate(this%filt_tmp) 
+        call alloc_buffs(this%filt_tmp,4+this%mix%ns,'y',this%decomp)
+
+        ! Allocate temporary filter variable
+        if ( allocated(this%filt_grad) ) deallocate(this%filt_grad) 
+        call alloc_buffs(this%filt_grad,3,'y',this%decomp)
+
+        ! Allocate temporary filter variable
+        if ( allocated(this%filt_thrs) ) deallocate(this%filt_thrs) 
+        allocate(this%filt_thrs(this%nxp,this%nyp,this%nzp) )
+
+        if ( allocated(this%v_mid) ) deallocate(this%v_mid)
+        allocate(this%v_mid(this%nxp,this%nyp,this%nzp,3) )
+
+        if ( allocated(this%u_mid) ) deallocate(this%u_mid)
+        allocate(this%u_mid(this%nxp,this%nyp,this%nzp,3) )
+
+        if ( allocated(this%w_mid) ) deallocate(this%w_mid)
+        allocate(this%w_mid(this%nxp,this%nyp,this%nzp,3) )
+
+        if ( allocated(this%p_mid) ) deallocate(this%p_mid)
+        allocate(this%p_mid(this%nxp,this%nyp,this%nzp,3) )
+
+        if ( allocated(this%rho_mid) ) deallocate(this%rho_mid)
+        allocate(this%rho_mid(this%nxp,this%nyp,this%nzp,3) )
+
+        if ( allocated(this%pu_mid) ) deallocate(this%pu_mid)
+        allocate(this%pu_mid(this%nxp,this%nyp,this%nzp,3) )
+
+        if ( allocated(this%ke_mid) ) deallocate(this%ke_mid)
+        allocate(this%ke_mid(this%nxp,this%nyp,this%nzp,3) )
+
+
+        ! Associate pointers for ease of use
+        this%rho  => this%fields(:,:,:, rho_index) 
+        this%u    => this%fields(:,:,:,   u_index) 
+        this%v    => this%fields(:,:,:,   v_index) 
+        this%w    => this%fields(:,:,:,   w_index)  
+        this%p    => this%fields(:,:,:,   p_index)  
+        this%T    => this%fields(:,:,:,   T_index)  
+        this%e    => this%fields(:,:,:,   e_index)  
+        this%sos  => this%fields(:,:,:, sos_index)  
+        this%mu   => this%fields(:,:,:,  mu_index)  
+        this%bulk => this%fields(:,:,:,bulk_index)  
+        this%kap  => this%fields(:,:,:, kap_index)   
+        this%devstress => this%fields(:,:,:,sxx_index:szz_index)
+        this%sxx  => this%fields(:,:,:, sxx_index)   
+        this%sxy  => this%fields(:,:,:, sxy_index)   
+        this%sxz  => this%fields(:,:,:, sxz_index)   
+        this%syy  => this%fields(:,:,:, syy_index)   
+        this%syz  => this%fields(:,:,:, syz_index)   
+        this%szz  => this%fields(:,:,:, szz_index)   
+        this%u_int => this%fields(:,:,:, uint_index)
+        this%v_int => this%fields(:,:,:, vint_index)
+        this%w_int => this%fields(:,:,:, wint_index)
+        this%uJ        => this%fields(:,:,:, uJ_index)
+        this%vJ        => this%fields(:,:,:, vJ_index)
+        this%wJ        => this%fields(:,:,:, wJ_index)
+        this%keJ       => this%fields(:,:,:, keJ_index)
+        this%eJ        => this%fields(:,:,:,eJ_index)
+        this%uref      => this%fields(:,:,:,uref_index)
+        this%tauxx     => this%fields(:,:,:,tauxx_index)
+        this%tauyy     => this%fields(:,:,:,tauyy_index)
+        this%tauzz     => this%fields(:,:,:,tauzz_index)
+        this%tauxy     => this%fields(:,:,:,tauxy_index)
+        this%tauyx     => this%fields(:,:,:,tauyx_index)
+        this%tauxz     => this%fields(:,:,:,tauxz_index)
+        this%tauzx     => this%fields(:,:,:,tauzx_index)
+        this%tauyz     => this%fields(:,:,:,tauyz_index)
+        this%tauzy     => this%fields(:,:,:,tauzy_index)
+        this%dudx      => this%fields(:,:,:,dudx_index)
+        this%dudy      => this%fields(:,:,:,dudy_index)
+        this%dudz      => this%fields(:,:,:,dudz_index)
+        this%dvdx      => this%fields(:,:,:,dvdx_index)
+        this%dvdy      => this%fields(:,:,:,dvdy_index)
+        this%dvdz      => this%fields(:,:,:,dvdz_index) 
+        this%dwdx      => this%fields(:,:,:,dwdx_index)
+        this%dwdy      => this%fields(:,:,:,dwdy_index) 
+        this%dwdz      => this%fields(:,:,:,dwdz_index)
+        this%tauSum    => this%fields(:,:,:,tauSum_index)
+        this%metric    => this%fields(:,:,:,metric_index)
+        this%metric_exact    => this%fields(:,:,:,metric_exact_index)
+        this%metric_half => this%fields(:,:,:,metric_half_index)
+        this%metric_N2F  => this%fields(:,:,:,metric_N2F_index) 
+        this%m1_int    => this%fields(:,:,:,m1int_index)
+        this%m2_int    => this%fields(:,:,:,m2int_index)
+        ! Initialize everything to a constant Zero
+        this%fields = zero  
+
+        ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
+          ! STEP 7: INITIALIZE THE FIELDS
+        if (useRestartFile) then
+            print *, "before restart"
+            call this%readRestartFile(restartfile_TID, restartfile_RID)
+            print *, "after restart"
+            this%step = restartfile_TID
+            print *, "restart ID"
+            this%mix%material(2)%VF = 1 - this%mix%material(1)%VF 
+            print *, "VF"
+            this%mix%material(2)%Ys = 1 - this%mix%material(1)%Ys
+            print *, "Ys"
+            this%mix%material(1)%p = this%p
+            print *, "p"
+            this%mix%material(2)%p = this%p
+
+            print *, "pre restart"
+            call initparam_restart(this%decomp,this%der,this%derStagg,this%interpMid, this%dx, this%dy, this%dz, inputfile, this%mesh,this%fields, &
+                        this%mix, this%tstop,this%dtfixed,tviz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            print *, " finished restart "
+
+        else 
+            call initfields(this%decomp,this%der,this%derStagg, this%interpMid, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
+                        this%mix, this%tstop, this%dtfixed,tviz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+            this%mix%material(1)%spec_consrv(:,:,:,1) = one / this%rho
+    !    call this%mix%get_pmix(this%p)
+        print *, "init fields"
+        !    call this%mix%get_rhoYs_from_gVF(this%rho)
+        endif
+        ! Get hydrodynamic and elastic energies, stresses
+        !call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
+        print *, "post bc"
+        call this%post_bc()
+        call this%getFaces()
+        print *, "post bc"
+        call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
+        call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
+        call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
+        print *, "alloc buffs" 
+        this%SkewSymm = SkewSymm
+
+        varnames( 1) = 'density'
+        varnames( 2) = 'u'
+        varnames( 3) = 'v'
+        varnames( 4) = 'w'
+        varnames( 5) = 'p'
+        varnames( 6) = 'T'
+        varnames( 7) = 'e'
+        varnames( 8) = 'sos'
+        varnames( 9) = 'mu'
+        varnames(10) = 'bulk'
+        varnames(11) = 'kap'
+        varnames(12) = 'Sxx'
+        varnames(13) = 'Sxy'
+        varnames(14) = 'Sxz'
+        varnames(15) = 'Syy'
+        varnames(16) = 'Syz'
+        varnames(17) = 'Szz'
+        varnames(18) = 'uint'
+        varnames(19) = 'vint'
+        varnames(20) = 'wint'  
+        varnames(21) = 'uJ'
+        varnames(22) = 'vJ'
+        varnames(23) = 'wJ'
+        varnames(24) = 'keJ'
+        varnames(25) = 'eJ'  
+        varnames(26) = 'tauxx'
+        varnames(27) = 'tauyy'
+        varnames(28) = 'tauzz'
+        varnames(29) = 'tauxy'
+        varnames(30) = 'tauyx'
+        varnames(31) = 'tauxz'
+        varnames(32) = 'tauzx'
+        varnames(33) = 'tauyz'
+        varnames(34) = 'tauzy'
+        varnames(35) = 'dudx'
+        varnames(36) = 'dudy'
+        varnames(37) = 'dudz'
+        varnames(38) = 'dvdx'
+        varnames(39) = 'dvdy'
+        varnames(40) = 'dvdz'
+        varnames(41) = 'dwdx'
+        varnames(42) = 'dwdy'
+        varnames(43) = 'dwdz'
+        varnames(44) = 'tauSum'
+        varnames(45) = 'metric_exact'
+        varnames(46) = 'metric'
+        varnames(47) = 'metric_N2F'
+        varnames(48) = 'metric_half'
+        varnames(49) = 'uref'
+        varnames(50) = 'm1int'
+        varnames(51) = 'm2int'
+        allocate(this%viz)
+        call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
+        this%tviz = tviz
+        if( useRestartfile ) then       
+           this%viz%vizcount = this%numviz
+        end if
+                
+        if(this%SpongeLayer) then
+          call get_sponge(this%decomp,this%dx,this%dy,this%dz,this%mesh,this%fields,this%mix,this%rhou_ref,this%rhov_ref,this%rhow_ref,this%rhoe_ref,this%sponge)
+        endif
+
+    end subroutine
+
+
+    subroutine destroy(this)
+        class(sgrid), intent(inout) :: this
+
+        ! Nullify pointers
+        nullify(this%x); nullify(this%y); nullify(this%z)
+        nullify(this%eta1); nullify(this%eta2); nullify(this%eta3)
+        nullify(this%rho      )
+        nullify(this%u        )
+        nullify(this%v        )
+        nullify(this%w        )
+        nullify(this%p        )
+        nullify(this%T        )
+        nullify(this%e        )
+        nullify(this%sos      )
+        nullify(this%mu       )
+        nullify(this%bulk     )
+        nullify(this%kap      )
+        nullify(this%devstress)
+        nullify(this%sxx      )
+        nullify(this%sxy      )
+        nullify(this%sxz      )
+        nullify(this%syy      )
+        nullify(this%syz      )
+        nullify(this%szz      )
+        nullify(this%rho_int  )
+        nullify(this%u_int    )
+        nullify(this%v_int    )
+        nullify(this%w_int    )
+        nullify(this%p_int    )
+        nullify(this%e_int    )
+        nullify(this%qy_int   )
+        nullify(this%tauxy_int)
+        nullify(this%tauyy_int)
+        nullify(this%tauyz_int)
+        nullify(this%xflux_x  )
+        nullify(this%xflux_y  )
+        nullify(this%xflux_z  )
+        nullify(this%yflux_x  )
+        nullify(this%yflux_y  )
+        nullify(this%yflux_z  )
+        nullify(this%zflux_x  )
+        nullify(this%zflux_y  ) 
+        nullify(this%zflux_z  )
+        nullify(this%xflux_e  )
+        nullify(this%yflux_e  )
+        nullify(this%zflux_e  )
+        nullify(this%uJ)
+        nullify(this%vJ)
+        nullify(this%wJ)
+        nullify(this%keJ)
+        nullify(this%eJ)
+        nullify(this%tauxx)
+        nullify(this%tauyy)
+        nullify(this%tauzz)
+        nullify(this%tauxy)
+        nullify(this%tauyx)
+        nullify(this%tauxz)
+        nullify(this%tauzx)
+        nullify(this%tauyz)
+        nullify(this%tauzy)
+        nullify(this%dudx)
+        nullify(this%dudy)
+        nullify(this%dudz)
+        nullify(this%dvdx)
+        nullify(this%dvdy)
+        nullify(this%dvdz)
+        nullify(this%dwdx)
+        nullify(this%dwdy)
+        nullify(this%dwdz)
+        nullify(this%tauSum)
+        nullify(this%metric)
+        nullify(this%metric_exact)
+        nullify(this%metric_half)
+        nullify(this%metric_N2F)
+        nullify(this%uref)
+        nullify(this%m1_int)
+        nullify(this%m2_int)
+
+        if (allocated(this%mesh)) deallocate(this%mesh) 
+        if (allocated(this%fields)) deallocate(this%fields) 
+        if (allocated(this%mesh)) deallocate(this%meshstretch)
+        if (allocated(this%sponge)) deallocate(this%sponge)
+        if (allocated(this%dy_stretch)) deallocate(this%dy_stretch)
+        if (allocated(this%yMetric)) deallocate(this%yMetric)      
+        if (allocated(this%yMetric_F2N)) deallocate(this%yMetric_F2N) 
+        if (allocated(this%yLADMetric)) deallocate(this%yLADMetric) 
+        if (allocated(this%xMetric)) deallocate(this%xMetric)        
+        if (allocated(this%zMetric)) deallocate(this%zMetric)
+        if (allocated(this%yMetric_half)) deallocate(this%yMetric_half)
+        if (allocated(this%xMetric_half)) deallocate(this%xMetric_half)
+        if (allocated(this%zMetric_half)) deallocate(this%zMetric_half)
+ 
+
+        call this%der%destroy()
+        if (allocated(this%der)) deallocate(this%der) 
+
+        call this%derD02%destroy()
+        if (allocated(this%derD02)) deallocate(this%derD02) 
+    
+        call this%der_nostretch%destroy()
+        if (allocated(this%der_nostretch)) deallocate(this%der_nostretch)
+
+        call this%derCD06_nostretch%destroy()
+        if (allocated(this%derCD06_nostretch)) deallocate(this%derCD06_nostretch)
+ 
+        call this%derD04%destroy()
+        if (allocated(this%derD04)) deallocate(this%derD04)
+
+        call this%derD06%destroy()
+        if (allocated(this%derD06)) deallocate(this%derD06)
+  
+        call this%derCD06%destroy()
+        if (allocated(this%derCD06)) deallocate(this%derCD06)
+
+        call this%derCD04%destroy()
+        if (allocated(this%derCD04)) deallocate(this%derCD04)
+
+        call this%fil%destroy()
+        if (allocated(this%fil)) deallocate(this%fil) 
+        
+        call this%gfil%destroy()
+        if (allocated(this%gfil)) deallocate(this%gfil) 
+
+        call this%derStagg%destroy()
+        if (allocated(this%derStagg)) deallocate(this%derStagg) 
+
+        call this%interpMid%destroy()
+        if (allocated(this%interpMid)) deallocate(this%interpMid) 
+       
+        call this%derStaggd02%destroy()
+        if (allocated(this%derStaggd02)) deallocate(this%derStaggd02)
+
+        call this%derStaggd04%destroy()
+        if (allocated(this%derStaggd04)) deallocate(this%derStaggd04)
+
+        call this%interpMid02%destroy()
+        if (allocated(this%interpMid02)) deallocate(this%interpMid02)
+
+        call this%interpMid04%destroy()
+        if (allocated(this%interpMid04)) deallocate(this%interpMid04)
+
+        call this%interpMid08%destroy()
+        if (allocated(this%interpMid08)) deallocate(this%interpMid08)
+
+        call this%interpMide06%destroy()
+        if (allocated(this%interpMide06)) deallocate(this%interpMide06)
+
+        call this%interpMid06%destroy()
+        if (allocated(this%interpMid06)) deallocate(this%interpMid06)
+
+        call this%derStagg_stretch%destroy()
+        if (allocated(this%derStagg_stretch)) deallocate(this%derStagg_stretch)
+ 
+        call destroy_buffs(this%xbuf)
+        call destroy_buffs(this%ybuf)
+        call destroy_buffs(this%zbuf)
+
+        if ( allocated(this%mix) ) deallocate(this%mix)
+
+        if ( allocated(this%LAD) ) deallocate(this%LAD)
+        
+        if (allocated(this%Wcnsrv)) deallocate(this%Wcnsrv) 
+
+        if (allocated(this%filt_tmp)) deallocate(this%filt_tmp) 
+
+        if (allocated(this%filt_grad)) deallocate(this%filt_grad) 
+
+        if (allocated(this%filt_thrs)) deallocate(this%filt_thrs) 
+      
+        if (allocated(this%u_mid)) deallocate(this%u_mid) 
+
+        if (allocated(this%v_mid)) deallocate(this%v_mid)
+
+        if (allocated(this%w_mid)) deallocate(this%w_mid)
+
+        if (allocated(this%p_mid)) deallocate(this%p_mid)
+
+        if (allocated(this%rho_mid)) deallocate(this%rho_mid)
+
+        if (allocated(this%ke_mid)) deallocate(this%ke_mid)
+
+        if (allocated(this%pu_mid)) deallocate(this%pu_mid)
+
+        call this%viz%destroy()
+        if (allocated(this%viz)) deallocate(this%viz)
+
+        call decomp_2d_finalize
+        if (allocated(this%decomp)) deallocate(this%decomp) 
+
+    end subroutine
+
+    subroutine gradient(this, f, dfdx, dfdy, dfdz, x_bc, y_bc, z_bc)
+        class(sgrid),target, intent(inout) :: this
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdx
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdy
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: dfdz
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
+        
+        der => this%der
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+
+        ! Get Y derivatives
+        call der%ddy(f,dfdy,y_bc(1),y_bc(2))
+
+        ! Get X derivatives
+        call transpose_y_to_x(f,xtmp,decomp)
+        call der%ddx(xtmp,xdum,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xdum,dfdx)
+
+        ! Get Z derivatives
+        call transpose_y_to_z(f,ztmp,decomp)
+        call der%ddz(ztmp,zdum,z_bc(1),z_bc(2))
+        call transpose_z_to_y(zdum,dfdz)
+
+    end subroutine 
+
+    subroutine laplacian(this, f, lapf, x_bc, y_bc, z_bc)
+        use timer
+        class(sgrid),target, intent(inout) :: this
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: lapf
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+        
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum, ytmp
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        
+
+        der => this%der
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+        ytmp => this%ybuf(:,:,:,1)
+
+        ! Get Y derivatives
+        call der%d2dy2(f,lapf,y_bc(1),y_bc(2))
+        
+        ! Get X derivatives
+        call transpose_y_to_x(f,xtmp,this%decomp) 
+        call this%der%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xdum,ytmp,this%decomp)
+
+        lapf = lapf + ytmp
+
+        ! Get Z derivatives
+        call transpose_y_to_z(f,ztmp,this%decomp)
+        call this%der%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
+        call transpose_z_to_y(zdum,ytmp,this%decomp)
+        
+        lapf = lapf + ytmp
+
+    end subroutine
+
+    
+
+    subroutine secondder(this,derType, f, d2fdx2, d2fdy2, d2fdz2, x_bc, y_bc, z_bc)
+        class(sgrid),target, intent(inout) :: this
+        type(derivatives), intent(in) :: derType
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdx2
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdy2
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d2fdz2
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
+
+        !der => derType
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+
+        ! Get Y derivative
+        call derType%d2dy2(f,d2fdy2,y_bc(1),y_bc(2))
+
+        ! Get X derivative
+        call transpose_y_to_x(f,xtmp,decomp)
+        call derType%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xdum,d2fdx2,decomp)
+
+        ! Get Z derivative
+        call transpose_y_to_z(f,ztmp,decomp)
+        call derType%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
+        call transpose_z_to_y(zdum,d2fdz2,decomp)
+
+    end subroutine
+   
+     subroutine fourthder(this,derType, f, d4fdx4, d4fdy4, d4fdz4, x_bc, y_bc, z_bc)
+        class(sgrid),target, intent(inout) :: this
+        type(derivatives), intent(in) :: derType
+        real(rkind), intent(in), dimension(this%nxp, this%nyp, this%nzp) :: f 
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d4fdx4
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d4fdy4
+        real(rkind), intent(out), dimension(this%nxp, this%nyp, this%nzp) :: d4fdz4
+        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: tmp
+        integer, dimension(2), optional, intent(in) :: x_bc, y_bc, z_bc
+
+        type(derivatives), pointer :: der
+        type(decomp_info), pointer :: decomp
+        real(rkind), dimension(:,:,:), pointer :: xtmp,xdum,ztmp,zdum
+
+        !der => derType
+        decomp => this%decomp
+        xtmp => this%xbuf(:,:,:,1)
+        xdum => this%xbuf(:,:,:,2)
+        ztmp => this%zbuf(:,:,:,1)
+        zdum => this%zbuf(:,:,:,2)
+
+        ! Get Y derivative
+        call derType%d2dy2(f,tmp,y_bc(1),y_bc(2))
+        call derType%d2dy2(tmp,d4fdy4,y_bc(1),y_bc(2))
+
+        ! Get X derivative
+        call transpose_y_to_x(f,xtmp,decomp)
+        call derType%d2dx2(xtmp,xdum,x_bc(1),x_bc(2))
+        call derType%d2dx2(xdum,xtmp,x_bc(1),x_bc(2))
+        call transpose_x_to_y(xtmp,d4fdx4,decomp)
+
+        ! Get Z derivative
+        call transpose_y_to_z(f,ztmp,decomp)
+        call derType%d2dz2(ztmp,zdum,z_bc(1),z_bc(2))
+        call derType%d2dz2(zdum,ztmp,z_bc(1),z_bc(2))
+        call transpose_z_to_y(ztmp,d4fdz4,decomp)
+
+    end subroutine
+ 
+    subroutine coordinateTransform(this,dx,dy,dz) 
+       use constants,        only: one, half, pi
+       use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_x, gradFV_y, gradFV_z, gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz
+       class(sgrid), intent(inout) :: this
+       real(rkind),  intent(inout) :: dx,dy,dz
+       real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
+       integer :: i,j,k
+       integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
+       real(rkind) :: L, STRETCH_RATIO = 5.0d0, Lr, Lr_half
+       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
+       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
+       nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
+
+        ! If base decomposition is in Y
+       ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
+       ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
+
+       L = 16.0d0
+
+       y_half = this%y + 0.5_rkind*this%dy
+        
+       this%eta1 = this%x
+       this%eta3 = this%z
+       this%xMetric = 1.0_rkind
+       this%zMetric = 1.0_rkind
+       this%xMetric_half = 1.0_rkind
+       this%zMetric_half = 1.0_rkind
+       tmpeta = atanh( 2.0_rkind*this%y / ( 1.0_rkind + 1.0_rkind / STRETCH_RATIO) )
+       Lr =  L /( tmpeta(1, ny,1) - tmpeta(1,1,1))
+
+       this%eta2 = Lr*tmpeta
+       tmpeta2 = Lr*tmpeta
+       call this%der_nostretch%ddy(tmpeta2, tmp2, this%y_bc(1),this%y_bc(2))
+       this%yMetric = 1.0_rkind/tmp2
+       call interpolateFV_y(this%decomp,this%interpMid,this%eta2,eta2_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        
+       call gradFV_y(this%decomp,this%derStagg_stretch,eta2_int,tmp,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)     
+       this%yMetric_F2N = 1.0_rkind / tmp 
+       call gradFV_N2Fy(this%decomp,this%derStagg_stretch,this%eta2,tmp3,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+       this%yMetric_half = 1.0_rkind / tmp3
+       this%yMetric_half(:,this%nyp,:) = 1.0_rkind
+        
+       call this%der_nostretch%d2dy2(this%eta2,tmpdy2,this%y_bc(1),this%y_bc(2))
+       this%yLADMetric = 1.0_rkind / tmpdy2
+       this%dy_stretch(:,2:this%nyp-1,:) = abs((this%eta2(:,3:this%nyp,:)-this%eta2(:,1:this%nyp-2,:))/2)
+       this%dy_stretch(:,1,:) = abs((this%eta2(:,2,:)-this%eta2(:,1,:)))
+       this%dy_stretch(:,this%nyp,:) = abs((this%eta2(:,this%nyp,:)-this%eta2(:,this%nyp-1,:)) )
+
+    end subroutine 
+
+    subroutine update_P(this,Qtmpp,isub,dt,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        use decomp_2d,  only: nrank
+        use RKCoeffs,   only: RK45_A,RK45_B,RK3_A,RK3_B
+        class(sgrid), intent(inout) :: this
+        integer, intent(in) :: isub
+        real(rkind), intent(in) :: dt,tsim
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(inout)  :: Qtmpp
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        logical :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rhsP ! for mass fraction equation
+        real(rkind)  :: dx,dy
+        integer      :: i
+
+        dy = y(1,2,1) - y(1,1,1)
+
+        call this%getRHS_P(rhsP,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+        ! advance sub-step
+        if(isub==1) Qtmpp = 0 !this%p                   ! not really needed since RK45_A(1) = 0
+!       this%p = RK3_B(isub)*(this%p + dt*rhsP) + RK3_A(isub)*Qtmpp
+        Qtmpp = dt*rhsP + RK45_A(isub)*Qtmpp
+        this%p =  this%p  + RK45_B(isub)*Qtmpp
+
+        do i = 1,2
+
+         this%mix%material(i)%p = this%p
+
+        enddo
+  !      this%QtmpVF  = dt*rhsVF + RK45_A(isub)*this%QtmpVF
+!        Qtmpp = dt*rhsP + RK45_A(isub)*Qtmpp
+!        this%p =  this%p  + RK45_B(isub)*Qtmpp
+    end subroutine
+
+    subroutine getRHS_P(this,rhsP,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+        use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z, gradFV_x, gradFV_y, gradFV_z
+        class(sgrid),                                         intent(inout)  :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(out)    :: rhsP
+        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+        logical :: periodicx,periodicy,periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp,tmp1,tmp2,tmp3,u_int,v_int, w_int,flux,divu, Gam,esum,ksum, esumJ, divup, tauSum, eta1, eta2, rhoSos1, rhoSos, EtaSum, rhoSos2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: rho_int,Ys_int,rhoYs_int, p_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: sosm, rhom, eta
+        integer :: i
+       ! vcon = 100
+        
+         !call this%get_tauSum(tauSum)
+         rhsP = 0.0
+         rhoSos = zero
+         rhoSos2 = zero
+         do i = 1,2
+           call this%mix%material(i)%getLAD_VF(this%rho,this%sos,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,this%dx,this%dy)
+           call this%mix%material(i)%getSpeciesDensity(this%rho,rhom(:,:,:,i))
+           call this%mix%material(i)%hydro%get_sos2(rhom(:,:,:,i),this%p,sosm(:,:,:,i))
+           rhoSos = rhoSos + rhom(:,:,:,i)*sosm(:,:,:,i)/this%mix%material(i)%VF
+           rhoSos2 = rhoSos2 + rhom(:,:,:,i)*sosm(:,:,:,i)*this%mix%material(i)%VF
+         enddo
+
+         eta(:,:,:,1) = (rhom(:,:,:,2)*sosm(:,:,:,2) - rhom(:,:,:,1)*sosm(:,:,:,1) ) / rhoSos
+         eta(:,:,:,2) = (rhom(:,:,:,1)*sosm(:,:,:,1) - rhom(:,:,:,2)*sosm(:,:,:,2) ) / rhoSos
+
+         Gam = 0
+         esum = 0
+         EtaSum = 0
+
+         do i = 1,2
+
+            Gam = Gam + this%mix%material(i)%VF/(this%mix%material(i)%hydro%gam- 1 )
+            esum = esum + this%mix%material(i)%eh*this%mix%material(i)%rhom*(this%mix%material(i)%intSharp_aFV + this%mix%material(i)%intSharp_aDiffFV)
+            EtaSum = EtaSum + this%mix%material(i)%eh*this%mix%material(i)%rhom*eta(:,:,:,i)
+         enddo
+
+
+       if(.NOT. this%use_Stagg) then
+
+
+         call this%gradient(this%p, tmp1, tmp2, tmp3, this%x_bc,  this%y_bc,this%z_bc)
+         call divergence(this%decomp, this%der,this%u, this%v, this%w, divu, this%x_bc, this%y_bc, this%z_bc)
+       
+       else
+
+!         call interpolateFV_x(this%decomp,this%interpMid,this%u,u_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV_y(this%decomp,this%interpMid,this%v,v_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV_z(this%decomp,this%interpMid,this%w,w_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV(this%decomp,this%interpMid,this%p,p_int,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+         !this%u_int = u_int
+         !this%v_int = v_int
+         !this%w_int = w_int
+         !this%tauxy_int  = p_int(:,:,:,1)
+         !this%tauyy_int = p_int(:,:,:,2)
+         !this%tauyz_int = p_int(:,:,:,3)
+         call gradFV_x(this%decomp,this%derStagg,-this%p_mid(:,:,:,1),tmp1,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call gradFV_y(this%decomp,this%derStagg,-this%p_mid(:,:,:,2),tmp2,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call gradFV_z(this%decomp,this%derStagg,-this%p_mid(:,:,:,3),tmp3,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call divergenceFV(this%decomp,this%derStagg,-this%u_mid(:,:,:,1)*this%p_mid(:,:,:,1),-this%v_mid(:,:,:,2)*this%p_mid(:,:,:,2),-this%w_mid(:,:,:,3)*this%p_mid(:,:,:,3),divup,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+         call divergenceFV(this%decomp,this%derStagg,-this%u_mid(:,:,:,1),-this%v_mid(:,:,:,2),-this%w_mid(:,:,:,3),divu,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+
+       endif
+
+
+         if( .NOT. this%intSharp) then
+   
+            !rhsP = tmp1*this%u + tmp2*this%v + tmp3*this%w + (1/Gam)*((this%rho*this%e +this%p)*divu +tauSum)
+            rhsP = divup - this%p*divu + (1/Gam)*((this%rho*this%e +this%p)*divu + tauSum ) ! - this%tauRho) !+ EtaSum*divu) !+ this%rho*this%qDiv ) !+ EtaSum*divu )
+            !rhsP = divup - this%p*divu + rhoSos2*divu + (1/Gam)*(tauSum + EtaSum*divu )
+         else
+            !rhsP = divup - this%p*divu +  (1/Gam)*((this%rho*this%e + this%p)*divu + this%mix%intSharp_pFV + tauSum) 
+            !rhsP = tmp1*this%u + tmp2*this%v + tmp3*this%w + (1/Gam)*((this%rho*this%e +this%p)*divu + this%mix%intSharp_hFV - esum + tauSum)
+            rhsP = divup - this%p*divu +  (1/Gam)*((this%rho*this%e +this%p)*divu + this%mix%intSharp_hFV + tauSum - esum ) ! - this%tauRho )! EtaSum*divu) !+ this%rho*this%qDiv) !+ EtaSum*divu )
+            !rhsP = divup - this%p*divu +  rhoSos2*divu + (1/Gam)*( this%mix%intSharp_hFV - esum + tauSum + EtaSum*divu )
+         endif
+
+
+         if( this%twoPhaseLAD ) then
+
+            esumJ = 0
+            do i = 1,2
+                
+                call this%mix%material(i)%getLAD_VF(this%rho,this%sos,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy) 
+                esumJ = esumJ + this%mix%material(i)%eh*this%mix%material(i)%rhom*this%mix%material(i)%vfLAD 
+
+            enddo
+
+            !rhsP = rhsP + (1/Gam) * this%pJ 
+            rhsP = rhsP + (1/Gam) * (this%eJ  - esumJ) 
+
+         end if
+
+
+    end subroutine
+
+
+    subroutine profile_transpose_simple(this, n_samples)
+    use mpi
+    use kind_parameters, only: rkind
+     use decomp_2d,  only: nrank
+    class(sgrid), target, intent(inout) :: this
+    integer, intent(in), optional :: n_samples
+
+    real(rkind), dimension(:,:,:), allocatable :: field_x, field_z
+    real(rkind) :: t1, t2, time_y2x, time_x2y, time_y2z, time_z2y
+    integer :: i, ns, ierr
+
+    ns = 10
+    if (present(n_samples)) ns = n_samples
+
+    allocate(field_x(this%decomp%xsz(1), this%decomp%xsz(2), this%decomp%xsz(3)))
+    allocate(field_z(this%decomp%zsz(1), this%decomp%zsz(2), this%decomp%zsz(3)))
+
+    ! Profile Y->X
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t1 = MPI_Wtime()
+    do i = 1, ns
+        call transpose_y_to_x(this%u, field_x, this%decomp)
+    end do
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t2 = MPI_Wtime()
+    time_y2x = (t2 - t1) / ns   ! ms
+
+    ! Profile X->Y
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t1 = MPI_Wtime()
+    do i = 1, ns
+        call transpose_x_to_y(field_x, this%u, this%decomp)
+    end do
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t2 = MPI_Wtime()
+    time_x2y = (t2 - t1) / ns 
+
+    ! Profile Y->Z
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t1 = MPI_Wtime()
+    do i = 1, ns
+        call transpose_y_to_z(this%u, field_z, this%decomp)
+    end do
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t2 = MPI_Wtime()
+    time_y2z = (t2 - t1) / ns 
+
+    ! Profile Z->Y
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t1 = MPI_Wtime()
+    do i = 1, ns
+        call transpose_z_to_y(field_z, this%u, this%decomp)
+    end do
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t2 = MPI_Wtime()
+    time_z2y = (t2 - t1) / ns 
+
+    if (nrank == 0) then
+        print*, "Transpose times (averaged over", ns, "samples):"
+        print*, "  Y->X: ", time_y2x, " s"
+        print*, "  X->Y: ", time_x2y, " s"
+        print*, "  Y->Z: ", time_y2z, " s"
+        print*, "  Z->Y: ", time_z2y, " s"
+    end if
+
+    deallocate(field_x, field_z)
+
+  end subroutine
+
+    subroutine simulate(this)
+        use reductions, only: P_MEAN, P_MINVAL,P_MAXVAL
+        use timer,      only: tic, toc
+        use exits,      only: GracefulExit, message, check_exit
+        use decomp_2d,  only: nrank
+        class(sgrid), target, intent(inout) :: this
+
+        logical :: tcond, vizcond, stepcond
+        character(len=clen) :: stability
+        real(rkind) :: cputime
+        real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind), dimension(:,:,:), pointer :: ehmix
+        integer :: i, imat
+        logical :: restartWrite = .false.
+        real(rkind) :: u_max, u_min, v_max, v_min, w_max, w_min,p_min,p_max
+        real(rkind) :: rho_max, rho_min, Ys_min, Ys_max, VF_min, VF_max
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: noise1, noise2,noise3
+       !  CALL RANDOM_NUMBER(noise1)
+       !  CALL RANDOM_NUMBER(noise2)
+       !  CALL RANDOM_NUMBER(noise3)
+    
+       !  this%T = (noise2-0.5)*1e-5 + this%T
+       !  this%rho = (noise1-0.5)*1e-5 + this%rho
+       !  this%u = (noise3-0.5)*1e-5 + this%u
+
+        allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
+        ! Get artificial properties for initial conditions
+        dudx => duidxj(:,:,:,1); dudy => duidxj(:,:,:,2); dudz => duidxj(:,:,:,3);
+        dvdx => duidxj(:,:,:,4); dvdy => duidxj(:,:,:,5); dvdz => duidxj(:,:,:,6);
+        dwdx => duidxj(:,:,:,7); dwdy => duidxj(:,:,:,8); dwdz => duidxj(:,:,:,9);
+        
+        call this%gradient(this%u, dudx, dudy, dudz, -this%x_bc,  this%y_bc,  this%z_bc)
+        call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
+        call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
+
+
+        !do i=1,this%mix%ns
+            !if (this%use_gTg) then
+                ! Project g tensor to SPD space
+                !call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
+                !call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g_t) !mca check
+            !end if
+            ! Get massfraction gradients in Ji
+        !    call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
+        !                       this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
+        !end do
+
+            
+        ! compute artificial shear and bulk viscosities
+        call this%getPhysicalProperties()
+        !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
+
+        this%mix%deltakap = 1
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
+        if (this%PTeqb) then
+            ehmix => duidxj(:,:,:,4) ! use some storage space
+            ehmix = this%e
+            do imat = 1, this%mix%ns
+                ehmix = ehmix - this%mix%material(imat)%Ys * this%mix%material(imat)%eel
+            enddo
+         endif
+!            call this%LAD%get_conductivity(this%rho,this%p,ehmix,this%T,this%sos,this%kap,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dy_stretch,this%yMetric,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
+
+!        call this%LAD%get_e(this%rho,this%p,this%e,this%T,this%sos,this%eLAD,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor)
+        ! compute species artificial conductivities and diffusivities
+        call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+!       do imat = 1,2
+
+!              call this%mix%material(imat)%getLAD_VF(this%rho,this%sos,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy)
+!              call this%mix%material(imat)%getYsLAD(this%rho,this%sos,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!       enddo
+
+        nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
+        deallocate( duidxj )
+        
+        ! ------------------------------------------------
+        if (this%useRestartFile) then
+ 
+!          this%dt = 1d-9
+ 
+           call this%get_dt(stability)
         else
-          call this%get_dtlocal(stability)
+          call this%get_dt(stability)
         endif
         
         !populate surface tension terms at initial condition
@@ -306,45 +1875,15 @@ module SolidGrid
         if(nrank==0) write(*,*) 'Starting time loop'
         do while ( tcond .AND. stepcond )
             ! Advance time
-            call tic()
-            call this%advance_RK45()
-            call toc(cputime)
-
-            !call this%mix%thick_calculations(this%rho, this%p,this%u,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle, this%dx)          
-!            u_max = P_MAXVAL(this%u)
-!            u_min = P_MINVAL(this%u)
-!            v_max = P_MAXVAL(this%v)
-!            v_min = P_MINVAL(this%v)
-!            w_max = P_MAXVAL(this%w)
-!            w_min = P_MINVAL(this%w)
-!            p_max = P_MAXVAL(this%p)
-!            p_min = P_MINVAL(this%p)
-!            rho_max = P_MAXVAL(this%rho)
-!            rho_min = P_MINVAL(this%rho)
-!            Ys_max = P_MAXVAL(this%mix%material(1)%Ys)
-!            Ys_min = P_MINVAL(this%mix%material(1)%Ys)
-!            VF_max = P_MAXVAL(this%mix%material(1)%VF)
-!            VF_min = P_MINVAL(this%mix%material(1)%VF)
+           call tic()
+           call this%advance_RK45()
+           call toc(cputime)
 
             call message(1,"Time",this%tsim)
             call message(1,"Step",this%step)
             call message(2,"Time step",this%dt)
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
-   !         call message(3, " u min ", u_min)
-   !         call message(3, " u max ", u_max)
-   !         call message(3, " v min ", v_min)
-   !         call message(3, " v max ", v_max)
-   !         call message(3, " w min ", w_min)
-   !         call message(3, " w max ", w_max)
-   !         call message(3, " p min ", p_min)
-   !         call message(3, " p max ", p_max)
-   !         call message(3, " rho min ", rho_min)
-   !         call message(3, " rho max ", rho_max)
-   !         call message(3, " Ys min ", Ys_min)
-   !         call message(3, " Ys max ", Ys_max)
-   !         call message(3, " VF min ", VF_min)
-   !         call message(3, " VF max ", VF_max)
             call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
             ! Write out vizualization dump if vizcond is met 
            if (vizcond) then
@@ -367,7 +1906,7 @@ module SolidGrid
            end if
             
             ! Get the new time step
-            call this%get_dtlocal(stability)
+            call this%get_dt(stability)
             ! Check for visualization condition and adjust time step
             if ( (this%tviz > zero) .AND. (this%tsim + this%dt >= this%tviz * this%viz%vizcount) ) then
                 this%dt = abs( this%tviz * this%viz%vizcount - this%tsim)
@@ -418,6 +1957,272 @@ module SolidGrid
          call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
     end subroutine
 
+    subroutine advance_RK45_profiled(this)
+        use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B,RK3_steps,RK3_A,RK3_B
+        use timer,      only: tic, toc
+        use exits,      only: message,nancheck,GracefulExit
+        use reductions, only: P_MAXVAL, P_MINVAL
+        use decomp_2d,  only: nrank
+        use operators, only: divergence,gradient,gradFV_x,gradFV_y,gradFV_z,interpolateFV,divergenceFV
+        use constants,               only: pi
+        use mpi
+        class(sgrid), target, intent(inout) :: this
+
+
+        real(rkind)                                               :: Qtmpt      ! Temporary variable for RK45
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: rhs        ! RHS for conserved variables
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,ncnsrv) :: Qtmp             ! Temporary variable for RK45
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: divu,Qtmpp, pmix ! Velocity divergence for species energy eq
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork         ! Viscous work term for species energy eq
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource, tmp, eta, tmp2,rhofil,efil,m1fil,m2fil,TEfil,rhoufil,rhovfil,rhowfil,VFfil,H1,H2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx,drudy,drudz,drvdx,drvdy,drvdz,drwdx,drwdy,drwdz,dredx,dredy,dredz,dVFdx,dVFdy,dVFdz,dm1dx,dm1dy,dm1dz,dm2dx,dm2dy,dm2dz,tmp1,tmp3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx4,drudy4,drudz4,drvdx4,drvdy4,drvdz4,drwdx4,drwdy4,drwdz4,dredx4,dredy4,dredz4,dVFdx4,dVFdy4,dVFdz4,dm1dx4,dm1dy4,dm1dz4,dm2dx4,dm2dy4,dm2dz4
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)      :: tmpint
+        integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
+        real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
+        real(rkind), dimension(:,:,:), pointer :: dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz
+        real(rkind) ::cputime, Ystime, VFtime, consvTime, intsharp, u_max, u_min,rhoYs_min, rhoYs_max,tmod,Ut
+
+        character(len=clen) :: charout
+
+    ! Timing variables
+    real(rkind) :: t_step, t1, t2
+    real(rkind) :: t_conserved, t_faces, t_sos, t_lad, t_intsharp,t_divergence
+    real(rkind) :: t_rhs, t_update_ys, t_update_vf, t_equilibrate,t_interpolateFV
+    real(rkind) :: t_bc, t_misc, t_total
+    integer :: ierr
+
+    ! Initialize timers
+    t_conserved=0; t_faces=0; t_sos=0; t_lad=0; t_intsharp=0
+    t_rhs=0; t_update_ys=0; t_update_vf=0; t_equilibrate=0
+    t_bc=0; t_misc=0; t_divergence=0; t_interpolateFV=0
+
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t_total = MPI_Wtime()
+
+    ! ===== get_conserved =====
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t1 = MPI_Wtime()
+    call this%get_conserved()
+    Qtmp  = this%Wcnsrv
+    Qtmpt = this%tsim
+    pmix  = zero
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t2 = MPI_Wtime()
+    t_conserved = t_conserved + (t2-t1)
+
+    do isub = 1, RK3_steps
+
+        ! ===== Surface tension setup =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+
+        call this%get_conserved()
+        if(this%use_surfaceTension) then
+              call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%x,this%y,isub)
+        endif
+        where(this%mix%material(1)%VF .GT. 1d-10)
+            this%mix%deltakap = abs(this%mix%kappaNoFil*(this%dy_stretch))
+        elsewhere
+            this%mix%deltakap = 0
+        endwhere
+        do i = 1,2
+            this%mix%material(i)%deltakap = this%mix%deltakap
+        enddo
+
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_misc = t_misc + (t2-t1)
+
+        ! ===== getFaces =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+        call this%getFaces()
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_faces = t_faces + (t2-t1)
+
+        ! ===== NaN check =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+        if (nancheck(this%Wcnsrv,i,j,k,l)) then
+             call message("Wcnsrv: ",this%Wcnsrv(i,j,k,l))
+             !write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at substep ", isub, " of step ", this%step+1, " at (",i,", ",j,", ",k,", ",l,") of Wcnsrv"
+             write(charout,'(A,I1,A,I5,A,4(I5,A))') "NaN encountered in solution (Wcnsrv) at substep ", isub, " of step ", this%step+1, " at (",i+this%decomp%yst(1)-1,", ",j+this%decomp%yst(2)-1,", ",k+this%decomp%yst(3)-1,", ",l,") of Wcnsrv"
+             call GracefulExit(trim(charout), 999)
+
+        end if
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_misc = t_misc + (t2-t1)
+
+        ! ===== getSOS =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+        call this%mix%getSOS(this%rho, this%p, this%sos)
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_sos = t_sos + (t2-t1)
+
+        ! ===== getLAD =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+
+        call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
+
+        do imat = 1,this%mix%ns
+            call this%mix%material(imat)%LAD_Quant(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        enddo
+
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_lad = t_lad + (t2-t1)
+
+        ! ===== Interface sharpening =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+        if(this%intSharp) then
+            ! ... initialization ...
+            call this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
+
+        endif
+        call this%mix%checkNaN()
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_intsharp = t_intsharp + (t2-t1)
+
+
+        ! ===== divergence =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+
+        call interpolateFV(this%decomp,this%interpMid,this%u,tmpint,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_interpolateFV = t_interpolateFV + (t2-t1)
+
+
+        ! ===== interpolate =====
+
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+
+        call divergenceFV(this%decomp,this%derStagg,tmpint(:,:,:,1),tmpint(:,:,:,2),tmpint(:,:,:,3),tmp2,this%periodicx, this%periodicy, this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_divergence = t_divergence + (t2-t1)
+
+        ! ===== getRHS =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+        if (this%useNC) then
+            call this%getRHS_NC(rhs, divu, viscwork)
+        else
+            call this%getRHS(rhs, divu, viscwork)
+        endif
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_rhs = t_rhs + (t2-t1)
+
+        ! ===== RK update =====
+        this%Wcnsrv = RK3_B(isub)*(this%Wcnsrv + this%dt*rhs) + RK3_A(isub)*Qtmp
+
+        ! ===== update_Ys =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+        if(this%use_Stagg) then
+              call this%mix%update_Ys(isub,this%dt,this%rho,this%u,this%v,this%w,this%u_int,this%v_int,this%w_int,this%sos,this%x,this%y,this%z,this%tsim,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%sponge,this%alpha_skew) 
+        endif
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_update_ys = t_update_ys + (t2-t1)
+
+        ! ===== update_VF =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+        if(this%pEqb) then
+
+        endif
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_update_vf = t_update_vf + (t2-t1)
+
+        ! ===== Time update =====
+        this%tsim = RK3_B(isub)*(this%tsim + this%dt) + RK3_A(isub)*Qtmpt
+
+        ! ===== get_primitive (includes equilibration) =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+
+
+        call this%get_primitive()
+
+        if (this%PTeqb) then
+           ! equilibration
+        elseif (this%pEqb) then
+            call this%mix%equilibratePressure(this%rho, this%e, this%p)
+        elseif (this%pRelax) then
+            call this%mix%relaxPressure(this%rho, this%e, this%p)
+        endif
+
+
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_equilibrate = t_equilibrate + (t2-t1)
+
+        ! ===== Boundary conditions =====
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t1 = MPI_Wtime()
+
+        call hook_bc(this%decomp, this%mesh, this%fields, this%mix, &
+                    this%tsim, this%x_bc, this%y_bc, this%z_bc)
+
+        if(this%pEqb) then
+            call this%post_bc_2()
+        else
+            call this%post_bc()
+        endif
+
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        t2 = MPI_Wtime()
+        t_bc = t_bc + (t2-t1)
+
+    end do
+
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    t_total = MPI_Wtime() - t_total
+
+    ! ===== Print results (rank 0 only) =====
+    if (nrank == 0 .and. mod(this%step, 10) == 0) then
+        print*, ""
+        print*, "============================================="
+        print*, "  DETAILED TIMING (per timestep, 3 substeps)"
+        print*, "============================================="
+        write(*,'(A30,F8.4,A,F6.2,A)') "get_conserved:", t_conserved, " s (", t_conserved/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "getFaces:", t_faces, " s (", t_faces/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "getSOS:", t_sos, " s (", t_sos/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "getLAD:", t_lad, " s (", t_lad/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "intSharp:", t_intsharp, " s (", t_intsharp/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "getRHS:", t_rhs, " s (", t_rhs/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "update_Ys:", t_update_ys, " s (", t_update_ys/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "update_VF:", t_update_vf, " s (", t_update_vf/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "interpolateFV:", t_interpolateFV, " s (", t_interpolateFV/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "divergence:", t_divergence, " s (", t_divergence/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "get_prim+equilibrate:", t_equilibrate, " s (", t_equilibrate/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "BC/post_bc:", t_bc, " s (", t_bc/t_total*100, "%)"
+        write(*,'(A30,F8.4,A,F6.2,A)') "Misc (surf tens, etc):", t_misc, " s (", t_misc/t_total*100, "%)"
+        print*, "---------------------------------------------"
+        write(*,'(A30,F8.4,A)') "TOTAL:", t_total, " s"
+        write(*,'(A30,F8.4,A)') "Accounted:", t_conserved+t_faces+t_sos+t_lad+t_intsharp+t_rhs+ &
+                                              t_update_ys+t_update_vf+t_equilibrate+t_bc+t_misc, " s"
+        print*, "============================================="
+        print*, ""
+    endif
+
+    this%step = this%step + 1
+
+    end subroutine
     subroutine advance_RK45(this)
         use RKCoeffs,   only: RK45_steps,RK45_A,RK45_B,RK3_steps,RK3_A,RK3_B
         use timer,      only: tic, toc
@@ -645,6 +2450,19 @@ module SolidGrid
             !call message(3,"VF time (in seconds)",cputime)
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! UNCOMENT             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             !if (.NOT. this%PTeqb) then
+
+!           this%mix%material(1)%VF = 1
+!            this%mix%material(2)%VF = 0
+!            this%mix%material(1)%Ys = 1
+!            this%mix%material(2)%Ys = 0
+!           this%u = 0.7
+!            this%p = 1
+           ! this%mix%material(1)%p = 1
+           ! this%mix%material(2)%p = 1
+           ! this%e = 1
+           ! this%mix%material(1)%eh = 1
+           ! this%mix%material(2)%eh = 1
+
            this%tsim = RK3_B(isub)*( this%tsim + this%dt)  + RK3_A(isub)*Qtmpt
 
             
@@ -690,16 +2508,60 @@ module SolidGrid
                !call this%mix%equilibratePressureTemperature(this%rho, this%e, this%p, this%T, isub)
                ! do i=1,2
 
+               !    call this%mix%equilibrateTemperature(this%rho, this%e, this%p, this%T, isub, RK45_steps)
+!               call this%mix%equilibratePressureTemperature_new(this%rho,this%e, this%p, this%T, isub, RK45_steps) !fixes problem when negative mass fraction
+               !     call this%mix%pressureLiquidGas(this%rho, this%e, this%p)
+               !call this%mix%get_pmix(this%p)                         ! Get mixture pressure
+               !call this%mix%get_Tmix(this%T)                         ! Get mixture temperature
+               ! enddo
 
             elseif (this%pEqb) then
 
 
               call this%mix%equilibratePressure(this%rho,this%e, this%p)
+!             do imat = 1, 2
+!               this%mix%material(imat)%p = this%p
+!               call this%mix%material(imat)%get_ehydroT_from_p(this%rho)
+!             enddo
+
+               !call this%filter(this%p, this%fil, 1,this%x_bc, this%y_bc,this%z_bc)
+              ! call this%mix%updateP_VF(this%rho,this%e,this%p)
+
+
+
+!            rhoe = 0
+!            do i = 1,2
+
+!              rhoe = rhoe + this%mix%material(i)%VF*this%mix%material(i)%hydro%onebygam_m1*( this%p + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)
+
+
+!            enddo
+
+!            where( this%mix%material(1)%VF .GE. 0.1_rkind .AND.( this%mix%material(2)%VF .LE.
+!            this%e = rhoe/this%rho             
+
+!            do i = 1,2
+
+!              this%mix%material(i)%p = this%p
+!              call this%mix%material(i)%get_ehydroT_from_p(this%rho)
+
+!            enddo
 
             elseif (this%pRelax) then
                 call this%mix%relaxPressure(this%rho, this%e, this%p)
+                !call this%mix%relaxPressure_os(this%rho, this%u, this%v, this%w, this%e, this%dt, this%p)
             end if
 
+            !print *, nrank, 11
+            !#####################################################################
+            if(this%intSharp_flp) then  !high pressure ratio shocks require additional dealiasing
+               call this%filter(this%p, this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+               call this%filter(this%T, this%fil, 1, this%x_bc, this%y_bc, this%z_bc)
+               ! call this%filter(this%u, this%fil, 1,-this%x_bc, this%y_bc, this%z_bc)
+               ! call this%filter(this%v, this%fil, 1, this%x_bc,-this%y_bc, this%z_bc)
+               ! call this%filter(this%w, this%fil, 1, this%x_bc, this%y_bc,-this%z_bc)
+            endif
+            !#####################################################################
 
             call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, this%x_bc, this%y_bc, this%z_bc)
             
@@ -710,8 +2572,22 @@ module SolidGrid
             call this%post_bc()
             endif
 
+!            tmp2 = half*( erf( ( this%x - MOD(0.4*this%tsim,5.0)+0.5) / (6.0*this%dx )) - erf( (this%x - MOD(0.4*this%tsim, 5.0)-0.5 ) / (6.0*this%dx ) )  )
+
+!            this%mix%material(1)%VF = tmp2
+!            this%mix%material(2)%VF = 1 - tmp2
+!            this%rho                = this%mix%material(1)%elastic%rho0*tmp2 + this%mix%material(2)%elastic%rho0*(1.0 - tmp2 )
+!            this%mix%material(1)%Ys = this%mix%material(1)%elastic%rho0*tmp2/this%rho
+!            this%mix%material(2)%Ys = 1 - this%mix%material(2)%Ys
+
+            !this%u = 0.7
+            !this%p = 1
+            !call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%x_bc,this%y_bc,this%z_bc)     
+ 
+
          end do
         
+!        call this%FilDiffHeuristic()  
 
         this%step = this%step + 1
     end subroutine
@@ -845,295 +2721,6 @@ module SolidGrid
 
     end subroutine
 
-    subroutine get_dt(this,stability)
-        use reductions, only : P_MAXVAL, P_MINVAL
-        use decomp_2d,  only: nrank
-	use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
-        class(sgrid), target, intent(inout) :: this
-        character(len=*), intent(out) :: stability
-        real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0,dtYs1, dtYs2,dtVF1,dtVF2,deltay,dteKap,dtCurv
-        integer :: i
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk,rhofil,rhokappafil !Source term for possible use in VF, g eh eqns
-        character(len=30) :: str,str2
-        real(rkind) :: dtSponge, sigma_max
-        this%st_limit = 20
-
-        if(this%Stretch1Dy) then
-          deltay = P_MINVAL(this%dy_stretch)
-          delta = min(this%dx,deltay,this%dz)
-        else 
-          delta = min(this%dx, this%dy, this%dz)
-	endif
-	phys_mu = min(this%phys_mu1, this%phys_mu2)
-
-        sigma_max = P_MAXVAL(this%sponge(:,:,:,1))
-        dtSponge  = this%CFL / sigma_max
-        ! continuum
-        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz   &
-                 + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) + one/(this%dz**2) ))
-
-
-        !dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy +  &
-        !       + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2)  ))
-        !print *, "u maxval"
-        !print *, P_MAXVAL( ABS(this%u)/this%dx )
-        !print *, "v maxval"
-        !print *, P_MAXVAL( ABS(this%v)/this%dy )
-        !print *, "w maxval"
-        !print *, P_MAXVAL( ABS(this%w)/this%dz )        
-        !print *, "sos"
-        !print *, P_MAXVAL( this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) +one/(this%dz**2) ) )
-        !print *, "dy"
-        !print *, this%dy
-        !print *, "dx"
-        !print *, this%dx
-        !print *, "dz"
-        !print *, this%dz
-        !print *, "sosmax"
-        !print *, P_MAXVAL( this%sos)
-        rhokappafil = this%mix%material(1)%rhodiff*(this%mix%kappa)**2.0_rkind
-        call this%filter(rhofil, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
-        dtmu   = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
-        dtYs1 = 0.5_rkind * delta**2.0_rkind / (max(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,2)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,3))) + eps) 
-        dtYs2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%rhodiff  ) + eps)
-        dtVF1 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(1)%adiff  ) + eps)
-        dtVF2 = dtYs1 !0.75_rkind * delta**2 / (P_MAXVAL( this%mix%material(2)%adiff  ) + eps)
-
-        !dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
-        dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	dtCurv = 0.5_rkind   /(max(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)*(this%mix%kappa)**2.0_rkind),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,2)*(this%mix%kappa)**2.0_rkind),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,3)*(this%mix%kappa)**2.0_rkind)) + eps)
-
-	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
-              !  if ( phys_mu > eps) then
-          ! filter3D(this%
-                  uk = ABS(this%u*this%mix%norm(:,:,:,1)) + ABS(this%v*this%mix%norm(:,:,:,2)) + ABS(this%w*this%mix%norm(:,:,:,3))
-	          dtsigma = this%CFL*4*max(1/P_MAXVAL(sqrt((4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 ))/ (this%rho))) , &
-                                  P_MINVAL(this%mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy ) ) ))
-                                  !max(1/P_MAXVAL( sqrt((4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 +1/this%dx**3) )/ (this%rho))) , &
-                                  !P_MINVAL(this%mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy + 1/this%dz) ) ))
-              !  else 
-                  dtsigma2 = P_MINVAL( sqrt( (this%rho)/(4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 + 1/this%dx**3) ) ) )
-                  dtsigma3 =  P_MINVAL( 1/ (sqrt((4*pi*this%surfaceTension_coeff) / (this%rho*( this%dx**3 + this%dy**3 +this%dz**3))) + uk*(1/this%dx + 1/this%dy + 1/this%dz  )))
-
-              !  end if
-	end if
-        ! species specific
-        call this%mix%get_dt(this%rho, delta, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast)
-
-        if (this%PTeqb) then
-            !dtkap  = delta**2 / (P_MAXVAL( this%kap*this%T/(this%rho*this%sos**2)) + eps)   ! Cook (2007) formulation
-            dtkap  = one / ( (P_MAXVAL(this%kap*this%T/(this%rho*delta**4)))**(third) + eps) ! Cook (2009) formulation
-        end if
-
-        dtkap     = 0.2_rkind * dtkap! * this%CFL
-        !dtkap     = 0.2_rkind * dtkap !/ 5.0! test
-
-        dtdiff    = 0.2_rkind * dtdiff! * this%CFL
-        dtdiff_g  = 0.2_rkind * dtdiff_g! * this%CFL
-        dtdiff_gt = 0.2_rkind * dtdiff_gt! * this%CFL
-        dtdiff_gp = 0.2_rkind * dtdiff_gp! * this%CFL
-        
-        if(this%intSharp) then
-
-           if(this%intSharp_gam.lt.-0.5) then !maximize intSharp_gam without restricting time step, based on CFL
-              !For intSharp_gam = -1
-              !if(this%intSharp_gam.gt.-two) then
-              this%mix%intSharp_gam = 0.2_rkind * delta**2 / (dtCFL * this%mix%intSharp_eps + eps)
-              !else !ELSE: set intSharp_gam based on maximum velocity as in Tiwari, Freund, Pantano JCP 2013   !For intSharp_gam <= -2
-              if(this%intSharp_gam.lt.-1.5) then
-                 this%mix%intSharp_gam = zero
-                 do i=1,this%mix%ns
-                    this%mix%intSharp_gam = max( this%mix%intSharp_gam, P_MAXVAL( four*sqrt( this%u**2 + this%v**2 + this%w**2 ) * this%mix%material(i)%VF*(one-this%mix%material(i)%VF)) )
-                 enddo
-                 if(this%intSharp_gam.lt.-2.5) then
-                    this%mix%intSharp_gam = zero
-                    this%mix%intSharp_gam = max( this%mix%intSharp_gam, P_MAXVAL(sqrt( this%u**2 + this%v**2 + this%w**2 ) ) )
-                 endif
-                 if (this%intSharp_gam.lt.-3.5) then
-                 this%mix%intSharp_gam = zero
-                 do i=1,this%mix%ns
-                     this%mix%intSharp_gam = max( this%mix%intSharp_gam,P_MAXVAL( four*sqrt( this%v**2 ) *this%mix%material(i)%VF*(one-this%mix%material(i)%VF)) )
-                 enddo
-                 endif
-
-                 if (this%intSharp_gam.lt.-4.5) then
-                 this%mix%intSharp_gam = zero
-                 do i=1,this%mix%ns
-                     this%mix%intSharp_gam = max(this%mix%intSharp_gam,P_MAXVAL( sqrt( this%v**2 )) )
-                 enddo
-                 endif
-
-
-
-              endif
-              !print*,this%intSharp_gam,this%mix%intSharp_gam
-           endif
-
-           ! if (this%step .LE. this%st_limit) then
-           !    !this%mix%intSharp_gam = zero
-           !    this%mix%intSharp_gam = this%mix%intSharp_gam * 1.0D-2
-           !    if (nrank.eq.0) print*,"limiting intSharp_gam"
-           ! endif
-           ! ! ! this%mix%intSharp_gam = zero
-           ! ! ! if (nrank.eq.0) print*,"limiting intSharp_gam"
-              
-
-           dtSharp_diff =  delta**2 / (P_MAXVAL( 6*this%mix%intSharp_gam*this%mix%intSharp_eps) + eps)*this%CFL !based on diffusivity in VF sharpening equation 
-
-           !dtSharp_diff = delta**2/(2.0*this%mix%intSharp_gam*this%mix%intSharp_eps)!from Suhas Jain, Mani, Moin JCP 2020 -- not work
-
-           dtSharp_bound = one/eps
-           if(this%intSharp_msk) then
-              do i=1,this%mix%ns
-                 !dtSharp_bound = min(dtSharp_bound, 0.2_rkind * delta**2 / (P_MAXVAL( this%mix%intSharp_gam*this%mix%intSharp_eps*this%mix%VFboundDiff(:,:,:,i)) + eps))! * this%CFL !based on VF out of bounds diffusivity in VF sharpening equation 
-                 !dtSharp_bound = min(dtSharp_bound, 0.2_rkind * delta**2 / (P_MAXVAL( this%mix%intSharp_gam*this%mix%intSharp_eps*this%mix%VFboundDiff(:,:,:,i)) + eps))! * this%CFL !based on VF out of bounds diffusivity in VF sharpening equation 
-                 !dtSharp_bound = min(dtSharp_bound, 0.2_rkind * delta**2 / (P_MAXVAL( this%mix%intSharp_dif*this%mix%intSharp_gam*this%intSharp_eps*this%mix%VFboundDiff(:,:,:,i)) + eps))! * this%CFL !based on VF out of bounds diffusivity in VF sharpening equation 
-                 dtSharp_bound = min(dtSharp_bound, 0.2_rkind * delta**2 / (P_MAXVAL( this%intSharp_dif*this%mix%intSharp_gam*this%intSharp_eps*this%mix%VFboundDiff(:,:,:,i)) + eps))! * this%CFL !based on VF out of bounds diffusivity in VF sharpening equation 
-              enddo
-           endif
-
-           dtSharp_Adiff   = delta/max(this%mix%intSharp_gam,eps)! * this%CFL !based on anti-diffusivity in VF sharpening equation
-        endif
-         a = -1
-        ! Use fixed time step if CFL <= 0
-        if ( this%CFL .LE. zero ) then
-            this%dt = this%dtfixed
-            stability = 'fixed'
-        else
-            stability = 'convective'
-            this%dt = dtCFL
-            if ( this%dt > dtmu ) then
-                 this%dt = dtmu
-                 stability = 'shear'
-             else if ( this%dt > dtbulk ) then
-                 this%dt = dtbulk
-                 stability = 'bulk'
-             else if ( this%dt > dtYs1 ) then
-                 this%dt = dtYs1
-                 stability = 'Ys1'
-             else if ( this%dt > dtYs2) then
-                 this%dt = dtYs2
-                 stability = 'Ys2'
-             else if ( this%dt > dtVF1 ) then
-                 this%dt = dtVF1
-                 stability = 'VF1'
-             else if ( this%dt > dtVF2) then
-                 this%dt = dtVF2
-                 stability = 'VF2'
-             else if ( this%dt > dtkap ) then
-                 this%dt = dtkap
-                 stability = 'conductive'
-             else if ( this%dt > dtdiff ) then
-                 this%dt = dtdiff
-                 stability = 'diffusive'
-             else if ( this%dt > dtdiff_g ) then
-                 this%dt = dtdiff_g
-                 stability = 'diffusive g'
-             else if ( this%dt > dtdiff_gt ) then
-                 this%dt = dtdiff
-                 stability = 'diffusive g_t'
-             else if ( this%dt > dtplast ) then
-                 this%dt = dtplast
-                 stability = 'plastic'
-              else if ( this%dt > dtSponge ) then
-                 this%dt = dtplast
-                 stability = 'sponge'
-             else if (this%dt > dtCurv ) then
-                 stability = 'numerical curvature'
-             endif
-          
-            if ( this%dt > dtCurv ) then
-               this%dt = dtCurv
-               write(str,'(ES10.3E3)') 1.0D0-dtCurv/dtCFL
-               stability = 'Curv: '//trim(str)//' CFL loss fraction'
-            endif
- 
-            if ( this%dt > dtSponge ) then
-               this%dt = dtSponge
-               write(str,'(ES10.3E3)') 1.0D0-dtmu/dtCFL
-               stability = 'Sponge: '//trim(str)//' CFL loss fraction'
-            endif 
-            if ( this%dt > dtmu ) then
-               this%dt = dtmu
-               write(str,'(ES10.3E3)') 1.0D0-dtmu/dtCFL
-               stability = 'shear: '//trim(str)//' CFL loss fraction'
-            endif
-            if ( this%dt > dtbulk ) then
-               this%dt = dtbulk
-               write(str,'(ES10.3E3)') 1.0D0-dtbulk/dtCFL
-               stability = 'bulk: '//trim(str)//' CFL loss fraction'
-            endif
-            if ( this%dt > dtkap ) then
-               this%dt = dtkap
-               write(str,'(ES10.3E3)') 1.0D0-dtkap/dtCFL
-               stability = 'conductive: '//trim(str)//' CFL loss fraction'
-            endif
-
-            if ( this%dt > dtdiff ) then
-               this%dt = dtdiff
-               write(str,'(ES10.3E3)') 1.0D0-dtdiff/dtCFL
-               stability = 'diffusive: '//trim(str)//' CFL loss fraction'
-            endif
-            if ( this%dt > dtdiff_g ) then
-               this%dt = dtdiff_g
-               write(str,'(ES10.3E3)') 1.0D0-dtdiff_g/dtCFL
-               stability = 'diffusive g: '//trim(str)//' CFL loss fraction'
-            endif
-            if ( this%dt > dtdiff_gt ) then
-               this%dt = dtdiff_gt
-               write(str,'(ES10.3E3)') 1.0D0-dtdiff_gt/dtCFL
-               stability = 'diffusive g_t: '//trim(str)//' CFL loss fraction'
-            endif
-            if ( this%dt > dtdiff_gp ) then
-               this%dt = dtdiff_gp
-               write(str,'(ES10.3E3)') 1.0D0-dtdiff_gp/dtCFL
-               stability = 'diffusive g_p: '//trim(str)//' CFL loss fraction'
-            endif
-	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then	
-	    if ( this%dt > dtsigma ) then
-               this%dt = dtsigma
-               write(str,'(ES10.3E3)') 1.0D0-dtsigma/dtCFL
-               stability = 'surfaceTension: '//trim(str)//' CFL loss fraction'
-            endif
-	endif
-            if ( this%dt > dtplast ) then
-               this%dt = dtplast
-               write(str,'(ES10.3E3)') 1.0D0-dtplast/dtCFL
-               stability = 'plastic: '//trim(str)//' CFL loss fraction'
-            end if
-            if (this%intSharp) then
-               if ( this%dt > dtSharp_diff ) then
-                  this%dt = dtSharp_diff
-                  write(str,'(ES10.3E3)') 1.0D0-dtSharp_diff/dtCFL
-                  stability = 'sharp diff: '//trim(str)//' CFL loss fraction'
-               end if
-               if ( this%dt > dtSharp_Adiff ) then
-                  this%dt = dtSharp_Adiff
-                  write(str,'(ES10.3E3)') 1.0D0-dtSharp_Adiff/dtCFL
-                  stability = 'sharp a-diff: '//trim(str)//' CFL loss fraction'
-               end if
-               
-               if(this%intSharp_msk) then
-
-                  if ( this%dt > dtSharp_bound ) then
-                      this%dt = dtSharp_bound
-                      !write(str2,'(F25.18)') dtCFL
-                      !write(str,'(F6.2)') 1.0D2*dtSharp_bound/dtCFL
-                      !stability = 'Sharp VF bounds: '//trim(str)//'%'//' '//trim(str2)
-                      write(str,'(ES10.3E3)') 1.0D0-dtSharp_bound/dtCFL
-                      stability = 'sharp VF bounds: '//trim(str)//' CFL loss fraction'
-                  end if
-               end if
-            end if
-
-            if (this%step .LE. this%st_limit) then
-               this%dt = min(this%dt / st_fac, this%dtfixed)
-               stability = 'startup'
-            endif
-         endif
-
-    end subroutine
-
     subroutine get_dtlocal(this,stability)
     use reductions, only : P_MAXVAL, P_MINVAL
     use decomp_2d,  only: nrank
@@ -1252,7 +2839,7 @@ module SolidGrid
     ! Interface sharpening terms
     if (this%intSharp) then
         idx = idx + 1
-        local_vals(idx) = MAXVAL(6*this%mix%intSharp_gam*this%mix%intSharp_eps)
+        local_vals(idx) =(6*this%mix%intSharp_gam*this%mix%intSharp_eps)
 
         if (this%intSharp_gam .lt. -1.5) then
             idx = idx + 1
@@ -1275,13 +2862,6 @@ module SolidGrid
             endif
         endif
 
-        if (this%intSharp_msk) then
-            do i=1,this%mix%ns
-                idx = idx + 1
-                local_vals(idx) = MAXVAL(this%intSharp_dif*this%mix%intSharp_gam*this%intSharp_eps* &
-                                         this%mix%VFboundDiff(:,:,:,i))
-            enddo
-        endif
     endif
 
     n_max = idx  ! Actual number of max values computed
@@ -1433,8 +3013,7 @@ module SolidGrid
             write(str,'(ES10.3E3)') 1.0D0-dtmu/dtCFL
             stability = 'Sponge: '//trim(str)//' CFL loss fraction'
         endif
-
-        if ( this%dt > dtmu ) then
+         if ( this%dt > dtmu ) then
                this%dt = dtmu
                write(str,'(ES10.3E3)') 1.0D0-dtmu/dtCFL
                stability = 'shear: '//trim(str)//' CFL loss fraction'
@@ -1471,6 +3050,184 @@ module SolidGrid
 
             end if
 
+            if (this%step .LE. this%st_limit) then
+               this%dt = min(this%dt / st_fac, this%dtfixed)
+               stability = 'startup'
+            endif
+         endif
+
+    end subroutine
+    subroutine get_dt(this,stability)
+        use reductions, only : P_MAXVAL, P_MINVAL
+        use decomp_2d,  only: nrank
+	use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
+        class(sgrid), target, intent(inout) :: this
+        character(len=*), intent(out) :: stability
+        real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0,dtYs1, dtYs2,dtVF1,dtVF2,deltay,dteKap,dtCurv
+        integer :: i
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk,rhofil,rhokappafil !Source term for possible use in VF, g eh eqns
+        character(len=30) :: str,str2
+        real(rkind) :: dtSponge, sigma_max
+        this%st_limit = 20
+
+        if(this%Stretch1Dy) then
+          deltay = P_MINVAL(this%dy_stretch)
+          delta = min(this%dx,deltay,this%dz)
+        else 
+          delta = min(this%dx, this%dy, this%dz)
+	endif
+	phys_mu = min(this%phys_mu1, this%phys_mu2)
+
+        sigma_max = P_MAXVAL(this%sponge(:,:,:,1))
+        dtSponge  = this%CFL / sigma_max
+        ! continuum
+        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy + ABS(this%w)/this%dz   &
+                 + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2) + one/(this%dz**2) ))
+
+        !dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/this%dy +  &
+        !       + this%sos*sqrt( one/(this%dx**2) + one/(this%dy**2)  ))
+        dtmu   = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
+        dtYs1 = 0.5_rkind * delta**2.0_rkind / (max(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,2)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,3))) + eps) 
+
+        !dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
+        dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
+	dtCurv = 0.5_rkind   /(max(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)*(this%mix%kappa)**2.0_rkind),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,2)*(this%mix%kappa)**2.0_rkind),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,3)*(this%mix%kappa)**2.0_rkind)) + eps)
+
+	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
+              !  if ( phys_mu > eps) then
+          ! filter3D(this%
+                  uk = ABS(this%u*this%mix%norm(:,:,:,1)) + ABS(this%v*this%mix%norm(:,:,:,2)) + ABS(this%w*this%mix%norm(:,:,:,3))
+	          dtsigma = this%CFL*4*max(1/P_MAXVAL(sqrt((4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 ))/ (this%rho))) , &
+                                  P_MINVAL(this%mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy ) ) ))
+                                  !max(1/P_MAXVAL( sqrt((4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 +1/this%dx**3) )/ (this%rho))) , &
+                                  !P_MINVAL(this%mu/(this%surfaceTension_coeff*(1/this%dx + 1/this%dy + 1/this%dz) ) ))
+              !  else 
+                  dtsigma2 = P_MINVAL( sqrt( (this%rho)/(4*pi*this%surfaceTension_coeff*(1/this%dx**3 + 1/this%dy**3 + 1/this%dx**3) ) ) )
+                  dtsigma3 =  P_MINVAL( 1/ (sqrt((4*pi*this%surfaceTension_coeff) / (this%rho*( this%dx**3 + this%dy**3 +this%dz**3))) + uk*(1/this%dx + 1/this%dy + 1/this%dz  )))
+
+              !  end if
+	end if
+
+        if(this%intSharp) then
+
+           if(this%intSharp_gam.lt.-0.5) then !maximize intSharp_gam without restricting time step, based on CFL
+              !For intSharp_gam = -1
+              !if(this%intSharp_gam.gt.-two) then
+              this%mix%intSharp_gam = 0.2_rkind * delta**2 / (dtCFL * this%mix%intSharp_eps + eps)
+              !else !ELSE: set intSharp_gam based on maximum velocity as in Tiwari, Freund, Pantano JCP 2013   !For intSharp_gam <= -2
+              if(this%intSharp_gam.lt.-1.5) then
+                 this%mix%intSharp_gam = zero
+                 do i=1,this%mix%ns
+                    this%mix%intSharp_gam = max( this%mix%intSharp_gam, P_MAXVAL( four*sqrt( this%u**2 + this%v**2 + this%w**2 ) * this%mix%material(i)%VF*(one-this%mix%material(i)%VF)) )
+                 enddo
+                 if(this%intSharp_gam.lt.-2.5) then
+                    this%mix%intSharp_gam = zero
+                    this%mix%intSharp_gam = max( this%mix%intSharp_gam, P_MAXVAL(sqrt( this%u**2 + this%v**2 + this%w**2 ) ) )
+                 endif
+                 if (this%intSharp_gam.lt.-3.5) then
+                 this%mix%intSharp_gam = zero
+                 do i=1,this%mix%ns
+                     this%mix%intSharp_gam = max( this%mix%intSharp_gam,P_MAXVAL( four*sqrt( this%v**2 ) *this%mix%material(i)%VF*(one-this%mix%material(i)%VF)) )
+                 enddo
+                 endif
+
+                 if (this%intSharp_gam.lt.-4.5) then
+                 this%mix%intSharp_gam = zero
+                 do i=1,this%mix%ns
+                     this%mix%intSharp_gam = max(this%mix%intSharp_gam,P_MAXVAL( sqrt( this%v**2 )) )
+                 enddo
+                 endif
+
+
+
+              endif
+              !print*,this%intSharp_gam,this%mix%intSharp_gam
+           endif
+
+           dtSharp_diff =  delta**2 / (P_MAXVAL( 6*this%mix%intSharp_gam*this%mix%intSharp_eps) + eps)*this%CFL !based on diffusivity in VF sharpening equation 
+
+
+           dtSharp_bound = one/eps
+           if(this%intSharp_msk) then
+              do i=1,this%mix%ns
+                 dtSharp_bound = min(dtSharp_bound, 0.2_rkind * delta**2 / (P_MAXVAL( this%intSharp_dif*this%mix%intSharp_gam*this%intSharp_eps*this%mix%VFboundDiff(:,:,:,i)) + eps))! * this%CFL !based on VF out of bounds diffusivity in VF sharpening equation 
+              enddo
+           endif
+
+           dtSharp_Adiff   = delta/max(this%mix%intSharp_gam,eps)! * this%CFL !based on anti-diffusivity in VF sharpening equation
+        endif
+         a = -1
+        ! Use fixed time step if CFL <= 0
+        if ( this%CFL .LE. zero ) then
+            this%dt = this%dtfixed
+            stability = 'fixed'
+        else
+            stability = 'convective'
+            this%dt = dtCFL
+            if ( this%dt > dtmu ) then
+                 this%dt = dtmu
+                 stability = 'shear'
+             else if ( this%dt > dtbulk ) then
+                 this%dt = dtbulk
+                 stability = 'bulk'
+             else if ( this%dt > dtYs1 ) then
+                 this%dt = dtYs1
+                 stability = 'Ys1'
+              else if ( this%dt > dtSponge ) then
+                 this%dt = dtSponge
+                 stability = 'sponge'
+             else if (this%dt > dtCurv ) then
+                 stability = 'numerical curvature'
+             endif
+          
+            if ( this%dt > dtCurv ) then
+               this%dt = dtCurv
+               write(str,'(ES10.3E3)') 1.0D0-dtCurv/dtCFL
+               stability = 'Curv: '//trim(str)//' CFL loss fraction'
+            endif
+ 
+            if ( this%dt > dtSponge ) then
+               this%dt = dtSponge
+               write(str,'(ES10.3E3)') 1.0D0-dtSponge/dtCFL
+               stability = 'Sponge: '//trim(str)//' CFL loss fraction'
+            endif 
+            if ( this%dt > dtmu ) then
+               this%dt = dtmu
+               write(str,'(ES10.3E3)') 1.0D0-dtmu/dtCFL
+               stability = 'shear: '//trim(str)//' CFL loss fraction'
+            endif
+            if ( this%dt > dtbulk ) then
+               this%dt = dtbulk
+               write(str,'(ES10.3E3)') 1.0D0-dtbulk/dtCFL
+               stability = 'bulk: '//trim(str)//' CFL loss fraction'
+            endif
+
+             if ( this%dt > dtYs1 ) then
+               this%dt = dtYs1
+               write(str,'(ES10.3E3)') 1.0D0-dtYs1/dtCFL
+               stability = 'Ys1: '//trim(str)//' CFL loss fraction'
+            endif
+
+	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then	
+	    if ( this%dt > dtsigma ) then
+               this%dt = dtsigma
+               write(str,'(ES10.3E3)') 1.0D0-dtsigma/dtCFL
+               stability = 'surfaceTension: '//trim(str)//' CFL loss fraction'
+            endif
+	endif
+            if (this%intSharp) then
+               if ( this%dt > dtSharp_diff ) then
+                  this%dt = dtSharp_diff
+                  write(str,'(ES10.3E3)') 1.0D0-dtSharp_diff/dtCFL
+                  stability = 'sharp diff: '//trim(str)//' CFL loss fraction'
+               end if
+               if ( this%dt > dtSharp_Adiff ) then
+                  this%dt = dtSharp_Adiff
+                  write(str,'(ES10.3E3)') 1.0D0-dtSharp_Adiff/dtCFL
+                  stability = 'sharp a-diff: '//trim(str)//' CFL loss fraction'
+               end if
+               
+            end if
 
             if (this%step .LE. this%st_limit) then
                this%dt = min(this%dt / st_fac, this%dtfixed)
@@ -1478,7 +3235,8 @@ module SolidGrid
             endif
          endif
 
-    end subroutine    
+    end subroutine
+
     subroutine get_primitive(this)
         use reductions, only: P_MAXVAL, P_MINVAL
         use decomp_2d,  only: nrank
