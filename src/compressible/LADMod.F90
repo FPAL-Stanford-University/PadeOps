@@ -55,6 +55,7 @@ module LADMod
         procedure          :: get_diffusivity_Bounds
         procedure          :: get_diffusivity_N2F
         procedure          :: get_diffusivity_5eqnOG
+        procedure          :: get_diffusivity_5eqnOG_Speed
         procedure          :: get_diff_g
         procedure          :: get_diff_pe
         procedure          :: get_e
@@ -778,14 +779,14 @@ contains
         call transpose_y_to_x(kappa,xtmp1,this%decomp)
         call this%der%d2dx2(xtmp1,xtmp2,x_bc(1),x_bc(2))
         !call this%der%d2dx2(xtmp2,xtmp1,x_bc(1),x_bc(2))
-        xtmp1 = xtmp2*this%dx**5
+        xtmp1 = xtmp2*this%dx**4
         call transpose_x_to_y(xtmp1,ytmp4,this%decomp)
         Curvstar = ytmp4
 
         call transpose_y_to_z(kappa,ztmp1,this%decomp)
         call this%der%d2dz2(ztmp1,ztmp2,x_bc(1),x_bc(2))
         !call this%der%d2dz2(ztmp2,ztmp1,x_bc(1),x_bc(2))
-        ztmp1 = ztmp2*this%dz**5
+        ztmp1 = ztmp2*this%dz**4
         call transpose_z_to_y(ztmp1,ytmp4,this%decomp)
         Curvstar = Curvstar +ytmp4
 
@@ -911,7 +912,149 @@ contains
         
 
     end subroutine
+   
+    subroutine get_diffusivity_5eqnOG_Speed(this,rho,VF,rhoYs,umag,minYs,minVF, sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,rho0,dt, OOBVF, OOBYs, HighVF, HighYs,deltakapYs,kappa)
+    use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
+    class(ladobject),  intent(in) :: this
+    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in)    :: rhoYs,sos,VF,rho, umag,dy_stretch,detady,deltakapYs,kappa
+    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff, OOBVF, OOBYs, HighVF, HighYs
+    integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+    real(rkind),intent(in)  :: rho0,dt
+    real(rkind), intent(in) :: minYs, minVF
     
+    ! Reduced temporary arrays - reuse aggressively
+    real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1, xtmp2
+    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1, ytmp2, ytmp3
+    real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1, ztmp2
+    
+    ! Results arrays - keep only what we need
+    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: Ys, diffstar, adiffstar, Curvstar
+    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: outb_Ys, outb_VF
+    
+    ! Pre-computed constants
+    real(rkind) :: delta_cube_third, sos_CY, sos_Cvf2, dx5, dy5, dz5, dx4, dy4, dz4
+    real(rkind) :: detady4, dy_stretch5, dy_stretch4
+    real(rkind), parameter :: eps_bound = 1.0d-5, eps_safe = 1.0d-14
+    real(rkind), parameter :: inv_eps_safe = 1.0d0 / (eps_bound + eps_safe)
+    
+    ! -------- Pre-compute constants ---------
+    dx5 = this%dx**5
+    dz5 = this%dz**5
+    dx4 = this%dx**4
+    dz4 = this%dz**4
+    
+    if(this%yMetric) then
+        delta_cube_third = (dy_stretch*this%dx*this%dz)**third
+        detady4 = detady**4
+        dy_stretch5 = dy_stretch**5
+        dy_stretch4 = dy_stretch**4
+        dy5 = detady4 * dy_stretch5
+        dy4 = detady**2 * dy_stretch4
+    else
+        delta_cube_third = (this%dy*this%dx*this%dz)**third
+        dy5 = this%dy**5
+        dy4 = this%dy**4
+    endif
+    
+    sos_CY = this%CY * delta_cube_third
+    sos_Cvf2 = this%Cvf2 * delta_cube_third
+    
+    ! -------- Compute Ys once ---------
+    Ys = rhoYs / rho
+    
+    ! ========================================
+    ! PASS 1: All X-direction derivatives
+    ! ========================================
+    call transpose_y_to_x(Ys, xtmp1, this%decomp)
+    call this%der%d2dx2(xtmp1, xtmp2, x_bc(1), x_bc(2))
+    call this%der%d2dx2(xtmp2, xtmp1, x_bc(1), x_bc(2))
+    xtmp1 = xtmp1 * dx5
+    call transpose_x_to_y(xtmp1, diffstar, this%decomp)  ! diffstar = d4Ys/dx4 * dx^5
+    
+    call transpose_y_to_x(VF, xtmp1, this%decomp)
+    call this%der%d2dx2(xtmp1, xtmp2, x_bc(1), x_bc(2))
+    call this%der%d2dx2(xtmp2, xtmp1, x_bc(1), x_bc(2))
+    xtmp1 = xtmp1 * dx5
+    call transpose_x_to_y(xtmp1, adiffstar, this%decomp)  ! adiffstar = d4VF/dx4 * dx^5
+    
+    call transpose_y_to_x(kappa, xtmp1, this%decomp)
+    call this%der%d2dx2(xtmp1, xtmp2, x_bc(1), x_bc(2))
+    xtmp2 = xtmp2 * dx4
+    call transpose_x_to_y(xtmp2, Curvstar, this%decomp)  ! Curvstar = d2kappa/dx2 * dx^4
+    
+    ! ========================================
+    ! PASS 2: All Z-direction derivatives
+    ! ========================================
+    call transpose_y_to_z(Ys, ztmp1, this%decomp)
+    call this%der%d2dz2(ztmp1, ztmp2, z_bc(1), z_bc(2))
+    call this%der%d2dz2(ztmp2, ztmp1, z_bc(1), z_bc(2))
+    ztmp1 = ztmp1 * dz5
+    call transpose_z_to_y(ztmp1, ytmp1, this%decomp)
+    diffstar = diffstar + ytmp1  ! Add Z contribution
+    
+    call transpose_y_to_z(VF, ztmp1, this%decomp)
+    call this%der%d2dz2(ztmp1, ztmp2, z_bc(1), z_bc(2))
+    call this%der%d2dz2(ztmp2, ztmp1, z_bc(1), z_bc(2))
+    ztmp1 = ztmp1 * dz5
+    call transpose_z_to_y(ztmp1, ytmp1, this%decomp)
+    adiffstar = adiffstar + ytmp1  ! Add Z contribution
+    
+    call transpose_y_to_z(kappa, ztmp1, this%decomp)
+    call this%der%d2dz2(ztmp1, ztmp2, z_bc(1), z_bc(2))
+    ztmp2 = ztmp2 * dz4
+    call transpose_z_to_y(ztmp2, ytmp1, this%decomp)
+    Curvstar = Curvstar + ytmp1  ! Add Z contribution
+    
+    ! ========================================
+    ! PASS 3: All Y-direction derivatives (no transpose needed!)
+    ! ========================================
+    call this%der%d2dy2(Ys, ytmp1, y_bc(1), y_bc(2))
+    call this%der%d2dy2(ytmp1, ytmp2, y_bc(1), y_bc(2))
+    diffstar = diffstar + ytmp2 * dy5
+    
+    call this%der%d2dy2(VF, ytmp1, y_bc(1), y_bc(2))
+    call this%der%d2dy2(ytmp1, ytmp2, y_bc(1), y_bc(2))
+    adiffstar = adiffstar + ytmp2 * dy5
+    
+    call this%der%d2dy2(kappa, ytmp1, y_bc(1), y_bc(2))
+    Curvstar = Curvstar + ytmp1 * dy4
+    
+    ! ========================================
+    ! Compute out-of-bounds diffusivity
+    ! ========================================
+    ! For Ys: max((eps-Ys), (Ys-1+eps), 0) / (eps + eps_safe)
+    ytmp1 = max(eps_bound - Ys, Ys - 1.0d0 + eps_bound, 0.0d0) * inv_eps_safe
+    outb_Ys = sos_CY * sos * ytmp1
+    
+    ! For VF: same formula
+    ytmp2 = max(eps_bound - VF, VF - 1.0d0 + eps_bound, 0.0d0) * inv_eps_safe
+    outb_VF = sos_Cvf2 * sos * ytmp2
+    
+    ! ========================================
+    ! Finalize diffusivity terms
+    ! ========================================
+    ! Complete diffstar: multiply by sos
+    diffstar = abs(diffstar) * sos
+    
+    ! Complete adiffstar
+    adiffstar = this%Cvf1 * abs(adiffstar) * sos
+    
+    ! Complete Curvstar
+    Curvstar = abs(Curvstar* sos * log(abs(rho + 1.0d-16)))
+    
+    ! ========================================
+    ! Combine results
+    ! ========================================
+    rhodiff = max(diffstar, adiffstar, this%Cdiff * Curvstar) + max(outb_Ys, outb_VF)
+    adiff = rhodiff
+    
+    ! Output diagnostics
+    HighYs = diffstar
+    OOBYs = outb_Ys
+    HighVF = Curvstar
+    OOBVF = outb_VF
+
+end subroutine  
     subroutine get_diffusivity(this,Ys,dYsdx,dYsdy,dYsdz,sos,diff,x_bc,y_bc,z_bc)
         class(ladobject),  intent(in) :: this
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)), intent(in)  :: Ys,dYsdx,dYsdy,dYsdz,sos
