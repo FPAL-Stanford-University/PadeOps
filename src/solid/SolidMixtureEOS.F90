@@ -1770,6 +1770,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos,p,u,v,w,detady,dy_stretch  ! Mixture density and speed of sound
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical, intent(in) :: periodicx, periodicy, periodicz
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: adiff_shared,rhodiff_shared,OOBVF,OOBYs,HighVF,HighYs
         real(rkind), intent(in) :: tfloor,dt
         real(rkind), dimension(2) :: minYs
         integer :: i,d
@@ -1794,10 +1795,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
             call this%LAD%get_diffusivity_5eqnOG_Speed( &
                 rho, &
                 this%material(1)%VF, &
-                rho*this%material(1)%Ys, &
-                umag, &
-                minYs(1), &
-                this%intSharp_cut, &
+                this%material(1)%Ys, &
                 sos, &
                 adiff_shared, &
                 rhodiff_shared, &
@@ -1806,7 +1804,6 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                 this%material(1)%elastic%rho0, &
                 dt, &
                 OOBVF, OOBYs, HighVF, HighYs, &
-                this%deltakap, &
                 this%kappaNoFil)
             
             ! Share the result with both species
@@ -1831,10 +1828,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                 call this%LAD%get_diffusivity_5eqnOG_Speed( &
                     rho, &
                     this%material(i)%VF, &
-                    rho*this%material(i)%Ys, &
-                    umag, &
-                    minYs(i), &
-                    this%intSharp_cut, &
+                    this%material(i)%Ys, &
                     sos, &
                     this%material(i)%adiff, &
                     this%material(i)%rhodiff, &
@@ -1846,7 +1840,6 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                     this%material(i)%OOBYs, &
                     this%material(i)%HighVF, &
                     this%material(i)%HighYs, &
-                    this%deltakap, &
                     this%kappaNoFil)
             enddo
         endif

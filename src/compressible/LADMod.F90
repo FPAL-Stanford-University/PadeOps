@@ -913,14 +913,13 @@ contains
 
     end subroutine
    
-    subroutine get_diffusivity_5eqnOG_Speed(this,rho,VF,rhoYs,umag,minYs,minVF, sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,rho0,dt, OOBVF, OOBYs, HighVF, HighYs,deltakapYs,kappa)
+    subroutine get_diffusivity_5eqnOG_Speed(this,rho,VF,Ys,sos,adiff,rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,rho0,dt, OOBVF, OOBYs, HighVF, HighYs,kappa)
     use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
     class(ladobject),  intent(in) :: this
-    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in)    :: rhoYs,sos,VF,rho, umag,dy_stretch,detady,deltakapYs,kappa
+    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(in)    :: Ys,sos,VF,rho,dy_stretch,detady,kappa
     real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)),intent(inout) :: adiff, rhodiff, OOBVF, OOBYs, HighVF, HighYs
     integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
     real(rkind),intent(in)  :: rho0,dt
-    real(rkind), intent(in) :: minYs, minVF
     
     ! Reduced temporary arrays - reuse aggressively
     real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1, xtmp2
@@ -928,12 +927,11 @@ contains
     real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1, ztmp2
     
     ! Results arrays - keep only what we need
-    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: Ys, diffstar, adiffstar, Curvstar
-    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: outb_Ys, outb_VF
+    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar, adiffstar, Curvstar,sos_CY, sos_Cvf2 
+    real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: outb_Ys, outb_VF,detady4,dy_stretch5,dy_stretch4,delta_cube_third,dy4,dy5
     
     ! Pre-computed constants
-    real(rkind) :: delta_cube_third, sos_CY, sos_Cvf2, dx5, dy5, dz5, dx4, dy4, dz4
-    real(rkind) :: detady4, dy_stretch5, dy_stretch4
+    real(rkind) :: dx5, dz5, dx4, dz4
     real(rkind), parameter :: eps_bound = 1.0d-5, eps_safe = 1.0d-14
     real(rkind), parameter :: inv_eps_safe = 1.0d0 / (eps_bound + eps_safe)
     
@@ -960,7 +958,6 @@ contains
     sos_Cvf2 = this%Cvf2 * delta_cube_third
     
     ! -------- Compute Ys once ---------
-    Ys = rhoYs / rho
     
     ! ========================================
     ! PASS 1: All X-direction derivatives

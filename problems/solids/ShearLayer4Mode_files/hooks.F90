@@ -23,7 +23,7 @@ module ShearLayer4Mode_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 4*pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d = 0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=4*pi
+    real(rkind) :: Ly = 1.0, Lx = 2*pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
     real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
