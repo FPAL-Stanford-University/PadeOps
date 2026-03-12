@@ -1763,91 +1763,138 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
     end subroutine
 
-    ! Subroutine to get species art. conductivities and diffusivities
+      ! Subroutine to get species art. conductivities and diffusivities
     subroutine getLAD(this,rho,p,e,u,v,w,sos,detady,dy_stretch,use_gTg,strainHard,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,tfloor,dt)
          use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz,filter3D
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos,p,u,v,w,detady,dy_stretch  ! Mixture density and speed of sound
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical, intent(in) :: periodicx, periodicy, periodicz
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: adiff_shared,rhodiff_shared,OOBVF,OOBYs,HighVF,HighYs
         real(rkind), intent(in) :: tfloor,dt
         real(rkind), dimension(2) :: minYs
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradrYs,gradphi,tmpYs,rho_int
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)   :: umag,rhom1,rhom2,c1,c2,cVF,rhom,Ys_fil,VF_fil,divu
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,2) :: dYdx_x, dYdy_y, dYdz_z
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,2) :: tmp,VF_int,rhodiff_int,rhom_int, adiff_int,Ys_int
         integer :: i,d
 
         logical, intent(in) :: use_gTg,strainHard
         minYs(1) = this%material(1)%elastic%rho0/this%material(2)%elastic%rho0*1d-7 !*this%intSharp_cut
         minYs(2) = this%material(2)%elastic%rho0/this%material(1)%elastic%rho0*1d-7 !*this%intSharp_cut
 
+        !print *, "minYs 1 = ", minYs(1)
+        !print *, "minYs 2 = ", minYs(2)
+        umag = u*u + v*v + w*w
+        tmpYs = 0.0
 
-        do i = 1, this%ns
+        call this%material(1)%getSpeciesDensity(rho,rhom1)
+        call this%material(2)%getSpeciesDensity(rho,rhom2)
+        call this%material(1)%hydro%get_sos(rhom1,p,c1)
+        call this%material(2)%hydro%get_sos(rhom2,p,c2)
+
+        cVF = this%material(1)%VF*c1 + this%material(2)%VF*c1
+        rho_int = this%material(1)%rhoYs_mid + this%material(2)%rhoYs_mid
+
+        do i = 1,this%ns
             call this%material(i)%getPhysicalProperties()
-        enddo
-        
-        if (this%ns == 2) then
-            ! ============================================
-            ! TWO-SPECIES OPTIMIZATION: Calculate once
-            ! ============================================
-            ! Use species 1 as the reference (could use either)
-            adiff_shared = 0.0d0
-            rhodiff_shared = 0.0d0
-            
-            call this%LAD%get_diffusivity_5eqnOG_Speed( &
-                rho, &
-                this%material(1)%VF, &
-                this%material(1)%Ys, &
-                sos, &
-                adiff_shared, &
-                rhodiff_shared, &
-                x_bc, y_bc, z_bc, &
-                detady, dy_stretch, &
-                this%material(1)%elastic%rho0, &
-                dt, &
-                OOBVF, OOBYs, HighVF, HighYs, &
-                this%kappaNoFil)
-            
-            ! Share the result with both species
-            do i = 1, 2
-                this%material(i)%adiff = adiff_shared
-                this%material(i)%rhodiff = rhodiff_shared
-                this%material(i)%OOBVF = OOBVF
-                this%material(i)%OOBYs = OOBYs
-                this%material(i)%HighVF = HighVF
-                this%material(i)%HighYs = HighYs
-            enddo
-            
-        else
-            ! ============================================
-            ! MULTI-SPECIES: Calculate separately
-            ! ============================================
-            do i = 1, this%ns
-                this%material(i)%adiff = 0.0d0
-                this%material(i)%rhodiff = 0.0d0
-                this%material(i)%outdiff = 0.0d0
-                
-                call this%LAD%get_diffusivity_5eqnOG_Speed( &
-                    rho, &
-                    this%material(i)%VF, &
-                    this%material(i)%Ys, &
-                    sos, &
-                    this%material(i)%adiff, &
-                    this%material(i)%rhodiff, &
-                    x_bc, y_bc, z_bc, &
-                    detady, dy_stretch, &
-                    this%material(i)%elastic%rho0, &
-                    dt, &
-                    this%material(i)%OOBVF, &
-                    this%material(i)%OOBYs, &
-                    this%material(i)%HighVF, &
-                    this%material(i)%HighYs, &
-                    this%kappaNoFil)
-            enddo
-        endif
-    
-    
+
+            this%material(i)%adiff = 0
+            this%material(i)%rhodiff = 0
+            this%material(i)%outdiff = 0
+            call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,umag,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,this%deltakap,this%kappaNoFil)
+
+       enddo
+
+
+
 
     end subroutine
 
+    ! Subroutine to get species art. conductivities and diffusivities
+!    subroutine getLAD(this,rho,p,e,u,v,w,sos,detady,dy_stretch,use_gTg,strainHard,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,tfloor,dt)
+!         use operators, only: divergence,gradient,divergenceFV,interpolateFV,interpolateFV_x,interpolateFV_y,interpolateFV_z,gradFV_N2Fx, gradFV_N2Fy, gradFV_N2Fz,filter3D
+!        class(solid_mixture), intent(inout) :: this
+!        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,e,sos,p,u,v,w,detady,dy_stretch  ! Mixture density and speed of sound
+!        integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+!        logical, intent(in) :: periodicx, periodicy, periodicz
+!        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: adiff_shared,rhodiff_shared,OOBVF,OOBYs,HighVF,HighYs
+!        real(rkind), intent(in) :: tfloor,dt
+!        real(rkind), dimension(2) :: minYs
+!        integer :: i,d
+!
+!        logical, intent(in) :: use_gTg,strainHard
+!        minYs(1) = this%material(1)%elastic%rho0/this%material(2)%elastic%rho0*1d-7 !*this%intSharp_cut
+!        minYs(2) = this%material(2)%elastic%rho0/this%material(1)%elastic%rho0*1d-7 !*this%intSharp_cut
+!
+!
+!        do i = 1, this%ns
+!            call this%material(i)%getPhysicalProperties()
+!        enddo
+!        
+!        if (this%ns == 2) then
+!            ! ============================================
+!            ! TWO-SPECIES OPTIMIZATION: Calculate once
+!            ! ============================================
+!            ! Use species 1 as the reference (could use either)
+!            adiff_shared = 0.0d0
+!            rhodiff_shared = 0.0d0
+!            
+!            call this%LAD%get_diffusivity_5eqnOG_Speed( &
+!                rho, &
+!                this%material(1)%VF, &
+!                this%material(1)%Ys, &
+!                sos, &
+!                adiff_shared, &
+!                rhodiff_shared, &
+!                x_bc, y_bc, z_bc, &
+!                detady, dy_stretch, &
+!                this%material(1)%elastic%rho0, &
+!                dt, &
+!                OOBVF, OOBYs, HighVF, HighYs, &
+!                this%kappaNoFil)
+!            
+!            ! Share the result with both species
+!            do i = 1, 2
+!                this%material(i)%adiff = adiff_shared
+!                this%material(i)%rhodiff = rhodiff_shared
+!                this%material(i)%OOBVF = OOBVF
+!                this%material(i)%OOBYs = OOBYs
+!                this%material(i)%HighVF = HighVF
+!                this%material(i)%HighYs = HighYs
+!            enddo
+!            
+!        else
+!            ! ============================================
+!            ! MULTI-SPECIES: Calculate separately
+!            ! ============================================
+!            do i = 1, this%ns
+!                this%material(i)%adiff = 0.0d0
+!                this%material(i)%rhodiff = 0.0d0
+!                this%material(i)%outdiff = 0.0d0
+!                
+!                call this%LAD%get_diffusivity_5eqnOG_Speed( &
+!                    rho, &
+!                    this%material(i)%VF, &
+!                    this%material(i)%Ys, &
+!                    sos, &
+!                    this%material(i)%adiff, &
+!                    this%material(i)%rhodiff, &
+!                    x_bc, y_bc, z_bc, &
+!                    detady, dy_stretch, &
+!                    this%material(i)%elastic%rho0, &
+!                    dt, &
+!                    this%material(i)%OOBVF, &
+!                    this%material(i)%OOBYs, &
+!                    this%material(i)%HighVF, &
+!                    this%material(i)%HighYs, &
+!                    this%kappaNoFil)
+!            enddo
+!        endif
+!    
+!    
+!
+!    end subroutine
+!
     subroutine get_p_from_ehydro(this, rho)
         class(solid_mixture), intent(inout) :: this
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: rho
@@ -2307,7 +2354,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradYs(:,:,:,imat) )
 
 
-                Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) +  (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradVF(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 ) + this%material(i)%adiff_stagg(:,:,:,imat)*gradp(:,:,:,imat)*this%material(i)%VF_mid(:,:,:,imat)*this%material(i)%hydro%onebygam_m1*this%material(i)%hydro%gam
+                Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradVF(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )  + this%material(i)%adiff_stagg(:,:,:,imat)*gradp(:,:,:,imat)*this%material(i)%VF_mid(:,:,:,imat)*this%material(i)%hydro%onebygam_m1*this%material(i)%hydro%gam
              
 
             enddo
@@ -2850,12 +2897,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            if(this%intSharp_msk) then
 
                   if(i == 1) then
-                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-5 - this%intSharp_cut + e )/ (one -  this%intSharp_cut - 1d-5 + e) ) )
+                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one -  this%intSharp_cut - 4d-5 + e) ) )
                      
-                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-3 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-3 + e) ) )                 
+                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-2 + e) ) )                 
                   else
-                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-3 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-3 + e) ) )
-                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-5 + e) ) )      
+                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-2 + e) ) )
+                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 4d-5 + e) ) )      
 
                   endif
 
@@ -2904,10 +2951,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                        H = abs( this%material(i)%Ys_mid(:,:,:,d) -one )
                     elsewhere( (this%material(i)%Ys_mid(:,:,:,d) .LE. zero ) )
                        H = abs(this%material(i)%Ys_mid(:,:,:,d) )
-                    elsewhere( this%material(i)%Ys .GE. one)
-                       H = abs(this%material(i)%Ys - one)
-                    elsewhere(this%material(i)%Ys .LE. zero)
-                       H = abs(this%material(i)%Ys)     
+!                    elsewhere( this%material(i)%Ys .GE. one)
+!                       H = abs(this%material(i)%Ys - one)
+!                    elsewhere(this%material(i)%Ys .LE. zero)
+!                       H = abs(this%material(i)%Ys)     
 
                     elsewhere
                        H = zero
@@ -6329,12 +6376,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !iprint *, '----Exiting mix%getSOS----'
     end subroutine
 
-    subroutine update_VF(this,isub,dt,rho,u,v,w,umid,vmid,wmid,sos,x,y,z,tsim,divu,src,periodicx, periodicy, periodicz,x_bc,y_bc,z_bc,sponge,alpha)
+    subroutine update_VF(this,isub,dt,rho,u,v,w,ucor,vcor,wcor,umid,vmid,wmid,sos,x,y,z,tsim,divu,src,periodicx, periodicy, periodicz,x_bc,y_bc,z_bc,sponge,alpha)
         class(solid_mixture), intent(inout) :: this
         integer,              intent(in)    :: isub
         real(rkind),          intent(in)    :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in) :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: rho,u,v,w,divu,src,umid,vmid,wmid,sos
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(inout) :: rho,u,v,w,divu,src,umid,vmid,wmid,sos,ucor,vcor,wcor
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2), intent(in) :: sponge
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         logical :: periodicx,periodicy,periodicz
@@ -6365,7 +6412,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 !            src = 0.0
  
 !        endwhere
-        call this%material(1)%update_VF(this%material(1),isub,dt,rho,u,v,w,umid,vmid,wmid,sos,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge,alpha)
+        call this%material(1)%update_VF(this%material(1),isub,dt,rho,u,v,w,ucor,vcor,wcor,umid,vmid,wmid,sos,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge,alpha)
         !call this%material(2)%update_VF(this%material(1),isub,dt,rho,u,v,w,x,y,z,tsim,divu,-src,x_bc,y_bc,z_bc)
 !        this%material(1)%VF = this%material(1)%consrv(:,:,:,1)/this%material(1)%elastic%rho0
         this%material(2)%VF = one - this%material(1)%VF

@@ -5119,7 +5119,7 @@ contains
 
     end subroutine
 
-    subroutine update_VF(this,other,isub,dt,rho,u,v,w,umid,vmid,wmid,sos,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge,alpha)
+    subroutine update_VF(this,other,isub,dt,rho,u,v,w,ucor,vcor,wcor,umid,vmid,wmid,sos,x,y,z,tsim,divu,src,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc, sponge,alpha)
         use RKCoeffs,   only: RK45_A,RK45_B,RK3_A,RK3_B
         use operators, only: filter3D
         class(solid), intent(inout) :: this
@@ -5127,7 +5127,7 @@ contains
         integer, intent(in) :: isub
         real(rkind), intent(in) :: dt,tsim
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: x,y,z
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,src,wmid,umid,vmid,sos
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in)  :: rho,u,v,w,divu,src,wmid,umid,vmid,sos,ucor,vcor,wcor
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,2),   intent(in)  :: sponge
         real(rkind),                                            intent(in)  :: alpha
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
@@ -5145,9 +5145,9 @@ contains
         endif
 
         if(this%intSharp) then        
-           call this%getRHS_VF_intSharp(other,rho,u,v,w,umid,vmid,wmid,divu,sos,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
+           call this%getRHS_VF_intSharp(other,rho,u,v,w,ucor,vcor,wcor,umid,vmid,wmid,divu,sos,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
         else
-           call this%getRHS_VF(other,rho,u,v,w,umid,vmid,wmid,divu,sos,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha,dx,dy)
+           call this%getRHS_VF(other,rho,u,v,w,ucor,vcor,wcor,umid,vmid,wmid,divu,sos,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha,dx,dy)
         endif
         call hook_material_VF_source(this%decomp,this%hydro,this%elastic,x,y,z,tsim,u,v,w,this%Ys,this%VF,this%p,rhsVF)
         
@@ -5167,12 +5167,12 @@ contains
 
     end subroutine
 
-    subroutine getRHS_VF(this,other,rho,u,v,w,umid,vmid,wmid,divu,sos,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha,dx,dy)
+    subroutine getRHS_VF(this,other,rho,u,v,w,ucor,vcor,wcor,umid,vmid,wmid,divu,sos,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,alpha,dx,dy)
         use operators, only: gradient, divergence,divergenceFV,interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z,gradFV_x,gradFV_y,gradFV_z,filter3D,interpolateFV_F2Nx, interpolateFV_F2Ny
         use constants, only: one
         class(solid),                                       intent(inout)  :: this
         class(solid),                                       intent(in)  :: other
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,divu,src,umid,vmid,wmid,sos
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,u,v,w,divu,src,umid,vmid,wmid,sos,ucor,vcor,wcor
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
         real(rkind)                                       , intent(in)  :: dx,dy
         logical :: periodicx,periodicy,periodicz
@@ -5183,6 +5183,9 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: div_u,div_uVF
         integer :: iflag = one 
 
+         tmp1 = 0
+         tmp2 = 0
+         tmp3 = 0
          call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          tmp1 = -umid*this%VF_mid(:,:,:,1) + this%adiff_stagg(:,:,:,1)*this%gradVF(:,:,:,1)
          tmp2 = -vmid*this%VF_mid(:,:,:,2) + this%adiff_stagg(:,:,:,2)*this%gradVF(:,:,:,2)
@@ -5280,12 +5283,12 @@ contains
         endif
     end subroutine
 
-    subroutine getRHS_VF_intSharp(this,other,rho,u,v,w,umid,vmid,wmid,divu,sos,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
+    subroutine getRHS_VF_intSharp(this,other,rho,u,v,w,ucor,vcor,wcor,umid,vmid,wmid,divu,sos,src,rhsVF,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,dx,dy)
         use operators, only: gradient,divergence,divergenceFV,interpolateFV,interpolateFV_x, interpolateFV_y,interpolateFV_z,gradFV_x,gradFV_y,gradFV_z,wenoInterpx,wenoInterpy
         use constants, only: one
         class(solid),                                       intent(inout)  :: this
         class(solid),                                       intent(in)  :: other
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  ::rho,u,v,w,divu,src,umid,vmid,wmid,sos
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  ::rho,u,v,w,divu,src,umid,vmid,wmid,sos,ucor,vcor,wcor
         real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(out) :: rhsVF
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind)                                       , intent(in)  :: dx,dy
@@ -5294,6 +5297,9 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: VF_int,adiff_int
         logical :: periodicx,periodicy,periodicz
 
+         tmp1 = 0
+         tmp2 = 0
+         tmp3 = 0
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Compact Scheme          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
          call divergenceFV(this%decomp,this%derStagg,umid,vmid,wmid,div_u,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
