@@ -71,7 +71,14 @@ module SolidGrid
     integer, parameter  :: uref_index         = 49
     integer, parameter  :: m1int_index        = 50
     integer, parameter  :: m2int_index        = 51
-    integer, parameter  :: nfields = 51
+    integer, parameter  :: up_index           = 52
+    integer, parameter  :: vp_index           = 53
+    integer, parameter  :: wp_index           = 54
+    integer, parameter  :: VFp_index          = 55
+    integer, parameter  :: m1p_index          = 56
+    integer, parameter  :: m2p_index          = 57
+    integer, parameter  :: pp_index           = 58
+    integer, parameter  :: nfields = 58
 
     integer, parameter :: mom_index = 1
     integer, parameter :: TE_index = mom_index+3
@@ -136,7 +143,7 @@ module SolidGrid
         real(rkind) :: intSharp_tnh                ! Interface sharpening blending parameter
         real(rkind) :: intSharp_pfloor              ! Pressure floor for pressure-temperature relaxation / LAD
         real(rkind) :: intSharp_tfloor              ! Temperature floor for pressure-temperature relaxation / LAD
-        real(rkind) :: alpha_skew
+        real(rkind) :: alpha_skew,epsk
         logical :: intSharp_d02                    ! Use 2nd order
         logical :: intSharp_msk                    ! Mask FV diffusion
         logical :: intSharp_flt                    ! Use dealliasing filter for interface sharpening derivatives
@@ -209,6 +216,7 @@ module SolidGrid
         real(rkind), dimension(:,:,:), pointer :: fsw,divgrad
         real(rkind), dimension(:,:,:), pointer :: rhouHeur,rhovHeur,rhowHeur,rhoeHeur,m1heur,m2heur,VFheur,entropy,discreteKE,puKE,SurfTenDiff
         real(rkind), dimension(:,:,:), pointer :: keJ, uJ, vJ, wJ, eJ, qDiv,pEvolve, VFEvolve, pError, VFerror, pJ, tauRho,uref
+        real(rkind), dimension(:,:,:), pointer :: up,vp,wp,pp,VFp,m1p,m2p
         real(rkind) :: phys_mu1, phys_mu2,CP,sos_ratio, sos_ref=4.28646795041d0
         real(rkind) :: phys_bulk1, phys_bulk2
         real(rkind) :: phys_kap1, phys_kap2, g 
@@ -216,7 +224,7 @@ module SolidGrid
         real(rkind), dimension(2) :: rhou_ref,rhov_ref,rhow_ref, rhoe_ref
         real(rkind), dimension(10) :: lamru,lamrv,lamrw,lamre,lamm1,lamm2,lamvf,lamtim
         real(rkind), dimension(:,:,:,:), allocatable :: meshstretch, sponge
-        real(rkind), dimension(:,:,:), allocatable :: yMetric,xMetric, zMetric,yMetric_half, xMetric_half, zMetric_half,yLADMetric, yMetric_F2N, dy_stretch
+        real(rkind), dimension(:,:,:), allocatable :: yMetric,xMetric, zMetric,yMetric_half, xMetric_half, zMetric_half,yLADMetric, yMetric_F2N, dy_stretch,MASK
         integer :: stepfil,numfil
         contains
             procedure          :: init
@@ -263,6 +271,7 @@ module SolidGrid
             procedure          :: FilDiffHeuristic
             procedure          :: entropy_discreteKE
             procedure          :: profile_transpose_simple
+            procedure          :: eigenfunctions
 !            procedure          :: sixthder
 end type
 
@@ -340,7 +349,7 @@ contains
         integer :: restartFile_TID = 1, ioType = 0, restartFile_RID =1
         logical :: useRestartFile=.false.
         logical :: skew_Ys = .false., skew_VF = .false.,skew_mass = .false.
-        real(rkind) :: intSharp_gam = 0.0d0, intSharp_eps = 0.0d0, intSharp_cut = 1.0d-2, intSharp_dif = 1.0d1, intSharp_tnh = 1.0D-2, intSharp_pfloor = 0.0D0, intSharp_tfloor = 0.0D0, XiLS_eps = 0.0, alpha_skew, sos_ratio=1.0d0, g = 0_rkind
+        real(rkind) :: intSharp_gam = 0.0d0, intSharp_eps = 0.0d0, intSharp_cut = 1.0d-2, intSharp_dif = 1.0d1, intSharp_tnh = 1.0D-2, intSharp_pfloor = 0.0D0, intSharp_tfloor = 0.0D0, XiLS_eps = 0.0, alpha_skew, sos_ratio=1.0d0, g =  0_rkind,epsk=0_rkind
 
         real(rkind) :: filter_alpha = 0.475
 
@@ -363,7 +372,7 @@ contains
                            x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
                            strainHard, cnsrv_g, cnsrv_gt, cnsrv_gp, cnsrv_pe, phys_mu1, phys_mu2, phys_bulk1, phys_bulk2, phys_kap1, phys_kap2, &
                            use_CnsrvSurfaceTension, use_surfaceTension, use_normFV, use_normInt, use_gradXi,energy_surfTen,use_gradphi, use_gradVF, use_Stagg, use_FV,use_D04, surface_mask, weightedcurvature, &
-                           surfaceTension_coeff, R,Cln, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, LADMass_Consv, Stretch1D, Stretch1Dx,Stretch1Dy, Stretch1Dz, SpongeLayer, useEigenFunction, alpha_skew, skew_mass, skew_Ys, skew_VF,CP,sos_ratio, g
+                           surfaceTension_coeff, R,Cln, p_amb, use_XiLS,XiLS_eps,LADInt, LADN2F, LADMass_Consv, Stretch1D, Stretch1Dx,Stretch1Dy, Stretch1Dz, SpongeLayer, useEigenFunction, alpha_skew, skew_mass, skew_Ys, skew_VF,CP,sos_ratio, g,epsk
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -444,6 +453,7 @@ contains
         this%cnsrv_gp = cnsrv_gp
         this%cnsrv_pe = cnsrv_pe
         this%alpha_skew = alpha_skew
+        this%epsk       = epsk
         this%sos_ratio  = sos_ratio/this%sos_ref 
         this%LADMass_Consv        = LADMass_Consv 
         this%LADInt               = LADInt
@@ -559,6 +569,9 @@ contains
         ! Allocate sponge
         if ( allocated(this%sponge) ) deallocate(this%sponge)
         allocate(this%sponge(this%nxp,this%nyp,this%nzp,2) )
+
+        if ( allocated(this%mask) ) deallocate(this%mask)
+        allocate(this%mask(this%nxp,this%nyp,this%nzp) )
 
         ! Go to hooks if a different mesh is desired 
         call meshgen(this%decomp, this%dx, this%dy, this%dz, this%mesh)
@@ -1016,6 +1029,13 @@ contains
         this%metric_N2F  => this%fields(:,:,:,metric_N2F_index) 
         this%m1_int    => this%fields(:,:,:,m1int_index)
         this%m2_int    => this%fields(:,:,:,m2int_index)
+        this%up        => this%fields(:,:,:,up_index)
+        this%vp        => this%fields(:,:,:,vp_index)
+        this%wp        => this%fields(:,:,:,wp_index)
+        this%VFp       => this%fields(:,:,:,VFp_index)
+        this%m1p       => this%fields(:,:,:,m1p_index)
+        this%m2p       => this%fields(:,:,:,m2p_index)
+        this%pp        => this%fields(:,:,:,pp_index)
         ! Initialize everything to a constant Zero
         this%fields = zero  
 
@@ -1053,7 +1073,11 @@ contains
         !call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
         print *, "post bc"
         call this%post_bc()
-        call this%getFaces()
+        !call this%get_conserved()
+        !call this%eigenfunctions()
+        !call this%get_primitive()
+        !call this%post_bc()
+        !call this%getFaces()
         print *, "post bc"
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
         call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
@@ -1112,6 +1136,14 @@ contains
         varnames(49) = 'uref'
         varnames(50) = 'm1int'
         varnames(51) = 'm2int'
+        varnames(52) = 'up'
+        varnames(53) = 'vp'
+        varnames(54) = 'wp'
+        varnames(55) = 'VFp'
+        varnames(56) = 'm1p'
+        varnames(57) = 'm2p'
+        varnames(58) = 'pp'
+
         allocate(this%viz)
         call this%viz%init(this%outputdir, vizprefix, nfields, varnames)
         this%tviz = tviz
@@ -1120,7 +1152,7 @@ contains
         end if
                 
         if(this%SpongeLayer) then
-          call get_sponge(this%decomp,this%dx,this%dy,this%dz,this%mesh,this%fields,this%mix,this%rhou_ref,this%rhov_ref,this%rhow_ref,this%rhoe_ref,this%sponge)
+          call get_sponge(this%decomp,this%dx,this%dy,this%dz,this%mesh,this%fields,this%mix,this%rhou_ref,this%rhov_ref,this%rhow_ref,this%rhoe_ref,this%sponge,this%mask)
         endif
 
     end subroutine
@@ -1208,6 +1240,7 @@ contains
         if (allocated(this%fields)) deallocate(this%fields) 
         if (allocated(this%mesh)) deallocate(this%meshstretch)
         if (allocated(this%sponge)) deallocate(this%sponge)
+        if (allocated(this%mask)) deallocate(this%mask)
         if (allocated(this%dy_stretch)) deallocate(this%dy_stretch)
         if (allocated(this%yMetric)) deallocate(this%yMetric)      
         if (allocated(this%yMetric_F2N)) deallocate(this%yMetric_F2N) 
@@ -1474,7 +1507,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 5.0d0, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 10.0d0, Lr, Lr_half
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1483,7 +1516,7 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 16.0d0
+       L = 8.0d0
 
        y_half = this%y + 0.5_rkind*this%dy
         
@@ -1516,6 +1549,41 @@ contains
 
     end subroutine 
 
+    subroutine eigenfunctions(this)
+        class(sgrid), intent(inout) :: this
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: rho0,VF0,e0,U0,TE0,rhoep,A0,Bp,Ap,rhop
+        integer :: i
+
+        rho0 = this%rho
+        e0   = this%e
+        VF0  = this%mix%material(1)%VF
+        U0   = this%u
+        TE0   = this%Wcnsrv(:,:,:,TE_index)
+        rhop =  this%epsk*(this%m1p + this%m2p) !(VF0*this%m1p + this%mix%material(1)%elastic%rho0*this%VFp) + this%epsk*(VF0*this%m2p + this%mix%material(2)%elastic%rho0*this%VFp)
+        this%mix%material(1)%consrv(:,:,:,1) = this%mix%material(1)%consrv(:,:,:,1) + this%epsk*this%m1p !(VF0*this%m1p + this%mix%material(1)%elastic%rho0*this%VFp)
+        this%mix%material(2)%consrv(:,:,:,1) = this%mix%material(2)%consrv(:,:,:,1) + this%epsk*this%m2p !(VF0*this%m2p + this%mix%material(2)%elastic%rho0*this%VFp)
+        this%mix%material(1)%VF     =  this%mix%material(1)%VF + this%epsk*this%VFp
+        this%mix%material(2)%VF     = 1._rkind - this%mix%material(1)%VF 
+        this%rho                    = this%mix%material(1)%consrv(:,:,:,1)+this%mix%material(2)%consrv(:,:,:,1)
+        this%mix%material(1)%Ys     = this%mix%material(1)%consrv(:,:,:,1)/this%rho
+        this%mix%material(2)%Ys     = 1 -  this%mix%material(1)%Ys
+        A0 = VF0/(this%mix%material(1)%hydro%gam-1) + (1-VF0)/(this%mix%material(2)%hydro%gam-1)
+        Ap = this%VFp/(this%mix%material(1)%hydro%gam-1) + (-this%VFp)/(this%mix%material(2)%hydro%gam-1)
+
+        Bp =  this%mix%material(1)%hydro%Pinf*this%mix%material(1)%hydro%gam*this%VFp/(this%mix%material(1)%hydro%gam-1) + this%mix%material(2)%hydro%Pinf*this%mix%material(2)%hydro%gam*(-this%VFp)/(this%mix%material(2)%hydro%gam-1)
+
+        rhoep  = (A0*this%pp + Bp + this%p*Ap )
+        this%Wcnsrv(:,:,:,mom_index)   =  this%Wcnsrv(:,:,:,mom_index) + this%epsk*(rho0*this%up + U0*rhop)
+        this%Wcnsrv(:,:,:,mom_index+1) =  this%Wcnsrv(:,:,:,mom_index+1) + this%epsk*(rho0*this%vp )
+        this%Wcnsrv(:,:,:,TE_index)    =  this%Wcnsrv(:,:,:,TE_index)  + this%epsk*(rhoep + rho0*U0*this%up + +half*U0*U0*rhop)
+
+        this%u = this%Wcnsrv(:,:,:,mom_index)  / this%rho
+        this%v = this%Wcnsrv(:,:,:,mom_index+1)  / this%rho
+        this%e = (this%Wcnsrv(:,:,:,TE_index)/this%rho) - half*(this%u*this%u + this%v*this%v +this%w*this%w )
+        this%p = this%p + this%epsk*this%pp
+        !call this%mix%equilibratePressure(this%rho, this%e, this%p)
+    endsubroutine
+                
     subroutine update_P(this,Qtmpp,isub,dt,x,y,z,tsim,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
         use decomp_2d,  only: nrank
         use RKCoeffs,   only: RK45_A,RK45_B,RK3_A,RK3_B
@@ -1736,13 +1804,6 @@ contains
         real(rkind) :: u_max, u_min, v_max, v_min, w_max, w_min,p_min,p_max
         real(rkind) :: rho_max, rho_min, Ys_min, Ys_max, VF_min, VF_max
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: noise1, noise2,noise3
-       !  CALL RANDOM_NUMBER(noise1)
-       !  CALL RANDOM_NUMBER(noise2)
-       !  CALL RANDOM_NUMBER(noise3)
-    
-       !  this%T = (noise2-0.5)*1e-5 + this%T
-       !  this%rho = (noise1-0.5)*1e-5 + this%rho
-       !  this%u = (noise3-0.5)*1e-5 + this%u
 
         allocate( duidxj(this%nxp, this%nyp, this%nzp, 9) )
         ! Get artificial properties for initial conditions
@@ -1754,18 +1815,10 @@ contains
         call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
         call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
+        if( .NOT. this%SpongeLayer) then
 
-        !do i=1,this%mix%ns
-            !if (this%use_gTg) then
-                ! Project g tensor to SPD space
-                !call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g)
-                !call this%mix%material(i)%elastic%make_tensor_SPD(this%mix%material(i)%g_t) !mca check
-            !end if
-            ! Get massfraction gradients in Ji
-        !    call this%gradient(this%mix%material(i)%Ys,this%mix%material(i)%Ji(:,:,:,1),&
-        !                       this%mix%material(i)%Ji(:,:,:,2),this%mix%material(i)%Ji(:,:,:,3), this%x_bc,  this%y_bc, this%z_bc)
-        !end do
-
+           this%mask = 0d0
+        endif
             
         ! compute artificial shear and bulk viscosities
         call this%getPhysicalProperties()
@@ -1833,7 +1886,12 @@ contains
 
         endif
 
-   
+
+!        call this%get_conserved()
+!        call this%eigenfunctions()
+!        call this%get_primitive()
+!        call this%post_bc()
+      
         ! Write out initial conditions
         ! call hook_output(this%decomp, this%dx, this%dy, this%dz, this%outputdir, this%mesh, this%fields, this%mix, this%tsim, this%viz%vizcount)
 !        call hook_output(this%decomp,this%der,this%dx,this%dy,this%dz,this%outputdir,this%mesh,this%fields,this%mix,this%tsim,this%viz%vizcount,this%pthick,this%uthick,this%rhothick,this%Ys_thick,this%VF_thick,this%Ys_wiggle,this%VF_wiggle,this%x_bc,this%y_bc,this%z_bc)
@@ -2021,8 +2079,8 @@ contains
         if(this%use_surfaceTension) then
               call this%mix%get_surfaceTension(this%rho,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%x,this%y,isub)
         endif
-        where(this%mix%material(1)%VF .GT. 1d-10)
-            this%mix%deltakap = abs(this%mix%kappaNoFil*(this%dy_stretch))
+        where(this%mix%material(1)%VF .GT. 1d-8)
+            this%mix%deltakap = abs(this%mix%kappaNoFil*(this%dx*this%dz*this%dy_stretch)**third)
         elsewhere
             this%mix%deltakap = 0
         endwhere
@@ -2071,7 +2129,7 @@ contains
         call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
 
         do imat = 1,this%mix%ns
-            call this%mix%material(imat)%LAD_Quant(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+            call this%mix%material(imat)%LAD_Quant(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%mask)
         enddo
 
         call MPI_Barrier(MPI_COMM_WORLD, ierr)
@@ -2280,17 +2338,15 @@ contains
 
             endif
 
-            where( this%mix%material(1)%VF .GT. 1d-10 )
-               this%mix%deltakap =abs(this%mix%kappaNoFil*(this%dy_stretch)) !*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF) )*4.0           
+            where(this%mix%material(1)%VF .GT. 1d-8 .OR. this%mix%material(1)%VF  .LT. (1d0-1d-8) )
+               this%mix%deltakap = abs(this%mix%kappaNoFil*(this%dx*this%dz*this%dy_stretch)**third)
             elsewhere
                this%mix%deltakap = 0
             endwhere
-
             do i = 1,2
-             
-             this%mix%material(i)%deltakap = this%mix%deltakap
+              this%mix%material(i)%deltakap = this%mix%deltakap
+            enddo
 
-            enddo       
 
             !call tic()
             call this%getFaces()
@@ -2310,7 +2366,7 @@ contains
             call this%mix%getLAD(this%rho,this%p,this%e,this%u, this%v, this%w,this%sos,this%yMetric,this%dy_stretch,this%use_gTg,this%strainHard,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%intSharp_tfloor,this%dt)  ! Compute species LAD (kap, diff, diff_g, diff_gt,diff_pe)
 
             do imat = 1,this%mix%ns
-                call this%mix%material(imat)%LAD_Quant(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+                call this%mix%material(imat)%LAD_Quant(this%rho,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc,this%mask)
             enddo
             !call toc(cputime)
             !call message(3,"LAD time (in seconds)",cputime)
@@ -2602,8 +2658,8 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int,sos_int,VFbar,kappabar,gradp,gradVF,peff,peff_fil
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: psi_int,e1_int, Gam_int,pVF_int,num,denom,af,c1_int,rhobar
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2,tmpfil,tmp3,psi,Gam,psi_safe,c1,rhom1,tmp1,mask1,mask2,mask3,gradpf1,gradpf2,gradpf3
-        real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4,xtmp5
-        real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2,ztmp3,ztmp4,ztmp5
+        real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4,xtmp5,xdum
+        real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2,ztmp3,ztmp4,ztmp5,zdum
         real(rkind) :: e = 1d-10,ref_ratio=1d3, rho_ratio, cputime
 
 
@@ -2640,42 +2696,57 @@ contains
 
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!     Calculate Pressure Gradients and Coefficients       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      call gradFV_N2Fx(this%decomp,this%derStaggd04,this%p,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fy(this%decomp,this%derStaggd04,this%p,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fz(this%decomp,this%derStaggd04,this%p,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call interpolateFV(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
- !     gradpf1 = gradp(:,:,:,1)
- !     gradpf2 = gradp(:,:,:,2)
- !     gradpf3 = gradp(:,:,:,3)
+!      call this%der%d2dy2(this%p,tmp2,this%y_bc(1),this%y_bc(2))
+!
+!       ! Get X derivatives
+!      call transpose_y_to_x(this%p,xtmp1,this%decomp)
+!      call this%der%d2dx2(xtmp1,xdum,this%x_bc(1),this%x_bc(2))
+!      call transpose_x_to_y(xdum,tmp1,this%decomp)
+!
+!        ! Get Z derivatives
+!      call transpose_y_to_z(this%p,ztmp1,this%decomp)
+!      call this%der%d2dz2(ztmp1,zdum,this%z_bc(1),this%z_bc(2))
+!      call transpose_z_to_y(zdum,tmp3,this%decomp)
 
- !     call this%filter(gradpf1, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
- !     call this%filter(gradpf2, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
- !     call this%filter(gradpf3, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
- !     gradp(:,:,:,1) = gradp(:,:,:,1) - gradpf1
- !     gradp(:,:,:,2) = gradp(:,:,:,2) - gradpf2
- !     gradp(:,:,:,3) = gradp(:,:,:,3) - gradpf3
+      tmp = this%p
+      call this%filter(tmp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fx(this%decomp,this%derStaggd04,this%p-tmp,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fy(this%decomp,this%derStaggd04,this%p-tmp,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fz(this%decomp,this%derStaggd04,this%p-tmp,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!      gradpf1 = gradp(:,:,:,1)
+!      gradpf2 = gradp(:,:,:,2)
+!      gradpf3 = gradp(:,:,:,3)
+
+!      call this%filter(gradpf1, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!      call this%filter(gradpf2, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!      call this%filter(gradpf3, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!     gradp(:,:,:,1) = gradp(:,:,:,1) - gradpf1
+!     gradp(:,:,:,2) = gradp(:,:,:,2) - gradpf2
+!     gradp(:,:,:,3) = gradp(:,:,:,3) - gradpf3
       this%mix%material(2)%Ys_mid = 1.0_rkind - this%mix%material(1)%Ys_mid
       this%mix%material(2)%VF_mid = 1.0_rkind - this%mix%material(1)%VF_mid
 
-      mask1 = (1.0_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1.0_rkind-VFbar(:,:,:,1)) ) )**0.3_rkind    ! (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**(0.3_rkind)
-      mask2 = (1.0_rkind/0.6598_rkind)*abs(VFbar(:,:,:,2)*(1.0_rkind-VFbar(:,:,:,2)))**0.3_rkind   ! (1_rkind/0.6598_rkind)*( abs(VFbar(:,:,:,2)*(1-VFbar(:,:,:,2)) ) )**(0.3_rkind)
-      mask3 = (1.0_rkind/0.6598_rkind)*abs(VFbar(:,:,:,3)*(1.0_rkind-VFbar(:,:,:,3)))**0.3_rkind
+      mask1 =  (4.0_rkind*abs(VFbar(:,:,:,1)*(1.0_rkind-VFbar(:,:,:,1)) ) )**0.2_rkind    ! (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**(0.3_rkind)
+      mask2 =  (4.0_rkind*abs(VFbar(:,:,:,2)*(1.0_rkind-VFbar(:,:,:,2)) ) )**(0.2_rkind)
+      mask3 =  (4.0_rkind*abs(VFbar(:,:,:,3)*(1.0_rkind-VFbar(:,:,:,3))))**0.2_rkind
 
       af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))*this%sos_ratio*rho_ratio  * ( (sqrt( this%u_mid(:,:,:,1)**2.0_rkind + this%v_mid(:,:,:,1)**2.0_rkind + this%w_mid(:,:,:,1 )**2.0_rkind )) /sos_int(:,:,:,1) )**2.0_rkind  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
       af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,2)**2.0_rkind + this%v_mid(:,:,:,2)**2.0_rkind + this%w_mid(:,:,:,2 )**2.0_rkind  ) ) /sos_int(:,:,:,2))**2.0_rkind
       af(:,:,:,3) =this%CP*mask3*this%dt/(this%rho_mid(:,:,:,3))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,3)**2.0_rkind + this%v_mid(:,:,:,3)**2.0_rkind + this%w_mid(:,:,:,3 )**2.0_rkind  ) ) /sos_int(:,:,:,3))**2.0_rkind
 
-      peff = ( gradp + this%surfaceTension_coeff*kappabar*gradVF )
+!      peff = gradp
+     peff = ( gradp + this%surfaceTension_coeff*kappabar*gradVF )
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Y Correction !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      do j = 2,this%nyp-1
-        this%v_int(:,j,:) = this%v_mid(:,j,:,2) -  af(:,j,:,2) *  ( peff(:,j,:,2)- 0.5_rkind*(peff(:,j+1,:,2) + peff(:,j-1,:,2) ) ) !  * ( gradp(:,j,:,2) + this%surfaceTension_coeff*kappabar(:,j,:,2)*gradVF(:,j,:,2) )  !/this%dy * ( ( this%p(:,j+1,:) - this%p(:,j,:)   ) & (peff(:,j,:,2) - peff_fil(:,j,:,2))
+        this%v_int(:,j,:) = this%v_mid(:,j,:,2) -  af(:,j,:,2) *  ( peff(:,j,:,2))!(this%dx*this%dy)**two /4.0_rkind !- 0.5_rkind*(peff(:,j+1,:,2) + peff(:,j-1,:,2) ) ) !  * ( gradp(:,j,:,2) + this%surfaceTension_coeff*kappabar(:,j,:,2)*gradVF(:,j,:,2) )  !/this%dy * ( ( this%p(:,j+1,:) - this%p(:,j,:)   ) & (peff(:,j,:,2) - peff_fil(:,j,:,2))
 
      enddo
 
 
-     this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2) *  ( peff(:,this%nyp,:,2) - 0.5_rkind*(peff(:,1,:,2) + peff(:,this%nyp-1,:,2) ) ) !(peff(:,this%nyp,:,2) - peff_fil(:,this%nyp,:,2))
-     this%v_int(:,1,:) = this%v_mid(:,1,:,2) - af(:,1,:,2) * ( peff(:,1,:,2) - 0.5_rkind*(peff(:,2,:,2) + peff(:,this%nyp,:,2) ) ) !(peff(:,1,:,2) - peff_fil(:,1,:,2)
+     this%v_int(:,this%nyp,:) = this%v_mid(:,this%nyp,:,2) -   af(:,this%nyp,:,2) *  ( peff(:,this%nyp,:,2) )!*(this%dx*this%dy)**two / 4.0_rkind  ! - 0.5_rkind*(peff(:,1,:,2) + peff(:,this%nyp-1,:,2) ) ) !(peff(:,this%nyp,:,2) - peff_fil(:,this%nyp,:,2))
+     this%v_int(:,1,:) = this%v_mid(:,1,:,2) - af(:,1,:,2) * ( peff(:,1,:,2))!*(this%dx*this%dy)**two / 4.0_rkind ! - 0.5_rkind*(peff(:,2,:,2) + peff(:,this%nyp,:,2) ) ) !(peff(:,1,:,2) - peff_fil(:,1,:,2)
      !this%v_int =this%v_mid(:,:,:,2)
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! X Correction      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       tmp1 = this%u_mid(:,:,:,1)
@@ -2689,13 +2760,13 @@ contains
 !
       do i = 2,nx-1
 !
-         xtmp1(i,:,:) = xtmp1(i,:,:) - xtmp2(i,:,:) * ( xtmp3(i,:,:)  - 0.5_rkind*(xtmp3(i+1,:,:) + xtmp3(i-1,:,:) ))
+         xtmp1(i,:,:) = xtmp1(i,:,:) - xtmp2(i,:,:) * ( xtmp3(i,:,:))!*(this%dx*this%dy)**two / 4.0_rkind ! - 0.5_rkind*(xtmp3(i+1,:,:) + xtmp3(i-1,:,:) ))
 
 
       enddo
 !
-      xtmp1(nx,:,:) = xtmp1(nx,:,:) - xtmp2(nx,:,:) * ( xtmp3(nx,:,:)   - 0.5_rkind*(xtmp3(1,:,:) + xtmp3(nx-1,:,:) ))
-      xtmp1(1,:,:) = xtmp1(1,:,:) - xtmp2(1,:,:) * ( xtmp3(1,:,:)        - 0.5_rkind*(xtmp3(nx,:,:) + xtmp3(nx,:,:) ))
+      xtmp1(nx,:,:) = xtmp1(nx,:,:) - xtmp2(nx,:,:) * ( xtmp3(nx,:,:) )!*(this%dy*this%dx)**two / 4.0_rkind  !  - 0.5_rkind*(xtmp3(1,:,:) + xtmp3(nx-1,:,:) ))
+      xtmp1(1,:,:) = xtmp1(1,:,:) - xtmp2(1,:,:) * ( xtmp3(1,:,:) )!*(this%dx*this%dy)**two / 4.0_rkind      ! - 0.5_rkind*(xtmp3(nx,:,:) + xtmp3(nx,:,:) ))
 
       !/this%dx *( ( xtmp3(1,:,:) - xtmp3(nx,:,:) ) + this%surfaceTension_coeff*xtmp4(nx,:,:)*( xtmp5(1,:,:) - xtmp5(nx,:,:) )  )
       call transpose_x_to_y(xtmp1,tmp1,this%decomp)
@@ -2713,13 +2784,13 @@ contains
 !
       do i = 2,nz-1
 !
-         ztmp1(:,:,i) = ztmp1(:,:,i) - ztmp2(:,:,i) * ( ztmp3(:,:,i)  - 0.5_rkind*(ztmp3(:,:,i+1) + ztmp3(:,:,i-1) ))
+         ztmp1(:,:,i) = ztmp1(:,:,i) - ztmp2(:,:,i) * ( ztmp3(:,:,i)) !  - 0.5_rkind*(ztmp3(:,:,i+1) + ztmp3(:,:,i-1) ))
 
 
       enddo
 !
-      ztmp1(:,:,nz) = ztmp1(:,:,nz) - ztmp2(:,:,nz) * ( ztmp3(:,:,nz)  - 0.5_rkind*(ztmp3(:,:,1) + ztmp3(:,:,nz-1) ))
-      ztmp1(:,:,1) = ztmp1(:,:,1) - ztmp2(:,:,1) * ( ztmp3(:,:,1)       - 0.5_rkind*(ztmp3(:,:,nz) + ztmp3(:,:,nz) ))
+      ztmp1(:,:,nz) = ztmp1(:,:,nz) - ztmp2(:,:,nz) * ( ztmp3(:,:,nz) ) ! - 0.5_rkind*(ztmp3(:,:,1) + ztmp3(:,:,nz-1) ))
+      ztmp1(:,:,1) = ztmp1(:,:,1) - ztmp2(:,:,1) * ( ztmp3(:,:,1) )     !      - 0.5_rkind*(ztmp3(:,:,nz) + ztmp3(:,:,nz) ))
 
       call transpose_z_to_y(ztmp1,tmp,this%decomp)
       this%w_int(:,:,:) =  tmp
@@ -2742,7 +2813,7 @@ contains
     character(len=*), intent(out) :: stability
     real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0,dtYs1, dtYs2,dtVF1,dtVF2,deltay,dteKap,dtCurv
     integer :: i, ierr, nvals, idx
-    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk,rhofil,rhokappafil
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk,rhofil,rhokappafil,mask
     character(len=30) :: str,str2
     real(rkind) :: dtSponge, sigma_max
 
@@ -3075,7 +3146,7 @@ contains
         character(len=*), intent(out) :: stability
         real(rkind) :: dtCFL, a, dtsigma,dtsigma2,dtsigma3,dtmu, dtbulk, dtkap, dtdiff, dtdiff_g, dtdiff_gt, dtdiff_gp, dtplast, phys_mu, delta, dtSharp_diff, dtSharp_Adiff,alpha,dtSharp_bound,st_fac=10.D0,dtYs1, dtYs2,dtVF1,dtVF2,deltay,dteKap,dtCurv
         integer :: i
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk,rhofil,rhokappafil !Source term for possible use in VF, g eh eqns
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: uk,rhofil,rhokappafil,mask !Source term for possible use in VF, g eh eqns
         character(len=30) :: str,str2
         real(rkind) :: dtSponge, sigma_max
         this%st_limit = 20
@@ -3091,18 +3162,19 @@ contains
 
         sigma_max = P_MAXVAL(this%sponge(:,:,:,1))
         dtSponge  = this%CFL / sigma_max
-        ! continuum
-        !dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/deltay + ABS(this%w)/this%dz   &
-        !         + this%sos*sqrt( one/(this%dx**2) + one/(deltay**2) + one/(this%dz**2) ))
 
-        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/deltay +  &
-               + this%sos*sqrt( one/(this%dx**2) + one/(deltay**2)  ))
+        ! continuum
+        dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/deltay + ABS(this%w)/this%dz   &
+                 + this%sos*sqrt( one/(this%dx**2) + one/(deltay**2) + one/(this%dz**2) ))
+
+        !dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/deltay +  &
+        !       + this%sos*sqrt( one/(this%dx**2) + one/(deltay**2)  ))
         dtmu   = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
-        dtYs1 = 0.5_rkind * delta**2.0_rkind / (max(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,2)),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,3))) + eps) 
+        dtYs1 = 0.5_rkind * delta**2.0_rkind /((P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)*(one-this%mask))) + eps) 
 
         !dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	dtCurv = 0.5_rkind   /(max(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)*(this%mix%kappa)**2.0_rkind),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,2)*(this%mix%kappa)**2.0_rkind),P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,3)*(this%mix%kappa)**2.0_rkind)) + eps)
+	dtCurv = dtYs1 ! 0.5_rkind   /((P_MAXVAL(mask*this%mix%material(1)%adiff_stagg(:,:,:,1)*(this%mix%kappa)**2.0_rkind)) + eps)
 
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then
@@ -3722,8 +3794,8 @@ contains
 
 
        !!!!!!!!!!!!!!!!!!!!!!!!!!!! GRAVITY        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       ! rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + this%rho*this%g
-       ! rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%rho*this%g*(this%v)
+        rhs(:,:,:, mom_index+1 ) = rhs(:,:,:,mom_index+1 ) + this%rho*this%g
+        rhs(:,:,:, TE_index )    = rhs(:,:,:,TE_index    ) + this%rho*this%g*(this%v)
 
  
     end subroutine

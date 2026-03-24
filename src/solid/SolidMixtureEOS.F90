@@ -2354,7 +2354,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradYs(:,:,:,imat) )
 
 
-                Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) + (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradVF(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat) + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )  + this%material(i)%adiff_stagg(:,:,:,imat)*gradp(:,:,:,imat)*this%material(i)%VF_mid(:,:,:,imat)*this%material(i)%hydro%onebygam_m1*this%material(i)%hydro%gam
+                Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) +  (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradVF(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat)  + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )  + this%material(i)%adiff_stagg(:,:,:,imat)*gradp(:,:,:,imat)*this%material(i)%VF_mid(:,:,:,imat)*this%material(i)%hydro%onebygam_m1*this%material(i)%hydro%gam
              
 
             enddo
@@ -2897,12 +2897,12 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
            if(this%intSharp_msk) then
 
                   if(i == 1) then
-                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one -  this%intSharp_cut - 4d-5 + e) ) )
+                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-5 - this%intSharp_cut + e )/ (one -  this%intSharp_cut - 1d-5 + e) ) )
                      
-                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-2 + e) ) )                 
+                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-3 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-3 + e) ) )                 
                   else
-                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-2 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-2 + e) ) )
-                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 4d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 4d-5 + e) ) )      
+                     xiLow = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-3 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-3 + e) ) )
+                     xiHigh = abs(this%intSharp_eps*(one/(one-two*this%intSharp_cut))*log( ( 1d-5 - this%intSharp_cut + e )/ (one - this%intSharp_cut - 1d-5 + e) ) )      
 
                   endif
 
@@ -2980,7 +2980,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 
                   H = HYs*Hh*Hl
-!                  call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc)
+                  call filter3D(this%decomp, this%gfil, H,iflag,x_bc,y_bc,z_bc)
 !                   where( abs(H) .GT. 1d-12)
 !                           HYs = H/P_MAXVAL(H)
 !                   elsewhere

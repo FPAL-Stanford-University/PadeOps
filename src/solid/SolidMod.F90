@@ -5197,12 +5197,12 @@ contains
 
     end subroutine
 
-    subroutine LAD_Quant(this,rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+    subroutine LAD_Quant(this,rho,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc,mask)
         use operators, only: gradient,divergence, interpolateFV,interpolateFV_x, interpolateFV_y, interpolateFV_z, divergenceFV,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz,interpolateMax,filter3D
         use constants, only: one
         use reductions,       only: P_SUM, P_MEAN, P_MAXVAL, P_MINVAL
         class(solid), intent(inout)  :: this
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp), intent(in)  :: rho,mask
         logical :: periodicx,periodicy,periodicz
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)     :: tmp1, tmp2,tmp3
@@ -5221,9 +5221,15 @@ contains
           call gradFV_N2Fy(this%decomp,this%derStagg,rho*this%Ys,this%gradYs(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
           call gradFV_N2Fz(this%decomp,this%derStagg,rho*this%Ys,this%gradYs(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
-          adiff_fil1 = adiff_int(:,:,:,1)
-          adiff_fil2 = adiff_int(:,:,:,2)
-          adiff_fil3 = adiff_int(:,:,:,3)
+!          if(.NOT. this%SpongeLayer) then
+!          adiff_fil1 = adiff_int(:,:,:,1)
+!          adiff_fil2 = adiff_int(:,:,:,2)
+!          adiff_fil3 = adiff_int(:,:,:,3)
+!          else
+          adiff_fil1 = adiff_int(:,:,:,1)*(one-mask)
+          adiff_fil2 = adiff_int(:,:,:,2)*(one-mask)
+          adiff_fil3 = adiff_int(:,:,:,3)*(one-mask)
+!          endif
           call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
           call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)
           call filter3D(this%decomp, this%gfil, adiff_fil3, 1, x_bc,y_bc,z_bc)

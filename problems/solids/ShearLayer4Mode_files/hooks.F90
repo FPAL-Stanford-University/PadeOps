@@ -23,7 +23,7 @@ module ShearLayer4Mode_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 2*pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
+    real(rkind) :: Ly = 1.0, Lx = 2*pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0,  delta_d=0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
     real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
@@ -271,10 +271,10 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%plast = plastic ; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
-        delta_rho = Nrho * 2.0_rkind*pi/384.0_rkind * 0.275d0
+        delta_rho = Nrho * dx * 0.275d0
         !delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
         eta = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
-        Lr    = 14.0d0/(eta(1,ny,1) - eta(1,1,1))
+        Lr    = 8.0d0/(eta(1,ny,1) - eta(1,1,1))
         eta = Lr*eta
 
 
@@ -394,7 +394,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
           do l = 1, bnum_modes
             alpha_dim = alpha_modes(q) / delta_ref
             beta_dim  = beta_modes(l) / delta_ref
-            current_phase = 2.0_rkind * pi * sin( real(q)*1.37d0 + real(l)*3.81d0)**2d0
+            current_phase = 2.0_rkind * pi * sin( real(q)*(1.27d0) + real(l)*3.81d0)**2d0
             do k = 1, nz
                 do j = 1, ny
                     do i = 1, nx
@@ -405,17 +405,17 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                         v_perturb = U_ref * ( v_r(j,q,l)*cos(arg) - v_i(j,q,l)*sin(arg) )
                         w_perturb = U_ref * ( w_r(j,q,l)*cos(arg) - w_i(j,q,l)*sin(arg) )
                         p_perturb = P_ref * ( p_r(j,q,l)*cos(arg) - p_i(j,q,l)*sin(arg) )
-                        phi_perturb =       ( phi_r(j,q,l)*cos(arg) - phi_i(j,q,l)*sin(arg) )
-                        m1_perturb = Rho_ref * ( m1_r(j,q,l)*cos(arg) - m1_i(j,q,l)*sin(arg) )
-                        m2_perturb = Rho_ref * ( m2_r(j,q,l)*cos(arg) - m2_i(j,q,l)*sin(arg) )
+        !                phi_perturb =       ( phi_r(j,q,l)*cos(arg) - phi_i(j,q,l)*sin(arg) )
+        !                m1_perturb = Rho_ref * ( m1_r(j,q,l)*cos(arg) - m1_i(j,q,l)*sin(arg) )
+        !                m2_perturb = Rho_ref * ( m2_r(j,q,l)*cos(arg) - m2_i(j,q,l)*sin(arg) )
 
                         ! Apply the perturbations, scaled by the single amplitude 'epsilonk'
                         u(i,j,k) = u(i,j,k) + epsilonk * u_perturb
                         v(i,j,k) = v(i,j,k) + epsilonk * v_perturb
                         w(i,j,k) = w(i,j,k) + epsilonk * w_perturb
                         mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk * p_perturb
-                        mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
-                        rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb + m2_perturb)
+         !               mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
+         !               rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb + m2_perturb)
                     end do
                 end do
             end do
@@ -425,7 +425,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         ! --- Finalize mixture properties after all perturbations are added ---
         !mix%material(1)%VF = max(minVF, min(1.0_rkind - minVF, mix%material(1)%VF))
         mix%material(2)%VF = 1.0_rkind - mix%material(1)%VF
-        mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
+        !mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
         !mix%material(2)%Ys = max(0.0_rkind, 1.0_rkind - mix%material(1)%Ys) ! Ensure Ys sums to 1 and is non-negative
         mix%material(2)%p  = mix%material(1)%p
         p = mix%material(1)%p
@@ -459,7 +459,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     end associate
 end subroutine initfields
 
-subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge)
+subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge,mask)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index,rho_index,e_index, uref_index
@@ -475,10 +475,11 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout):: sponge
+    real(rkind), dimension(:,:,:), intent(inout):: mask
     real(rkind), dimension(2), intent(inout) :: rhou, rhov,rhow,rhoe
     integer :: ioUnit,i,iy
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 10.0,int_KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 10.0d0,int_KE
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2, sigma1, sigma2
     integer :: nx,ny,nz,k,ix,j
@@ -492,22 +493,26 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         
         nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
         yphys = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
-        Lr    = 14.0d0/(yphys(1,ny,1) - yphys(1,1,1))
+        Lr    = 8.0d0/(yphys(1,ny,1) - yphys(1,1,1))
         yphys = Lr*yphys
       
 
-        sigma1 = -5000d0 ! -2400 ! -80000
+        sigma1 = -34782.6086957d0 ! -2400 ! -80000
 
-        where(yphys .LE. -6.0d0)
-           sponge(:,:,:,1) = sigma1*( (yphys + 6.0d0)/1.0d0)**2.0d0
+        where(yphys .LE. -3.0d0)
+           sponge(:,:,:,1) = sigma1*( (yphys + 3.0d0)/1.0d0)**2.0d0 / 5.0d0
+           mask  = 1.0
         elsewhere
            sponge(:,:,:,1) = 0d0
+           mask = 0.0
         endwhere
 
-        where(yphys .GE. 6.0d0)
-           sponge(:,:,:,2) = sigma1*( (yphys- 6.0d0)/1.0d0)**2.0d0 / 5d0
+        where(yphys .GE. 3.0d0)
+           sponge(:,:,:,2) = sigma1*( (yphys- 3.0d0)/1.0d0)**2.0d0 / 5d0
+           mask = 1.0
         elsewhere
            sponge(:,:,:,2) = 0
+           mask = 0.0
         endwhere
 
         rhou(1) = rho(1,1,1)*uref(1,1,1)
@@ -568,7 +573,7 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
     integer :: ioUnit,i,iy
     real(rkind), dimension(8) :: fparams
     real(rkind), dimension(4) :: alphai, phase
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0, int_KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 12.0, int_KE
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2,dx1
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
@@ -834,7 +839,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx,ny, i, j
-    real(rkind) :: dy, yspng, tspng, yspngR, yspngL, Lr, STRETCH_RATIO = 5.0 
+    real(rkind) :: dy, yspng, tspng, yspngR, yspngL, Lr, STRETCH_RATIO = 12.0 
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR, yphys
     
     nx = decomp%ysz(1)
@@ -902,7 +907,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
         
   ! apply sponge at left and right boundaries to damp outgoing waves
         yphys = atanh(2.0*y /(1 + 1/STRETCH_RATIO))
-        Lr    = 24
+        Lr    = 24D0
         yphys = Lr*yphys
 
         yspngL = -0.85 !250

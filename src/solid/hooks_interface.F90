@@ -87,7 +87,7 @@ module sgrid_hooks
     end interface
 
     interface get_sponge
-       subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge)
+       subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge,mask)
             import :: rkind
             import :: decomp_info
             import :: solid_mixture
@@ -98,6 +98,7 @@ module sgrid_hooks
             type(solid_mixture),             intent(inout) :: mix
             real(rkind),dimension(2),        intent(inout) :: rhou, rhov,rhow,rhoe
             real(rkind), dimension(:,:,:,:), intent(inout) :: sponge
+            real(rkind), dimension(:,:,:), intent(inout) :: mask
          end subroutine
 
     end interface

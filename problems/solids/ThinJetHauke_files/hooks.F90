@@ -188,7 +188,7 @@ end subroutine
 subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fields,mix,tstop,dt,tviz,periodicx,periodicy,periodicz, x_bc,y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
-    use SolidGrid,        only: u_index,v_index,w_index,rho_index, uref_index,p_index
+    use SolidGrid,        only: u_index,v_index,w_index,rho_index,uref_index,p_index,up_index,vp_index,wp_index,m1p_index,m2p_index,pp_index,VFp_index
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit
     use StiffGasEOS,      only: stiffgas
@@ -225,7 +225,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
     real(rkind) :: Lr, STRETCH_RATIO = 5.0d0
     real(rkind) :: AA0,A3,B0,B1,B2,B3,yi,yp,y_core,y_LG,y_outer,U_loc,U_li,xi
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: eta,tmp
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: eta,tmp,VF0
     ! --- Variables for Eigenfunction Initialization ---
 
     ! Arrays to hold the read-in, pre-interpolated eigenfunctions
@@ -250,7 +250,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     ! =========================================================================
     ! 1. READ INPUTS
     ! =========================================================================
-    associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w =>fields(:,:,:,w_index), uref =>fields(:,:,:,uref_index),rho => fields(:,:,:,rho_index),p=>fields(:,:,:,p_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+    associate(   u => fields(:,:,:,u_index), v => fields(:,:,:,v_index), w =>fields(:,:,:,w_index), uref =>fields(:,:,:,uref_index),rho => fields(:,:,:,rho_index),p=>fields(:,:,:,p_index),up =>fields(:,:,:,up_index),vp => fields(:,:,:,vp_index),wp => fields(:,:,:,wp_index),pp => fields(:,:,:,pp_index),VFp => fields(:,:,:,VFp_index),m1p => fields(:,:,:,m1p_index), m2p => fields(:,:,:,m2p_index),  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
 
         nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
@@ -359,7 +359,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
         mix%material(2)%Ys = 1.0_rkind - mix%material(1)%Ys
         mix%material(2)%p  = mix%material(1)%p
-
+        VF0 =  mix%material(1)%VF 
 !    ! =========================================================================
 !    ! 3. READ AND APPLY EIGENFUNCTION PERTURBATIONS
 !    ! =========================================================================
@@ -430,19 +430,29 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                         arg = alpha_dim * x(i,j,k) + beta_dim * z(i,j,k) - current_phase
 
                         ! Construct dimensional perturbations using pre-interpolated eigenfunction values at y-index 'j'
-                        u_perturb = U_ref * ( u_r(j,q,l)*cos(arg) - u_i(j,q,l)*sin(arg) )
-                        v_perturb = U_ref * ( v_r(j,q,l)*cos(arg) - v_i(j,q,l)*sin(arg) )
-                        p_perturb = P_ref * ( p_r(j,q,l)*cos(arg) - p_i(j,q,l)*sin(arg) )
-                        phi_perturb =       ( phi_r(j,q,l)*cos(arg) - phi_i(j,q,l)*sin(arg) )
-                        m1_perturb = Rho_ref * ( m1_r(j,q,l)*cos(arg) - m1_i(j,q,l)*sin(arg) )
-                        m2_perturb = Rho_ref * ( m2_r(j,q,l)*cos(arg) - m2_i(j,q,l)*sin(arg) )
+                        u_perturb   = U_ref * ( u_r(j,q,l)*cos(arg) - u_i(j,q,l)*sin(arg) )
+                        v_perturb   = U_ref * ( v_r(j,q,l)*cos(arg) - v_i(j,q,l)*sin(arg) )
+                        p_perturb   = P_ref * ( p_r(j,q,l)*cos(arg) - p_i(j,q,l)*sin(arg) )
+                        phi_perturb =      ( phi_r(j,q,l)*cos(arg) - phi_i(j,q,l)*sin(arg) )
+                        m1_perturb =  Rho_ref * ( m1_r(j,q,l)*cos(arg) - m1_i(j,q,l)*sin(arg) )
+                        m2_perturb =  Rho_ref * ( m2_r(j,q,l)*cos(arg) - m2_i(j,q,l)*sin(arg) )
 
                         ! Apply the perturbations, scaled by the single amplitude 'epsilonk'
+                        up(i,j,k) = up(i,j,k) + u_perturb
+                        vp(i,j,k) = vp(i,j,k) + v_perturb
+                        pp(i,j,k) = pp(i,j,k) + p_perturb
+                        VFp(i,j,k) = VFp(i,j,k) +  phi_perturb
+                        m1p(i,j,k) = m1p(i,j,k) +  m1_perturb 
+                        m2p(i,j,k) = m2p(i,j,k) +  m2_perturb
+
+
                         u(i,j,k) = u(i,j,k) + epsilonk * u_perturb
                         v(i,j,k) = v(i,j,k) + epsilonk * v_perturb
-                        mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk * p_perturb
-                        mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
-                        rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb + m2_perturb)
+        !                w(i,j,k) = w(i,j,k) + epsilonk * w_perturb
+        !                mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk * p_perturb
+        !                mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
+        !                rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb*VF0(i,j,k) + m2_perturb*(1-VF0(i,j,k)) + rho_0*phi_perturb +rho_0_2*(-phi_perturb))
+
                     end do
                 end do
             end do
@@ -452,11 +462,12 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         ! --- Finalize mixture properties after all perturbations are added ---
         !mix%material(1)%VF = max(minVF, min(1.0_rkind - minVF, mix%material(1)%VF))
         mix%material(2)%VF = 1.0_rkind - mix%material(1)%VF
-        mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
+        !mix%material(1)%Ys = mix%material(1)%VF * rho_0 / rho
+        !mix%material(2)%Ys = 1 -  mix%material(1)%Ys
         !mix%material(2)%Ys = max(0.0_rkind, 1.0_rkind - mix%material(1)%Ys) ! Ensure Ys sums to 1 and is non-negative
         mix%material(2)%p  = mix%material(1)%p
         p = mix%material(1)%p
-!        deallocate(phi_r, phi_i, u_r, u_i, v_r, v_i, w_r, w_i, p_r, p_i, m1_r, m1_i, m2_r, m2_i)
+
 
     ! =========================================================================
     ! 4. CLEANUP AND BOUNDARY CONDITIONS
@@ -513,7 +524,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     integer, allocatable :: data(:), recvbuf(:) 
 
 
-        associate(u => fields(:,:,:,u_index), v => fields(:,:,:,v_index),w => fields(:,:,:,w_index),uref => fields(:,:,:,uref_index), rho => fields(:,:,:,rho_index), e => fields(:,:,:,e_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
+     associate(u => fields(:,:,:,u_index), v => fields(:,:,:,v_index),w => fields(:,:,:,w_index),uref => fields(:,:,:,uref_index), rho => fields(:,:,:,rho_index), e => fields(:,:,:,e_index), x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
 
 
         

@@ -159,7 +159,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
 
         dx = Lx/real(nx,rkind)
         dy = Ly/real(ny-1,rkind)
-        dz = Lz/real(nz,rkind)
+        dz = dx ! Lz/real(nz,rkind)
 
         if(abs(dx-dy)>1.0d-13) then
           call warning("dx not equal to dy")

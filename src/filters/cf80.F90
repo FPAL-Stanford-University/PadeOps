@@ -32,7 +32,7 @@ module cf80stuff
     real(rkind), parameter :: b80    = 0.6637265541720044!0.49875!0.9975!0.9985!0.9995!0.6708115625000001!real(0.66652, rkind) ! Already divided by factor of 2 
     real(rkind), parameter :: c80    = 0.16813672291399762!0.0! 0.17959421874999998!real(0.16674, rkind) ! Already divided by factor of 2 
     real(rkind), parameter :: d80    = 0.8018488621805249D-3! 0.00011593749999999625!real(4.0D-5  , rkind) ! Already divided by factor of 2 
-    real(rkind), parameter :: e80    = -0.10023110777257385D-3! -0.000014492187499999531!real(-5.0D-6  , rkind) ! Already divided by factor of 2 
+    real(rkind), parameter :: e80    =-0.10023110777257385D-3! -0.000014492187499999531!real(-5.0D-6  , rkind) ! Already divided by factor of 2 
     
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
     !! NOTE : The following variables are used for non-periodic filter !!

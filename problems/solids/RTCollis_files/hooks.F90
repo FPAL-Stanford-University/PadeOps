@@ -355,7 +355,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
 end subroutine
 
-subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge)
+subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge,mask)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index,rho_index,e_index, uref_index
@@ -371,6 +371,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout):: sponge
+    real(rkind), dimension(:,:,:), intent(inout):: mask
     real(rkind), dimension(2), intent(inout) :: rhou, rhov,rhow,rhoe
     integer :: ioUnit,i,iy
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys
@@ -396,14 +397,18 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
 
         where(yphys .LE. 0.05)
            sponge(:,:,:,1) = sigma1*( (yphys -0.05)/0.05)**2.0
+           mask = 1d0
         elsewhere
            sponge(:,:,:,1) = 0
+           mask = 0d0  
         endwhere
 
         where(yphys .GE. 2.95)
            sponge(:,:,:,2) = sigma1*( (yphys- 2.95)/0.05)**2.0 
+           mask = 1d0
         elsewhere
            sponge(:,:,:,2) = 0
+           mask = 0d0
         endwhere
 
         rhou(1) = rho(1,1,1)*uL !uref(1,1,1)

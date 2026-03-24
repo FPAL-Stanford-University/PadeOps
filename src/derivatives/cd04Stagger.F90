@@ -12,10 +12,10 @@ module cd04Staggerstuff
     public :: cd04Stagger, alpha06d1, a06d1, b06d1
     
     ! 6th order first derivative coefficients (See Lele (1992) for explanation)
-    real(rkind), parameter :: alpha06d1=  1.0_rkind/22.0_rkind 
+    real(rkind), parameter :: alpha06d1=  1.0_rkind/100.0_rkind 
     real(rkind), parameter :: c06d1    =  0_rkind / 5.0_rkind
     real(rkind), parameter :: a06d1    =  1.0_rkind/8.0_rkind*(9.0_rkind -6.0_rkind*alpha06d1) 
-    real(rkind), parameter :: b06d1    =  0_rkind  
+    real(rkind), parameter :: b06d1    =  1.0_rkind/8.0_rkind*(22.0_rkind*alpha06d1-1.0_rkind) / 3.0_rkind
 
     ! 6th order first derivative explicit centeral difference coefficients
     real(rkind), parameter :: aD06d1     = 3.0_rkind / 4.0_rkind
