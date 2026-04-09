@@ -139,6 +139,7 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   this%dy = dy
   this%dz = dz
   this%DomainAveraged_DynProc = DomainAveraged_DynProc
+  this%nzE_inX_local = this%gpE%xen(3)
 
   allocate(this%tau_ij(gpC%xsz(1),gpC%xsz(2),gpC%xsz(3),6))
   this%tau_11   => this%tau_ij(:,:,:,1)

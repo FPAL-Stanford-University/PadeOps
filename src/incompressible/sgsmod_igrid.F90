@@ -71,6 +71,8 @@ module sgsmod_igrid
         integer :: WM_matchingIndex
         real(rkind) :: walldist_fact  !! this is to filter the velocity at a distance away from the wall
         real(rkind) :: fact_goit      !! this factor determines the strength of the extra corrections of goit model 
+        integer :: nzE_inX_local
+        logical :: topbc_WM = .false.
 
         ! for varying z0
         real(rkind), dimension(:,:), allocatable :: z0var, ustarsqvar, WallMFactorvar, Uxvar, Uyvar, alpfac, nlptype, Uxspan, Uyspan,ustarsqspan 
@@ -278,6 +280,16 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
       this%tau_22 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,4)
       this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
+   else
+      !! no non-eddy viscosity model has been implemented yet.
+      !! setting stresses to zero so that they do not accumulate
+      !! when viscous and wallmodel contributions are added below
+      this%tau_11 = zero
+      this%tau_12 = zero
+      this%tau_13 = zero
+      this%tau_22 = zero
+      this%tau_23 = zero
+      this%tau_33 = zero
    end if
 
 

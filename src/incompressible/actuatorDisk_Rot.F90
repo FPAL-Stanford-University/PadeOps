@@ -565,7 +565,7 @@ subroutine getMeanU(this, u, v, w)
         this%uface = this%alpha_tau*umn + (1.d0 - this%alpha_tau)*this%uface
         this%vface = this%alpha_tau*vmn + (1.d0 - this%alpha_tau)*this%vface
         this%wface = this%alpha_tau*wmn + (1.d0 - this%alpha_tau)*this%wface
-        print *, "uface  =  ", this%uface
+        !print *, "uface  =  ", this%uface
 
         ! Get u disk
         this%rbuff = u(this%xdisk_idx,:,:); 
@@ -600,7 +600,7 @@ subroutine getMeanU(this, u, v, w)
         this%udisk = this%alpha_tau*umn + (1.d0 - this%alpha_tau)*this%udisk
         this%vdisk = this%alpha_tau*vmn + (1.d0 - this%alpha_tau)*this%vdisk
         this%wdisk = this%alpha_tau*wmn + (1.d0 - this%alpha_tau)*this%wdisk
-        print *, "udisk  =  ", this%udisk
+        !print *, "udisk  =  ", this%udisk
     end if 
     this%alpha_tau = alpha_smooth
 

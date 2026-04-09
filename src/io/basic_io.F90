@@ -30,16 +30,17 @@ contains
         character(len=30) :: rowfmt
         integer :: n1, n2
         integer :: i, j
+        integer :: unit_n
 
         n1 = size(raw_data,1)
         n2 = size(raw_data,2)
         write(rowfmt,'(A,I4,A)') '(',n2,'(es25.17E3,1x))'
-        OPEN(UNIT=10, FILE=trim(filename))
+        OPEN(newunit=unit_n, FILE=trim(filename))
 
         do i=1,n1
-            write(10,FMT=rowfmt) ( raw_data(i,j), j=1,n2 )
+            write(unit_n,FMT=rowfmt) ( raw_data(i,j), j=1,n2 )
         enddo
-        CLOSE(10)
+        CLOSE(unit_n)
     end subroutine   
  
    subroutine read_2d_ascii(data2read,filename)

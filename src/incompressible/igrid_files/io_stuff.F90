@@ -804,21 +804,40 @@
        class(igrid), intent(in) :: this
        character(len=clen) :: tempname, fname
        integer :: pid, idx
+       real(rkind) :: xp, yp, zp
+       integer :: i, j, k
+       integer :: unit
+       
+       if (this%nprobes <= 0) return
+       if (.not. this%doIhaveAnyProbes) return
+ 
 
        do idx = 1,this%nprobes
            pid = this%probes(4,idx)
-           write(tempname,"(A3,I2.2,A6,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
+
+           i = this%probes(1,idx)
+           j = this%probes(2,idx)
+           k = this%probes(3,idx)
+
+           xp = this%mesh(i,1,1,1)
+           yp = this%mesh(1,j,1,2)
+           zp = this%mesh(1,1,k,3)
+           unit = 900 + idx
+           write(tempname,"(A3,I2.2,A6,I6.6,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
            fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-           call write_2d_ascii(transpose(this%probe_data(:,idx,this%probeStartStep:this%step)), fname)
+           call write_2d_ascii(transpose(this%probe_data(:,idx,1:this%step - this%probeStartStep)), fname)
+           open(newunit=unit, file=fname, status='old', position='append', action='write')
+           write(unit,'(A,3ES16.8)') '# Location (x y z): ', xp, yp, zp
+           close(unit)
        end do 
 
        ! KS - preprocess
        if (this%PreprocessForKS) then
            do idx = 1,this%nprobes
                pid = this%probes(4,idx)
-               write(tempname,"(A3,I2.2,A9,I3.3,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE_KS",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
+               write(tempname,"(A3,I2.2,A9,I6.6,A4,I6.6,A4,I6.6,A4)") "Run",this%runID, "_PROBE_KS",pid,"_tst",this%probeStartStep,"_ten",this%step,".out"
                fname = this%OutputDir(:len_trim(this%OutputDir))//"/"//trim(tempname)
-               call write_2d_ascii(transpose(this%KS_probe_data(:,idx,this%probeStartStep:this%step)), fname)
+               call write_2d_ascii(transpose(this%KS_probe_data(:,idx, 1:this%step - this%probeStartStep)), fname)
            end do 
        end if
        

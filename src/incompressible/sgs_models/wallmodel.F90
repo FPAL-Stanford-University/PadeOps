@@ -12,6 +12,11 @@ subroutine initWallModel(this)
    real(rkind) :: epssmall = 1.0d-6
    integer :: i, j
 
+   ! check sanctity of user inputs
+   if( (this%topbc_WM) .and. (this%WallModel .ne. 6) ) then
+       call GracefulExit("Wall model on top boundary is allowed only with finite-Re wall mode, i.e. flag equal to 6", 111)
+   endif
+
    this%useWallModel = .true.
    allocate(this%tauijWM(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),2))
    allocate(this%tauijWMhat_inZ(this%sp_gpE%zsz(1),this%sp_gpE%zsz(2),this%sp_gpE%zsz(3),2))
@@ -76,8 +81,8 @@ subroutine initWallModel(this)
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
    
    case (6) ! Smooth wall wall model (Meneveau JoT 2020)
-       ! do nothing    
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
+
    case default
       call gracefulExit("Invalid choice of Wallmodel.",324)
    end select
@@ -106,6 +111,8 @@ subroutine computeWallStress(this, u, v, uhat, vhat, That)
    cbuffy => this%cbuffyC(:,:,:,1)
    call this%compute_and_bcast_surface_Mn(u, v, uhat, vhat, That)
    
+   this%ustar_upstream = this%ustar  ! will be overwritten if is_z0_varying is TRUE
+
    select case (this%WallModel)
    case (1) ! Standard Moeng Wall model
       this%WallMFactor = -this%ustar*this%ustar/(this%Uspmn + 1.D-13)
@@ -635,9 +642,20 @@ subroutine embed_WM_stress(this)
    class(sgs_igrid), intent(inout) :: this
    
    if(this%gpE%xst(3)==1) then
+      !this%tau_13(:,:,1) = this%tau_13(:,:,1) + this%tauijWM(:,:,1,1)
+      !this%tau_23(:,:,1) = this%tau_23(:,:,1) + this%tauijWM(:,:,1,2)
+  
       this%tau_13(:,:,1) = this%tauijWM(:,:,1,1)
       this%tau_23(:,:,1) = this%tauijWM(:,:,1,2)
    endif
+
+   if(this%topbc_WM) then
+      if(this%gpE%xen(3)==this%gpE%zsz(3)) then
+         this%tau_13(:,:,this%nzE_inX_local) = this%tau_13(:,:,this%nzE_inX_local) + this%tauijWM(:,:,this%nzE_inX_local,1)
+         this%tau_23(:,:,this%nzE_inX_local) = this%tau_13(:,:,this%nzE_inX_local) + this%tauijWM(:,:,this%nzE_inX_local,2)
+      endif
+   endif
+
 end subroutine 
 
 subroutine embed_WM_PotTflux(this)

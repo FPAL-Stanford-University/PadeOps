@@ -53,9 +53,9 @@
        else
            call this%populate_rhs()
        end if
-       !print*, sum(abs(this%u_rhs))
-       !print*, sum(abs(this%v_rhs))
-       !print*, sum(abs(this%w_rhs))
+       !write(100+nrank,'(3(e23.16,1x))') p_sum(abs(this%u_rhs)), p_maxval(abs(this%u_rhs)), p_minval(abs(this%u_rhs))
+       !write(100+nrank,'(3(e23.16,1x))') p_sum(abs(this%v_rhs)), p_maxval(abs(this%v_rhs)), p_minval(abs(this%v_rhs))
+       !write(100+nrank,'(3(e23.16,1x))') p_sum(abs(this%w_rhs)), p_maxval(abs(this%w_rhs)), p_minval(abs(this%w_rhs))
        !print*, sum(abs(this%T_rhs))
      
        this%newTimeStep = .false. 

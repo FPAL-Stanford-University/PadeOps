@@ -267,7 +267,7 @@ subroutine hook_probes(inputfile, probe_locs)
     use kind_parameters,    only: rkind
     real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
     character(len=*),                intent(in)    :: inputfile
-    integer, parameter :: nprobes = 20
+    integer, parameter :: nprobes = 1 
     
     ! IMPORTANT : Convention is to allocate probe_locs(3,nprobes)
     ! Example: If you have at least 3 probes:
@@ -281,32 +281,156 @@ subroutine hook_probes(inputfile, probe_locs)
     ! (0.2,0.2,0.2)  
     print*, inputfile
     allocate(probe_locs(3,nprobes))
-    probe_locs(1,1) = 1.0d0; probe_locs(2,1) = 0.8d0; probe_locs(3,1) = 0.1d0;
-    probe_locs(1,2) = 1.0d0; probe_locs(2,2) = 0.8d0; probe_locs(3,2) = 0.2d0;
-    probe_locs(1,3) = 1.0d0; probe_locs(2,3) = 0.8d0; probe_locs(3,3) = 0.5d0;
-    probe_locs(1,4) = 1.0d0; probe_locs(2,4) = 0.8d0; probe_locs(3,4) = 0.8d0;
-   
-    probe_locs(1,5) = 2.5d0; probe_locs(2,5) = 0.8d0; probe_locs(3,5) = 0.1d0;
-    probe_locs(1,6) = 2.5d0; probe_locs(2,6) = 0.8d0; probe_locs(3,6) = 0.2d0;
-    probe_locs(1,7) = 2.5d0; probe_locs(2,7) = 0.8d0; probe_locs(3,7) = 0.5d0;
-    probe_locs(1,8) = 2.5d0; probe_locs(2,8) = 0.8d0; probe_locs(3,8) = 0.8d0;
-   
-    probe_locs(1,9) = 3.0d0; probe_locs(2,9) = 0.8d0; probe_locs(3,9) = 0.1d0;
-    probe_locs(1,10) = 3.0d0; probe_locs(2,10) = 0.8d0; probe_locs(3,10) = 0.2d0;
-    probe_locs(1,11) = 3.0d0; probe_locs(2,11) = 0.8d0; probe_locs(3,11) = 0.5d0;
-    probe_locs(1,12) = 3.0d0; probe_locs(2,12) = 0.8d0; probe_locs(3,12) = 0.8d0;
-   
-    probe_locs(1,13) = 3.5d0; probe_locs(2,13) = 0.8d0; probe_locs(3,13) = 0.1d0;
-    probe_locs(1,14) = 3.5d0; probe_locs(2,14) = 0.8d0; probe_locs(3,14) = 0.2d0;
-    probe_locs(1,15) = 3.5d0; probe_locs(2,15) = 0.8d0; probe_locs(3,15) = 0.5d0;
-    probe_locs(1,16) = 3.5d0; probe_locs(2,16) = 0.8d0; probe_locs(3,16) = 0.8d0;
-   
-    probe_locs(1,17) = 4.0d0; probe_locs(2,17) = 0.8d0; probe_locs(3,17) = 0.1d0;
-    probe_locs(1,18) = 4.0d0; probe_locs(2,18) = 0.8d0; probe_locs(3,18) = 0.2d0;
-    probe_locs(1,19) = 4.0d0; probe_locs(2,19) = 0.8d0; probe_locs(3,19) = 0.5d0;
-    probe_locs(1,20) = 4.0d0; probe_locs(2,20) = 0.8d0; probe_locs(3,20) = 0.8d0;
-
+    probe_locs(1,1) = 5.0d0; probe_locs(2,1) = 6.0d0; probe_locs(3,1) = 1.365d0;
 end subroutine
+
+!subroutine hook_probes(inputfile, probe_locs)
+!    use kind_parameters, only: rkind 
+!    real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
+!    character(len=*), intent(in) :: inputfile
+!
+!    integer :: nprobes, i
+!    real(8) :: y_start, y_end, dy
+!
+!    ! Probe configuration
+!    y_start = 0.5d0
+!    y_end   = 7.0d0
+!    dy      = 0.5d0
+!
+!    nprobes = int((y_end - y_start)/dy) + 1
+!
+!    ! Allocate and assign
+!    allocate(probe_locs(3,nprobes))
+!    do i = 1, nprobes
+!        probe_locs(1,i) = 6.0d0            ! x
+!        probe_locs(2,i) = 6.0d0  ! y
+!        probe_locs(3,i) = y_start + (i-1)*dy          ! z
+!    end do
+!
+!end subroutine
+
+
+!subroutine hook_probes(inputfile, probe_locs)
+!    use kind_parameters, only: rkind
+!    real(rkind), dimension(:,:), allocatable, intent(out) :: probe_locs
+!    character(len=*), intent(in) :: inputfile
+!
+!    integer :: nprobes, Ny, Nz, i, j, p
+!    real(8) :: x_center, y_center, z_center
+!    real(8) :: side, y_start, y_end, z_start, z_end, dy, dz
+!
+!    ! no of probes 
+!    nprobes = 6400  
+!
+!    ! turbine center
+!    x_center = 6.0d0
+!    y_center = 6.0d0
+!    z_center = 1.365d0
+!
+!    ! downstream release plane (0.5 downstream of turbine)
+!    x_center = x_center + 2.5d0
+!
+!    ! square side
+!    side = 1.5d0
+!
+!    ! grid dimensions (Ny x Nz)
+!    Ny = int(sqrt(dble(nprobes)))
+!    Nz = nprobes / Ny
+!    if (Ny * Nz /= nprobes) then
+!        call GracefulExit("nprobes must be a rectangular grid (Ny×Nz)", 12)
+!    end if
+!
+!    ! y range
+!    y_start = y_center - side/2.0d0
+!    y_end   = y_center + side/2.0d0
+!    dy      = (y_end - y_start) / dble(Ny-1)
+!
+!    ! z range
+!    z_start = z_center - side/2.0d0
+!    z_end   = z_center + side/2.0d0
+!    dz      = (z_end - z_start) / dble(Nz-1)
+!
+!    ! Allocate: 3 coords × nprobes
+!    allocate(probe_locs(3, nprobes))
+!
+!    ! Assign probe locations (grid in y–z plane)
+!    p = 0
+!    do j = 1, Nz
+!        do i = 1, Ny
+!            p = p + 1
+!            probe_locs(1,p) = x_center                ! x fixed
+!            probe_locs(2,p) = y_start + (i-1)*dy      ! y grid
+!            probe_locs(3,p) = z_start + (j-1)*dz      ! z grid
+!        end do
+!    end do
+!
+!end subroutine
+
+
+
+!subroutine hook_probes(inputfile, probe_locs)
+!    use kind_parameters, only: rkind
+!    real(rkind), dimension(:,:), allocatable, intent(inout) :: probe_locs
+!    character(len=*), intent(in) :: inputfile
+!
+!    integer :: nbase, ny, nprobes, iprobe, ixz, iy
+!    real(rkind), dimension(:,:), allocatable :: base_locs
+!    real(rkind), dimension(:), allocatable   :: ylocs
+!
+!    ! base (x,z) locations (with dummy y=0.0, will be replaced by ylocs)
+!    nbase = 28
+!    allocate(base_locs(3,nbase))
+!    base_locs(:,1)  = [1.0d0, 0.0d0, 0.1d0]
+!    base_locs(:,2)  = [1.0d0, 0.0d0, 0.2d0]
+!    base_locs(:,3)  = [1.0d0, 0.0d0, 0.5d0]
+!    base_locs(:,4)  = [1.0d0, 0.0d0, 0.8d0]
+!    base_locs(:,5)  = [2.5d0, 0.0d0, 0.1d0]
+!    base_locs(:,6)  = [2.5d0, 0.0d0, 0.2d0]
+!    base_locs(:,7)  = [2.5d0, 0.0d0, 0.5d0]
+!    base_locs(:,8)  = [2.5d0, 0.0d0, 0.8d0]
+!    base_locs(:,9)  = [3.0d0, 0.0d0, 0.1d0]
+!    base_locs(:,10) = [3.0d0, 0.0d0, 0.2d0]
+!    base_locs(:,11) = [3.0d0, 0.0d0, 0.5d0]
+!    base_locs(:,12) = [3.0d0, 0.0d0, 0.8d0]
+!    base_locs(:,13) = [3.5d0, 0.0d0, 0.1d0]
+!    base_locs(:,14) = [3.5d0, 0.0d0, 0.2d0]
+!    base_locs(:,15) = [3.5d0, 0.0d0, 0.5d0]
+!    base_locs(:,16) = [3.5d0, 0.0d0, 0.8d0]
+!    base_locs(:,17) = [4.0d0, 0.0d0, 0.1d0]
+!    base_locs(:,18) = [4.0d0, 0.0d0, 0.2d0]
+!    base_locs(:,19) = [4.0d0, 0.0d0, 0.5d0]
+!    base_locs(:,20) = [4.0d0, 0.0d0, 0.8d0]
+!    base_locs(:,21) = [7.0d0, 0.0d0, 0.1d0]
+!    base_locs(:,22) = [7.0d0, 0.0d0, 0.2d0]
+!    base_locs(:,23) = [7.0d0, 0.0d0, 0.5d0]
+!    base_locs(:,24) = [7.0d0, 0.0d0, 0.8d0]
+!    base_locs(:,25) = [12.0d0, 0.0d0, 0.1d0]
+!    base_locs(:,26) = [12.0d0, 0.0d0, 0.2d0]
+!    base_locs(:,27) = [12.0d0, 0.0d0, 0.5d0]
+!    base_locs(:,28) = [12.0d0, 0.0d0, 0.8d0]
+!
+!    ! spanwise locations
+!    allocate(ylocs(17))
+!    ylocs = (/ 0.4d0, 0.45d0, 0.5d0, 0.55d0, 0.6d0, 0.65d0, 0.7d0, 0.75d0, 0.8d0, 0.85d0 ,0.9d0, 0.95d0, 1.0d0, 1.05d0, 1.1d0, 1.15d0, 1.2d0 /)
+!
+!    ny = size(ylocs)
+!    nprobes = nbase * ny
+!    allocate(probe_locs(3,nprobes))
+!
+!    ! fill probes
+!    iprobe = 0
+!    do iy = 1, ny
+!        do ixz = 1, nbase
+!            iprobe = iprobe + 1
+!            probe_locs(1,iprobe) = base_locs(1,ixz)
+!            probe_locs(2,iprobe) = ylocs(iy)
+!            probe_locs(3,iprobe) = base_locs(3,ixz)
+!        end do
+!    end do
+!
+!!    print *, "Total probes placed = ", nprobes
+!end subroutine
+!
 
 subroutine initScalar(decompC, inpDirectory, mesh, scalar_id, scalarField)
     use kind_parameters, only: rkind

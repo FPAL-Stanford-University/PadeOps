@@ -219,26 +219,26 @@ subroutine updateProbes(this)
 
     if (this%doIhaveAnyProbes) then
         do idx = 1,this%nprobes
-            this%probe_data(1,idx,this%step) = this%tsim
-            this%probe_data(2,idx,this%step) = this%u (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
-            this%probe_data(3,idx,this%step) = this%v (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
-            this%probe_data(4,idx,this%step) = this%wC(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+            this%probe_data(1,idx,this%step-this%ProbeStartStep) = this%tsim
+            this%probe_data(2,idx,this%step-this%ProbeStartStep) = this%u (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+            this%probe_data(3,idx,this%step-this%ProbeStartStep) = this%v (this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+            this%probe_data(4,idx,this%step-this%ProbeStartStep) = this%wC(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             if (this%isStratified) then
-                this%probe_data(5,idx,this%step) = this%T(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(5,idx,this%step-this%ProbeStartStep) = this%T(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if
             if (this%fastCalcPressure) then
-                this%probe_data(6,idx,this%step) = this%Pressure(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(6,idx,this%step-this%ProbeStartStep) = this%Pressure(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if
             if (this%computeDNSpressure) then
-                this%probe_data(7,idx,this%step) = this%Pressure_dns(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(7,idx,this%step-this%ProbeStartStep) = this%Pressure_dns(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if 
 
             if (this%computeFringePressure) then
-                this%probe_data(8,idx,this%step) = this%Pressure_fringe(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(8,idx,this%step-this%ProbeStartStep) = this%Pressure_fringe(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if
             
             if (this%computeTurbinePressure) then
-                this%probe_data(9,idx,this%step) = this%Pressure_turbine(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
+                this%probe_data(9,idx,this%step-this%ProbeStartStep) = this%Pressure_turbine(this%probes(1,idx),this%probes(2,idx),this%probes(3,idx))
             end if
         end do 
     end if
