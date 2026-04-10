@@ -20,6 +20,7 @@ module interpolatorMod
             procedure :: init 
             procedure :: destroy 
             procedure :: LinInterp3D 
+            procedure :: LinFuncExtend
     end type 
 
 contains 
@@ -234,5 +235,56 @@ subroutine LinInterp3D(this, fS, fD, loglaw_corr)
     call transpose_z_to_y(this%fxyz_Z,this%fxyz_Y,this%gpDest)
     call transpose_y_to_x(this%fxyz_Y,fD, this%gpDest) ! DONE!
 end subroutine 
+
+subroutine LinFuncExtend(this, fS, fD, extenType, zSource, loglaw_corr)
+    ! linearly extending function in the padded region: even or odd
+    ! 1: odd extension 2: even extension
+    use constants, only: one, two
+    class(interpolator), intent(inout) :: this
+    real(rkind), dimension(this%gpSource%xsz(1),this%gpSource%xsz(2), this%gpSource%xsz(3)), intent(in) :: fS
+    real(rkind), dimension(this%gpDest%xsz(1),this%gpDest%xsz(2), this%gpDest%xsz(3)), intent(out) :: fD
+    real(rkind), dimension(:), intent(in) :: zSource
+    logical, optional, intent(in) :: loglaw_corr
+    integer :: i, j, k, kprime
+    integer, intent(in) :: extenType
+    logical :: apply_loglaw_correction = .false.
+    real(rkind) :: logfac, z0, sign_factor
+
+    ! transpose to z decomposition
+    call transpose_x_to_y(fS, this%fx_Y, this%gpSX)
+    call transpose_y_to_z(this%fx_Y,this%fxy_Z, this%gpSXY)
+
+    do k = 1, this%gpDest%zsz(3)
+        if (k .le. size(zSource)) then
+            ! original data region
+            kprime = k; sign_factor = one
+        else
+            ! padded region, applying extension
+            kprime = this%gpDest%zsz(3)+1-k
+            if (extenType == 1) then       ! odd extension
+                sign_factor = -one
+            elseif (extenType == 2) then   ! even extension
+                sign_factor = one
+            else
+                call GracefulExit("ERROR: variable extenType can only be 1 or 2",34)
+            end if
+        end if
+
+        this%fxyz_Z(:,:,k) = sign_factor*this%fxy_Z(:,:,kprime)
+    end do
+
+    if(present(loglaw_corr)) then
+        apply_loglaw_correction = loglaw_corr
+    endif
+
+    if(apply_loglaw_correction) then
+        logfac = log(this%dzDest/two/this%z0)/log(this%dzSource/two/this%z0)
+        this%fxyz_Z(:,:,1) = this%fxyz_Z(:,:,1)*logfac
+    endif
+
+    ! transpose back to x decomposition
+    call transpose_z_to_y(this%fxyz_Z,this%fxyz_Y,this%gpDest)
+    call transpose_y_to_x(this%fxyz_Y,fD, this%gpDest)
+end subroutine
 
 end module 

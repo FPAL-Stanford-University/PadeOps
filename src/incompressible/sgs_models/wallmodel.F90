@@ -30,8 +30,17 @@ subroutine initWallModel(this)
    case (2) ! Bou-Zeid Wall model
       allocate(this%filteredSpeedSq(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3)))
       if(this%is_z0_varying) then
-          this%kaplnzfac_s = (kappa/log(half*this%dz/this%z0s))**2
-          this%kaplnzfac_r = (kappa/log(half*this%dz/this%z0r))**2
+          ! this%kaplnzfac_s = (kappa/log(half*this%dz/this%z0s))**2
+          ! this%kaplnzfac_r = (kappa/log(half*this%dz/this%z0r))**2
+
+          if(.not. this%stripe_heterog) then                             !! for single step jump
+              this%kaplnzfac_s = (kappa/log(half*this%dz/this%z0s))**2
+              this%kaplnzfac_r = (kappa/log(half*this%dz/this%z0r))**2
+          else                                                           !! for stripe heterogeneity
+              this%kaplnzfac_z01 = (kappa/log(half*this%dz/this%z01))**2
+              this%kaplnzfac_z02 = (kappa/log(half*this%dz/this%z02))**2
+              this%kaplnzfac_z03 = (kappa/log(half*this%dz/this%z03))**2
+          endif
       endif
    case (3) ! Abkar-PA heterogeneous Wall model
       if(.not. this%is_z0_varying) then
@@ -618,7 +627,12 @@ subroutine compute_ustar_upstreampart(this, ustar1)
 
    !ufiltavg = p_sum(sum(this%filteredSpeedSq(:,:,1)*this%mask_upstream))/this%mask_normfac !--- using not-span-avg
    ufiltavg = p_sum(sum(this%filteredSpeedSq(:,:,2)*this%mask_upstream))/this%mask_normfac  !--- using span-avg
-   ustar1 = sqrt(ufiltavg*this%kaplnzfac_s)
+   ! ustar1 = sqrt(ufiltavg*this%kaplnzfac_s)
+   if(.not. this%stripe_heterog) then
+       ustar1 = sqrt(ufiltavg*this%kaplnzfac_s)    !! for single step jump
+   else
+       ustar1 = sqrt(ufiltavg*this%kaplnzfac_z01)  !! for stripe heterogeneity
+   endif
    !if(nrank==0) 
    !print '(a,3(e19.12,1x))', "ustar1:= ", ustar1, this%kaplnzfac_s, ufiltavg
 

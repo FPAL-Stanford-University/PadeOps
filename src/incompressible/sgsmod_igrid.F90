@@ -79,6 +79,9 @@ module sgsmod_igrid
         real(rkind), dimension(:,:), allocatable :: lamfact, mask_upstream, deli, ustarsq_ratio_kaplnzfacs
         real(rkind) :: kaplnzfac_s, kaplnzfac_r, z0s, z0r, mask_normfac, ustar_upstream, betfac
         logical :: is_z0_varying = .false., filter_for_heterog = .true., LSM = .false.
+        real(rkind) :: z01, z02, z03 !! this is for stripe heterogeneity
+        real(rkind) :: kaplnzfac_z01, kaplnzfac_z02, kaplnzfac_z03 !! this is for stripe heterogeneity
+        logical :: stripe_heterog = .false. !! this is for stripe heterogeneity
 
         ! for dynamic procedures - all are at edges
         type(gaussian) :: gaussianTestFilterZ

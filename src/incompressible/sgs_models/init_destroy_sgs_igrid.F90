@@ -77,13 +77,17 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
   real(rkind), dimension(gpC%xsz(1)) :: sp_map, x1, x2, S1, S2, deli
   real(rkind), dimension(gpC%xsz(1), gpC%xsz(2)) :: sp_map_2d
   logical :: is_z0_varying = .false., filter_for_heterog = .true., use_const_alpfac = .true.
-  real(rkind) :: z0r, z0s, spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
+  real(rkind) :: spx, spy, rpx, rpy, totpx, xl, xlmod, rpstart = -1.0d0, spx_delta = 1.0d0, spy_delta = 1.0d0
   real(rkind) :: Mfactor, dele, excludedist = 3.0_rkind, const_alpfac = 0.027_rkind, blht_for_alpfac = 3.0_rkind, betfac = 0.15_rkind
   real(rkind) :: ylmod, yl, totpy
   integer :: spnumx, spnumy
+  real(rkind) :: z0s = 1.0_rkind, z0r = 1.0_rkind, z01 = 1.0_rkind, z02 = 1.0_rkind, z03 = 1.0_rkind
   real(rkind), allocatable, dimension(:) :: Mfactor_arr  !! making Mfactor into array for gradual roughness transition in APA model
   real(rkind) :: walldist_fact = 0.0  !! this is to filter the velocity at a distance away from the wall
   real(rkind) :: fact_goit = 0.0      !! this factor determines the strength of the extra corrections of goit model 
+  real(rkind) :: fringe_xst_stripe = 0.75_rkind !! this is used for stripe heterogeneity only
+  real(rkind) :: fringeplusspx = 0.0_rkind, notfringeplusspx = 0.0_rkind
+  logical :: stripe_heterog = .false. !! this is used for stripe heterogeneity only
 
   namelist /SGS_MODEL/ DynamicProcedureType, SGSmodelID, z0, z0t, &
                  useWallDamping, ncWall, Csgs, WallModelType, usePrSGS, &
@@ -95,7 +99,8 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
                  is_z0_varying, fact_goit
 
   namelist /Z0VARYING/ spx, spy, rpx, rpy, spnumx, spnumy, z0s, z0r, rpstart, spx_delta, spy_delta, &
-                       filter_for_heterog, excludedist, use_const_alpfac, const_alpfac, blht_for_alpfac, betfac
+                       filter_for_heterog, excludedist, use_const_alpfac, const_alpfac, blht_for_alpfac, betfac, &
+                       stripe_heterog, z01, z02, z03, fringe_xst_stripe
 
   this%gpC => gpC
   this%gpE => gpE
@@ -236,10 +241,13 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     sp_map_2d          = 0.0_rkind;   Mfactor_arr          = 0.0_rkind
 
     this%z0s = z0s; this%z0r = z0r
+    this%z01 = z01; this%z02 = z02; this%z03 = z03; this%stripe_heterog = stripe_heterog ! for stripe heterogeneity
     this%filter_for_heterog = filter_for_heterog
     this%betfac = betfac
     totpx = spx + rpx
     totpy = spy + rpy
+    fringeplusspx = rpstart + (Lx-fringe_xst_stripe*Lx); notfringeplusspx = Lx - fringeplusspx
+
     if(rpstart < zero) then
         ! overwrite rough patch start with length of smooth patch
         rpstart = spx
@@ -249,58 +257,127 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, Lx, Ly, x
     endif
     
     if(spx_delta < epssmall) then
-        do i = 1, this%gpC%xsz(1)
-          xl = xMesh(i)
-          xlmod = mod(xl, totpx)
-          if((xlmod >= (rpstart+rpx)) .or. (xlmod < rpstart)) then
-              sp_map(i) = 0.0_rkind !this%z0var(i,j) = z0s
-          else
-              sp_map(i) = 1.0_rkind !this%z0var(i,j) = z0r
-          endif
-        enddo
-        
-        ! copying 1d sp_map into 2d sp_map
-        do j = 1, this%gpC%xsz(2)
-          do i = 1, this%gpC%xsz(1)
-            sp_map_2d(i,j) = sp_map(i)
-          enddo
-        enddo
-        
-        ! inverting the sp_map for heterogeneity in y-direction
-        do j = 1, this%gpC%xsz(2)
-          yl = yMesh(j)
-          ylmod = mod(yl, totpy)
-          if(ylmod > spy) then
-              sp_map_2d(:,j) = abs(one - sp_map_2d(:,j))
-          endif
-          !print '(2(i4,1x), 100(e19.12,1x))', nrank, j, yMesh(j), yl, totpy, ylmod, sp_map_2d(:,j) 
-        enddo
+        if(.not. this%stripe_heterog) then   !! single step jump
+            do i = 1, this%gpC%xsz(1)
+              xl = xMesh(i)
+              xlmod = mod(xl, totpx)
+              if((xlmod >= (rpstart+rpx)) .or. (xlmod < rpstart)) then
+                  sp_map(i) = 0.0_rkind !this%z0var(i,j) = z0s
+              else
+                  sp_map(i) = 1.0_rkind !this%z0var(i,j) = z0r
+              endif
+            enddo
 
+            ! copying 1d sp_map into 2d sp_map
+            do j = 1, this%gpC%xsz(2)
+              do i = 1, this%gpC%xsz(1)
+                sp_map_2d(i,j) = sp_map(i)
+              enddo
+            enddo
+
+            ! inverting the sp_map for heterogeneity in y-direction
+            do j = 1, this%gpC%xsz(2)
+              yl = yMesh(j)
+              ylmod = mod(yl, totpy)
+              if(ylmod > spy) then
+                  sp_map_2d(:,j) = abs(one - sp_map_2d(:,j))
+              endif
+              !print '(2(i4,1x), 100(e19.12,1x))', nrank, j, yMesh(j), yl, totpy, ylmod, sp_map_2d(:,j) 
+            enddo
+            do j = 1, this%gpC%xsz(2)
+              this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
+            enddo
+        else
+            do i = 1, this%gpC%xsz(1)            !! for stripe heterogeneity
+                xl = xMesh(i)
+                xlmod = mod(xl, totpx)
+                if((xlmod >= (fringe_xst_stripe*Lx)) .or. (xlmod < rpstart)) then
+                    sp_map(i) = 0.0_rkind !this%z0var(i,j) = z01
+                elseif((xlmod >= rpstart) .and. (xlmod < (rpstart+rpx))) then
+                    sp_map(i) = 1.0_rkind !this%z0var(i,j) = z02
+                else
+                    sp_map(i) = 2.0_rkind !this%z0var(i,j) = z03
+                endif
+                !print '(1(i5,1x),1(e17.15))', i, sp_map(i)
+                !if((xlmod .le. (rpstart+rpx))) then
+                !elseif then
+                !else
+            enddo
+        endif
     else
-        ! this part is for gradual change in roughness
-        ! spx_delta determines how much gradual it will be
-        ! handle xpos = (rpstart-spx) separately
-        xpos = rpstart-spx; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
-        call S_fringe(x1, S1)
-        sp_map = 1.0_rkind-S1
+        if(.not. this%stripe_heterog) then   !! single step jump
+            ! this part is for gradual change in roughness
+            ! spx_delta determines how much gradual it will be
+            ! handle xpos = (rpstart-spx) separately
+            xpos = rpstart-spx; x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+            call S_fringe(x1, S1)
+            sp_map = 1.0_rkind-S1
 
-        !xpos = rpstart - spx; sp_map = 0.0_rkind
+            !xpos = rpstart - spx; sp_map = 0.0_rkind
 
-        ! then calculate map for all stripes
-        do i = 1, spnumx
-          xpos = xpos + spx; x1 = (xMesh - (xpos - 0.5_rkind*spx_delta))/spx_delta
-          xpos = xpos + rpx; x2 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
-          call S_fringe(x1, S1)
-          call S_fringe(x2, S2)
-          sp_map = sp_map + S1 - S2
-        enddo
+            ! then calculate map for all stripes
+            do i = 1, spnumx
+              xpos = xpos + spx; x1 = (xMesh - (xpos - 0.5_rkind*spx_delta))/spx_delta
+              xpos = xpos + rpx; x2 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+              call S_fringe(x1, S1)
+              call S_fringe(x2, S2)
+              sp_map = sp_map + S1 - S2
+            enddo
+            do j = 1, this%gpC%xsz(2)
+              this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
+            enddo
+        else
+            xpos = rpstart-fringeplusspx;
+            x1 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+            call S_fringe(x1, S1)
+            sp_map = 1.0_rkind-S1
+            do i = 1, spnumx
+              xpos = xpos + fringeplusspx; x1 = (xMesh - (xpos - 0.5_rkind*spx_delta))/spx_delta
+              xpos = xpos + notfringeplusspx; x2 = (xMesh - (xpos + 0.5_rkind*spx_delta))/spx_delta + 1.0_rkind
+              call S_fringe(x1, S1)
+              call S_fringe(x2, S2)
+              sp_map = sp_map + S1 - S2
+            enddo
+            do j = 1, this%gpC%xsz(2)
+              this%z0var(:,j) = z01 - sp_map * (z01 - z02)
+            enddo
+            do j = 1, this%gpC%xsz(2)
+              do i = 1, this%gpC%xsz(1)
+                xl = xMesh(i)
+                xlmod = mod(xl, totpx)
+                if((xlmod >= rpstart+rpx) .and. (xlmod < fringe_xst_stripe*Lx)) then
+                  this%z0var(i,j) = z03;
+                elseif (xlmod >= fringe_xst_stripe*Lx) then
+                  this%z0var(i,j) = z01;
+                endif
+              enddo
+            enddo
+        endif
     endif
 
     !! heterogeneity in x-direction only
-    do j = 1, this%gpC%xsz(2)
-      this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
-    enddo
-    
+    !if(.not. this%stripe_heterog) then 
+    !    ! single roughness transition
+    !    do j = 1, this%gpC%xsz(2)
+    !      this%z0var(:,j) = z0s + sp_map * (z0r - z0s)
+    !    enddo
+    !else
+    !    ! stripe heterogeneity
+    !    do j = 1, this%gpC%xsz(2)
+    !        do i = 1, this%gpC%xsz(1)
+    !            if(abs(sp_map(i)-0) < epssmall) then
+    !                this%z0var(i,j) = z01
+    !            elseif(abs(sp_map(i)-1) < epssmall) then
+    !                this%z0var(i,j) = z02
+    !            elseif(abs(sp_map(i)-2) < epssmall) then
+    !                this%z0var(i,j) = z03
+    !            else
+    !                call GracefulExit("Wrong value of sp_map", 11)
+    !            endif 
+    !        enddo
+    !    enddo
+    !endif
+
     !! heterogeneity in both x & y-direction
     !do j = 1, this%gpC%xsz(2)
     !  do i = 1, this%gpC%xsz(1)

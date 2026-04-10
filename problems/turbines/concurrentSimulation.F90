@@ -27,7 +27,7 @@ program concurrentSimulation
     type(budgets_xy_avg) :: budg_xyavg1, budg_xyavg2
     logical :: useInterpolator = .false., restrict_igp_dt = .false.
     real(rkind) :: srcxst = 0, srcyst = 0, srczst = 0, tsub, dtfull, dtpart
-    integer :: extrap_method = -1   ! -1 : no extrap; 0 : 0th-order; 1 : 1st-order
+    integer :: extrap_method = -2   ! -2 : no extrap; -1: linear extension; 0 : 0th-order; 1 : 1st-order 2: mix of -1 & 0
     real(rkind), allocatable, dimension(:,:,:), target :: utarget,  vtarget,  wtarget,  Ttarget
     real(rkind), allocatable, dimension(:,:,:), target :: utarget0, vtarget0, wtarget0, Ttarget0
     real(rkind), allocatable, dimension(:,:,:), target :: utarget1, vtarget1, wtarget1, Ttarget1
@@ -70,7 +70,7 @@ program concurrentSimulation
         if( srcyst + igp%Ly > prec%Ly) then
             call GracefulExit("Precursor is not wide enough. Check details.", 11)
         endif
-        if( (srczst + igp%Lz > prec%Lz) .and. (extrap_method == -1)) then
+        if( (srczst + igp%Lz > prec%Lz) .and. (extrap_method == -2)) then
             call GracefulExit("Precursor is not tall enough and extrap_method is -1. Check details.", 11)
         endif
         if( abs(srczst) > zero) then
@@ -79,8 +79,8 @@ program concurrentSimulation
         if(.not. igp%useFringe) then
             call GracefulExit("If interpolator is being used, igp%useFringe must be true.", 11)
         endif
-        if( .not. ((extrap_method==-1) .or. (extrap_method==0) .or. (extrap_method==1))) then
-            call GracefulExit("extrap_method must be -1, 0 or 1.", 11)
+        if( .not. ((extrap_method==-2) .or. (extrap_method==-1) .or. (extrap_method==0) .or. (extrap_method==1) .or. (extrap_method==2))) then        
+            call GracefulExit("extrap_method must be -2, -1, 0 or 1.", 11)
         endif
         !if( abs(srcyst+igp%Ly-prec%Ly) > 1.0d-12 ) then
         !  !if(.not. igp%fringe_x%Apply_y_fringe) then
@@ -139,13 +139,37 @@ program concurrentSimulation
     ! simulation (at the end of each time step).  
 
     if(useInterpolator) then
-        call interpC%LinInterp3D(prec%u, utarget1, .true.)
-        call interpC%LinInterp3D(prec%v, vtarget1, .true.)
-        !call interpC%loglaw_correction_uv(prec%u, prec%v, utarget1, vtarget1)
-        call interpE%LinInterp3D(prec%w, wtarget1, .false.)
-        if(igp%isStratified) then
-            call interpC%LinInterp3D(prec%T, Ttarget1, .false.)
-            !call interpC%loglaw_correction_T(prec%T, Ttarget1)
+        ! call interpC%LinInterp3D(prec%u, utarget1, .true.)
+        ! call interpC%LinInterp3D(prec%v, vtarget1, .true.)
+        ! !call interpC%loglaw_correction_uv(prec%u, prec%v, utarget1, vtarget1)
+        ! call interpE%LinInterp3D(prec%w, wtarget1, .false.)
+        ! if(igp%isStratified) then
+        !     call interpC%LinInterp3D(prec%T, Ttarget1, .false.)
+        !     !call interpC%loglaw_correction_T(prec%T, Ttarget1)
+        ! endif
+        if (extrap_method == -1) then
+            call interpC%LinFuncExtend(prec%u, utarget1, 2, prec%zline, .true.)
+            call interpC%LinFuncExtend(prec%v, vtarget1, 2, prec%zline, .true.)
+            call interpE%LinFuncExtend(prec%w, wtarget1, 1, prec%zline, .false.)
+            if(igp%isStratified) then
+                call interpC%LinFuncExtend(prec%T, Ttarget1, 2, prec%zline, .false.)
+            endif
+        elseif (extrap_method == 0 .and. extrap_method == 1) then
+            call interpC%LinInterp3D(prec%u, utarget1, .true.)
+            call interpC%LinInterp3D(prec%v, vtarget1, .true.)
+            !call interpC%loglaw_correction_uv(prec%u, prec%v, utarget1, vtarget1)
+            call interpE%LinInterp3D(prec%w, wtarget1, .false.)
+            if(igp%isStratified) then
+                call interpC%LinInterp3D(prec%T, Ttarget1, .false.)
+                !call interpC%loglaw_correction_T(prec%T, Ttarget1)
+            endif
+        elseif (extrap_method == 2) then
+            call interpC%LinFuncExtend(prec%u, utarget1, 2, prec%zline, .true.)
+            call interpC%LinFuncExtend(prec%v, vtarget1, 2, prec%zline, .true.)
+            call interpE%LinInterp3D(prec%w, wtarget1, .false.)
+            if(igp%isStratified) then
+                call interpC%LinInterp3D(prec%T, Ttarget1, .false.)
+            endif
         endif
     endif
 
@@ -161,11 +185,33 @@ program concurrentSimulation
            utarget0 = utarget1; vtarget0 = vtarget1; wtarget0 = wtarget1; 
            if(igp%isStratified) Ttarget0 = Ttarget1
  
-           call interpC%LinInterp3D(prec%u, utarget1, .true.)
-           call interpC%LinInterp3D(prec%v, vtarget1, .true.)
-           call interpE%LinInterp3D(prec%w, wtarget1, .false.)
-           if(igp%isStratified) then
-               call interpC%LinInterp3D(prec%T, Ttarget1, .false.)
+           ! call interpC%LinInterp3D(prec%u, utarget1, .true.)
+           ! call interpC%LinInterp3D(prec%v, vtarget1, .true.)
+           ! call interpE%LinInterp3D(prec%w, wtarget1, .false.)
+           ! if(igp%isStratified) then
+           !     call interpC%LinInterp3D(prec%T, Ttarget1, .false.)
+           ! endif
+           if (extrap_method == -1) then
+               call interpC%LinFuncExtend(prec%u, utarget1, 2, prec%zline, .true.)
+               call interpC%LinFuncExtend(prec%v, vtarget1, 2, prec%zline, .true.)
+               call interpE%LinFuncExtend(prec%w, wtarget1, 1, prec%zline, .false.)
+               if(igp%isStratified) then
+                   call interpC%LinFuncExtend(prec%T, Ttarget1, 2, prec%zline, .false.)
+               endif
+           elseif (extrap_method == 0 .and. extrap_method == 1) then
+               call interpC%LinInterp3D(prec%u, utarget1, .true.)
+               call interpC%LinInterp3D(prec%v, vtarget1, .true.)
+               call interpE%LinInterp3D(prec%w, wtarget1, .false.)
+               if(igp%isStratified) then
+                   call interpC%LinInterp3D(prec%T, Ttarget1, .false.)
+               endif
+           elseif (extrap_method == 2) then
+               call interpC%LinInterp3D(prec%u, utarget1, .true.)
+               call interpC%LinInterp3D(prec%v, vtarget1, .true.)
+               call interpE%LinFuncExtend(prec%w, wtarget1, 1, prec%zline, .false.)
+               if(igp%isStratified) then
+                   call interpC%LinInterp3D(prec%T, Ttarget1, .false.)
+               endif
            endif
 
            dtfull = prec%tsim-igp%tsim
