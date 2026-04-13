@@ -23,8 +23,8 @@ module ThinJetHauke_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 2*pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
-    real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref
+    real(rkind) :: Ly = 1.0, Lx = 2d0*pi/0.9d0,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
+    real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref,ll
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
     integer, parameter :: MAX_MODES = 10
@@ -174,8 +174,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi
-                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi/0.9d0
+                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5d0
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz  -pi
                 end do
             end do
@@ -224,7 +224,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
 
     real(rkind) :: Lr, STRETCH_RATIO = 5.0d0
-    real(rkind) :: AA0,A3,B0,B1,B2,B3,yi,yp,y_core,y_LG,y_outer,U_loc,U_li,xi
+    real(rkind) :: AA0,AA2,A3,B0,B1,B2,B3,yi,yp,y_core,y_LG,y_outer,U_loc,U_li,xi,mur,Delta0
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: eta,tmp,VF0
     ! --- Variables for Eigenfunction Initialization ---
 
@@ -233,6 +233,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     real(rkind), dimension(:,:,:), allocatable :: &
         phi_r, phi_i, u_r, u_i, v_r, v_i, w_r, w_i, &
         p_r, p_i, m1_r, m1_i, m2_r, m2_i
+    real(rkind), dimension(:), allocatable :: u_base
 
     real(rkind) :: arg, u_perturb, v_perturb, w_perturb, p_perturb, phi_perturb, m1_perturb, m2_perturb,current_phase
 
@@ -240,7 +241,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, &
                           interface_init, delta, pointy, epsilonk, v0, v0_2, &
                           base_dir, num_modes, alpha_modes, beta_modes, phase_modes, &
-                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes,h,d1,d2,pmu1,pmu2
+                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes,h,d1,d2,pmu1,pmu2,ll
 
      ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -272,10 +273,10 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%plast = plastic ; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
-        delta_rho = Nrho * 2.0_rkind*pi/384.0_rkind * 0.275d0
+        delta_rho = Nrho * 2d0*pi/0.9d0/150d0 * 0.275d0
         !delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
         eta = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
-        Lr    = 12.0d0/(eta(1,ny,1) - eta(1,1,1))
+        Lr    = 30.0d0/(eta(1,ny,1) - eta(1,1,1))
         eta = Lr*eta
 
 
@@ -310,20 +311,59 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     ! 2. SET BASE STATE
     ! =========================================================================
         ! ... (This part is unchanged, set base u, v, w, VF, rho, Ys etc.) ...
-        A0 = v0
+        ! Compute profile parameters
+   !    mur = pmu2/pmu1  ! gas/liquid viscosity ratio (corrected)
+   !    Delta0 = twothird*mur + ll
+!        
+        ! A0, A2 for liquid transition (quadratic, not cubic)
+   !    AA0 = v0*(one + third*mur/Delta0) - v0_2*third*mur/Delta0
+   !    AA2 = (v0_2 - v0)*mur/Delta0
+!        
+!        ! B0, B1, B2 for gas transition region (quadratic, not cubic)
+   !    B0 = v0_2*(one - ll/Delta0) + v0*ll/Delta0
+   !    B1 = two*(v0_2 - v0)*ll/Delta0
+   !    B2 = -(v0_2 - v0)*ll/Delta0
+!        
+!        ! Region boundaries
+   !    y_core  = h
+   !    y_outer = h + d2  ! Only one transition layer (dg = d2)
+        
+   !    do i = 1, ny
+   !        yi = eta(1, i, 1)
+   !        yp = abs(yi)
+        
+   !        if (yp <= y_core) then
+                ! Liquid interior - quadratic profile
+   !            U_loc = AA0 + AA2*yp**two
+        
+   !        else if (yp <= y_outer) then
+                ! Gas transition - quadratic profile
+   !            xi = (yp - h)/d2
+   !            U_loc = B0 + B1*xi + B2*xi**two
+        
+   !        else
+   !            ! Outer gas region - constant
+   !            U_loc = v0_2
+   !        end if
+        
+   !        u(:, i, :) = U_loc
+   !    end do
+   !    uref = u
+!
+        AA0 = v0
         A3 = pmu1 /d1 *(v0-v0_2) / &
                 (d2**2 * ( pmu1 + pmu2*(d1/d2)))
-
+!
         ! Values at liquid-gas interface (y=h+dl)
-        U_li = A0 + A3*d1**3
-
-        ! B0..B3 for gas transition region
+        U_li = AA0 + A3*d1**3
+!
+!        ! B0..B3 for gas transition region
         B0 = U_li
         B3 = (v0_2 - B0)/d2**3
         B1 = 3.0d0*(v0_2 - B0)/d2
         B2 = -3.0d0*(v0_2 - B0)/d2**2
-
-        ! region boundaries
+!
+!        ! region boundaries
         y_core  = h
         y_LG    = h + d1
         y_outer = h + d1 + d2
@@ -337,7 +377,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
               U_loc = v0        
           else if(yp <= y_LG) then
               xi=yp-h
-              U_loc = A0+A3*xi**3
+              U_loc = AA0+A3*xi**3
           else if(yp <= y_outer ) then 
               xi = yp - (h+d1)
               U_loc = B0 + B1*xi + B2*xi**2 + B3*xi**3
@@ -350,6 +390,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         uref = u
         v = 0.0
         w = 0.0
+!        u = 0.0
         mix%material(1)%p = p_amb
         tmp = 0.5_rkind*( erf( (eta+h)/delta_rho ) - erf( (eta-h)/delta_rho ) )
         !set mixture Volume fraction
@@ -367,7 +408,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         allocate( phi_r(pointy, MAX_MODES,MAX_MODES), phi_i(pointy, MAX_MODES,MAX_MODES), u_r(pointy, MAX_MODES,MAX_MODES),u_i(pointy, MAX_MODES,MAX_MODES), &
                   v_r(pointy, MAX_MODES,MAX_MODES), v_i(pointy, MAX_MODES,MAX_MODES),  &
                   p_r(pointy, MAX_MODES,MAX_MODES), p_i(pointy, MAX_MODES,MAX_MODES), m1_r(pointy, MAX_MODES,MAX_MODES),m1_i(pointy, MAX_MODES,MAX_MODES), &
-                  m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES) )
+                  m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES))
+        allocate( u_base(pointy) )
 !
 !        ! --- Rank 0 reads all data from files ---
         if (nrank == 0) then
@@ -400,6 +442,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                 open(unit=33, file=trim(folder_path)//'m1_I.txt', status='old'); read(33,*) m1_i(:,q,l);  close(33)
                 open(unit=34, file=trim(folder_path)//'m2_R.txt', status='old'); read(34,*) m2_r(:,q,l);  close(34)
                 open(unit=35, file=trim(folder_path)//'m2_I.txt', status='old'); read(35,*) m2_i(:,q,l);  close(35)
+                open(unit=36, file=trim(folder_path)//'Ubase.txt', status='old'); read(36,*) u_base;  close(36)
             end do
             end do
         end if
@@ -417,7 +460,14 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         call MPI_Bcast(m1_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         call MPI_Bcast(m2_r,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         call MPI_Bcast(m2_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+        call MPI_Bcast(u_base, pointy, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
+      ! do j = 1, ny
+
+      !     uref(:,j,:) = u_base(j) 
+      !     u(:,j,:)    = u_base(j)
+
+      ! enddo
         ! --- Loop over modes and add perturbations to the 3D field ---
         do q = 1, num_modes
           do l = 1, bnum_modes
@@ -446,10 +496,10 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                         m2p(i,j,k) = m2p(i,j,k) +  m2_perturb
 
 
-                        u(i,j,k) = u(i,j,k) + epsilonk * u_perturb
+                        u(i,j,k) = u(i,j,k) + epsilonk * u_perturb 
                         v(i,j,k) = v(i,j,k) + epsilonk * v_perturb
-        !                w(i,j,k) = w(i,j,k) + epsilonk * w_perturb
-        !                mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk * p_perturb
+        !               w(i,j,k) = w(i,j,k) + epsilonk * w_perturb
+                        mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk * p_perturb
         !                mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
         !                rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb*VF0(i,j,k) + m2_perturb*(1-VF0(i,j,k)) + rho_0*phi_perturb +rho_0_2*(-phi_perturb))
 
@@ -497,7 +547,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     end associate
 end subroutine initfields
 
-subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge)
+subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge,mask)
     use kind_parameters,  only: rkind
     use constants,        only: zero,third,half,twothird,one,two,seven,pi,eps
     use SolidGrid,        only: u_index,v_index,w_index,rho_index,e_index, uref_index
@@ -513,6 +563,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout):: sponge
+    real(rkind), dimension(:,:,:), intent(inout):: mask
     real(rkind), dimension(2), intent(inout) :: rhou, rhov,rhow,rhoe
     integer :: ioUnit,i,iy
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys
@@ -530,22 +581,26 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         
         nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
         yphys = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
-        Lr    = 12.0d0/(yphys(1,ny,1) - yphys(1,1,1))
-        yphys = Lr*yphys
+        Lr    = 30.0d0/(yphys(1,ny,1) - yphys(1,1,1))
+        yphys =Lr*yphys
       
 
-        sigma1 = -5000d0 ! -2400 ! -80000
+        sigma1 = -1000d0 ! -2400 ! -80000
 
-        where(yphys .LE. -5.0d0)
-           sponge(:,:,:,1) = sigma1*( (yphys + 5.0d0)/1.0d0)**2.0d0
+        where(yphys .LE. -13.0d0)
+           sponge(:,:,:,1) = sigma1*( (yphys + 13.0d0)/2.0d0)**4.0d0 
+           mask = 1d0
         elsewhere
            sponge(:,:,:,1) = 0d0
+           mask = 0d0
         endwhere
 
-        where(yphys .GE. 5.0d0)
-           sponge(:,:,:,2) = sigma1*( (yphys- 5.0d0)/1.0d0)**2.0d0 
+        where(yphys .GE. 13.0d0)
+           sponge(:,:,:,2) = sigma1*( (yphys- 13.0d0)/2.0d0)**4.0d0 
+           mask = 1d0
         elsewhere
            sponge(:,:,:,2) = 0
+           mask = 0d0
         endwhere
 
         rhou(1) = rho(1,1,1)*uref(1,1,1)

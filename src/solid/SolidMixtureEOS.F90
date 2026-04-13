@@ -121,6 +121,7 @@ module SolidMixtureMod
         procedure :: get_q
         procedure :: get_intSharp_clean
         procedure :: get_intSharp_clean2
+        procedure :: get_intSharp_clean2_optimized
         procedure :: get_intSharp
         procedure :: get_gradp
         procedure :: get_surfaceTensionPE
@@ -2354,7 +2355,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                 Frho(:,:,:,imat)    = Frho(:,:,:,imat) + (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradYs(:,:,:,imat) )
 
 
-                Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) +  (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradVF(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat)  + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )  + this%material(i)%adiff_stagg(:,:,:,imat)*gradp(:,:,:,imat)*this%material(i)%VF_mid(:,:,:,imat)*this%material(i)%hydro%onebygam_m1*this%material(i)%hydro%gam
+                Fenergy(:,:,:,imat) = Fenergy(:,:,:,imat) +  (this%material(i)%adiff_stagg(:,:,:,imat)*this%material(i)%gradVF(:,:,:,imat))*((this%material(i)%hydro%gam*p_int(:,:,:,imat)  + this%material(i)%hydro%gam*this%material(i)%hydro%Pinf)*this%material(i)%hydro%onebygam_m1 )!  + this%material(i)%adiff_stagg(:,:,:,imat)*gradp(:,:,:,imat)*this%material(i)%VF_mid(:,:,:,imat)*this%material(i)%hydro%onebygam_m1*this%material(i)%hydro%gam
              
 
             enddo
@@ -2698,6 +2699,269 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 
     end subroutine
+
+    subroutine get_intSharp_clean2_optimized(this,rho,ke_mid,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w,p,uFVint,vFVint,wFVint,pFVint)
+    use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
+    use operators, only: divergence,gradient,filter3D,interpolateFV_x,interpolateFV_y, interpolateFV_z, gradFV_N2Fx, gradFV_N2Fy,gradFV_N2Fz
+    use constants,       only: zero,epssmall,eps,one,two,third,half,pi
+    use exits,           only: GracefulExit
+    use reductions, only : P_MAXVAL
+
+    class(solid_mixture), intent(inout) :: this
+    integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
+    real(rkind), intent(in) :: dx,dy,dz
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,p
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: ke_mid
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: uFVint,vFVint,wFVint,pFVint
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradVF,gradVFdiff,fv_f,fv_h,tmp4, gradphi, fv_k,Db_int,hDiff,kDiff,uDiff
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: rhoi,VFbound,hi,spf_a,spf_r
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint,gradxi,VFint, gradFV_N2F,rhoFVint,NMint
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint, rhoiFVint_local,intDiff,hiFVint_6, rhoiFVint_6, pFVint_6,rhoantiDiffFVint
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: gradVF_FV,gradVFint, gradXi_FV
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom,Db,H,OOB_mask,Hl,Hh,HYs,HVF,xi_mask,HVF2
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: gradVF_x,gradVF_y, gradVF_z,tmp1,tmp2,tmp3,tmp1_i,tmp2_i,tmp3_i
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i,VF_RHS_i, Kij_coeff_i
+    real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-32, intSharp_exp = -1.0D0,gradDiff,md1,md2,cut_off=1d-4,cut_offY=1d-4,xiLow,xiHigh
+    integer :: i,j,ii,jj,kk,iflag = one,im,jm,km,k,q,d
+    logical :: useTiwari = .FALSE., useRhoYsbound = .FALSE., useTotalRho = .FALSE.
+    logical :: periodicx,periodicy,periodicz, useGradPsi = .FALSE., useRhoLocal = .false., useHighOrder = .TRUE.,useYSbound = .TRUE., useNewSPF = .TRUE., useNewSPFfull = .FALSE.
+
+    ! Temporary variables for optimization
+    real(rkind) :: inv_cut_range, two_eps, tanh_arg, phi_val, VF_val, xi_val, dx_15, inv_dx_15, pi_inv_dx_15
+    real(rkind) :: rho0_i, gam_i, gam_PInf_i, onebygam_m1_i, GVFmag_val, inv_GVFmag
+    real(rkind) :: xi_diff, heaviside_arg, heaviside_val, Ys_mid_val
+    real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tanh_vals, phi_deriv
+
+    ! Precompute constants
+    inv_cut_range = one / (one - two * this%intSharp_cut)
+    two_eps = two * this%intSharp_eps
+    dx_15 = 1.5_rkind * dx
+    inv_dx_15 = one / dx_15
+    pi_inv_dx_15 = pi * inv_dx_15
+
+    ! Initialize outputs
+    do i = 1, this%ns
+        this%material(i)%intSharp_aFV = zero
+        this%material(i)%intSharp_aDiff = zero
+        this%material(i)%intSharp_R = zero
+        this%material(i)%intSharp_RDiff = zero
+        this%material(i)%intSharp_RFV = zero
+    enddo
+    this%intSharp_fFV = zero
+    this%intSharp_hFV = zero
+
+    ! Compute component densities - vectorized
+    do i = 1, this%ns
+        rhoi(:,:,:,i) = ((this%material(1)%consrv(:,:,:,1) + this%material(2)%consrv(:,:,:,2)) * &
+                          this%material(i)%Ys + &
+                          this%material(i)%elastic%rho0 * this%intSharp_cut) / &
+                         (this%material(i)%VF + this%intSharp_cut)
+    enddo
+
+    ! Main material loop - only compute for first material, then invert for ns=2
+    i = 1  ! Process only material 1
+
+    ! Cache material properties
+    rho0_i = this%material(i)%elastic%rho0
+    gam_i = this%material(i)%hydro%gam
+    gam_PInf_i = gam_i * this%material(i)%hydro%PInf
+    onebygam_m1_i = this%material(i)%hydro%onebygam_m1
+
+        ! Construct Psi - replace WHERE with explicit loops
+        do k = 1, this%nzp
+            do j = 1, this%nyp
+                do ii = 1, this%nxp
+                    VF_val = this%material(i)%VF(ii,j,k)
+
+                    if (VF_val >= one - this%intSharp_cut) then
+                        phi_val = (one - two*this%intSharp_cut + e) / e
+                    else if (VF_val <= this%intSharp_cut) then
+                        phi_val = e / (one - two*this%intSharp_cut + e)
+                    else
+                        phi_val = (VF_val - this%intSharp_cut + e) / (one - this%intSharp_cut - VF_val + e)
+                    endif
+
+                    this%xi(ii,j,k,i) = this%intSharp_eps * inv_cut_range * log(phi_val)
+                enddo
+            enddo
+        enddo
+
+        call filter3D(this%decomp, this%gfil, this%xi(:,:,:,i), iflag, x_bc, y_bc, z_bc)
+
+        ! Psi Gradient
+        if(this%intSharp_d02) then
+            call gradient(this%decomp, this%derD02, this%xi(:,:,:,i), gradxi(:,:,:,1), gradxi(:,:,:,2), gradxi(:,:,:,3))
+        endif
+
+        ! Compute gradient magnitude and normalize - vectorized where possible
+        GVFmag = sqrt(gradxi(:,:,:,1)**two + gradxi(:,:,:,2)**two + gradxi(:,:,:,3)**two)
+
+        do k = 1, this%nzp
+            do j = 1, this%nyp
+                do ii = 1, this%nxp
+                    if (GVFmag(ii,j,k) < eps) then
+                        norm(ii,j,k,1) = zero
+                        norm(ii,j,k,2) = zero
+                        norm(ii,j,k,3) = zero
+                    else
+                        inv_GVFmag = one / GVFmag(ii,j,k)
+                        norm(ii,j,k,1) = gradxi(ii,j,k,1) * inv_GVFmag
+                        norm(ii,j,k,2) = gradxi(ii,j,k,2) * inv_GVFmag
+                        norm(ii,j,k,3) = gradxi(ii,j,k,3) * inv_GVFmag
+                    endif
+                enddo
+            enddo
+        enddo
+
+
+    call interpolateFV_x(this%decomp, this%interpMid02, norm(:,:,:,1), NMint(:,:,:,1), periodicx, periodicy, periodicz, x_bc, y_bc, z_bc)
+    call interpolateFV_y(this%decomp, this%interpMid02, norm(:,:,:,2), NMint(:,:,:,2), periodicx, periodicy, periodicz, x_bc, y_bc, z_bc)
+    call interpolateFV_z(this%decomp, this%interpMid02, norm(:,:,:,3), NMint(:,:,:,3), periodicx, periodicy, periodicz, x_bc, y_bc, z_bc)
+
+    ! Set rho interpolations to constant
+    rhoiFVint(:,:,:,:,i) = rho0_i
+
+    call interpolateFV(this, this%xi(:,:,:,i), phiint, periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+
+   ! Compute anti-diffusion term - vectorized outer operations
+    do d = 1, 3
+         ! Vectorize tanh computation
+         tanh_vals = tanh((one - two*this%intSharp_cut) * phiint(:,:,:,d) / two_eps)
+         phi_deriv = half * half * (one - tanh_vals**two) - &
+                      half * (one + tanh_vals) * this%intSharp_cut + this%intSharp_cut
+
+         antiDiffFVint(:,:,:,d,i) = -this%intSharp_gam * phi_deriv * NMint(:,:,:,d)
+    enddo
+
+    ! Gradient computations
+    call gradFV_N2Fx(this%decomp, this%derStaggd02, this%material(i)%VF, gradFV_N2F(:,:,:,1), periodicx, periodicy, periodicz, x_bc, y_bc, z_bc)
+    call gradFV_N2Fy(this%decomp, this%derStaggd02, this%material(i)%VF, gradFV_N2F(:,:,:,2), periodicx, periodicy, periodicz, x_bc, y_bc, z_bc)
+    call gradFV_N2Fz(this%decomp, this%derStaggd02, this%material(i)%VF, gradFV_N2F(:,:,:,3), periodicx, periodicy, periodicz, x_bc, y_bc, z_bc)
+    
+    ! Add epsilon gradient term - vectorized
+    antiDiffFVint(:,:,:,1,i) = antiDiffFVint(:,:,:,1,i) + this%intSharp_gam * this%intSharp_eps * gradFV_N2F(:,:,:,1)
+    antiDiffFVint(:,:,:,2,i) = antiDiffFVint(:,:,:,2,i) + this%intSharp_gam * this%intSharp_eps * gradFV_N2F(:,:,:,2)
+    antiDiffFVint(:,:,:,3,i) = antiDiffFVint(:,:,:,3,i) + this%intSharp_gam * this%intSharp_eps * gradFV_N2F(:,:,:,3)
+    
+        ! Set xi bounds based on material index
+        if(i == 1) then
+            xiLow = abs(this%intSharp_eps * inv_cut_range * log((1d-5 - this%intSharp_cut + e) / (one - this%intSharp_cut - 1d-5 + e)))
+            xiHigh = abs(this%intSharp_eps * inv_cut_range * log((1d-3 - this%intSharp_cut + e) / (one - this%intSharp_cut - 1d-3 + e)))                 
+        else
+            xiLow = abs(this%intSharp_eps * inv_cut_range * log((1d-3 - this%intSharp_cut + e) / (one - this%intSharp_cut - 1d-3 + e)))
+            xiHigh = abs(this%intSharp_eps * inv_cut_range * log((1d-5 - this%intSharp_cut + e) / (one - this%intSharp_cut - 1d-5 + e)))      
+        endif
+        
+        do d = 1, 3
+            ! Compute Heaviside functions - replace WHERE with explicit loops
+            do k = 1, this%nzp
+                do j = 1, this%nyp
+                    do ii = 1, this%nxp
+                        ! Hh computation
+                        xi_diff = this%xi(ii,j,k,i) - xiHigh
+                        if (xi_diff >= dx_15) then
+                            Hh(ii,j,k) = zero
+                        else if (xi_diff > -dx_15) then
+                            heaviside_arg = xi_diff * inv_dx_15
+                            Hh(ii,j,k) = one - half * (one + heaviside_arg + sin(pi * heaviside_arg) / pi)
+                        else
+                            Hh(ii,j,k) = one
+                        endif
+                        
+                        ! Hl computation
+                        xi_diff = this%xi(ii,j,k,i) + xiLow
+                        if (xi_diff >= dx_15) then
+                            Hl(ii,j,k) = one
+                        else if (xi_diff > -dx_15) then
+                            heaviside_arg = xi_diff * inv_dx_15
+                            Hl(ii,j,k) = half * (one + heaviside_arg + sin(pi * heaviside_arg) / pi)
+                        else
+                            Hl(ii,j,k) = zero
+                        endif
+                        
+                        ! HYs computation
+                        Ys_mid_val = this%material(i)%Ys_mid(ii,j,k,d)
+                        if (Ys_mid_val >= one) then
+                            H(ii,j,k) = abs(Ys_mid_val - one)
+                        else if (Ys_mid_val <= zero) then
+                            H(ii,j,k) = abs(Ys_mid_val)
+                        else
+                            H(ii,j,k) = zero
+                        endif
+                    enddo
+                enddo
+            enddo
+            
+            ! Filter H twice
+            call filter3D(this%decomp, this%gfil, H, iflag, x_bc, y_bc, z_bc) 
+            call filter3D(this%decomp, this%gfil, H, iflag, x_bc, y_bc, z_bc)
+            
+            ! Compute HYs mask - vectorized
+            do k = 1, this%nzp
+                do j = 1, this%nyp
+                    do ii = 1, this%nxp
+                        if (abs(H(ii,j,k)) > 1d-6) then
+                            HYs(ii,j,k) = zero
+                        else
+                            HYs(ii,j,k) = one
+                        endif
+                    enddo
+                enddo
+            enddo
+            
+            ! Combine masks
+            H = HYs * Hh * Hl
+            call filter3D(this%decomp, this%gfil, H, iflag, x_bc, y_bc, z_bc)
+            
+            this%intdiff = HYs  ! Store for diagnostics
+            
+            ! Apply mask to anti-diffusion term
+            antiDiffFVint(:,:,:,d,i) = antiDiffFVint(:,:,:,d,i) * H
+        enddo
+    
+    ! For ns=2, compute material 2 as negative of material 1
+    antiDiffFVint(:,:,:,:,2) = -antiDiffFVint(:,:,:,:,1)
+    rhoiFVint(:,:,:,:,2) = this%material(2)%elastic%rho0
+    
+    ! Compute divergence and RHS terms for both materials
+    do i = 1, this%ns
+        call divergenceFV(this, antiDiffFVint(:,:,:,:,i), this%material(i)%intSharp_aFV, dx, dy, dz, periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+        call divergenceFV(this, rhoiFVint(:,:,:,:,i) * antiDiffFVint(:,:,:,:,i), this%material(i)%intSharp_RFV, dx, dy, dz, periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+    enddo
+    
+    ! Compute fv_f - vectorized
+    fv_f = zero
+    do i = 1, this%ns
+        fv_f = fv_f + rhoiFVint(:,:,:,:,i) * antiDiffFVint(:,:,:,:,i)
+    enddo
+    
+    call divergenceFV(this, fv_f * uFVint, this%intSharp_fFV(:,:,:,1), dx, dy, dz, periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+    call divergenceFV(this, fv_f * vFVint, this%intSharp_fFV(:,:,:,2), dx, dy, dz, periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+    call divergenceFV(this, fv_f * wFVint, this%intSharp_fFV(:,:,:,3), dx, dy, dz, periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+    
+    ! Compute enthalpy
+    do i = 1, this%ns
+         call this%material(i)%getSpeciesDensity(rho, rhom)
+         hi(:,:,:,i) = this%material(i)%hydro%gam * (this%material(i)%p + this%material(i)%hydro%PInf) * this%material(i)%hydro%onebygam_m1
+        
+        ! Compute face-centered enthalpy - vectorized
+        hiFVint(:,:,:,:,i) = (this%material(i)%hydro%gam * pFVint + &
+                              this%material(i)%hydro%gam * this%material(i)%hydro%PInf) * &
+                              this%material(i)%hydro%onebygam_m1
+    enddo
+    
+    ! Compute energy flux terms
+    fv_h = zero
+    fv_k = zero
+    
+    do i = 1, this%ns
+       fv_h = fv_h + antiDiffFVint(:,:,:,:,i) * hiFVint(:,:,:,:,i)
+       fv_k = fv_k + antiDiffFVint(:,:,:,:,i) * rhoiFVint(:,:,:,:,i) * half * (uFVint**two + vFVint**two + wFVint**two)
+    enddo
+    
+    call divergenceFV(this, fv_h + fv_k, this%intSharp_hFV, dx, dy, dz, periodicx, periodicy, periodicz, this%x_bc, this%y_bc, this%z_bc)
+
+end subroutine get_intSharp_clean2_optimized
 
     subroutine get_intSharp_clean2(this,rho,ke_mid,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w,p,uFVint,vFVint,wFVint,pFVint)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y

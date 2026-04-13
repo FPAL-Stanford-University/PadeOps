@@ -1507,7 +1507,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 10.0d0, Lr, Lr_half
+       real(rkind) :: L, STRETCH_RATIO = 5d0 , Lr, Lr_half !d0
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1516,7 +1516,7 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 8.0d0
+       L = 30.0d0
 
        y_half = this%y + 0.5_rkind*this%dy
         
@@ -1819,7 +1819,8 @@ contains
 
            this%mask = 0d0
         endif
-            
+       ! call this%filter(this%mask, this%gfil,1,-this%x_bc,this%y_bc,this%z_bc)     
+        
         ! compute artificial shear and bulk viscosities
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
@@ -2656,7 +2657,7 @@ contains
         class(sgrid), target, intent(inout) :: this
         integer :: i,j,k,iflag = one, nx,nz
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: T1_int,T2_int,rhom_int,rhom2_int,rhoe1_int,rhoe2_int,rhoe_int,rhou_int,rhov_int,rhow_int,spec_int,pgam,T_int,rhoc_int,rhocp_int,mu_int,mv_int,mw_int,sos_int,VFbar,kappabar,gradp,gradVF,peff,peff_fil
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: psi_int,e1_int, Gam_int,pVF_int,num,denom,af,c1_int,rhobar
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: psi_int,e1_int, Gam_int,pVF_int,num,denom,af,c1_int,rhobar,surfFil
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: xhalf,tmp,rhom,tmp2,tmpfil,tmp3,psi,Gam,psi_safe,c1,rhom1,tmp1,mask1,mask2,mask3,gradpf1,gradpf2,gradpf3
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2,xtmp3,xtmp4,xtmp5,xdum
         real(rkind),dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2,ztmp3,ztmp4,ztmp5,zdum
@@ -2735,8 +2736,13 @@ contains
       af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,2)**2.0_rkind + this%v_mid(:,:,:,2)**2.0_rkind + this%w_mid(:,:,:,2 )**2.0_rkind  ) ) /sos_int(:,:,:,2))**2.0_rkind
       af(:,:,:,3) =this%CP*mask3*this%dt/(this%rho_mid(:,:,:,3))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,3)**2.0_rkind + this%v_mid(:,:,:,3)**2.0_rkind + this%w_mid(:,:,:,3 )**2.0_rkind  ) ) /sos_int(:,:,:,3))**2.0_rkind
 
-!      peff = gradp
-     peff = ( gradp + this%surfaceTension_coeff*kappabar*gradVF )
+
+     surfFil=this%surfaceTension_coeff*kappabar*gradVF 
+     call this%filter(surfFil(:,:,:,1), this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+     call this%filter(surfFil(:,:,:,2), this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+     call this%filter(surfFil(:,:,:,3), this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+     surfFil = this%surfaceTension_coeff*kappabar*gradVF - surfFil
+     peff = ( gradp + surfFil) ! this%surfaceTension_coeff*kappabar*gradVF )
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Y Correction !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      do j = 2,this%nyp-1
@@ -3165,16 +3171,16 @@ contains
 
         ! continuum
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/deltay + ABS(this%w)/this%dz   &
-                 + this%sos*sqrt( one/(this%dx**2) + one/(deltay**2) + one/(this%dz**2) ))
+                + this%sos*sqrt( one/(this%dx**2) + one/(deltay**2) + one/(this%dz**2) ))
 
         !dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dx + ABS(this%v)/deltay +  &
         !       + this%sos*sqrt( one/(this%dx**2) + one/(deltay**2)  ))
         dtmu   = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%mu/this%rho   ) + eps) * this%CFL
-        dtYs1 = 0.5_rkind * delta**2.0_rkind /((P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)*(one-this%mask))) + eps) 
+        dtYs1 = 0.5_rkind * delta**2.0_rkind /(P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)) + eps) 
 
         !dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) * this%CFL
         dtbulk = 0.2_rkind * delta**2.0_rkind / (P_MAXVAL( this%bulk/ this%rho ) + eps) !/ 5.0 !test /5
-	dtCurv = dtYs1 ! 0.5_rkind   /((P_MAXVAL(mask*this%mix%material(1)%adiff_stagg(:,:,:,1)*(this%mix%kappa)**2.0_rkind)) + eps)
+	dtCurv =  0.8_rkind   /((P_MAXVAL(this%mix%material(1)%adiff_stagg(:,:,:,1)*(this%mix%kappa)**2.0_rkind)) + eps)
 
 	if ((this%use_surfaceTension) .OR. (this%use_CnsrvSurfaceTension)) then
               !  if ( phys_mu > eps) then

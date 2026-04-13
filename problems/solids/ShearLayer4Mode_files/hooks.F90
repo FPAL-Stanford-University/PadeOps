@@ -23,7 +23,7 @@ module ShearLayer4Mode_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 2*pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0,  delta_d=0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
+    real(rkind) :: Ly = 1.0, Lx = pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0,  delta_d=0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=pi
     real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
@@ -174,9 +174,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi
-                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz  -pi
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx - pi/2d0
+                    y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy  - 0.5d0
+                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz   - pi/2d0
                 end do
             end do
         end do
@@ -271,7 +271,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%plast = plastic ; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
-        delta_rho = Nrho * dx * 0.275d0
+        delta_rho = Nrho * pi/128 * 0.275d0
         !delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
         eta = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
         Lr    = 8.0d0/(eta(1,ny,1) - eta(1,1,1))
@@ -497,10 +497,10 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         yphys = Lr*yphys
       
 
-        sigma1 = -34782.6086957d0 ! -2400 ! -80000
+        sigma1 = -100d0 ! -2400 ! -80000
 
-        where(yphys .LE. -3.0d0)
-           sponge(:,:,:,1) = sigma1*( (yphys + 3.0d0)/1.0d0)**2.0d0 / 5.0d0
+        where(yphys .LE. -3d0)
+           sponge(:,:,:,1) = sigma1*( (yphys + 3d0)/1.0d0)**4.0d0 
            mask  = 1.0
         elsewhere
            sponge(:,:,:,1) = 0d0
@@ -508,21 +508,21 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         endwhere
 
         where(yphys .GE. 3.0d0)
-           sponge(:,:,:,2) = sigma1*( (yphys- 3.0d0)/1.0d0)**2.0d0 / 5d0
+           sponge(:,:,:,2) = sigma1*( (yphys- 3.0d0)/1.0d0)**4.0d0 
            mask = 1.0
         elsewhere
            sponge(:,:,:,2) = 0
            mask = 0.0
         endwhere
 
-        rhou(1) = rho(1,1,1)*uref(1,1,1)
-        rhou(2) = rho(1,ny,1)*uref(1,ny,1)
+        rhou(1) = rho(1,1,1)*v0!uref(1,1,1)
+        rhou(2) = rho(1,ny,1)*v0_2 !uref(1,ny,1)
         rhov(1) = 0 !-1.060981230880199d-5 !rho(1,1,1)*v(1,1,1)
         rhov(2) = 0 !2.175685479370164d-08
         rhow(1) = rho(1,1,1)*w(1,1,1)
         rhow(2) = rho(1,ny,1)*w(1,ny,1)
-        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5d0*(uref(1,1,1)**2d0)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
-        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5d0*(uref(1,ny,1))**2d0) !1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
+        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5d0*(v0**2d0)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
+        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5d0*(v0_2**2d0)) !1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
         do i = 1,2
           mix%material(i)%VF_ref(1) = mix%material(i)%VF(1,1,1)
           mix%material(i)%VF_ref(2) = mix%material(i)%VF(1,ny,1) 
