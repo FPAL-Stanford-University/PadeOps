@@ -6,7 +6,7 @@ module CompressibleGrid
     use gridtools,             only: alloc_buffs, destroy_buffs
     use cgrid_hooks,           only: meshgen, initfields, hook_output, hook_bc, hook_timestep, hook_source
     use decomp_2d,             only: decomp_info, get_decomp_info, decomp_2d_init, decomp_2d_finalize, &
-                                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
+                                     transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y, nrank
     use DerivativesMod,        only: derivatives
     use io_hdf5_stuff,         only: io_hdf5
     use IdealGasEOS,           only: idealgas
@@ -71,7 +71,6 @@ module CompressibleGrid
         
         logical                  :: forcing_mat 
         logical                  :: forcing_cha 
-        logical                  :: scaling_flag 
         real(rkind)              :: tsim_0, dtheta_0
         real(rkind), dimension(:,:,:,:), allocatable :: Wcnsrv                               ! Conserved variables
         real(rkind), dimension(:,:,:,:), allocatable :: xbuf, ybuf, zbuf   ! Buffers
@@ -204,7 +203,6 @@ contains
         logical     :: compute_scale_decomposition = .false.
         logical     :: forcing_mat = .false. ! KVM 2021
         logical     :: forcing_cha = .false. ! Vishwaja 2024
-        logical     :: scaling_flag = .false.! to change the scaling factors
         logical     :: useSGS = .false., useMultiBlock = .false.
         logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
         logical     :: debugflag = .false., xplbc = .false.
@@ -221,12 +219,8 @@ contains
                              inviscid, nrestart, rewrite_viz, vizramp, &
                       compute_tke_budget, compute_scale_decomposition, &
                              x_bc1, x_bcn, y_bc1, y_bcn, z_bc1, z_bcn, &
-<<<<<<< Updated upstream
-                              forcing_mat, forcing_cha, useSGS, xplbc
-=======
-                        scaling_flag, forcing_mat, forcing_cha, useSGS
+                                       forcing_mat, forcing_cha, useSGS
 
->>>>>>> Stashed changes
 
         ioUnit = 11
         open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -261,7 +255,6 @@ contains
         this%compute_scale_decomposition = compute_scale_decomposition
         this%forcing_mat = forcing_mat 
         this%forcing_cha = forcing_cha
-        this%scaling_flag = scaling_flag
         this%debugflag   = debugflag
 
         ! Allocate decomp
@@ -271,7 +264,7 @@ contains
         ! Initialize decomp
         call decomp_2d_init(nx, ny, nz, prow, pcol)
         call get_decomp_info(this%decomp)
-        
+
         ! Allocate mesh
         if ( allocated(this%mesh) ) deallocate(this%mesh) 
         call alloc_buffs(this%mesh,3,'y',this%decomp)
@@ -327,7 +320,6 @@ contains
         ! Go to hooks if a different mesh is desired
         call meshgen(this%decomp,this%dx, this%dy, this%dz, this%mesh, inputfile, this%xmetric, this%ymetric, this%zmetric, &
                      this%xi, this%eta, this%zeta, this%dxs, this%dys, this%dzs, this%xbuf, this%zbuf)
-
         if (ns .LT. 1) call GracefulExit("Cannot have less than 1 species. Must have ns >= 1.",4568)
 
         ! Allocate mixture
@@ -505,7 +497,6 @@ contains
 
         ! Go to hooks if a different initialization is derired 
         call initfields(this%decomp, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
-<<<<<<< Updated upstream
                         this%mix, this%tsim, this%tstop, this%dtfixed, tviz)
 
         ! If x-plane inflow boundary condition is to be read in
@@ -514,10 +505,7 @@ contains
             call this%setup_xplbc(inputfile)
         endif
 
-=======
-                        this%mix, this%tsim, this%tstop, this%dtfixed, tviz, this%scaling_flag)
         
->>>>>>> Stashed changes
         ! Check for correct initialization of the mixture object
         call this%mix%check_initialization()
 
@@ -1342,17 +1330,9 @@ contains
             call message(2,"Stability limit: "//trim(stability))
             call message(2,"CPU time (in seconds)",cputime)
             if(this%useSGS) then
-<<<<<<< Updated upstream
-              call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim, this%outputdir, this%sgsmodel)
+              call hook_timestep(this%decomp, this%der, this%dx, this%dy, this%dz, this%mesh, this%fields, this%mix, this%step, this%tsim, this%outputdir, this%sgsmodel)
             else
-              call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim, this%outputdir)
-=======
-              !call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim, this%sgsmodel)
-              call hook_timestep(this%decomp, this%der, this%dx, this%dy, this%dz, this%mesh, this%fields, this%mix, this%step, this%tsim, this%sgsmodel)
-            else
-              !call hook_timestep(this%decomp, this%mesh, this%fields, this%mix, this%step, this%tsim)
-              call hook_timestep(this%decomp, this%der, this%dx, this%dy, this%dz, this%mesh, this%fields, this%mix, this%step, this%tsim)
->>>>>>> Stashed changes
+              call hook_timestep(this%decomp, this%der, this%dx, this%dy, this%dz, this%mesh, this%fields, this%mix, this%step, this%tsim, this%outputdir)
             endif
           
             ! Write out vizualization dump if vizcond is met 
@@ -1551,48 +1531,29 @@ contains
 
             call this%get_primitive()
             if(this%useMultiBlock) then
-              call hook_bc(this%decomp,this%mesh, this%fields, this%mix, this%tsim, &
+              call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
-<<<<<<< Updated upstream
                             this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
                             this%xplbcin_type, this%useMultiBlock, this%mbtopology)
             else
               call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
-                            this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, & 
+                            this%xplbc, this%xplbcInflow,this%numtbcIn, this%tbcIn, &
                             this%xplbcin_type)
-=======
-                            this%dx,this%M2,this%rho2,this%p2, &
-                            this%useMultiBlock,this%mbtopology)
-            else
-              call hook_bc(this%decomp,this%mesh, this%fields, this%mix, this%tsim, &
-                            this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step,this%dx,this%M2,this%rho2,this%p2)
->>>>>>> Stashed changes
             endif
             call this%post_bc()
             !!!============Vishwaja channel flow isothermal walls=========!!!
             if (this%forcing_cha) then
               if(this%useMultiBlock) then
-<<<<<<< Updated upstream
-                call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
-                              this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
-                              this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
-                              this%xplbcin_type, this%useMultiBlock, this%mbtopology)
-              else
-                call hook_bc(this%decomp, this%mesh, this%fields, this%mix, this%tsim, &
-                              this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
-                              this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
-                              this%xplbcin_type)
-=======
                 call hook_bc(this%decomp,this%mesh, this%fields, this%mix, this%tsim, &
                              this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
-                             this%dx,this%M2,this%rho2,this%p2, &
-                             this%useMultiBlock,this%mbtopology)
-                           !this%dx,this%M2,this%rho2,this%p2,this%useMultiBlock,this%mbtopology)
+                             this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
+                             this%xplbcin_type, this%useMultiBlock,this%mbtopology)
               else
                 call hook_bc(this%decomp,this%mesh, this%fields, this%mix, this%tsim, &
-                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step,this%dx,this%M2,this%rho2,this%p2)
->>>>>>> Stashed changes
+                             this%x_bc, this%y_bc, this%z_bc, newTimeStep, this%step, &
+                             this%xplbc, this%xplbcInflow, this%numtbcIn, this%tbcIn, &
+                             this%xplbcin_type)
               endif
             end if
             ! Compute TKE budgets
@@ -1952,9 +1913,9 @@ contains
             !    this%mix, this%tsim, rhs, &
             !    this%Wcnsrv,this%budget,this%tsim_0,this%dtheta_0)
         elseif (this%forcing_cha) then
-            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs, this%scaling_flag, this%der, this%dt, this%step, this%dys)
+            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs,  this%der, this%dt, this%step, this%dys)
         else
-            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs, this%scaling_flag)
+            call hook_source(this%decomp, this%mesh, this%fields, this%mix, this%tsim, rhs)
         endif
     end subroutine
 

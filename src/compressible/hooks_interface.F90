@@ -24,7 +24,7 @@ module cgrid_hooks
     end interface
 
     interface initfields
-        subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz,scaling_flag)
+        subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
             import :: rkind
             import :: decomp_info
             import :: mixture
@@ -35,10 +35,17 @@ module cgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
             real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
-            logical,                         intent(in)    :: scaling_flag
         end subroutine 
     end interface
 
+    interface
+        function interp_profile(y_prof, u_prof, n, yq, uq) !result(uq)
+            use kind_parameters, only: rkind
+            integer, intent(in) :: n
+            real(rkind), intent(in) :: y_prof(n), u_prof(n), yq
+            real(rkind), intent(inout) :: uq
+        end function
+    end interface
 
     interface hook_output
         subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
@@ -59,33 +66,24 @@ module cgrid_hooks
     end interface
 
     interface hook_bc
-<<<<<<< Updated upstream
-        subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn, xplbcin_type, useMultiBlock, mbtopology)
-=======
-        subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step,dx,M2,rho2,p2,useMultiBlock,mbtopology)
-       ! subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step)
->>>>>>> Stashed changes
+         subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step, xplbc, xplbcInflow, numtbc, tbcIn, xplbcin_type, useMultiBlock, mbtopology)
             import :: rkind
             import :: decomp_info
             import :: mixture
             import :: multiblocktopol
             type(decomp_info),               intent(in)    :: decomp
-            type(mixture),                   intent(in)    :: mix
             real(rkind),                     intent(in)    :: tsim
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(inout) :: fields
+            type(mixture),                   intent(in)    :: mix
             integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
             logical,                         intent(in)    :: newTimeStep
             integer,                         intent(in)    :: time_step
-<<<<<<< Updated upstream
             logical,                         intent(in)    :: xplbc
             real(rkind), dimension(:,:,:,:), intent(in)    :: xplbcInflow
             integer,                         intent(in)    :: numtbc
             real(rkind), dimension(:),       intent(in)    :: tbcIn
             integer,                         intent(in)    :: xplbcin_type
-=======
-            real(rkind),                     intent(in)    :: dx,M2,rho2,p2
->>>>>>> Stashed changes
             logical, optional,               intent(in)    :: useMultiBlock
             type(multiblocktopol), optional, intent(in)    :: mbtopology
 
@@ -93,12 +91,7 @@ module cgrid_hooks
     end interface
 
     interface hook_timestep
-<<<<<<< Updated upstream
-        subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,outputdir,sgsmodel)
-=======
-        !subroutine hook_timestep(decomp,mesh,fields,mix,step,tsim,sgsmodel)
-         subroutine hook_timestep(decomp,der,dx,dy,dz,mesh,fields,mix,step,tsim,sgsmodel)
->>>>>>> Stashed changes
+        subroutine hook_timestep(decomp,der,dx,dy,dz,mesh,fields,mix,step,tsim,outputdir,sgsmodel)
             import :: rkind
             import :: decomp_info
             import :: mixture
@@ -112,12 +105,7 @@ module cgrid_hooks
             type(mixture),                   intent(in) :: mix
             integer,                         intent(in) :: step
             real(rkind),                     intent(in) :: tsim
-<<<<<<< Updated upstream
-            real(rkind), dimension(:,:,:,:), intent(in) :: mesh
-            real(rkind), dimension(:,:,:,:), intent(in) :: fields
             character(len=*),                intent(in) :: outputdir
-=======
->>>>>>> Stashed changes
             type(sgs_cgrid), optional,       intent(in) :: sgsmodel
 
         end subroutine
@@ -125,7 +113,7 @@ module cgrid_hooks
 
 
     interface hook_source
-        subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,scaling_flag,der,dt,step,dys)
+        subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
             use kind_parameters, only: rkind
             use decomp_2d,       only: decomp_info
             use MixtureEOSMod,   only: mixture
@@ -139,7 +127,6 @@ module cgrid_hooks
             real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
             real(rkind), dimension(:,:,:,:), intent(in)    :: fields
             real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-            logical,                         intent(in)    :: scaling_flag
             ! KVM 2021
             !real(rkind), dimension(:,:,:,:), optional,intent(in)    :: Wcnsrv
             !type(tkeBudget), optional,       intent(inout) :: tkeb
@@ -154,4 +141,4 @@ module cgrid_hooks
         end subroutine
     end interface
 
-end module  !subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,Wcnsrv,tkeb,tsim_0,dtheta_0,der,dt)
+end module

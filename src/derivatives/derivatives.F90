@@ -1108,11 +1108,6 @@ contains
 
 
     subroutine init_metric(this, nxp, nyp, nzp, xstretch, xuniform, flag, params, dxudxs, dxudxs_sq, d2xudxs2) 
-<<<<<<< Updated upstream
-=======
-!call this%init_metric(this%ysz(1), this%ysz(2), this%ysz(3), y, eta, ymetric_flag, metric_params(2,:), &
-    !                     this%detady, this%detady_sq, this%d2etady2)
->>>>>>> Stashed changes
         class(derivatives),         intent(in) :: this
         integer,                    intent(in) :: nxp, nyp, nzp, flag
         real(rkind), dimension(5), intent(in)  :: params
@@ -1163,8 +1158,7 @@ contains
            enddo
         elseif(flag==2) then
            ! concentrate towards the two ends(alpha = 0.5) or one side at xend(alpha = 0)
-           ! concentrate towards the center -- Pletcher, Tannehill, Anderson
-           ! (Section 5.6, Transformation 2, pg. 335) 
+           ! Pletcher, Tannehill, Anderson (Section 5.6, Transformation 2, pg. 335) 
            alpha  = params(1);  beta   = params(2);  xstart = params(3); hh = params(4)
            !print '(5(e19.12,1x))', params(:)
            !print '(5(e19.12,1x))', alpha, beta, xstart, hh
@@ -1198,47 +1192,9 @@ contains
                  enddo
               enddo
            enddo
-        elseif(flag==4) then
-           ! concentrate at any arbitary point
-           ! (Section 5.6, Transformation 1, pg. 334)
-           beta = params(2); xstart = params(3); hh = params(4); xfocus = params(1) + abs(xstart)
-           top = 1+ ((xfocus/hh)*(exp(beta)-1))
-           bot = 1+ ((xfocus/hh)*(exp(-beta)-1))
-           BB = (log(top/bot))/(2*beta)
-           do k = 1, nzp
-              do j = 1, nyp
-                 do i = 1, nxp
-                    ! adjust for starting point
-                    xuniform_adj = (xuniform(i,j,k) - xstart)/hh
-                    num = sinh(beta*(xuniform_adj-BB))
-                    den = sinh(beta*BB)
-                    xstretch_loc = xfocus*(1+(num/den))
-
-                    ! metric for first derivative
-                    BB2 = 1 + (((xstretch_loc/xfocus)-1)*den)**2
-                    dxudxs(i,j,k) = den/(beta*xfocus*(BB**0.5))
-
-                    ! square of the metric for first derivative
-                    dxudxs_sq(i,j,k) = dxudxs(i,j,k)**2
-
-                    ! metric for second derivative
-                    d2xudxs2(i,j,k) = -((den**3)*((xstretch_loc/xfocus)-1))/(beta*xfocus*(BB**1.5))
-
-                    if(abs(xstretch(i,j,k)-xstretch_loc) > 1.0d-12) then
-                        print '(3i5,1x,2(e19.12,1x))', i,j,k, xstretch(i,j,k), xstretch_loc
-                        call GracefulExit("flag = 3; metric is not consistent with meshgen. Check details.", 21)
-                    endif
-                 enddo
-              enddo
-           enddo
-
         elseif(flag==3) then
            ! concentrate towards the start at xstart
-<<<<<<< Updated upstream
-=======
-           ! concentrate towards the center -- Pletcher, Tannehill, Anderson
->>>>>>> Stashed changes
-           ! (Section 5.6, Transformation 2, pg. 335) 
+           ! (Section 5.6, Transformation 1, pg. 335) 
            alpha  = params(1);  beta   = params(2);  xstart = params(3); hh = params(4)
            !print '(5(e19.12,1x))', params(:)
            !print '(5(e19.12,1x))', alpha, beta, xstart, hh
@@ -1253,7 +1209,6 @@ contains
                     BB2 = BB ** (1 - xuniform_adj)
                     num = (beta+1) - ((beta - 1) * BB2)
                     xstretch_loc = hh * (num / (BB2+1)) + xstart !same strectching but done in locally
-<<<<<<< Updated upstream
 
                     ! metric for first derivative y=(xstretch_loc-xstart)
                     BB2 = (1 - ((xstretch_loc-xstart)/hh)) !(1-y/h) 
@@ -1276,7 +1231,7 @@ contains
            enddo
         elseif(flag==4) then
            ! concentrate at any arbitary point
-           ! (Section 5.6, Transformation 1, pg. 334)
+           ! (Section 5.6, Transformation 3, pg. 334)
            beta = params(2); xstart = params(3); hh = params(4); xfocus = params(1) + abs(xstart)
            top = 1+ ((xfocus/hh)*(exp(beta)-1))
            bot = 1+ ((xfocus/hh)*(exp(-beta)-1))
@@ -1293,28 +1248,16 @@ contains
                     ! metric for first derivative
                     BB2 = 1 + (((xstretch_loc/xfocus)-1)*den)**2
                     dxudxs(i,j,k) = den/(beta*xfocus*(BB**0.5))
-=======
-
-                    ! metric for first derivative y=(xstretch_loc-xstart)
-                    BB2 = (1 - ((xstretch_loc-xstart)/hh)) !(1-y/h) 
-                    dxudxs(i,j,k) = num1 / ((beta**2 - BB2**2)*hh)
->>>>>>> Stashed changes
 
                     ! square of the metric for first derivative
                     dxudxs_sq(i,j,k) = dxudxs(i,j,k)**2
 
                     ! metric for second derivative
-<<<<<<< Updated upstream
                     d2xudxs2(i,j,k) = -((den**3)*((xstretch_loc/xfocus)-1))/(beta*xfocus*(BB**1.5))
 
-=======
-                    d2xudxs2(i,j,k) = - ((num1/hh**2) * 2 * BB2) / ((beta**2 - BB2**2)**2)
-                    !print '(i5,1x,4(e19.12,1x))', j, xstretch(1,j,1), xuniform(1,j,1), dxudxs(1,j,1), d2xudxs2(1,j,1)
-                    ! compare with xstretch specified in meshgen
->>>>>>> Stashed changes
                     if(abs(xstretch(i,j,k)-xstretch_loc) > 1.0d-12) then
                         print '(3i5,1x,2(e19.12,1x))', i,j,k, xstretch(i,j,k), xstretch_loc
-                        call GracefulExit("flag = 2; metric is not consistent with meshgen. Check details.", 21)
+                        call GracefulExit("flag = 3; metric is not consistent with meshgen. Check details.", 21)
                     endif
                  enddo
               enddo

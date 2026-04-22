@@ -24,7 +24,7 @@ module FlatPlateBL_data
     real(rkind) :: Re     = 3000.0_rkind
     real(rkind) :: utau   = 0.060_rkind
     real(rkind) :: Mc     = 1.5_rkind
-    real(rkind) :: x1, y1, z1
+    real(rkind) :: x1, y1=zero, z1
     real(rkind) :: xn, yn, zn
     logical     :: periodicx = .true., periodicy = .false., periodicz = .true. 
     logical     :: add_pert = .true.
@@ -223,10 +223,8 @@ contains
              end do
           end do
        end do
-<<<<<<< Updated upstream
     elseif(ymetric_flag==3) then
-       ! concentrate at one end
-       !print*,'its entering in to the ymetricflag=3'
+       ! concentrate at one end (at the starting/left/bottom side)
        beta = param2; ystart = param3; yh = param4
        BB   = (beta + 1) / (beta - 1)
        do k = 1,decomp%ysz(3)
@@ -241,17 +239,10 @@ contains
           end do
        end do
     elseif(ymetric_flag==4) then
-       ! concentrate at arbitrary point
-       beta = param2; ystart = param3; yh = param4; yfocus = param1 + abs(ystart)
-       top = one + ((yfocus/yh)*(exp(beta)-1))
-       bot = one + ((yfocus/yh)*(exp(-beta)-1))
-=======
-    elseif(ymetric_flag==4) then
-       ! concentrate at arbitrary point
+       ! concentrate at arbitrary point (given by yfocus)
        beta = param2; ystart = param3; yh = param4; yfocus = param1 + abs(ystart)
        top = 1+ ((yfocus/yh)*(exp(beta)-1))
        bot = 1+ ((yfocus/yh)*(exp(-beta)-1))
->>>>>>> Stashed changes
        BB = (log(top/bot))/(2*beta)
        do k = 1,decomp%ysz(3)
           do j = 1,decomp%ysz(2)
@@ -263,28 +254,9 @@ contains
              end do
           end do
        end do
-<<<<<<< Updated upstream
-=======
        
        !call GracefulExit("flag = 3 (concentrate at arbitrary point) is incomplete right now",21)
-    elseif(ymetric_flag==3) then
-       ! concentrate at one end
-       !print*,'its entering in to the ymetricflag=3'
-       beta = param2; ystart = param3; yh = param4
-       BB   = (beta + 1) / (beta - 1)
-       do k = 1,decomp%ysz(3)
-          do j = 1,decomp%ysz(2)
-             do i = 1,decomp%ysz(1)
-                  yuniform_adj = (eta(i,j,k) - ystart)/yh
-                  BB2 = BB ** (1 - yuniform_adj)
-                  num = (beta+1)-((beta-1)*BB2)
-                  den = 1 + BB2
-                  y(i,j,k) = yh * (num/den) + ystart
-             end do
-          end do
-       end do
 
->>>>>>> Stashed changes
     elseif(ymetric_flag==10) then
        ! finite-difference evaluation of metrics (reduces order of accuracy)
        call GracefulExit("flag = 4 (finite-difference evaluation of metrics) is incomplete right now",21)
@@ -441,7 +413,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
 
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype
     namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
 
     ioUnit = 15
@@ -479,8 +451,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
         dy = Ly/real(ny-1,rkind)  ! not periodic
         dz = Lz/real(nz-0,rkind)  ! periodic    
 
-        x1 = 0._rkind;        y1 = 0._rkind;     z1 = 0._rkind
-        xn = Lx;              yn = Ly;           zn = Lz
+        x1 = 0._rkind;                                z1 = 0._rkind
+        xn = Lx;              yn = y1 + Ly;           zn = Lz
 
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
@@ -611,19 +583,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
     real(rkind) :: S, Sk, T0, var, mu_ref, umax
-<<<<<<< Updated upstream
     real(rkind) :: B, kap, ylinmax, ylogmin, ylogmax, Bq, Prt, CT
     real(rkind) :: yplus, uplus, Tplus
     integer :: i,j, k, iounit, nx, ny, nz, nxl, nyl, nzl
-=======
-    integer :: i,j, k, ioUnit, nx, ny, nz, nxl, nyl, nzl
->>>>>>> Stashed changes
     character(len=clen) :: outputfile
     real(rkind), dimension(decomp%ysz(1)) :: x_new
     real(rkind), dimension(decomp%ysz(2)) :: y_new
     real(rkind), dimension(decomp%ysz(3)) :: z_new
     
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype
 
     ioUnit = 11
 !    print *, 'fine inputfile is',inputfile
@@ -688,11 +656,15 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         do k=1,nzl
          do j=1,nyl
           do i=1,nxl
-             yplus = y(i,j,k) * Re * utau
-             uplus = get_vandriest_scaling(yplus, kap, B, ylinmax, ylogmin, ylogmax)
+             yplus = y(i,j,k) * Re * utau      !! y should be distance from the lower wall
+             if(yplus<0) then
+                 uplus = 0
+                 Tplus = 0
+             else
+                 uplus = get_vandriest_scaling(yplus, kap, B, ylinmax, ylogmin, ylogmax)
+                 Tplus = get_vandriest_temperature(yplus, kap, Prt, CT, ylinmax, ylogmin, ylogmax)
+             endif
              u(i,j,k) = uplus * utau
-
-             Tplus = get_vandriest_temperature(yplus, kap, Prt, CT, ylinmax, ylogmin, ylogmax)
              T(i,j,k) = Tw * (1-Bq*Tplus)
 
              !u(i,j,k) = 1.5_rkind*(1-y(i,j,k)**2)
@@ -896,14 +868,12 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
          
         ! set Dirichlet BC at top and bottom
         do k = 1,decomp%ysz(3) 
-           u(:,1,k) = zero;                  !u(:,decomp%ysz(2),k) = zero ! u(s_r_i,decomp%ysz(2),k) = M2 * sqrt(gam*Rgas*T(s_l_i,decomp%ysz(2),K))    
-           v(:,1,k) = zero;                  !v(:,decomp%ysz(2),k) = zero
-           w(:,1,k) = zero;                  !w(:,decomp%ysz(2),k) = zero
-           T(:,1,k) = Tw;                    !T(:,decomp%ysz(2),k) = Tw
-           !p(:,1,k) = rho(:,1,k)*Rgas_Tw;    !p(s_r_i,decomp%ysz(2),k) = p2 * p(s_l_i,decomp%ysz(2),k)
-           !rho(s_r_i,decomp%ysz(2),k) = rho2 * rho(s_l_i,decomp%ysz(2),k)
+            u(:,1,k) = zero;                  !u(:,decomp%ysz(2),k) = zero ! u(s_r_i,decomp%ysz(2),k) = M2 * sqrt(gam*Rgas*T(s_l_i,decomp%ysz(2),K))    
+            v(:,1,k) = zero;                  !v(:,decomp%ysz(2),k) = zero
+            w(:,1,k) = zero;                  !w(:,decomp%ysz(2),k) = zero
+            !T(:,1,k) = Tw;                    !T(:,decomp%ysz(2),k) = Tw
+            p(:,1,k) = rho(:,1,k)*Rgas_Tw;    !p(s_r_i,decomp%ysz(2),k) = p2 * p(s_l_i,decomp%ysz(2),k)
         end do
-        
 
         if(present(useMultiBlock)) then
          if(useMultiBlock) then
