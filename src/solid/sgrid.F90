@@ -1516,7 +1516,7 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 30.0d0
+       L = 10d0 ! 14.0d0
 
        y_half = this%y + 0.5_rkind*this%dy
         

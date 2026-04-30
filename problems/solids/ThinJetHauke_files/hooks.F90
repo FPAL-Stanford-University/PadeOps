@@ -23,7 +23,7 @@ module ThinJetHauke_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 2d0*pi/0.9d0,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
+    real(rkind) :: Ly = 1.0, Lx = 8d0*pi/5d0,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
     real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref,ll
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
@@ -174,7 +174,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi/0.9d0
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -4d0*pi/5d0
                     y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5d0
                     z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz  -pi
                 end do
@@ -273,10 +273,10 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%plast = plastic ; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
-        delta_rho = Nrho * 2d0*pi/0.9d0/150d0 * 0.275d0
+        delta_rho = Nrho * 0.0279d0 * 0.275d0
         !delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
         eta = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
-        Lr    = 30.0d0/(eta(1,ny,1) - eta(1,1,1))
+        Lr    = 10.0d0/(eta(1,ny,1) - eta(1,1,1))
         eta = Lr*eta
 
 
@@ -350,44 +350,44 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
    !    end do
    !    uref = u
 !
-        AA0 = v0
-        A3 = pmu1 /d1 *(v0-v0_2) / &
-                (d2**2 * ( pmu1 + pmu2*(d1/d2)))
-!
-        ! Values at liquid-gas interface (y=h+dl)
-        U_li = AA0 + A3*d1**3
-!
-!        ! B0..B3 for gas transition region
-        B0 = U_li
-        B3 = (v0_2 - B0)/d2**3
-        B1 = 3.0d0*(v0_2 - B0)/d2
-        B2 = -3.0d0*(v0_2 - B0)/d2**2
-!
-!        ! region boundaries
-        y_core  = h
-        y_LG    = h + d1
-        y_outer = h + d1 + d2
-        do i = 1,ny
+ !       AA0 = v0
+ !       A3 = pmu1 /d1 *(v0-v0_2) / &
+ !               (d2**2 * ( pmu1 + pmu2*(d1/d2)))
+!!
+ !       ! Values at liquid-gas interface (y=h+dl)
+ !       U_li = AA0 + A3*d1**3
+!!
+!!        ! B0..B3 for gas transition region
+ !       B0 = U_li
+ !       B3 = (v0_2 - B0)/d2**3
+ !       B1 = 3.0d0*(v0_2 - B0)/d2
+ !       B2 = -3.0d0*(v0_2 - B0)/d2**2
+!!
+!!        ! region boundaries
+ !       y_core  = h
+ !       y_LG    = h + d1
+ !       y_outer = h + d1 + d2
+ !       do i = 1,ny
 
-          yi = eta(1,i,1)
-          yp = abs(yi)
+ !         yi = eta(1,i,1)
+ !         yp = abs(yi)
 
-          if(yp <= y_core) then
+ !         if(yp <= y_core) then
 
-              U_loc = v0        
-          else if(yp <= y_LG) then
-              xi=yp-h
-              U_loc = AA0+A3*xi**3
-          else if(yp <= y_outer ) then 
-              xi = yp - (h+d1)
-              U_loc = B0 + B1*xi + B2*xi**2 + B3*xi**3
-          else
-              U_loc = v0_2
-          endif 
+ !             U_loc = v0        
+ !         else if(yp <= y_LG) then
+ !             xi=yp-h
+ !             U_loc = AA0+A3*xi**3
+ !         else if(yp <= y_outer ) then 
+ !             xi = yp - (h+d1)
+ !             U_loc = B0 + B1*xi + B2*xi**2 + B3*xi**3
+ !         else
+ !             U_loc = v0_2
+ !         endif 
 
-          u(:,i,:) = U_loc
-        end do
-        uref = u
+ !         u(:,i,:) = U_loc
+ !       end do
+ !       uref = u
         v = 0.0
         w = 0.0
 !        u = 0.0
@@ -462,12 +462,12 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         call MPI_Bcast(m2_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         call MPI_Bcast(u_base, pointy, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
-      ! do j = 1, ny
+       do j = 1, ny
 
-      !     uref(:,j,:) = u_base(j) 
-      !     u(:,j,:)    = u_base(j)
+           uref(:,j,:) = u_base(j) 
+           u(:,j,:)    = u_base(j)
 
-      ! enddo
+       enddo
         ! --- Loop over modes and add perturbations to the 3D field ---
         do q = 1, num_modes
           do l = 1, bnum_modes
@@ -581,22 +581,22 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         
         nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
         yphys = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
-        Lr    = 30.0d0/(yphys(1,ny,1) - yphys(1,1,1))
+        Lr    = 10.0d0/(yphys(1,ny,1) - yphys(1,1,1))
         yphys =Lr*yphys
       
 
         sigma1 = -1000d0 ! -2400 ! -80000
 
-        where(yphys .LE. -13.0d0)
-           sponge(:,:,:,1) = sigma1*( (yphys + 13.0d0)/2.0d0)**4.0d0 
+        where(yphys .LE. -4.0d0)
+           sponge(:,:,:,1) = sigma1*( (yphys + 4.0d0)/1.0d0)**4.0d0 
            mask = 1d0
         elsewhere
            sponge(:,:,:,1) = 0d0
            mask = 0d0
         endwhere
 
-        where(yphys .GE. 13.0d0)
-           sponge(:,:,:,2) = sigma1*( (yphys- 13.0d0)/2.0d0)**4.0d0 
+        where(yphys .GE. 4.0d0)
+           sponge(:,:,:,2) = sigma1*( (yphys- 4.0d0)/1.0d0)**4.0d0 
            mask = 1d0
         elsewhere
            sponge(:,:,:,2) = 0
