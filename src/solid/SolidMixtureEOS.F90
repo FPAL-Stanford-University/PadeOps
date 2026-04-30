@@ -2963,7 +2963,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 end subroutine get_intSharp_clean2_optimized
 
-    subroutine get_intSharp_clean2(this,rho,ke_mid,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w,p,uFVint,vFVint,wFVint,pFVint)
+subroutine get_intSharp_clean2(this,rho,ke_mid,x_bc,y_bc,z_bc,dx,dy,dz,periodicx,periodicy,periodicz,u,v,w,p,uFVint,vFVint,wFVint,pFVint)
         use decomp_2d, only: transpose_y_to_x, transpose_x_to_y,transpose_y_to_z, transpose_z_to_y
         use operators, only: divergence,gradient,filter3D,interpolateFV_x,interpolateFV_y, interpolateFV_z, gradFV_N2Fx, gradFV_N2Fy,gradFV_N2Fz
         use constants,       only: zero,epssmall,eps,one,two,third,half,pi
@@ -2975,14 +2975,13 @@ end subroutine get_intSharp_clean2_optimized
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,p
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: ke_mid
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: uFVint,vFVint,wFVint,pFVint
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradVF,gradVFdiff,fv_f,fv_h,tmp4, gradphi, fv_k,Db_int,hDiff,kDiff,uDiff
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: rhoi,VFbound,hi,spf_a,spf_r
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: norm,gradVF,fv_f,fv_h,fv_k
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint,gradxi,VFint, gradFV_N2F,rhoFVint,NMint
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint, rhoiFVint_local,intDiff,hiFVint_6, rhoiFVint_6, pFVint_6,rhoantiDiffFVint
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: gradVF_FV,gradVFint, gradXi_FV
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::tmp,VF_fil,antiDiff,mask,RhoYsbound,filt,antiDiffFV,fmask,tanhmask,mask2,maskDiff,spf_f,spf_h,GVFmag,GVFmagT,antiDiffT,rhom,Db,H,OOB_mask,Hl,Hh,HYs,HVF,xi_mask,HVF2
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: gradVF_x,gradVF_y, gradVF_z,tmp1,tmp2,tmp3,tmp1_i,tmp2_i,tmp3_i
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: J_i,VF_RHS_i, Kij_coeff_i
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint, rhoiFVint_local
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::tmp,GVFmag,rhom,H,OOB_mask,Hl,Hh,HYs,HVF,HVF2
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1,tmp2,tmp3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: rhoi,hi
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: rhoantiDiffFVint
         real(rkind) :: intSharp_alp = 0.1, r= 0.5, nmask = 40, intSharp_adm =1.0D-1,e = 1d-32, intSharp_exp = -1.0D0,gradDiff,md1,md2,cut_off=1d-4,cut_offY=1d-4,xiLow,xiHigh !, intSharp_tnh = 0.1
 !1.0D-2
         integer :: i,j,ii,jj,kk,iflag = one,im,jm,km,k,q,d
@@ -3049,7 +3048,6 @@ end subroutine get_intSharp_clean2_optimized
              
              GVFmag = sqrt( gradxi(:,:,:,1)**two + gradxi(:,:,:,2)**two + gradxi(:,:,:,3)**two )
 
-             fmask = 1 - (1 - 4*this%material(i)%VF*(1-this%material(i)%VF))**nmask
 
              !surface normal
              where (GVFmag < eps)
@@ -3275,7 +3273,6 @@ end subroutine get_intSharp_clean2_optimized
           
 
               fv_f = zero
-              uDiff = zero
               do i = 1,this%ns
                  !FV term
                  fv_f = fv_f +rhoiFVint(:,:,:,:,i)*antiDiffFVint(:,:,:,:,i)
