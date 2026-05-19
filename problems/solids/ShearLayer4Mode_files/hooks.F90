@@ -23,7 +23,7 @@ module ShearLayer4Mode_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 2*pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d=0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=4*pi
+    real(rkind) :: Ly = 1.0, Lx = pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d=0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=pi
     real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
@@ -224,7 +224,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
 
     real(rkind) :: Lr, STRETCH_RATIO = 5.0d0
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: eta,tmp
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: eta,tmp,y_stretched
     ! --- Variables for Eigenfunction Initialization ---
 
     ! Arrays to hold the read-in, pre-interpolated eigenfunctions
@@ -233,8 +233,9 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         phi_r, phi_i, u_r, u_i, v_r, v_i, w_r, w_i, &
         p_r, p_i, m1_r, m1_i, m2_r, m2_i
 
+    real(rkind), dimension(:), allocatable :: u_base
     real(rkind) :: arg, u_perturb, v_perturb, w_perturb, p_perturb, phi_perturb, m1_perturb, m2_perturb,current_phase
-
+    real(rkind) :: y_min = -3.5d0, y_max = 6d0
     namelist /PROBINPUT/ p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, &
                           interface_init, delta, pointy, epsilonk, v0, v0_2, &
@@ -273,9 +274,13 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         delta_rho = Nrho * 0.048d0 * 0.275d0
         !delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
-        eta = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
-        Lr    = 14.0d0/(eta(1,ny,1) - eta(1,1,1))
-        eta = Lr*eta
+!        eta = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
+!        Lr    = 14.0d0/(eta(1,ny,1) - eta(1,1,1))
+!        eta = Lr*eta
+
+         y_stretched = atanh(2.0d0 * y / (1.0d0 + 1.0d0/STRETCH_RATIO))
+         eta = y_min + (y_stretched - minval(y_stretched)) / &
+               (maxval(y_stretched) - minval(y_stretched)) * (y_max - y_min)
 
 
 !        if (ny /= pointy) then
@@ -309,12 +314,12 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     ! 2. SET BASE STATE
     ! =========================================================================
         ! ... (This part is unchanged, set base u, v, w, VF, rho, Ys etc.) ...
-        where(eta .ge. 0)
-           u = v0_2*erf(eta/delta)
-        elsewhere(eta .lt. 0 )
-           u = v0*erf(eta/delta)
-        endwhere
-        uref = u
+        !where(eta .ge. 0)
+        !   u = v0_2*erf(eta/delta)
+        !elsewhere(eta .lt. 0 )
+        !   u = v0*erf(eta/delta)
+        !endwhere
+        !uref = u
         v = 0.0
         w = 0.0
         mix%material(1)%p = p_amb
@@ -334,7 +339,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         allocate( phi_r(pointy, MAX_MODES,MAX_MODES), phi_i(pointy, MAX_MODES,MAX_MODES), u_r(pointy, MAX_MODES,MAX_MODES),u_i(pointy, MAX_MODES,MAX_MODES), &
                   v_r(pointy, MAX_MODES,MAX_MODES), v_i(pointy, MAX_MODES,MAX_MODES), w_r(pointy, MAX_MODES,MAX_MODES), w_i(pointy,MAX_MODES,MAX_MODES), &
                   p_r(pointy, MAX_MODES,MAX_MODES), p_i(pointy, MAX_MODES,MAX_MODES), m1_r(pointy, MAX_MODES,MAX_MODES),m1_i(pointy, MAX_MODES,MAX_MODES), &
-                  m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES) )
+                  m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES))
+        allocate(  u_base(pointy) )
 
         ! --- Rank 0 reads all data from files ---
         if (nrank == 0) then
@@ -369,6 +375,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                 open(unit=33, file=trim(folder_path)//'m1_I.txt', status='old'); read(33,*) m1_i(:,q,l);  close(33)
                 open(unit=34, file=trim(folder_path)//'m2_R.txt', status='old'); read(34,*) m2_r(:,q,l);  close(34)
                 open(unit=35, file=trim(folder_path)//'m2_I.txt', status='old'); read(35,*) m2_i(:,q,l);  close(35)
+                open(unit=36, file=trim(folder_path)//'Ubase.txt', status='old'); read(36,*) u_base;  close(36)
             end do
             end do
         end if
@@ -388,6 +395,15 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         call MPI_Bcast(m1_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         call MPI_Bcast(m2_r,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         call MPI_Bcast(m2_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+
+        call MPI_Bcast(u_base, pointy, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+
+        do j = 1, ny
+
+           uref(:,j,:) = u_base(j)*(v0_2 - v0)
+           u(:,j,:)    = u_base(j)*(v0_2 - v0)
+
+        enddo
 
         ! --- Loop over modes and add perturbations to the 3D field ---
         do q = 1, num_modes
@@ -430,7 +446,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(2)%p  = mix%material(1)%p
         p = mix%material(1)%p
         deallocate(phi_r, phi_i, u_r, u_i, v_r, v_i, w_r, w_i, p_r, p_i, m1_r, m1_i, m2_r, m2_i)
-
+        deallocate(u_base)
     ! =========================================================================
     ! 4. CLEANUP AND BOUNDARY CONDITIONS
     ! =========================================================================
@@ -478,10 +494,10 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     real(rkind), dimension(:,:,:), intent(inout):: mask
     real(rkind), dimension(2), intent(inout) :: rhou, rhov,rhow,rhoe
     integer :: ioUnit,i,iy
-    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0d0,int_KE
+    real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys,y_stretched
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 6.0d0,int_KE
     integer, dimension(2) :: iparams
-    real(rkind) :: a0, a0_2, sigma1, sigma2
+    real(rkind) :: a0, a0_2, sigma1, sigma2, y_min = -3.5d0, y_max = 6d0
     integer :: nx,ny,nz,k,ix,j
     integer :: ierr, rank,fh, filesize, chunksize, offset, offset2,totalproc
     integer, allocatable :: data(:), recvbuf(:) 
@@ -492,23 +508,26 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
 
         
         nx = size(mesh,1); ny = size(mesh,2); nz = size(mesh,3)
-        yphys = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
-        Lr    = 14.0d0/(yphys(1,ny,1) - yphys(1,1,1))
-        yphys = Lr*yphys
-      
+!        yphys = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
+!        Lr    = 14.0d0/(yphys(1,ny,1) - yphys(1,1,1))
+!        yphys = Lr*yphys
+ 
+        y_stretched = atanh(2.0d0 * y / (1.0d0 + 1.0d0/STRETCH_RATIO))
+        yphys = y_min + (y_stretched - minval(y_stretched)) / &
+               (maxval(y_stretched) - minval(y_stretched)) * (y_max - y_min)
 
         sigma1 = -1000d0 ! -2400 ! -80000
 
-        where(yphys .LE. -6d0)
-           sponge(:,:,:,1) = sigma1*( (yphys + 6d0)/1.0d0)**4.0d0 
+        where(yphys .LE. -2.0d0)
+           sponge(:,:,:,1) = sigma1*( (yphys + 2.0d0)/0.5d0)**2.0d0 
            mask  = 1.0
         elsewhere
            sponge(:,:,:,1) = 0d0
            mask = 0.0
         endwhere
 
-        where(yphys .GE. 6.0d0)
-           sponge(:,:,:,2) = sigma1*( (yphys- 6.0d0)/1.0d0)**4.0d0 
+        where(yphys .GE. 5.5d0)
+           sponge(:,:,:,2) = sigma1*( (yphys- 5.5d0)/0.5d0)**2.0d0 
            mask = 1.0
         elsewhere
            sponge(:,:,:,2) = 0
@@ -573,7 +592,7 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
     integer :: ioUnit,i,iy
     real(rkind), dimension(8) :: fparams
     real(rkind), dimension(4) :: alphai, phase
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 12.0, int_KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 6.0, int_KE
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2,dx1
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
@@ -839,7 +858,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx,ny, i, j
-    real(rkind) :: dy, yspng, tspng, yspngR, yspngL, Lr, STRETCH_RATIO = 12.0 
+    real(rkind) :: dy, yspng, tspng, yspngR, yspngL, Lr, STRETCH_RATIO = 6.0 
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR, yphys
     
     nx = decomp%ysz(1)

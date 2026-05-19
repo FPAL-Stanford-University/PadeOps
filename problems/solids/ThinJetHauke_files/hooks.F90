@@ -23,7 +23,7 @@ module ThinJetHauke_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = 8d0*pi/5d0,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
+    real(rkind) :: Ly = 1.0, Lx = pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=pi
     real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref,ll
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
@@ -174,9 +174,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -4d0*pi/5d0
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi/2d0
                     y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5d0
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz  -pi
+                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz  - pi/2d0
                 end do
             end do
         end do
@@ -273,7 +273,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(1)%plast = plastic ; mix%material(1)%explPlast = explPlast
         mix%material(2)%plast = plastic2; mix%material(2)%explPlast = explPlast2
 
-        delta_rho = Nrho * 0.0279d0 * 0.275d0
+        delta_rho = Nrho * 0.025d0 * 0.275d0
         !delta_rho = Nrho * dx * 0.275d0 !converts from Nrho to approximate thickness of erf profile
         eta = atanh(2.0d0*y /(1d0 + 1d0/STRETCH_RATIO))
         Lr    = 10.0d0/(eta(1,ny,1) - eta(1,1,1))
@@ -408,7 +408,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         allocate( phi_r(pointy, MAX_MODES,MAX_MODES), phi_i(pointy, MAX_MODES,MAX_MODES), u_r(pointy, MAX_MODES,MAX_MODES),u_i(pointy, MAX_MODES,MAX_MODES), &
                   v_r(pointy, MAX_MODES,MAX_MODES), v_i(pointy, MAX_MODES,MAX_MODES),  &
                   p_r(pointy, MAX_MODES,MAX_MODES), p_i(pointy, MAX_MODES,MAX_MODES), m1_r(pointy, MAX_MODES,MAX_MODES),m1_i(pointy, MAX_MODES,MAX_MODES), &
-                  m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES))
+                  m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES), w_r(pointy, MAX_MODES,MAX_MODES), w_i(pointy, MAX_MODES,MAX_MODES))
         allocate( u_base(pointy) )
 !
 !        ! --- Rank 0 reads all data from files ---
@@ -443,6 +443,9 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                 open(unit=34, file=trim(folder_path)//'m2_R.txt', status='old'); read(34,*) m2_r(:,q,l);  close(34)
                 open(unit=35, file=trim(folder_path)//'m2_I.txt', status='old'); read(35,*) m2_i(:,q,l);  close(35)
                 open(unit=36, file=trim(folder_path)//'Ubase.txt', status='old'); read(36,*) u_base;  close(36)
+                open(unit=37, file=trim(folder_path)//'w_R.txt', status='old');  read(37,*) w_r(:,q,l);   close(37)
+                open(unit=38, file=trim(folder_path)//'w_I.txt', status='old');  read(38,*) w_i(:,q,l);   close(38)
+
             end do
             end do
         end if
@@ -461,11 +464,13 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         call MPI_Bcast(m2_r,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         call MPI_Bcast(m2_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         call MPI_Bcast(u_base, pointy, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-
+        call MPI_Bcast(w_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+        call MPI_Bcast(w_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+ 
        do j = 1, ny
 
-           uref(:,j,:) = u_base(j) 
-           u(:,j,:)    = u_base(j)
+           uref(:,j,:) = u_base(j)*U_ref
+           u(:,j,:)    = u_base(j)*U_ref
 
        enddo
         ! --- Loop over modes and add perturbations to the 3D field ---
@@ -473,7 +478,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
           do l = 1, bnum_modes
             alpha_dim = alpha_modes(q) / delta_ref
             beta_dim  = beta_modes(l) / delta_ref
-            current_phase =0.0_rkind ! 2.0_rkind * pi * sin( real(q)*1.37d0 + real(l)*3.81d0)**2d0
+            current_phase = 2.0_rkind * pi * sin( real(q)*1.37d0 + real(l)*3.81d0)**2d0
             do k = 1, nz
                 do j = 1, ny
                     do i = 1, nx
@@ -490,6 +495,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                         ! Apply the perturbations, scaled by the single amplitude 'epsilonk'
                         up(i,j,k) = up(i,j,k) + u_perturb
                         vp(i,j,k) = vp(i,j,k) + v_perturb
+                        wp(i,j,k) = wp(i,j,k) + w_perturb
                         pp(i,j,k) = pp(i,j,k) + p_perturb
                         VFp(i,j,k) = VFp(i,j,k) +  phi_perturb
                         m1p(i,j,k) = m1p(i,j,k) +  m1_perturb 
@@ -498,7 +504,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
                         u(i,j,k) = u(i,j,k) + epsilonk * u_perturb 
                         v(i,j,k) = v(i,j,k) + epsilonk * v_perturb
-        !               w(i,j,k) = w(i,j,k) + epsilonk * w_perturb
+                        w(i,j,k) = w(i,j,k) + epsilonk * w_perturb
                         mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk * p_perturb
         !                mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
         !                rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb*VF0(i,j,k) + m2_perturb*(1-VF0(i,j,k)) + rho_0*phi_perturb +rho_0_2*(-phi_perturb))
@@ -587,16 +593,16 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
 
         sigma1 = -1000d0 ! -2400 ! -80000
 
-        where(yphys .LE. -4.0d0)
-           sponge(:,:,:,1) = sigma1*( (yphys + 4.0d0)/1.0d0)**4.0d0 
+        where(yphys .LE. -4.5d0)
+           sponge(:,:,:,1) = sigma1*( (yphys + 4.5d0)/0.5d0)**2.0d0 
            mask = 1d0
         elsewhere
            sponge(:,:,:,1) = 0d0
            mask = 0d0
         endwhere
 
-        where(yphys .GE. 4.0d0)
-           sponge(:,:,:,2) = sigma1*( (yphys- 4.0d0)/1.0d0)**4.0d0 
+        where(yphys .GE. 4.5d0)
+           sponge(:,:,:,2) = sigma1*( (yphys- 4.5d0)/0.5d0)**2.0d0 
            mask = 1d0
         elsewhere
            sponge(:,:,:,2) = 0

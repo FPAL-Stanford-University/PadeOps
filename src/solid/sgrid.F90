@@ -1507,16 +1507,16 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 5d0 , Lr, Lr_half !d0
+       real(rkind) :: L, STRETCH_RATIO = 6d0 , Lr, Lr_half, y_min = -3.5d0, y_max = 6d0
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
-       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2
+       real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2,y_stretched
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
 
         ! If base decomposition is in Y
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       L = 10d0 ! 14.0d0
+       !L = 10d0 ! 14.0d0
 
        y_half = this%y + 0.5_rkind*this%dy
         
@@ -1526,11 +1526,17 @@ contains
        this%zMetric = 1.0_rkind
        this%xMetric_half = 1.0_rkind
        this%zMetric_half = 1.0_rkind
-       tmpeta = atanh( 2.0_rkind*this%y / ( 1.0_rkind + 1.0_rkind / STRETCH_RATIO) )
-       Lr =  L /( tmpeta(1, ny,1) - tmpeta(1,1,1))
+       !tmpeta = atanh( 2.0_rkind*this%y / ( 1.0_rkind + 1.0_rkind / STRETCH_RATIO) )
+       !Lr =  L /( tmpeta(1, ny,1) - tmpeta(1,1,1))
 
-       this%eta2 = Lr*tmpeta
-       tmpeta2 = Lr*tmpeta
+       !this%eta2 = Lr*tmpeta
+       !tmpeta2 = Lr*tmpeta
+
+       y_stretched = atanh(2.0d0 * this%y / (1.0d0 + 1.0d0/STRETCH_RATIO))
+       tmpeta2 = y_min + (y_stretched - minval(y_stretched)) / &
+               (maxval(y_stretched) - minval(y_stretched)) * (y_max - y_min)
+       this%eta2 = tmpeta2
+
        call this%der_nostretch%ddy(tmpeta2, tmp2, this%y_bc(1),this%y_bc(2))
        this%yMetric = 1.0_rkind/tmp2
        call interpolateFV_y(this%decomp,this%interpMid,this%eta2,eta2_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -2396,7 +2402,7 @@ contains
                this%mix%intSharp_kFV = zero
              
                !call tic()
-               call this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
+               call this%mix%get_intSharp_clean2_optimized(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
                !call toc(cputime)
                !call message(3,"Interface Sharpening Time (in seconds)",cputime)
 
@@ -6073,6 +6079,24 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_p.",this%step
         fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
         call decomp_2d_write_one(2,this%p,trim(fname), this%decomp)
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_Bulk.",this%step
+        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
+        call decomp_2d_write_one(2,this%bulk,trim(fname), this%decomp)
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_Mu.",this%step
+        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
+        call decomp_2d_write_one(2,this%mu,trim(fname), this%decomp)
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_kappa.",this%step
+        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
+        call decomp_2d_write_one(2,this%mix%kappa,trim(fname), this%decomp)
+
+        write(tempname,"(A7,A4,I2.2,A3,I6.6)") "RESTART", "_Run",this%runID, "_diff.",this%step
+        fname = this%outputdir(:len_trim(this%outputdir))//"/"//trim(tempname)
+        call decomp_2d_write_one(2,this%mix%material(1)%adiff,trim(fname), this%decomp)
+
+
 
         if (nrank == 0) then
             write(tempname,"(A7,A4,I2.2,A6,I6.6)") "RESTART", "_Run",this%runID, "_info.",this%step
