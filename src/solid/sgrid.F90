@@ -17,7 +17,6 @@ module SolidGrid
     use IOsgridMod,              only: IOsgrid
 
     use operators,               only: filter3D
-   
     implicit none
 
     integer, parameter :: rho_index    = 1 
