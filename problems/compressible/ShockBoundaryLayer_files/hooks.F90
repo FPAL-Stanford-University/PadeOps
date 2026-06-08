@@ -1,4 +1,4 @@
-module DevChannel_data
+module ShockBoundaryLayer_data
     use kind_parameters,  only: rkind, mpirkind, clen
     use constants,        only: zero, half, one, two, four, pi, imi, three
     use FiltersMod,       only: filters
@@ -22,14 +22,20 @@ module DevChannel_data
     real(rkind) :: Tw     = 1.0_rkind
     real(rkind) :: Rgas   = 1.0_rkind
     real(rkind) :: Re     = 3000.0_rkind
-    real(rkind) :: Mc     = 1.5_rkind
+    real(rkind) :: Mach   = 1.5_rkind
     real(rkind) :: x1, y1, z1
     real(rkind) :: xn, yn, zn
+    real(rkind) :: shock_d, Mc, sd, shk_ang, beta
+    real(rkind) :: s_l_i, s_r_i
+    real(rkind) :: velocity_right=0, u_right=0, v_right=0, p_right=0, rho_right=0
     logical     :: periodicx = .true., periodicy = .false., periodicz = .true. 
     logical     :: add_pert = .true., xplbc_recycle = .true.
     character(len=clen) :: fname_prefix
     ! Gaussian filter for sponge
     type(filters) :: mygfil
+    integer :: n_prof
+    real(rkind) :: yloc,val,uq=zero
+    real(rkind), allocatable :: y_prof(:), u_prof(:), inp_prfl(:)
 
 contains
 
@@ -53,16 +59,16 @@ contains
     character(len=clen) :: outputfile
 
     dx = Lx/real(decomp%xsz(1)-1,rkind)
-    filpt = 2.00_rkind/dx 
-    thickT = real(0.3D0, rkind)
-    ntf = 3
+    filpt = 0.2_rkind/dx 
+    thickT = real(0.1D0, rkind)
+    ntf = 2
 
     ! Gaussian Filter for right side of domain 
     do i=1,decomp%ysz(1)
        dumT(i,:,:)=half*(one-tanh( (real(decomp%xsz(1)- (decomp%yst(1) - 1 + i - 1), rkind)-filpt) / thickT ))
     end do
 
-    !! To check whether dumT is calculted correctly !!!
+   ! To check whether dumT is calculted correctly !!!
     write(outputfile, '(a,i3.3,a)') 'dumT_', nrank, '.dat'
     open(10,file=outputfile,status='unknown')
     do i=1,decomp%ysz(1)
@@ -90,9 +96,86 @@ contains
     call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
     rho = rho + dumT*(dumF-rho)
 
+
   end subroutine
+
+  subroutine sponge_y(decomp, mygfil, y, Ly, u, v, w, p, rho, x_bc, y_bc,z_bc)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
+    use decomp_2d,        only: decomp_info, nrank
+    use operators,        only: filter3D
+
+    type(decomp_info),               intent(in)    :: decomp
+    type(filters),                   intent(in)    :: mygfil
+    real(rkind), dimension(:,:,:),   intent(in)    :: y
+    real(rkind),                     intent(in)    :: Ly
+    real(rkind), dimension(:,:,:),   intent(inout) :: u,v,w,p,rho
+    integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
+
+    integer :: i, j, k
+    integer :: ntf  ! ntf is the parameter represents number of times the filter is applied
+    real(rkind) :: dx, dy, dz, filpt, thickT
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
+    character(len=clen) :: outputfile
+    real(rkind) :: y_start, thickness, y_top
+
+    dy = Ly/real(decomp%ysz(2)-1,rkind)
+    filpt = 0.08_rkind/dy
+    thickT = real(0.9D0, rkind)
+    ntf = 4
+    
+    !y_top = maxval(y)
+    !y_start = 2.8_rkind       ! <-- your desired start
+    !thickness = 0.05_rkind     ! adjust smoothness
+    
+    !do i=1,decomp%ysz(2)
+    !   dumT(:,i,:) = half * ( one - tanh( ( (y_top - y(:,i,:)) - (y_top -y_start) ) /thickness ) )
+    !end do
+    ! Gaussian Filter for top
+    do i=1,decomp%ysz(2)
+       dumT(:,i,:)=half*(one-tanh( (real(decomp%ysz(2)- (decomp%yst(2) - 1 + i - 1), rkind)-filpt) / thickT ))
+    end do
+
+   ! write(outputfile, '(a,i3.3,a)') 'dumT_', nrank, '.dat'
+   ! open(10,file=outputfile,status='unknown')
+   ! do i=1,decomp%ysz(2)
+   !    write(10,'(2(e19.12),1x)') y(1,i,1), dumT(1,i,1)
+   ! end do
+   ! close(10)
+
+    dumF = u
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    u = u + dumT*(dumF-u)
+
+    dumF = v
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    v = v + dumT*(dumF-v)
+
+    dumF = w
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    w = w + dumT*(dumF-w)
+
+    dumF = p
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    p = p + dumT*(dumF-p)
+
+    dumF = rho
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    rho = rho + dumT*(dumF-rho)
+
+    !if (nrank==0) then
+    !write(outputfile, '(a,i3.3,a)') 'dump_y_', nrank, '.dat'
+    !open(10,file=outputfile,status='unknown')
+    !do i=1,decomp%ysz(2)
+    !   write(10,'(2(e19.12),1x)') y(1,i,1), dumT(1,i,1)
+    !end do
+    !close(10)
+    !endif
+
+  end subroutine
+
    
-    subroutine stretched_coordinates(decomp, y, eta, ymetric, ymetric_flag, param1, param2, param3, param4)
+  subroutine stretched_coordinates(decomp, y, eta, ymetric, ymetric_flag, param1, param2, param3, param4)
     use constants,        only: zero, half, one
     use decomp_2d,        only: decomp_info, nrank
     use exits,            only: GracefulExit, message, nancheck
@@ -225,6 +308,30 @@ contains
         call message(2,"Minimum w", P_MINVAL(w))
     end subroutine
        
+    subroutine interp_profile(y_prof, u_prof, n, yq, uq)
+        implicit none
+    
+        integer, intent(in) :: n
+        real(rkind), intent(in) :: y_prof(n), u_prof(n), yq
+        real(rkind), intent(out) :: uq
+        integer :: i
+    
+        if (yq <= y_prof(1)) then
+            uq = 0.0_rkind
+        endif
+    
+        if (yq >= y_prof(n)) then
+            uq = 1.0_rkind
+        endif
+    
+        do i = 1, n-1
+            if (yq >= y_prof(i) .and. yq <= y_prof(i+1)) then
+                uq = u_prof(i) + (u_prof(i+1)-u_prof(i)) * (yq - y_prof(i)) / (y_prof(i+1)-y_prof(i))
+            endif
+        end do
+    
+    end subroutine
+
 end module
 
 
@@ -232,7 +339,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     use kind_parameters,  only: rkind
     use constants,        only: half,one
     use decomp_2d,        only: decomp_info, nrank, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
-    use DevChannel_data
+    use ShockBoundaryLayer_data
 
     implicit none
 
@@ -250,7 +357,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
 
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, xplbc_recycle
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, sd, shk_ang, add_pert, fname_prefix, xplbc_recycle
     namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
 
     ioUnit = 15
@@ -394,7 +501,7 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use exits,                       only: GracefulExit, message, nancheck
     use random,                      only: gaussian_random                  
 
-    use DevChannel_data
+    use ShockBoundaryLayer_data
     use mpi
 
     implicit none
@@ -405,25 +512,40 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
+    real(rkind) :: Machn1, theta, Rgas_Tw, beta_rad
 
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
     type(constPrandtlConductivity) :: thermcond
-    real(rkind) :: S, Sk, T0, var, mu_ref, umax
+    real(rkind) :: S, Sk, T0, var, mu_ref, umax, eta
     integer :: i,j, k, iounit, nx, ny, nz, nxl, nyl, nzl
     character(len=clen) :: outputfile
     real(rkind), dimension(decomp%ysz(1)) :: x_new
     real(rkind), dimension(decomp%ysz(2)) :: y_new
     real(rkind), dimension(decomp%ysz(3)) :: z_new
     
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, xplbc_recycle
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, sd, shk_ang, add_pert, fname_prefix, xplbc_recycle
 
     ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
-    ! Global domain sizes
+    Mach = Mc
+    shock_d = sd
+    beta = shk_ang
+    n_prof = 17
+
+    allocate(y_prof(n_prof), u_prof(n_prof))
+    
+    open(10, file="input_profile.dat", status="old")
+    
+    do i = 1, n_prof
+        read(10, *) y_prof(i), u_prof(i)
+    end do
+    
+    close(10) 
+    !! Global domain sizes
     nx = decomp%xsz(1);     ny = decomp%ysz(2);    nz = decomp%zsz(3)
 
     ! Local domain sizes
@@ -435,11 +557,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
                  e => fields(:,:,:,  e_index), &
                 Ys => fields(:,:,:,Ys_index:Ys_index+mix%ns-1), &
                  x => mesh(:,:,:,1), y => mesh(:,:,:,2), z => mesh(:,:,:,3) )
-
+    
         if (mix%ns /= ns) call GracefulExit("Wrong number of species. Check your input file and make ns consistent with the problem file.",4562)
         Rgas = one/(gam*(Mc**two))
         mu_ref = one/Re
-
+        !print*,'Re=',Re
         !!!! Set each material's transport coefficient object
         shearvisc = powerLawViscosity( mu_ref, Tw, 0.7_rkind)
         bulkvisc  = constRatioBulkViscosity( zero )
@@ -448,38 +570,71 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
         Ys(:,:,:,1)  = one 
         call mix%update(Ys)     
-     
+
+        Rgas_Tw = mix%material(1)%mat%Rgas * Tw
+        !print*,'Rgas_tw',Rgas_Tw,'rho_ref',rho_ref
+
+        s_l_i = int(shock_d/dy) + 1;
+        s_r_i = s_l_i + 1;
+
+        beta_rad = beta * 2 * pi / 360;
+        Machn1 = Mach * sin(beta_rad);
+        theta = atan((2 * (cos(beta_rad)/sin(beta_rad)))*(((Mach**2 * sin(beta_rad)**2) - 1)/((Mach**2 * (gam + cos(2*beta_rad)))+2))) 
+        !print*,'theta =',theta,'tantheta =',tantheta
+        !print*,'s_l_i',s_l_i,'s_r_i',s_r_i
+        velocity_right = sin(beta_rad) * ((gam-1)*Machn1**2 + 2.0) / ((gam+1)*Machn1**2)
+        u_right = velocity_right * cos(theta) / sin(beta_rad-theta)
+        v_right = velocity_right * sin(theta) / sin(beta_rad-theta)
+        !print*,'velocity_right=',velocity_right,'u_right=',u_right,'v_right=',v_right
+        p_right = (rho_ref * Rgas*Tw) * (1 + ((Machn1**2 - 1)* (2*gam)/(gam+1)))
+        rho_right = rho_ref * ((gam+1)*Machn1**2) / ((gam-1)*Machn1**2 + 2.0) 
+
+        allocate(inp_prfl(nyl))    
         ! Add base flow profiles
         !u = 1.0d0 !(1-y**2)
-
-        do k=1,nzl
-          do j=1,nyl
-            do i=1,nxl
-              !! laminar inflow
-              if(y(i,j,k) < zero) then
-                u(i,j,k) = zero
-              else
-                !u(i,j,k) = 6.0_rkind * y(i,j,k) * (1.0_rkind-y(i,j,k))     ! for Re=389; Chan-Mittal-CTRBriefs-1996
-                !u(i,j,k) = 24.0_rkind * y(i,j,k) * (0.5_rkind-y(i,j,k))    ! for Re=800; Chan-Mittal-CTRBriefs-1996
-                !u(i,j,k) = (1 - (0.406/(y(i,j,k)+0.406)))   
-                u(i,j,k) = one
-              endif
-              !!T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
-
-              ! turbulent inflow
-              !var = (1-abs(y(i,j,k)))*Re
-              !if (var .lt. 10) then
-              !    u(i,j,k) = var
-              !else
-              !    u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
-              !endif
+        do k = 1, nzl
+          do j = 2, nyl
+        
+            yloc = y(1, j, k)
+        
+            call interp_profile(y_prof, u_prof, n_prof, yloc, uq)
+            do i = 1, nxl
+              u(i,j,k) = uq
             end do
+            inp_prfl(j)= uq 
           end do
         end do
 
+!        do k=1,nzl
+!          do j=1,nyl
+!            do i=1,nxl
+!              !! laminar inflow
+!              eta = y(i,j,k)/1.4_rkind
+!              if(y(i,j,k) < zero) then
+!                u(i,j,k) = zero
+!              elseif(eta<=1.0_rkind) then
+!                !u(i,j,k) = 1.8*eta - 1.2*eta**2 + 0.4*eta**3
+!                
+!                u(i,j,k) = 
+!              else
+!                u(i,j,k) = 1.0_rkind
+!              endif
+!              !!T(i,j,k) = (1.5_rkind*(1-y(i,j,k)**4)*(gam-1)*Pr*(Mc**2)/three) +  Tw
+!
+!              ! turbulent inflow
+!              !var = (1-abs(y(i,j,k)))*Re
+!              !if (var .lt. 10) then
+!              !    u(i,j,k) = var
+!              !else
+!              !    u(i,j,k) = 2.5_rkind*log(var) + 5.5_rkind
+!              !endif
+!            end do
+!          end do
+!        end do
+
         ! turbulent inflow
         !umax = p_maxval(u)
-        !u = u/umax * 1.1d0
+        !u = u/umax * 1.8d0
 
         v   = zero
         w   = zero
@@ -497,8 +652,8 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         ! Initialize gaussian filter mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, "gaussian", "gaussian", "gaussian" )
     end associate
+   !deallocate(y_prof,u_prof)
 end subroutine
-
 
 subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcount)
     use kind_parameters,  only: rkind,clen
@@ -508,7 +663,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
     use DerivativesMod,   only: derivatives
     use MixtureEOSMod,    only: mixture
     use reductions,       only: P_MEAN
-    use DevChannel_data
+    use ShockBoundaryLayer_data
 
     implicit none
     character(len=*),                intent(in) :: outputdir
@@ -547,7 +702,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     use CompressibleGrid, only: rho_index,u_index,v_index,w_index,p_index,T_index,e_index,mu_index,bulk_index,kap_index,Ys_index
     use MixtureEOSMod,    only: mixture
     use operators,        only: filter3D
-    use DevChannel_data
+    use ShockBoundaryLayer_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp
@@ -639,31 +794,50 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
              umax = maxval(abs(u)); vmax = maxval(abs(v));  wmax = maxval(abs(w)); 
              pmax = maxval(abs(p)); rmax = maxval(abs(rho)); 
              if(nrank==0) print '(a,e19.12,1x,a,i6.6,1x,a,i4.4,1x,a,5(e19.12,1x))', 'x-inflow bc tsim= ', tsim, ' ttind=', ttind, 'rank=', nrank, "uvwpr=", umax, vmax, wmax, pmax, rmax
-             else
+          else
                do k = 1, decomp%ysz(3) 
-                 do j = 1, decomp%ysz(2)
+                 do j = 2, decomp%ysz(2)
                    u(1,j,k)   =  one
                    rho(1,j,k) =  rho_ref
                    !T(1,j,k)   =  Tw
                    v(1,j,k)   = zero
                    w(1,j,k)   = zero
-                   p(1,j,k)   =  rho(1,j,k) * Rgas_Tw
+                   p(1,j,k)   =  rho_ref * Rgas_Tw
                  enddo
                enddo
-             endif
           endif
+        endif
+
+
+        !if(decomp%yst(1) == 1) then 
+        !  do k = 1,decomp%ysz(3) 
+        !    u(1,s_r_i:,k) = u_right
+        !    v(1,s_r_i:,k) = v_right
+        !    p(1,s_r_i:,k) =  p_right
+        !    rho(1,s_r_i:,k) = rho_right
+        !    !print*,p(1,s_l_i,k),'p(1,s_l_i,k)' 
+        !  !print*,'nrank',nrank,'p_right',p_right,'p(1,decomp%ysz(2),k)',p(1,decomp%ysz(2),k),'p(decomp%ysz(1),decomp%ysz(2),k)',p(decomp%ysz(1),decomp%ysz(2),k)
+        !  end do
+        !endif    
+
         ! set Dirichlet BC at top and bottom
         do k = 1,decomp%ysz(3) 
-           u(:,1,k) = zero;                  u(:,decomp%ysz(2),k) = zero
-           v(:,1,k) = zero;                  v(:,decomp%ysz(2),k) = zero
-           w(:,1,k) = zero;                  w(:,decomp%ysz(2),k) = zero
+           u(:,1,k) = zero;                  !u(s_r_i:,decomp%ysz(2),k) = u(s_l_i,decomp%ysz(2),k)*((gam-1)*Mach**2 + 2.0) / ((gam+1)*Mach**2)
+           v(:,1,k) = zero;                  !v(:,decomp%ysz(2),k) = zero
+           w(:,1,k) = zero;                  !w(:,decomp%ysz(2),k) = zero
            !T(:,1,k) = Tw;                   T(:,decomp%ysz(2),k) = Tw
-           p(:,1,k) = rho(:,1,k)*Rgas_Tw;    p(:,decomp%ysz(2),k) = rho(:,decomp%ysz(2),k)*Rgas_Tw
+           !rho(:,1,k) = rho_ref
+           p(:,1,k) = rho(:,1,k)*Rgas_Tw;    !p(s_r_i:,decomp%ysz(2),k) = 1 + ((Mach**2 - 1)* (2*gam)/(gam+1))
+        !   u(:,decomp%ysz(2),k) = u_right
+        !   v(:,decomp%ysz(2),k) = v_right
+        !   p(:,decomp%ysz(2),k) = p_right
+        !   rho(:,decomp%ysz(2),k) = rho_right
+        !   !print*,'nrank',nrank,'p_right',p_right,'p(1,decomp%ysz(2),k)',p(1,decomp%ysz(2),k),'p(decomp%ysz(1),decomp%ysz(2),k)',p(decomp%ysz(1),decomp%ysz(2),k)
         end do
-        
+
         if(present(useMultiBlock)) then
          if(useMultiBlock) then
-            ! set Dirichlet BC at bottom block of multiblock
+            ! set Dirichlet BC at bottom block of multiblock 
             do imb = 1, mbtopology%y_num_blocks
               !jlo = mbtopology%yst(2, imb)
               !ist = mbtopology%yst(1, imb);   ien = mbtopology%yen(1, imb)
@@ -687,15 +861,16 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
               enddo
 
               ! upper boundary (jst, jen should be the same)
-              ist = mbtopology%ybchi_st(1,imb); jst = mbtopology%ybchi_st(2,imb); kst = mbtopology%ybchi_st(3,imb)
-              ien = mbtopology%ybchi_en(1,imb); jen = mbtopology%ybchi_en(2,imb); ken = mbtopology%ybchi_en(3,imb)
-              do k = kst, ken
-                  u(ist:ien, jst, k) = zero
-                  v(ist:ien, jst, k) = zero
-                  w(ist:ien, jst, k) = zero
-                  !T(ist:ien, jst, k) = Tw
-                  p(ist:ien, jst, k) = rho(ist:ien, jst, k) * Rgas_Tw
-              enddo
+              !ist = mbtopology%ybchi_st(1,imb); jst = mbtopology%ybchi_st(2,imb); kst = mbtopology%ybchi_st(3,imb)
+              !ien = mbtopology%ybchi_en(1,imb); jen = mbtopology%ybchi_en(2,imb); ken = mbtopology%ybchi_en(3,imb)
+              !do k = kst, ken
+              !    u(ist:ien, jst, k) = u_right
+              !    v(ist:ien, jst, k) = v_right
+              !    w(ist:ien, jst, k) = p_right
+              !    rho(ist:ien, jst, k) = rho_right
+              !    !T(ist:ien, jst, k) = Tw
+              !    p(ist:ien, jst, k) = rho(ist:ien, jst, k) * Rgas_Tw
+              !enddo
 
               !print *, 'Num-internal-boundaries-left: nrank=', nrank, 'num_blocks=', mbtopology%y_num_blocks, 'num_int_bdries=',mbtopology%y_num_intbd_left
               ! left internal boundary (ist, ien should be the same)
@@ -738,14 +913,20 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
             enddo
          endif
         endif
- 
+        !u(1,:,:)=one
         !p   = rho*Rgas*T
-
+        if(decomp%yst(1) == 1) then 
+           do k = 1, decomp%ysz(3) 
+             do j = 1, decomp%ysz(2)
+               u(1,j,k)   =  inp_prfl(j)
+             enddo
+            enddo
+        endif
         !!!!! =============  Add Sponge+bulk for exit bc ==========!!!!!
         ! Gradually apply the exit boundary conditions
         ! Apply sponge in X-direction on right
         call  sponge_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc)
-
+        call  sponge_y(decomp, mygfil, y, Ly, u, v, w, p, rho, x_bc, y_bc, z_bc)
 
     end associate
 end subroutine
@@ -762,7 +943,7 @@ subroutine hook_timestep(decomp,der,dx,dy,dz,mesh,fields,mix,step,tsim,outputdir
     use exits,            only: message
     use reductions,       only: P_MAXVAL,P_MINVAL
 
-    use DevChannel_data
+    use ShockBoundaryLayer_data
 
     implicit none
     type(decomp_info),               intent(in) :: decomp
@@ -845,7 +1026,7 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
     use decomp_2d,          only: decomp_info,nrank
     use MixtureEOSMod,      only: mixture
     use reductions,         only: P_MAXVAL,P_MINVAL
-    use DevChannel_data
+    use ShockBoundaryLayer_data
 
     implicit none
     type(decomp_info),               intent(in)    :: decomp

@@ -56,8 +56,8 @@ contains
     character(len=clen) :: outputfile
 
     dx = Lx/real(decomp%xsz(1)-1,rkind)
-    filpt = 2.00_rkind/dx 
-    thickT = real(0.3D0, rkind)
+    filpt = 3.00_rkind/dx 
+    thickT = real(9.0D0, rkind)
     ntf = 4
 
     ! Gaussian Filter for right side of domain 
@@ -95,6 +95,101 @@ contains
 
   end subroutine
 
+  subroutine cavity_filtering_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc, mbtopology)
+    use kind_parameters,  only: rkind
+    use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
+    use decomp_2d,        only: decomp_info, nrank
+    use operators,        only: filter3D
+
+    type(decomp_info),               intent(in)    :: decomp
+    type(filters),                   intent(in)    :: mygfil
+    real(rkind), dimension(:,:,:),   intent(in)    :: x
+    real(rkind),                     intent(in)    :: Lx
+    real(rkind), dimension(:,:,:),   intent(inout) :: u,v,w,p,rho
+    integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
+    type(multiblocktopol), optional, intent(in)    :: mbtopology
+
+    integer :: i, j, k
+    integer :: ntf  ! ntf is the parameter represents number of times the filter is applied
+    real(rkind) :: dx, dy, dz, filpt, thickT
+    !real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT_cavity, dumu, dumv, dumw, dump, dumrho
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT_cavity, dumF
+    character(len=clen) :: outputfile
+    real(rkind) :: x1,x2,x3,x4,delta,left,right
+    real(rkind), dimension(:,:,:),     allocatable :: u_xtmp, v_xtmp, w_xtmp, p_xtmp, rho_xtmp
+
+    x1 = 5.0_rkind
+    x2 = 6.0_rkind
+    x3 = 13.0_rkind
+    x4 = 14.0_rkind
+    dumT_cavity = 0.0_rkind
+    delta = 0.2_rkind
+    
+    do i=1,decomp%ysz(1)
+      do j=1,50
+    
+       left  = half*(one - tanh((x(i,1,1)-0.5_rkind*(x1+x2))/delta))
+       right = half*(one + tanh((x(i,1,1)-0.5_rkind*(x3+x4))/delta))
+    
+       dumT_cavity(i,j,:) = left + right
+      end do
+    end do
+    !dumu = u
+    !dumv = v
+    !dumw = w
+    !dump = p
+    !dumrho = rho
+    !
+    !do i=2,decomp%ysz(1)-2
+    !  do j=1,50
+    !   u(i,j,1) = (dumu(i-1,j,1) + dumu(i,j,1) + dumu(i+1,j,1))/3
+    !   v(i,j,1) = (dumv(i-1,j,1) + dumv(i,j,1) + dumv(i+1,j,1))/3
+    !   w(i,j,1) = (dumw(i-1,j,1) + dumw(i,j,1) + dumw(i+1,j,1))/3
+    !   p(i,j,1) = (dump(i-1,j,1) + dump(i,j,1) + dump(i+1,j,1))/3
+    !   rho(i,j,1) = (dumrho(i-1,j,1) + dumrho(i,j,1) + dumrho(i+1,j,1))/3
+    !
+    !  end do
+    !end do
+    !dx = Lx/real(decomp%xsz(1)-1,rkind)
+    !filpt = 2.00_rkind/dx 
+    !thickT = real(1.0D0, rkind)
+    !ntf = 4
+
+    !! Gaussian Filter for right side of domain 
+    !do i=1,decomp%ysz(1)
+    !   dumT(i,:,:)=half*(one-tanh( (real(decomp%xsz(1)- (decomp%yst(1) - 1 + i - 1), rkind)-filpt) / thickT ))
+    !end do
+
+   ! To check whether dumT is calculted correctly !!!
+    write(outputfile, '(a,i3.3,a)') 'dumT_cavity_', nrank, '.dat'
+    open(10,file=outputfile,status='unknown')
+    do i=1,decomp%ysz(1)
+       write(10,'(2(e19.12),1x)') x(i,1,1), dumT_cavity(i,1,1)
+    end do
+    close(10)
+
+    dumF = u
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    u = u + dumT_cavity*(dumF-u)
+
+    dumF = v
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    v = v + dumT_cavity*(dumF-v)
+
+    dumF = w
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    w = w + dumT_cavity*(dumF-w)
+
+    dumF = p
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    p = p + dumT_cavity*(dumF-p)
+
+    dumF = rho
+    call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
+    rho = rho + dumT_cavity*(dumF-rho)
+
+  end subroutine
+
   subroutine sponge_y(decomp, mygfil, y, Ly, u, v, w, p, rho, x_bc, y_bc,z_bc)
     use kind_parameters,  only: rkind
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
@@ -116,7 +211,7 @@ contains
     real(rkind) :: y_start, thickness, y_top
 
     dy = Ly/real(decomp%ysz(2)-1,rkind)
-    filpt = 0.08_rkind/dy
+    filpt = 0.1_rkind/dy
     thickT = real(0.9D0, rkind)
     ntf = 4
     
@@ -527,10 +622,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
-    n_prof = 30
+    n_prof = 17
     allocate(y_prof(n_prof), u_prof(n_prof))
     
-    open(10, file="input_profile.dat", status="old")
+    open(10, file="vel_input_profile.dat", status="old")
     
     do i = 1, n_prof
         read(10, *) y_prof(i), u_prof(i)
@@ -699,9 +794,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     real(rkind) :: dx, dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, Rgas_Tw, alpf, tbcmax
     real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p, onemalpf
     real(rkind) :: umax, vmax, wmax, rmax, pmax
+    real(rkind) :: xleftpt, xrightpt, ybtmpt
     character(len=clen) :: outputfile
     real(rkind), dimension(:,:),       allocatable :: u_noise, v_noise, w_noise
-    real(rkind), dimension(:,:,:),     allocatable :: u_xtmp, v_xtmp, w_xtmp
+    real(rkind), dimension(:,:,:),     allocatable :: u_xtmp, v_xtmp, w_xtmp, p_xtmp, rho_xtmp
 
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -714,6 +810,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
 
         Rgas_Tw = mix%material(1)%mat%Rgas * Tw
 
+        !u_xtmp => fields(:,:,:, u_index)
+        !v_xtmp => fields(:,:,:, v_index)
+        !w_xtmp => fields(:,:,:, w_index)
+        !p_xtmp => fields(:,:,:, p_index)
 
         ! set Dirichlet BC at the inlet
         if(decomp%yst(1) == 1) then 
@@ -788,9 +888,56 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
            !T(:,1,k) = Tw;                   T(:,decomp%ysz(2),k) = Tw
            p(:,1,k) = rho(:,1,k)*Rgas_Tw;    !p(:,decomp%ysz(2),k) = rho(:,decomp%ysz(2),k)*Rgas_Tw
         end do
+
         if(present(useMultiBlock)) then
          if(useMultiBlock) then
             ! set Dirichlet BC at bottom block of multiblock 
+            !print*,mbtopology%x_num_block
+            !allocate(u_xtmp(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)))
+            !allocate(v_xtmp(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)))
+            !allocate(w_xtmp(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)))
+            !allocate(p_xtmp(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)))
+            !allocate(rho_xtmp(decomp%xsz(1),decomp%xsz(2),decomp%xsz(3)))
+            !call transpose_y_to_x(u, u_xtmp, decomp)
+            !call transpose_y_to_x(v, v_xtmp, decomp)
+            !call transpose_y_to_x(w, w_xtmp, decomp)
+            !call transpose_y_to_x(p, p_xtmp, decomp)
+            !call transpose_y_to_x(rho, rho_xtmp, decomp)
+            !do imb = 1, mbtopology%x_num_blocks
+            !  ist = mbtopology%xst(1, imb);   ien = mbtopology%xen(1, imb)
+            !  jst = mbtopology%xst(2, imb);   jen = mbtopology%xen(2, imb)
+            !  kst = mbtopology%xst(3, imb);   ken = mbtopology%xen(3, imb)
+            !  !print*,ist,'ist',ien,'ien',jst,'jst',jen,'jen',kst,'kst',ken,'ken', nrank,'nrank'
+            !  if (ist /= 1) then
+            !    !print*,mbtopology%x_num_blocks
+            !    !print*,ist,'ist',ien,'ien',jst,'jst',jen,'jen',kst,'kst',ken,'ken', nrank,'nrank'
+            !    do k = kst, ken
+            !        !print*, shape(u_xtmp)
+            !        !print*, shape(v_xtmp)
+            !        !print*, shape(w_xtmp)
+            !        !print*, shape(p_xtmp)
+            !        u_xtmp(ist, jst:jen, k) = zero;    u_xtmp(ien, jst:jen, k) = zero
+            !        v_xtmp(ist, jst:jen, k) = zero;    v_xtmp(ien, jst:jen, k) = zero
+            !        w_xtmp(ist, jst:jen, k) = zero;    w_xtmp(ien, jst:jen, k) = zero
+            !        !T(ist, j, k) = Tw
+            !        !print*,ist,'ist',ien,'ien',jst,'jst',jen,'jen',kst,'kst',ken,'ken', nrank,'nrank'
+            !        p_xtmp(ist, jst:jen, k) = rho_xtmp(ist, jst:jen, k) * Rgas_Tw
+            !        p_xtmp(ien, jst:jen, k) = rho_xtmp(ien, jst:jen, k) * Rgas_Tw
+            !        !print*,ist,'ist',ien,'ien',jst,'jst',jen,'jen',kst,'kst',ken,'ken', nrank,'nrank'
+            !    enddo
+            !  endif
+            !enddo
+            !call transpose_x_to_y(u_xtmp, u, decomp)
+            !call transpose_x_to_y(v_xtmp, v, decomp)
+            !call transpose_x_to_y(w_xtmp, w, decomp)
+            !call transpose_x_to_y(p_xtmp, p, decomp)
+            !call transpose_x_to_y(rho_xtmp, p, decomp)
+            !deallocate(u_xtmp)
+            !deallocate(v_xtmp)
+            !deallocate(w_xtmp)
+            !deallocate(p_xtmp)
+            !deallocate(rho_xtmp)
+ 
             do imb = 1, mbtopology%y_num_blocks
               !jlo = mbtopology%yst(2, imb)
               !ist = mbtopology%yst(1, imb);   ien = mbtopology%yen(1, imb)
@@ -809,6 +956,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                   u(ist:ien, jst, k) = zero
                   v(ist:ien, jst, k) = zero
                   w(ist:ien, jst, k) = zero
+                  !rho(ist:ien, jst, k) = rho_ref
                   !T(ist:ien, jst, k) = Tw
                   p(ist:ien, jst, k) = rho(ist:ien, jst, k) * Rgas_Tw
               enddo
@@ -833,11 +981,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                 ien = mbtopology%y_intbd_left_en(1,i_intbd)
                 jen = mbtopology%y_intbd_left_en(2,i_intbd)
                 ken = mbtopology%y_intbd_left_en(3,i_intbd)
+                xleftpt = mbtopology%x_dombl_pt1(1,imb)
                 do k = kst, ken
                  do j = jst, jen
+                    !u(ist, j, k) = (u(ist+1, j, k) * (x(ist, j, k) - xleftpt))/(x(ist+1, j, k) - xleftpt)
                     u(ist, j, k) = zero
                     v(ist, j, k) = zero
                     w(ist, j, k) = zero
+                    !rho(ist, j, k) = rho_ref
                     !T(ist, j, k) = Tw
                     p(ist, j, k) = rho(ist, j, k) * Rgas_Tw
                  enddo
@@ -852,11 +1003,14 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
                 ien = mbtopology%y_intbd_rght_en(1,i_intbd)
                 jen = mbtopology%y_intbd_rght_en(2,i_intbd)
                 ken = mbtopology%y_intbd_rght_en(3,i_intbd)
+                xrightpt = mbtopology%y_dombl_pt1(2,imb)
                 do k = kst, ken
                  do j = jst, jen
+                    !u(ist, j, k) = (u(ist-1, j, k) * (xrightpt - x(ist, j, k)))/(xrightpt - x(ist+1, j, k))
                     u(ist, j, k) = zero
                     v(ist, j, k) = zero
                     w(ist, j, k) = zero
+                    !rho(ist, j, k) = rho_ref
                     !T(ist, j, k) = Tw
                     p(ist, j, k) = rho(ist, j, k) * Rgas_Tw
                  enddo
@@ -867,12 +1021,19 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
         endif
         !u(1,:,:)=one
         !p   = rho*Rgas*T
-
+        if(decomp%yst(1) == 1) then 
+           do k = 1, decomp%ysz(3) 
+             do j = 1, decomp%ysz(2)
+               u(1,j,k)   =  inp_prfl(j)
+             enddo
+            enddo
+        endif
         !!!!! =============  Add Sponge+bulk for exit bc ==========!!!!!
         ! Gradually apply the exit boundary conditions
         ! Apply sponge in X-direction on right
         call  sponge_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc)
         call  sponge_y(decomp, mygfil, y, Ly, u, v, w, p, rho, x_bc, y_bc, z_bc)
+        call  cavity_filtering_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc, mbtopology)
 
     end associate
 end subroutine

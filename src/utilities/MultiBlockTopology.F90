@@ -25,6 +25,9 @@ module MultiBlockTopologyMod
         integer, allocatable, dimension(:,:) :: y_intbd_rght_st, y_intbd_rght_en
         integer, allocatable, dimension(:)   :: y_num_intbd_left, y_num_intbd_rght
         real(rkind), allocatable, dimension(:,:,:) :: mask
+        real(rkind), dimension(3,max_numbl) :: x_dombl_pt1, x_dombl_pt2   !! left and right ends of the domain blocks
+        real(rkind), dimension(3,max_numbl) :: y_dombl_pt1, y_dombl_pt2
+        real(rkind), dimension(3,max_numbl) :: z_dombl_pt1, z_dombl_pt2
         
         contains
 
@@ -71,7 +74,12 @@ contains
                             detailed_debug
       !!---default---
       !!! only 1 block by default
-      !!this%x_num_blocks = 1
+      this%x_dombl_pt1 = x_dombl_pt1
+      this%x_dombl_pt2 = x_dombl_pt2
+      this%y_dombl_pt1 = y_dombl_pt1
+      this%y_dombl_pt2 = y_dombl_pt2
+      this%z_dombl_pt1 = z_dombl_pt1
+      this%z_dombl_pt2 = z_dombl_pt2
       !!this%y_num_blocks = 1
       !!this%z_num_blocks = 1
 
@@ -279,21 +287,21 @@ contains
                 cycle
             endif
             i2 = ybclo_st(1, imb2);  j2 = ybclo_st(2, imb2);  k2 = ybclo_st(3, imb2)
-            if(i1+1==i2) then
+            if((j1/=j2) .and. (i1+1==i2)) then      !! internal boundary exists only if j1/=j2
                 !! internal boundary exists
                 !! count this for imb1 or imb2; is it left or right boundary
                 if(j1 > j2) then
                     !! block imb2 has a left internal boundary
                     y_num_intbd_left(imb2) = y_num_intbd_left(imb2) + 1
                     i_intbd = y_num_intbd_left(imb2)
-                    y_intbd_left_st(:, i_intbd) = (/i2, j2, k2/)
-                    y_intbd_left_en(:, i_intbd) = (/i2, j1, k1/)
+                    y_intbd_left_st(:, i_intbd) = (/i1, j2, k2/)
+                    y_intbd_left_en(:, i_intbd) = (/i1, j1-1, k1/)
                 else
                     !! block imb1 has a right internal boundary
                     y_num_intbd_rght(imb1) = y_num_intbd_rght(imb1) + 1
                     i_intbd = y_num_intbd_rght(imb1)
-                    y_intbd_rght_st(:, i_intbd) = (/i1, j1, k2/)
-                    y_intbd_rght_en(:, i_intbd) = (/i1, j2, k1/)
+                    y_intbd_rght_st(:, i_intbd) = (/i2, j1, k2/)
+                    y_intbd_rght_en(:, i_intbd) = (/i2, j2-1, k1/)
                 endif
             endif
         enddo
@@ -306,21 +314,21 @@ contains
                 cycle
             endif
             i2 = ybclo_en(1, imb2);  j2 = ybclo_en(2, imb2);  k2 = ybclo_en(3, imb2)
-            if(i1==i2+1) then
+            if((j1/=j2) .and. (i2+1==i1)) then
                 !! internal boundary exists
                 !! count this for imb1 or imb2; is it left or right boundary
                 if(j1 > j2) then
                     !! block imb2 has a right internal boundary
                     y_num_intbd_rght(imb2) = y_num_intbd_rght(imb2) + 1
                     i_intbd = y_num_intbd_rght(imb2)
-                    y_intbd_rght_st(:, i_intbd) = (/i2, j2, k1/)
-                    y_intbd_rght_en(:, i_intbd) = (/i2, j1, k2/)
+                    y_intbd_rght_st(:, i_intbd) = (/i1, j2, k1/)
+                    y_intbd_rght_en(:, i_intbd) = (/i1, j1-1, k2/)
                 else
                     !! block imb1 has a left internal boundary
                     y_num_intbd_left(imb1) = y_num_intbd_left(imb1) + 1
                     i_intbd = y_num_intbd_left(imb1)
-                    y_intbd_left_st(:, i_intbd) = (/i1, j1, k1/)
-                    y_intbd_left_en(:, i_intbd) = (/i1, j2, k2/)
+                    y_intbd_left_st(:, i_intbd) = (/i2, j1, k1/)
+                    y_intbd_left_en(:, i_intbd) = (/i2, j2-1, k2/)
                 endif
             endif
         enddo
@@ -447,6 +455,35 @@ contains
         write(iounit, '(6(e19.12,1x))') xline_z(this%zst(1,imb)), xline_z(this%zen(1,imb)), yline_z(this%zst(2,imb)), &
                                         yline_z(this%zen(2,imb)), zline_z(this%zst(3,imb)), zline_z(this%zen(3,imb))
       enddo
+
+      ! write information about ybclo and ybchi
+      write(iounit,*)
+      write(iounit,'(a)') '----ybclo and ybchi in each blocks----'
+      do imb = 1, this%y_num_blocks
+        write(iounit,'(a,i2)') 'Block number = ',imb
+        write(iounit,'(a)') '----ybclo start  and ybclo end in each blocks----'
+        write(iounit, '(6(i8,1x))') this%ybclo_st(1:3,imb), this%ybclo_en(1:3,imb)
+        write(iounit,'(a)') '----left internal boundary start and end in each blocks if exist----'
+        if (this%y_num_intbd_left(imb) /= 0 )then
+          write(iounit,'(a,i2)') 'number of left int boundary = ',this%y_num_intbd_left(imb)
+          do i_intbd = 1, this%y_num_intbd_left(imb)
+            write(iounit,'(a,i2)') 'left int boundary = ',i_intbd
+            write(iounit,'(a)') '----left internal boundary start and end in each blocks----'
+            write(iounit, '(6(i8,1x))') this%y_intbd_left_st(1:3,i_intbd), this%y_intbd_left_en(1:3,i_intbd)
+          enddo
+        endif
+        write(iounit,'(a)') '----right internal boundary start and end in each blocks if exist----'
+        if (this%y_num_intbd_rght(imb) /= 0 )then
+          write(iounit,'(a,i2)') 'number of right int boundary = ',this%y_num_intbd_rght(imb)
+          do i_intbd = 1, this%y_num_intbd_rght(imb)
+            write(iounit,'(a,i2)') 'right int boundary = ',i_intbd
+            write(iounit,'(a)') '----right internal boundary start and end in each blocks----'
+            write(iounit, '(6(i8,1x))') this%y_intbd_rght_st(1:3,i_intbd), this%y_intbd_rght_en(1:3,i_intbd)
+          enddo
+        endif
+      enddo
+      ! write information about internal boundaries
+
       close(unit=iounit)
       !! STEP 6 :: Done
 
@@ -532,7 +569,7 @@ contains
       ii = minloc(abs(xline-refpt(1)), 1)
       jj = minloc(abs(yline-refpt(2)), 1)
       kk = minloc(abs(zline-refpt(3)), 1)
-
+      !print*,ii,'ii',jj,'jj',kk,'kk',xline(ii),'xline(ii)',yline(jj),'yline(jj)',zline(kk),'zline(kk)',refpt(1),'refpt(1)',refpt(2),'refpt(2)',refpt(3),'refpt(3)'
       if(pt_on_left) then
           !! (ii,jj,kk) must be greater than refpt
           if(xline(ii) < refpt(1)) ii = ii+1

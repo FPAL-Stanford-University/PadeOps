@@ -770,7 +770,7 @@ contains
         real(rkind), intent(out),dimension(this%xsz(1),this%xsz(2),this%xsz(3)) :: dfdx
         integer, optional, intent(in) :: bc1, bcn
 
-        integer imb, nxst, nxen, nyst, nyen, nzst, nzen
+        integer imb, nxst, nxen, nyst, nyen, nzst, nzen, b1, bn
 
         dfdx = zero
         select case (this%xmethod)
@@ -778,12 +778,18 @@ contains
           if(associated(this%mbtopology)) then
             if (present(bc1) .AND. present(bcn)) then
               do imb = 1, this%mbtopology%x_num_blocks
+                b1 = bc1
+                bn = bcn
+                if (imb==1) then
+                  b1 = 1
+                  bn = 1
+                end if
                 nxst = this%mbtopology%xst(1, imb);   nxen = this%mbtopology%xen(1, imb)
                 nyst = this%mbtopology%xst(2, imb);   nyen = this%mbtopology%xen(2, imb)
                 nzst = this%mbtopology%xst(3, imb);   nzen = this%mbtopology%xen(3, imb)
                 call this%xcd10(imb) % dd1(f(nxst:nxen,nyst:nyen,nzst:nzen), &
                                         dfdx(nxst:nxen,nyst:nyen,nzst:nzen), &
-                                        nyen-nyst+1, nzen-nzst+1,  bc1,bcn)
+                                        nyen-nyst+1, nzen-nzst+1,  b1,bn)
               enddo
             else
               do imb = 1, this%mbtopology%x_num_blocks

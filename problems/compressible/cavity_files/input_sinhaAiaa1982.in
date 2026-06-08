@@ -1,19 +1,19 @@
 &INPUT
 
-inputdir   =  "/home/darshan/runs/devchanfirst/Re_400/2d/1536x128"      ! Directory for input files
-outputdir  = "/home/darshan/runs/devchanfirst/Re_400/2d/1536x128"      ! Directory for output files
+inputdir   =  "/home/darshan/runs/cavity/test3/Re_1434/inp_prfl_3/2001x601/tmp"      ! Directory for input files
+outputdir  = "/home/darshan/runs/cavity/test3/Re_1434/inp_prfl_3/2001x601/tmp"      ! Directory for output files
 
-nx = 1536                 ! Number of points in X
-ny = 128                  ! Number of points in Y
+nx = 2001                ! Number of points in X
+ny = 601                 ! Number of points in Y
 nz = 1                   ! Number of points in Z
 
 dt = -2.0D-4               ! Fixed time step value (Set to negative to disable)
-tstop = 200.0D0                ! Physical time to stop the simulation
+tstop = 100.0D1                ! Physical time to stop the simulation
 CFL = 0.7D0                ! CFL criterion for calculating the time step (Set to negative to disable)
 nsteps = -1                ! Number of time steps before stopping (Set to negative to disable)
 
-tviz = 2.0D-1                ! Time between visualization dumps (Set to negative to disable)
-vizprefix = "devchan"      ! Prefix for the visualization files
+tviz = 1.0D0               ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "cavity"      ! Prefix for the visualization files
 reduce_precision  = .false.
 
 periodicx = .false.       ! Periodic in X?
@@ -29,7 +29,7 @@ filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq"
 filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
 
 xmetric = .false.          ! Streching in x-direction
-ymetric = .false.          ! Streching in y-direction
+ymetric = .false.           ! Streching in y-direction
 zmetric = .false.          ! Streching in z-direction
 
 useMultiBlock = .true.
@@ -52,8 +52,10 @@ Cdiff = 0.003D0                 ! LAD coeff
 Cy    = 1D2                     ! LAD coeff 
 inviscid = .false.
 nrestart = 100000            ! Number of steps between restart dumps
+x_bc1 = 0                 ! Left  Y boundary ( 0 => general, 1 => symmetric ) 
+x_bcn = 0                 ! Right Y boundary ( 0 => general, 1 => symmetric ) 
 y_bc1 = 1                 ! Left  Y boundary ( 0 => general, 1 => symmetric ) 
-y_bcn = 1                 ! Right Y boundary ( 0 => general, 1 => symmetric ) 
+y_bcn = 0                 ! Right Y boundary ( 0 => general, 1 => symmetric ) 
 compute_tke_budget = .false.
 compute_scale_decomposition = .false.
 !forcing = .false.
@@ -87,16 +89,16 @@ PrSGS                    =   0.7D0
 /
 &PROBINPUT
 ns     = 1
-Lx     = 26.0D0
-Ly     = 1.94D0
+Lx     = 40.0D0
+Ly     = 12.0D0
 Lz     = 1.0D0
-y1     = -0.94D0
+y1     = -1.25
 Pr     = 0.7D0
 Sc     = 1.0D0
 gam    = 1.4D0
 rho_ref= 1.0D0
 Tw     = 1.0D0
-Re     = 389.0D0
+Re     = 1147.0d0
 Mc     = 0.0955D0
 add_pert = .false.
 fname_prefix = "/home/vsj/Codes/channel/perturb_code"
@@ -106,49 +108,56 @@ fname_prefix = "/home/vsj/Codes/channel/perturb_code"
 &METRICS
 ymetric_flag = 4
 metric_params(2,1) = 0.5D0    !alpha (both walls concentration)
-metric_params(2,2) = 1.054D0  !beta-stretching parameter
-metric_params(2,3) = -1.0D0   !ystart
-metric_params(2,4) = 2.0D0    !yh
+metric_params(2,2) = 1.1D0  !beta-stretching parameter
+metric_params(2,3) = 0.0D0   !ystart
+metric_params(2,4) = 4.0D0    !yh
 
 /
 
 &MULTIBLOCK
 x_dom_numbl = 2
-x_dombl_pt1(1,1) = 2.0d0
-x_dombl_pt1(2,1) = -0.94d0
+x_dombl_pt1(1,1) = 5.0d0
+x_dombl_pt1(2,1) = -1.25d0
 x_dombl_pt1(3,1) = 0.0d0
-x_dombl_pt2(1,1) = 26.0d0
-x_dombl_pt2(2,1) = -0.00000000000100d0     !! ensure no overlap at all
+x_dombl_pt2(1,1) = 14.0000000000001d0
+x_dombl_pt2(2,1) = 0.00000000000000d0     !! ensure no overlap at all
 x_dombl_pt2(3,1) = 1.0d0
 
 x_dombl_pt1(1,2) = 0.0d0
-x_dombl_pt1(2,2) = 0.0d0
+x_dombl_pt1(2,2) = 0.00000000000001d0
 x_dombl_pt1(3,2) = 0.0d0
-x_dombl_pt2(1,2) = 26.0d0
-x_dombl_pt2(2,2) = 1.0d0
+x_dombl_pt2(1,2) = 40.0d0
+x_dombl_pt2(2,2) = 10.750d0
 x_dombl_pt2(3,2) = 1.0d0
 
-y_dom_numbl = 2
+y_dom_numbl = 3
 y_dombl_pt1(1,1) = 0.0d0
 y_dombl_pt1(2,1) = 0.0d0
 y_dombl_pt1(3,1) = 0.0d0
-y_dombl_pt2(1,1) = 1.999999999999999d0   !! ensure no overlap
-y_dombl_pt2(2,1) = 1.0d0
+y_dombl_pt2(1,1) = 5.00000000000000d0   !! ensure no overlap
+y_dombl_pt2(2,1) = 10.75d0
 y_dombl_pt2(3,1) = 1.0d0
 
-y_dombl_pt1(1,2) = 2.0d0
-y_dombl_pt1(2,2) = -0.94d0
+y_dombl_pt1(1,2) = 5.00000000000001d0
+y_dombl_pt1(2,2) = -1.25d0
 y_dombl_pt1(3,2) = 0.0d0
-y_dombl_pt2(1,2) = 26.0d0
-y_dombl_pt2(2,2) = 1.0d0
+y_dombl_pt2(1,2) = 13.9999999999999d0
+y_dombl_pt2(2,2) = 10.75d0
 y_dombl_pt2(3,2) = 1.0d0
 
+y_dombl_pt1(1,3) = 14.0000000000000d0
+y_dombl_pt1(2,3) = 0.0d0
+y_dombl_pt1(3,3) = 0.0d0
+y_dombl_pt2(1,3) = 40.0d0   !! ensure no overlap
+y_dombl_pt2(2,3) = 10.75d0
+y_dombl_pt2(3,3) = 1.0d0
+               
 z_dom_numbl = 1
 z_dombl_pt1(1,1) = 0.0d0
-z_dombl_pt1(2,1) = -0.94d0
+z_dombl_pt1(2,1) = -1.25d0
 z_dombl_pt1(3,1) = 0.0d0
-z_dombl_pt2(1,1) = 26.0d0
-z_dombl_pt2(2,1) = 1.0d0
+z_dombl_pt2(1,1) = 40.0d0
+z_dombl_pt2(2,1) = 10.75d0
 z_dombl_pt2(3,1) = 1.0d0
 
 detailed_debug = .false.
