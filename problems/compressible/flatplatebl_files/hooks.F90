@@ -27,7 +27,7 @@ module FlatPlateBL_data
     real(rkind) :: x1, y1=zero, z1
     real(rkind) :: xn, yn, zn
     logical     :: periodicx = .true., periodicy = .false., periodicz = .true. 
-    logical     :: add_pert = .true.
+    logical     :: add_pert = .true., xplbc_recycle = .true.
     integer     :: inittype = 1
     character(len=clen) :: fname_prefix
     real(rkind), allocatable, dimension(:,:) :: uleftbc
@@ -56,7 +56,7 @@ contains
 
     dx = Lx/real(decomp%xsz(1)-1,rkind)
     filpt = 2.00_rkind/dx 
-    thickT = real(0.3D0, rkind)
+    thickT = real(1.0D0, rkind)
 
     ! Gaussian Filter for right side of domain 
     do i=1,decomp%ysz(1)
@@ -64,12 +64,14 @@ contains
     end do
 
     !! To check whether dumT is calculted correctly !!!
-    write(outputfile, '(a,i3.3,a)') 'dumT_', nrank, '.dat'
-    open(10,file=outputfile,status='unknown')
-    do i=1,decomp%ysz(1)
-       write(10,'(2(e19.12),1x)') x(i,1,1), dumT(i,1,1)
-    end do
-    close(10)
+    if(decomp%yst(2)==1) then
+      write(outputfile, '(a,i3.3,a)') 'Fsponge_x_', nrank, '.dat'
+      open(10,file=outputfile,status='unknown')
+      do i=1,decomp%ysz(1)
+         write(10,'(2(e19.12),1x)') x(i,1,1), dumT(i,1,1)
+      end do
+      close(10)
+    endif
 
     dumF = u
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
@@ -112,33 +114,33 @@ contains
     character(len=clen) :: outputfile
 
     dy = Ly/real(decomp%ysz(2)-1,rkind)
-    filpt = 0.08_rkind/dy 
-    thickT = real(0.9D0, rkind)
+    filpt = 1.0_rkind/dy 
+    thickT = real(2.0D0, rkind)
         
-    ! Gussian Filter for bottom
-    do i=1,decomp%ysz(2)
-       dumT(:,i,:)=half*(one-tanh( (real( decomp%yst(2) - 1 + i - 1, rkind)-filpt) / thickT ))
-    end do
-            
-    dumF = u
-    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    u = u + dumT*(dumF-u) 
+    !! Gussian Filter for bottom
+    !do i=1,decomp%ysz(2)
+    !   dumT(:,i,:)=half*(one-tanh( (real( decomp%yst(2) - 1 + i - 1, rkind)-filpt) / thickT ))
+    !end do
+    !        
+    !dumF = u
+    !call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    !u = u + dumT*(dumF-u) 
 
-    dumF = v
-    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    v = v + dumT*(dumF-v)
+    !dumF = v
+    !call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    !v = v + dumT*(dumF-v)
 
-    dumF = w
-    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    w = w + dumT*(dumF-w)
+    !dumF = w
+    !call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    !w = w + dumT*(dumF-w)
 
-    dumF = p
-    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    p = p + dumT*(dumF-p)
+    !dumF = p
+    !call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    !p = p + dumT*(dumF-p)
 
-    dumF = rho
-    call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    rho = rho + dumT*(dumF-rho)
+    !dumF = rho
+    !call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
+    !rho = rho + dumT*(dumF-rho)
 
     ! Gaussian Filter for top
     do i=1,decomp%ysz(2)
@@ -165,14 +167,14 @@ contains
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
     rho = rho + dumT*(dumF-rho)
    
-    !if (nrank==0) then
-    !write(outputfile, '(a,i3.3,a)') 'dump_y_', nrank, '.dat'
-    !open(10,file=outputfile,status='unknown')
-    !do i=1,decomp%ysz(2)
-    !   write(10,'(2(e19.12),1x)') y(1,i,1), dumT(1,i,1)
-    !end do
-    !close(10)
-    !endif
+    if (decomp%yst(1)==1) then
+      write(outputfile, '(a,i3.3,a)') 'Fsponge_y_', nrank, '.dat'
+      open(10,file=outputfile,status='unknown')
+      do i=1,decomp%ysz(2)
+         write(10,'(2(e19.12),1x)') y(1,i,1), dumT(1,i,1)
+      end do
+      close(10)
+    endif
 
     end subroutine
 
@@ -413,7 +415,7 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
 
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype, xplbc_recycle
     namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
 
     ioUnit = 15
@@ -550,8 +552,8 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
 end subroutine
 
 
-subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz,scaling_flag)
-    use kind_parameters,             only: rkind, clen
+subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tviz)
+    !use kind_parameters,             only: rkind, clen
     use constants,                   only: zero,half,one,two,four,five,pi,eight, three
     use CompressibleGrid,            only: rho_index,u_index,v_index,w_index,&
                                            p_index,T_index,e_index,Ys_index
@@ -570,14 +572,13 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     use mpi
 
     implicit none
-    character(len=*),                intent(in)    :: inputfile
+    character(len=clen),             intent(in)    :: inputfile
     type(decomp_info),               intent(in)    :: decomp
     type(mixture),                   intent(inout) :: mix
     real(rkind),                     intent(in)    :: dx,dy,dz
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     real(rkind),                     intent(inout) :: tsim, tstop, dt, tviz
-    logical,                         intent(in)    :: scaling_flag
 
     type(powerLawViscosity) :: shearvisc
     type(constRatioBulkViscosity) :: bulkvisc
@@ -591,10 +592,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(decomp%ysz(2)) :: y_new
     real(rkind), dimension(decomp%ysz(3)) :: z_new
     
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype, xplbc_recycle
 
-    ioUnit = 11
-!    print *, 'fine inputfile is',inputfile
+!    ioUnit = 11
+!    print *, 'fine inputfile is :: ',inputfile
 !    print *, 'DEBUG: inputfile = "', trim(inputfile), '"'
 !    open(unit=ioUnit, file=trim(inputfile), form='formatted', status='old',action='read', iostat=ios)
 !    if (ios /= 0) then
@@ -656,10 +657,10 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         do k=1,nzl
          do j=1,nyl
           do i=1,nxl
-             yplus = y(i,j,k) * Re * utau      !! y should be distance from the lower wall
+             yplus = (y(i,j,k)-y1) * Re * utau      !! y should be distance from the lower wall
              if(yplus<0) then
-                 uplus = 0
-                 Tplus = 0
+                 uplus = 0.0d0
+                 Tplus = 0.0d0
              else
                  uplus = get_vandriest_scaling(yplus, kap, B, ylinmax, ylogmin, ylogmax)
                  Tplus = get_vandriest_temperature(yplus, kap, Prt, CT, ylinmax, ylogmin, ylogmax)
@@ -803,7 +804,7 @@ subroutine hook_output(decomp,der,dx,dy,dz,outputdir,mesh,fields,mix,tsim,vizcou
 end subroutine
 
 
-subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_step,dx,M2,rho2,p2,useMultiBlock,mbtopology)
+subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep,time_step,xplbc,xplbcInflow,numtbc,tbcIn,xplbcin_type,useMultiBlock,mbtopology)
     use kind_parameters,  only: rkind
     use decomp_2d,        only: decomp_info, nrank, transpose_y_to_x, transpose_x_to_y
     use constants,        only: zero, half, one, two, three, four, five, six, seven, eight
@@ -820,21 +821,24 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(inout) :: fields
     integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
-    logical,                         intent(in)    :: newTimeStep
-    integer,                         intent(in)    :: time_step 
-    real(rkind),                     intent(in)    :: dx,M2,rho2,p2
+    logical,                         intent(in)    :: newTimeStep, xplbc
+    integer,                         intent(in)    :: time_step, numtbc, xplbcin_type
+    real(rkind), dimension(:,:,:,:), intent(in)    :: xplbcInflow
+    real(rkind), dimension(:),       intent(in)    :: tbcIn
     logical, optional,               intent(in)    :: useMultiBlock
     type(multiblocktopol), optional, intent(in)    :: mbtopology
 
-    integer :: i, j, k 
-    integer :: nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx
-    integer :: ist, ien, jlo, jst, jen, kst, ken, imb, i_intbd
-    real(rkind) :: dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, s_l_i, s_r_i !s_l_i shock left index, s_r_i shock right index, s_d shock distance       
+    integer :: i, j, k, iounit=10
+    integer :: nx, ny, nz, ix1_new, iy1_new, iz1_new, tidx, ncycles
+    integer :: ist, ien, jlo, jst, jen, kst, ken, imb, i_intbd, ttind
+    real(rkind) :: dy, dz,rad, filpt, thickT, U0, P0, rho0, T0, s_l_i, s_r_i, dx !s_l_i shock left index, s_r_i shock right index, s_d shock distance       
     real(rkind) :: Rgas_Tw !s_l_i shock left index, s_r_i shock right index, s_d shock distance       
-    real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p
+    real(rkind) :: umin, pmin, Tmin, rhomin, diff_u, diff_rho, diff_T, diff_p, alpf, onemalpf, tbcmax
+    real(rkind) :: umax, vmax, wmax, pmax, rmax, treduced
     character(len=clen) :: outputfile
     real(rkind), dimension(:,:),       allocatable :: u_noise, v_noise, w_noise
     real(rkind), dimension(:,:,:),     allocatable :: u_xtmp, v_xtmp, w_xtmp
+    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3), 5) :: upert
     real(rkind) :: s_d = 4.0_rkind
     associate( rho    => fields(:,:,:, rho_index), u   => fields(:,:,:,  u_index), &
                  v    => fields(:,:,:,   v_index), w   => fields(:,:,:,  w_index), &
@@ -860,12 +864,87 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
               p(1,j,k)   =  rho(1,j,k) * Rgas_Tw
             enddo
           enddo
+          if(xplbc) then
+             ! use x-plane boundary condition from a previous simulation
+             ! temporal interpolation index and factor
+             ! Step 1 :: get treduced
+             ! if recycling :: tsim may be outside of [0,tbcIn] but treduced is within [0,tbcIn]
+             ! if not recycling :: tsim is identical to treduced
+             tbcmax = maxval(tbcIn)
+             ncycles = 0
+             if(xplbc_recycle)  ncycles = floor(tsim/tbcmax)
+             treduced = tsim - ncycles*tbcmax    
+
+             ! Step 2 :: get index that brackets treduced
+             ttind = minloc(abs(tbcIn-treduced), 1)
+             if(tbcIn(ttind) > treduced) ttind = ttind-1
+             if(ttind==0) then
+                 ! treduced is before smallest time where inflow is read in
+                 ttind = ttind+1
+                 alpf = zero
+             elseif(ttind==numtbc) then
+                 ! treduced is after largest time where inflow is read in
+                 ttind = ttind-1
+                 alpf = one
+             else
+                 ! treduced is within the range of times where inflow is read in
+                 alpf = (treduced - tbcIn(ttind)) / (tbcIn(ttind+1) - tbcIn(ttind))
+             endif
+             onemalpf = one - alpf
+
+             if(xplbcin_type==1) then
+               do k = 1, decomp%ysz(3) 
+                 do j = 1, decomp%ysz(2)
+                   u(1,j,k)   =  onemalpf * xplbcInflow(j,k,ttind,1) + alpf * xplbcInflow(j,k,ttind+1,1)
+                   v(1,j,k)   =  onemalpf * xplbcInflow(j,k,ttind,2) + alpf * xplbcInflow(j,k,ttind+1,2)
+                   w(1,j,k)   =  onemalpf * xplbcInflow(j,k,ttind,3) + alpf * xplbcInflow(j,k,ttind+1,3)
+                   p(1,j,k)   =  onemalpf * xplbcInflow(j,k,ttind,4) + alpf * xplbcInflow(j,k,ttind+1,4)
+                   rho(1,j,k) =  onemalpf * xplbcInflow(j,k,ttind,5) + alpf * xplbcInflow(j,k,ttind+1,5)
+                 enddo
+               enddo
+             elseif(xplbcin_type==2) then
+               upert = zero
+               do k = 1, decomp%ysz(3) 
+                 do j = 1, decomp%ysz(2)
+                   !!u(1,j,k)   =  u(1,j,k)   + onemalpf * xplbcInflow(j,k,ttind,1) + alpf * xplbcInflow(j,k,ttind+1,1)
+                   !!v(1,j,k)   =  v(1,j,k)   + onemalpf * xplbcInflow(j,k,ttind,2) + alpf * xplbcInflow(j,k,ttind+1,2)
+                   !!w(1,j,k)   =  w(1,j,k)   + onemalpf * xplbcInflow(j,k,ttind,3) + alpf * xplbcInflow(j,k,ttind+1,3)
+                   !!p(1,j,k)   =  p(1,j,k)   + onemalpf * xplbcInflow(j,k,ttind,4) + alpf * xplbcInflow(j,k,ttind+1,4)
+                   !!rho(1,j,k) =  rho(1,j,k) + onemalpf * xplbcInflow(j,k,ttind,5) + alpf * xplbcInflow(j,k,ttind+1,5)
+
+                   upert(1,j,k,1) = onemalpf * xplbcInflow(j,k,ttind,1) + alpf * xplbcInflow(j,k,ttind+1,1)
+                   upert(1,j,k,2) = onemalpf * xplbcInflow(j,k,ttind,2) + alpf * xplbcInflow(j,k,ttind+1,2)
+                   upert(1,j,k,3) = onemalpf * xplbcInflow(j,k,ttind,3) + alpf * xplbcInflow(j,k,ttind+1,3)
+                   upert(1,j,k,4) = onemalpf * xplbcInflow(j,k,ttind,4) + alpf * xplbcInflow(j,k,ttind+1,4)
+                   upert(1,j,k,5) = onemalpf * xplbcInflow(j,k,ttind,5) + alpf * xplbcInflow(j,k,ttind+1,5)
+                 enddo
+               enddo
+               u   = u   + upert(:,:,:,1)
+               v   = v   + upert(:,:,:,2)
+               w   = w   + upert(:,:,:,3)
+               p   = p   + upert(:,:,:,4)
+               rho = rho + upert(:,:,:,5)
+
+               !! write interpolated file (along y)
+               !write(outputfile,"(A,I4.4,A,I4.4,A)") "perturb_interpolated_",nrank,"_",ttind,".dat"
+               !open(iounit,file=trim(outputfile),status='unknown',action="write")
+               !k = 5;
+               !do j = 1, decomp%ysz(2)
+               !    write(iounit,'(23(e22.15, 1x))') mesh(1,j,k,2), alpf, onemalpf, xplbcInflow(j,k,ttind,1:5), xplbcInflow(j,k,ttind+1,1:5),upert(1,j,k,1:5), u(1,j,k), v(1,j,k), w(1,j,k), p(1,j,k), rho(1,j,k)
+               !enddo
+               !close(iounit)
+             endif
+ 
+             umax = maxval(abs(u)); vmax = maxval(abs(v));  wmax = maxval(abs(w)); 
+             pmax = maxval(abs(p)); rmax = maxval(abs(rho)); 
+             if(nrank==0) print '(a,e19.12,1x,a,i6.6,1x,a,i4.4,1x,a,5(e19.12,1x))', 'x-inflow bc tsim= ', tsim, ' ttind=', ttind, 'rank=', nrank, "uvwpr=", umax, vmax, wmax, pmax, rmax
+          endif
         endif
 
+        dx = mesh(2,1,1,1) - mesh(1,1,1,1)
         s_l_i = int(s_d/dx) + 1;
         s_r_i = s_l_i + 1;
-        
-         
+
         ! set Dirichlet BC at top and bottom
         do k = 1,decomp%ysz(3) 
             u(:,1,k) = zero;                  !u(:,decomp%ysz(2),k) = zero ! u(s_r_i,decomp%ysz(2),k) = M2 * sqrt(gam*Rgas*T(s_l_i,decomp%ysz(2),K))    
@@ -1103,7 +1182,7 @@ subroutine hook_timestep(decomp,der,dx,dy,dz,mesh,fields,mix,step,tsim,sgsmodel)
 
 end subroutine
 
-subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,scaling_flag,der,dt,step,dys)
+subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,der,dt,step,dys)
     use CompressibleGrid,   only: rho_index,u_index,v_index,w_index,&
                                   p_index,T_index,e_index,Ys_index,mu_index
     use kind_parameters,    only: rkind
@@ -1123,9 +1202,8 @@ subroutine hook_source(decomp,mesh,fields,mix,tsim,rhs,scaling_flag,der,dt,step,
     real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
     real(rkind), dimension(:,:,:,:), intent(in)    :: fields
     real(rkind), dimension(:,:,:,:), intent(inout) :: rhs
-    logical,                         intent(in)    :: scaling_flag
     integer,                         intent(in)    :: step
-    real(rkind), dimension(:,:,:),       intent(in)    :: dys
+    real(rkind), dimension(:,:,:),   intent(in)    :: dys
 
     !integer :: mass_index, mom_index, TE_index, i, j, k, ioUnit, nxl, nyl, nzl, nx, ny, nz, mpi_ierr, ierr
     !real(rkind) :: f_src = 0._rkind, q0_flux = 2.0_rkind, mu_bar, mu_locsum, mu_globsum, alpha, beta, q_flux_old, q_flux_new,u_bulk

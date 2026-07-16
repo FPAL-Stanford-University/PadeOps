@@ -214,7 +214,7 @@ contains
                                          filter_x, filter_y, filter_z, &
                                           xmetric,  ymetric,  zmetric, &
                                           useMultiBlock,   prow, pcol, &
-                                       M2,rho2,p2,SkewSymm, debugflag
+                                 M2,rho2,p2,SkewSymm, debugflag, xplbc
         namelist /CINPUT/  ns, gam, Rgas, Cmu, Cbeta, Ckap, Cdiff, CY, &
                              inviscid, nrestart, rewrite_viz, vizramp, &
                       compute_tke_budget, compute_scale_decomposition, &
@@ -806,7 +806,7 @@ contains
            close(iounit)
 
            ! read y-grid in the inflow plane
-           write(tempname,"(A12,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_xline_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           write(tempname,"(A12,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_yline_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
            inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
            open(iounit,file=inputfile2,form="formatted",status='old',action="read")
            do j = 1, nybcIn
@@ -817,7 +817,7 @@ contains
            call message("Read y-grid at the initial time step")
 
            ! read z-grid in the inflow plane
-           write(tempname,"(A12,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_xline_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
+           write(tempname,"(A12,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_zline_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
            inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
            open(iounit,file=inputfile2,form="formatted",status='old',action="read")
            do k = 1, nzbcIn
@@ -860,6 +860,7 @@ contains
            call message("Read rho field from synthetic turbulence generator")
 
            xplbcReadIn(:,:,:,4) = zero
+           !! IMPORTANT :: this should be P-perturbations, not T-perturbations. So setting to zero for now
            !! read T inflow plane field
            !write(tempname,"(A8,I4.4,A1,I4.4,A1,I4.4,A4)") "fluct_T_",numtbcin,"_", nybcIn, "_", nzbcIn, ".dat"
            !inputfile2 = xplbcInDir(:len_trim(xplbcInDir))//"/"//trim(tempname)
@@ -923,45 +924,45 @@ contains
         !close(iounit)
 
         ! one line at a time
-        !!! write original / readin file (along y)
-        !!write(tempname,"(A,I4.4,A)") "interpchecky_readin_",nrank,".dat"
-        !!outputfile = trim(tempname)
-        !!open(iounit,file=outputfile,status='unknown',action="write")
-        !!k = 5; ii = 4
-        !!do j = 1, nybcIn
-        !!    write(iounit,'(6(e22.15, 1x))') ygridIn(j,k), xplbcReadIn(j,k,ii,1:5)
-        !!enddo
-        !!close(iounit)
-        !!
-        !!! write interpolated file (along y)
-        !!write(tempname,"(A,I4.4,A)") "interpchecky_interpolated_",nrank,".dat"
-        !!outputfile = trim(tempname)
-        !!open(iounit,file=outputfile,status='unknown',action="write")
-        !!k = 5; ii = 4
-        !!do j = 1, this%decomp%ysz(2)
-        !!    write(iounit,'(6(e22.15, 1x))') this%mesh(1,j,k,2), this%xplbcInflow(j,k,ii,1:5)
-        !!enddo
-        !!close(iounit)
-        !!
-        !!! write original / readin file (along z)
-        !!write(tempname,"(A,I4.4,A)") "interpcheckz_readin_",nrank,".dat"
-        !!outputfile = trim(tempname)
-        !!open(iounit,file=outputfile,status='unknown',action="write")
-        !!j = 5; ii = 4
-        !!do k = 1, nzbcIn
-        !!    write(iounit,'(6(e22.15, 1x))') zgridIn(j,k), xplbcReadIn(j,k,ii,1:5)
-        !!enddo
-        !!close(iounit)
-        !!
-        !!! write interpolated file (along z)
-        !!write(tempname,"(A,I4.4,A)") "interpcheckz_interpolated_",nrank,".dat"
-        !!outputfile = trim(tempname)
-        !!open(iounit,file=outputfile,status='unknown',action="write")
-        !!j = 5; ii = 4
-        !!do k = 1, this%decomp%ysz(3)
-        !!    write(iounit,'(6(e22.15, 1x))') this%mesh(1,j,k,3), this%xplbcInflow(j,k,ii,1:5)
-        !!enddo
-        !!close(iounit)
+        ! write original / readin file (along y)
+        write(tempname,"(A,I4.4,A)") "interpchecky_readin_",nrank,".dat"
+        outputfile = trim(tempname)
+        open(iounit,file=outputfile,status='unknown',action="write")
+        k = 5; ii = 4
+        do j = 1, nybcIn
+            write(iounit,'(6(e22.15, 1x))') ygridIn(j,k), xplbcReadIn(j,k,ii,1:5)
+        enddo
+        close(iounit)
+        
+        ! write interpolated file (along y)
+        write(tempname,"(A,I4.4,A)") "interpchecky_interpolated_",nrank,".dat"
+        outputfile = trim(tempname)
+        open(iounit,file=outputfile,status='unknown',action="write")
+        k = 5; ii = 4
+        do j = 1, this%decomp%ysz(2)
+            write(iounit,'(6(e22.15, 1x))') this%mesh(1,j,k,2), this%xplbcInflow(j,k,ii,1:5)
+        enddo
+        close(iounit)
+        
+        ! write original / readin file (along z)
+        write(tempname,"(A,I4.4,A)") "interpcheckz_readin_",nrank,".dat"
+        outputfile = trim(tempname)
+        open(iounit,file=outputfile,status='unknown',action="write")
+        j = 5; ii = 4
+        do k = 1, nzbcIn
+            write(iounit,'(6(e22.15, 1x))') zgridIn(j,k), xplbcReadIn(j,k,ii,1:5)
+        enddo
+        close(iounit)
+        
+        ! write interpolated file (along z)
+        write(tempname,"(A,I4.4,A)") "interpcheckz_interpolated_",nrank,".dat"
+        outputfile = trim(tempname)
+        open(iounit,file=outputfile,status='unknown',action="write")
+        j = 5; ii = 4
+        do k = 1, this%decomp%ysz(3)
+            write(iounit,'(6(e22.15, 1x))') this%mesh(1,j,k,3), this%xplbcInflow(j,k,ii,1:5)
+        enddo
+        close(iounit)
 
         deallocate(interpIndices, interpFactors, zgridOut, ygridOut, zgridIn, ygridIn, xplbcReadIn)
 
@@ -1001,7 +1002,7 @@ contains
 
            if(kp==0) then
                interpind(j,k,3) = 1;    interpind(j,k,4) = 2;  alpz = zero;
-           elseif(kp==nyIn) then 
+           elseif(kp==nzIn) then 
                interpind(j,k,3) = kp-1; interpind(j,k,4) = kp; alpz = one
            else
                interpind(j,k,3) = kp;   interpind(j,k,4) = kp+1
