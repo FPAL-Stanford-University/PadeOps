@@ -744,7 +744,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
         !!!!! =============  Add Sponge+bulk for exit bc ==========!!!!!
         ! Gradually apply the exit boundary conditions
         ! Apply sponge in X-direction on right
-        call  sponge_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc)
+        ! call  sponge_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc)
 
 
     end associate

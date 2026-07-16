@@ -294,14 +294,14 @@ contains
                     !! block imb2 has a left internal boundary
                     y_num_intbd_left(imb2) = y_num_intbd_left(imb2) + 1
                     i_intbd = y_num_intbd_left(imb2)
-                    y_intbd_left_st(:, i_intbd) = (/i1, j2, k2/)
-                    y_intbd_left_en(:, i_intbd) = (/i1, j1-1, k1/)
+                    y_intbd_left_st(:, i_intbd) = (/i2, j2, k2/)
+                    y_intbd_left_en(:, i_intbd) = (/i2, j1, k1/)
                 else
                     !! block imb1 has a right internal boundary
                     y_num_intbd_rght(imb1) = y_num_intbd_rght(imb1) + 1
                     i_intbd = y_num_intbd_rght(imb1)
-                    y_intbd_rght_st(:, i_intbd) = (/i2, j1, k2/)
-                    y_intbd_rght_en(:, i_intbd) = (/i2, j2-1, k1/)
+                    y_intbd_rght_st(:, i_intbd) = (/i1, j1, k2/)
+                    y_intbd_rght_en(:, i_intbd) = (/i1, j2, k1/)
                 endif
             endif
         enddo
@@ -321,14 +321,14 @@ contains
                     !! block imb2 has a right internal boundary
                     y_num_intbd_rght(imb2) = y_num_intbd_rght(imb2) + 1
                     i_intbd = y_num_intbd_rght(imb2)
-                    y_intbd_rght_st(:, i_intbd) = (/i1, j2, k1/)
-                    y_intbd_rght_en(:, i_intbd) = (/i1, j1-1, k2/)
+                    y_intbd_rght_st(:, i_intbd) = (/i2, j2, k1/)
+                    y_intbd_rght_en(:, i_intbd) = (/i2, j1, k2/)
                 else
                     !! block imb1 has a left internal boundary
                     y_num_intbd_left(imb1) = y_num_intbd_left(imb1) + 1
                     i_intbd = y_num_intbd_left(imb1)
-                    y_intbd_left_st(:, i_intbd) = (/i2, j1, k1/)
-                    y_intbd_left_en(:, i_intbd) = (/i2, j2-1, k2/)
+                    y_intbd_left_st(:, i_intbd) = (/i1, j1, k1/)
+                    y_intbd_left_en(:, i_intbd) = (/i1, j2, k2/)
                 endif
             endif
         enddo

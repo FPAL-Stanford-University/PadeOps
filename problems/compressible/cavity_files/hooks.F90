@@ -66,12 +66,12 @@ contains
     end do
 
    ! To check whether dumT is calculted correctly !!!
-    write(outputfile, '(a,i3.3,a)') 'dumT_', nrank, '.dat'
-    open(10,file=outputfile,status='unknown')
-    do i=1,decomp%ysz(1)
-       write(10,'(2(e19.12),1x)') x(i,1,1), dumT(i,1,1)
-    end do
-    close(10)
+   ! write(outputfile, '(a,i3.3,a)') 'dumT_', nrank, '.dat'
+   ! open(10,file=outputfile,status='unknown')
+   ! do i=1,decomp%ysz(1)
+   !    write(10,'(2(e19.12),1x)') x(i,1,1), dumT(i,1,1)
+   ! end do
+   ! close(10)
 
     dumF = u
     call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
@@ -161,12 +161,12 @@ contains
     !end do
 
    ! To check whether dumT is calculted correctly !!!
-    write(outputfile, '(a,i3.3,a)') 'dumT_cavity_', nrank, '.dat'
-    open(10,file=outputfile,status='unknown')
-    do i=1,decomp%ysz(1)
-       write(10,'(2(e19.12),1x)') x(i,1,1), dumT_cavity(i,1,1)
-    end do
-    close(10)
+   ! write(outputfile, '(a,i3.3,a)') 'dumT_cavity_', nrank, '.dat'
+   ! open(10,file=outputfile,status='unknown')
+   ! do i=1,decomp%ysz(1)
+   !    write(10,'(2(e19.12),1x)') x(i,1,1), dumT_cavity(i,1,1)
+   ! end do
+   ! close(10)
 
     dumF = u
     call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
@@ -211,7 +211,7 @@ contains
     real(rkind) :: y_start, thickness, y_top
 
     dy = Ly/real(decomp%ysz(2)-1,rkind)
-    filpt = 0.1_rkind/dy
+    filpt = 2.0_rkind/dy
     thickT = real(0.9D0, rkind)
     ntf = 4
     
@@ -227,12 +227,12 @@ contains
        dumT(:,i,:)=half*(one-tanh( (real(decomp%ysz(2)- (decomp%yst(2) - 1 + i - 1), rkind)-filpt) / thickT ))
     end do
 
-   ! write(outputfile, '(a,i3.3,a)') 'dumT_', nrank, '.dat'
-   ! open(10,file=outputfile,status='unknown')
-   ! do i=1,decomp%ysz(2)
-   !    write(10,'(2(e19.12),1x)') y(1,i,1), dumT(1,i,1)
-   ! end do
-   ! close(10)
+    write(outputfile, '(a,i3.3,a)') 'dumT_', nrank, '.dat'
+    open(10,file=outputfile,status='unknown')
+    do i=1,decomp%ysz(2)
+       write(10,'(2(e19.12),1x)') y(1,i,1), dumT(1,i,1)
+    end do
+    close(10)
 
     dumF = u
     call filter3D(decomp,mygfil,dumF,ntf,x_bc,y_bc,z_bc)
@@ -1033,7 +1033,7 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep, time_
         ! Apply sponge in X-direction on right
         call  sponge_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc)
         call  sponge_y(decomp, mygfil, y, Ly, u, v, w, p, rho, x_bc, y_bc, z_bc)
-        call  cavity_filtering_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc, mbtopology)
+        !call  cavity_filtering_x(decomp, mygfil, x, Lx, u, v, w, p, rho, x_bc, y_bc, z_bc, mbtopology)
 
     end associate
 end subroutine

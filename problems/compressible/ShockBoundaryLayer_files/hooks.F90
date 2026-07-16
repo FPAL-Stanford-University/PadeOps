@@ -574,6 +574,11 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
         Rgas_Tw = mix%material(1)%mat%Rgas * Tw
         !print*,'Rgas_tw',Rgas_Tw,'rho_ref',rho_ref
 
+        !! oblique shock initialization: Tw, rho_ref, Machn1 are known on the
+        !! LHS (pre-shock). Others are calculated from these 3
+        !! On RHS (post-shock): quantities are obtained from jump conditions
+        !! J. Anderson (Modern Compressible Flow; Chap 4)
+
         s_l_i = int(shock_d/dy) + 1;
         s_r_i = s_l_i + 1;
 
