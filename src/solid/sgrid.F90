@@ -277,6 +277,7 @@ end type
 contains
     subroutine init(this, inputfile )
         use reductions, only: P_MAXVAL
+        use decomp_2d,  only: nrank
         use exits,      only: message, warning, nancheck, GracefulExit
         class(sgrid),target, intent(inout) :: this
         character(len=clen), intent(in) :: inputfile  
@@ -1041,23 +1042,15 @@ contains
         ! Go to hooks if a different initialization is derired (Set mixture p, Ys, VF, u, v, w, rho)
           ! STEP 7: INITIALIZE THE FIELDS
         if (useRestartFile) then
-            print *, "before restart"
             call this%readRestartFile(restartfile_TID, restartfile_RID)
-            print *, "after restart"
             this%step = restartfile_TID
-            print *, "restart ID"
             this%mix%material(2)%VF = 1 - this%mix%material(1)%VF 
-            print *, "VF"
             this%mix%material(2)%Ys = 1 - this%mix%material(1)%Ys
-            print *, "Ys"
             this%mix%material(1)%p = this%p
-            print *, "p"
             this%mix%material(2)%p = this%p
 
-            print *, "pre restart"
             call initparam_restart(this%decomp,this%der,this%derStagg,this%interpMid, this%dx, this%dy, this%dz, inputfile, this%mesh,this%fields, &
                         this%mix, this%tstop,this%dtfixed,tviz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-            print *, " finished restart "
 
         else 
             call initfields(this%decomp,this%der,this%derStagg, this%interpMid, this%dx, this%dy, this%dz, inputfile, this%mesh, this%fields, &
@@ -1065,19 +1058,16 @@ contains
 
             this%mix%material(1)%spec_consrv(:,:,:,1) = one / this%rho
     !    call this%mix%get_pmix(this%p)
-        print *, "init fields"
         !    call this%mix%get_rhoYs_from_gVF(this%rho)
         endif
         ! Get hydrodynamic and elastic energies, stresses
         !call this%mix%get_rhoYs_from_gVF(this%rho)  ! Get mixture rho and species Ys from species deformations and volume fractions
-        print *, "post bc"
         call this%post_bc()
         !call this%get_conserved()
         !call this%eigenfunctions()
         !call this%get_primitive()
         !call this%post_bc()
         !call this%getFaces()
-        print *, "post bc"
         call alloc_buffs(this%xbuf,nbufsx,"x",this%decomp)
         call alloc_buffs(this%ybuf,nbufsy,"y",this%decomp)
         call alloc_buffs(this%zbuf,nbufsz,"z",this%decomp)
@@ -1153,6 +1143,11 @@ contains
         if(this%SpongeLayer) then
           call get_sponge(this%decomp,this%dx,this%dy,this%dz,this%mesh,this%fields,this%mix,this%rhou_ref,this%rhov_ref,this%rhow_ref,this%rhoe_ref,this%sponge,this%mask)
         endif
+
+
+       if (nrank == 0) then
+           print*, "  Finished Init: "
+       end if
 
     end subroutine
 
@@ -1515,7 +1510,7 @@ contains
        ix1 = this%decomp%yst(1); iy1 = this%decomp%yst(2); iz1 = this%decomp%yst(3)
        ixn = this%decomp%yen(1); iyn = this%decomp%yen(2); izn = this%decomp%yen(3)
 
-       !L = 10d0 ! 14.0d0
+       L = 10d0 ! 14.0d0
 
        y_half = this%y + 0.5_rkind*this%dy
         
@@ -1831,7 +1826,7 @@ contains
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
         this%mix%deltakap = 1
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys)),this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF)))
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
             ehmix = this%e
@@ -2401,7 +2396,7 @@ contains
                this%mix%intSharp_kFV = zero
              
                !call tic()
-               call this%mix%get_intSharp_clean2_optimized(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
+               call this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
                !call toc(cputime)
                !call message(3,"Interface Sharpening Time (in seconds)",cputime)
 
@@ -2737,9 +2732,9 @@ contains
       mask2 =  (4.0_rkind*abs(VFbar(:,:,:,2)*(1.0_rkind-VFbar(:,:,:,2)) ) )**(0.2_rkind)
       mask3 =  (4.0_rkind*abs(VFbar(:,:,:,3)*(1.0_rkind-VFbar(:,:,:,3))))**0.2_rkind
 
-      af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))*this%sos_ratio*rho_ratio  * ( (sqrt( this%u_mid(:,:,:,1)**2.0_rkind + this%v_mid(:,:,:,1)**2.0_rkind + this%w_mid(:,:,:,1 )**2.0_rkind )) /sos_int(:,:,:,1) )**2.0_rkind  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
-      af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,2)**2.0_rkind + this%v_mid(:,:,:,2)**2.0_rkind + this%w_mid(:,:,:,2 )**2.0_rkind  ) ) /sos_int(:,:,:,2))**2.0_rkind
-      af(:,:,:,3) =this%CP*mask3*this%dt/(this%rho_mid(:,:,:,3))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,3)**2.0_rkind + this%v_mid(:,:,:,3)**2.0_rkind + this%w_mid(:,:,:,3 )**2.0_rkind  ) ) /sos_int(:,:,:,3))**2.0_rkind
+      af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))*this%sos_ratio*rho_ratio  * ( (sqrt( this%u_mid(:,:,:,1)**2.0_rkind  + this%v_mid(:,:,:,1)**2.0_rkind + this%w_mid(:,:,:,1 )**2.0_rkind )) /sos_int(:,:,:,1) )!**2.0_rkind  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
+      af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,2)**2.0_rkind + this%v_mid(:,:,:,2)**2.0_rkind + this%w_mid(:,:,:,2 )**2.0_rkind  ) ) /sos_int(:,:,:,2)) !**2.0_rkind
+      af(:,:,:,3) =this%CP*mask3*this%dt/(this%rho_mid(:,:,:,3))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,3)**2.0_rkind + this%v_mid(:,:,:,3)**2.0_rkind + this%w_mid(:,:,:,3 )**2.0_rkind  ) ) /sos_int(:,:,:,3)) !**2.0_rkind
 
 
      surfFil=this%surfaceTension_coeff*kappabar*gradVF 
@@ -3595,7 +3590,7 @@ contains
         !call tic()
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))* 4_rkind)
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys)),this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF)))
         !call toc(cputime)
         !call message(4, "Viscous Stress LAD ", cputime)
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Conductivity LAD        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -3878,7 +3873,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call this%getPhysicalProperties()
         !call
         !this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call  this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4_rkind)
+        call  this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys)),this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF)))
 
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy.

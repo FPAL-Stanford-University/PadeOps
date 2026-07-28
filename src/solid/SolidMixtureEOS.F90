@@ -1796,7 +1796,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         cVF = this%material(1)%VF*c1 + this%material(2)%VF*c1
         rho_int = this%material(1)%rhoYs_mid + this%material(2)%rhoYs_mid
 
-        i = 1 !,this%ns
+        do i = 1 ,this%ns
             call this%material(i)%getPhysicalProperties()
 
             this%material(i)%adiff = 0
@@ -1804,10 +1804,10 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
             this%material(i)%outdiff = 0
             call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,umag,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,this%deltakap,this%kappaNoFil)
 
-       !enddo
+       enddo
 
-       this%material(2)%adiff = this%material(1)%adiff
-       this%material(2)%rhodiff = this%material(1)%adiff
+       !this%material(2)%adiff = this%material(1)%adiff
+       !this%material(2)%rhodiff = this%material(1)%adiff
 
 
 

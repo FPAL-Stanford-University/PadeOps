@@ -734,7 +734,7 @@ contains
 !        call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
 
         if(this%yMetric) then
-          ytmp4 = (detady**4)*ytmp5*dy_stretch**5
+          ytmp4 =  (detady**4)*ytmp5*dy_stretch**5
           diffstar = diffstar + ytmp4!* ( dy_stretch   * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )
         else
           ytmp4 = ytmp5*this%dy**5
@@ -793,7 +793,7 @@ contains
         call this%der%d2dy2(kappa,ytmp4,y_bc(1),y_bc(2))
         !call this%der%d2dy2(ytmp4,ytmp5,y_bc(1),y_bc(2))
        if(this%yMetric) then
-          ytmp5 = (detady**2)*ytmp4*dy_stretch**4
+          ytmp5 =  (detady**2)*ytmp4*dy_stretch**4
           Curvstar =    Curvstar + ytmp5 !* ( dy_stretch   * ytmp2 / (ytmp1 + ytmp2 + ytmp3 + real(1.0D-32,rkind)) )
         else
           ytmp5 = ytmp4*this%dy**4
