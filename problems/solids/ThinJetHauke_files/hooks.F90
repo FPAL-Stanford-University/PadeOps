@@ -23,13 +23,13 @@ module ThinJetHauke_data
     integer     :: kos_sh,kos_sh2,pointy, pointx
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=pi
+    real(rkind) :: Ly = 1.0, Lx = 2*pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d =0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
     real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref,ll
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
     integer, parameter :: MAX_MODES = 10
     real(rkind), dimension(MAX_MODES) :: alpha_modes=0.0, beta_modes=0.0, phase_modes=0.0
-    integer :: num_modes=0,bnum_modes=0
+    integer :: num_modes=0,bnum_modes=0, run_id
     real(rkind) :: alpha_dim, beta_dim
     type(filters) :: mygfil
 
@@ -174,9 +174,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi/2d0
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx -pi
                     y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy - 0.5d0
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz  - pi/2d0
+                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz  - pi
                 end do
             end do
         end do
@@ -221,9 +221,12 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     real(rkind) :: a0, a0_2,dx1
     logical :: adjustRgas = .TRUE.   ! If true, Rgas is used, Rgas2 adjusted to ensure p-T equilibrium
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
+    real(rkind), allocatable :: theta_fix(:,:), theta_rand(:,:)
+    real(rkind) :: mag, magmax
+    integer :: j0
+    real(rkind) :: y_min = -3.5d0, y_max = 6d0, alphar, betar, gammar
 
-
-    real(rkind) :: Lr, STRETCH_RATIO = 5.0d0
+    real(rkind) :: Lr, STRETCH_RATIO = 6.0d0
     real(rkind) :: AA0,AA2,A3,B0,B1,B2,B3,yi,yp,y_core,y_LG,y_outer,U_loc,U_li,xi,mur,Delta0
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: eta,tmp,VF0
     ! --- Variables for Eigenfunction Initialization ---
@@ -241,7 +244,7 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, &
                           interface_init, delta, pointy, epsilonk, v0, v0_2, &
                           base_dir, num_modes, alpha_modes, beta_modes, phase_modes, &
-                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes,h,d1,d2,pmu1,pmu2,ll
+                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes,h,d1,d2,pmu1,pmu2,ll,run_id
 
      ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -410,6 +413,12 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                   p_r(pointy, MAX_MODES,MAX_MODES), p_i(pointy, MAX_MODES,MAX_MODES), m1_r(pointy, MAX_MODES,MAX_MODES),m1_i(pointy, MAX_MODES,MAX_MODES), &
                   m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES), w_r(pointy, MAX_MODES,MAX_MODES), w_i(pointy, MAX_MODES,MAX_MODES))
         allocate( u_base(pointy) )
+
+        allocate(theta_fix(MAX_MODES,MAX_MODES))
+        allocate(theta_rand(MAX_MODES,MAX_MODES))
+        theta_fix  = 0.0_rkind
+        theta_rand = 0.0_rkind
+
 !
 !        ! --- Rank 0 reads all data from files ---
         if (nrank == 0) then
@@ -466,6 +475,28 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         call MPI_Bcast(u_base, pointy, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         call MPI_Bcast(w_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         call MPI_Bcast(w_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+
+        do q = 1, num_modes
+           do l = 1, bnum_modes
+
+              magmax = -1.0_rkind
+              j0 = 1
+              do j = 1, pointy
+                mag = sqrt(u_r(j,q,l)**2 + u_i(j,q,l)**2)
+                if (mag > magmax) then
+                  magmax = mag
+                  j0 = j
+                end if
+              end do
+
+              if (magmax < 1.0e-14_rkind) then
+                theta_fix(q,l) = 0.0_rkind   ! fallback: mode has ~zero u everywhere
+              else
+                theta_fix(q,l) = atan2(u_i(j0,q,l), u_r(j0,q,l))
+              end if
+
+            end do
+        end do
  
        do j = 1, ny
 
@@ -473,48 +504,48 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
            u(:,j,:)    = u_base(j)*U_ref
 
        enddo
-        ! --- Loop over modes and add perturbations to the 3D field ---
+
+               ! --- Loop over modes and add perturbations to the 3D field ---
         do q = 1, num_modes
           do l = 1, bnum_modes
             alpha_dim = alpha_modes(q) / delta_ref
             beta_dim  = beta_modes(l) / delta_ref
-            current_phase = 2.0_rkind * pi * sin( real(q)*1.37d0 + real(l)*3.81d0)**2d0
+            alphar = 0.6180339887498949_rkind   ! golden ratio conjugate
+            betar  = 0.4142135623730950_rkind   ! sqrt(2)-1
+            gammar = 0.7320508075688772_rkind   ! sqrt(3)-1
+
+            current_phase = theta_fix(q,l) + two*pi*fract( alphar*real(run_id,rkind) + &
+                                              betar *real(q,rkind)      + &
+                                              gammar*real(l,rkind) )
+            !current_phase = 2.0_rkind * pi * sin( real(q)*(1.27d0) + real(l)*3.81d0)**2d0
             do k = 1, nz
                 do j = 1, ny
                     do i = 1, nx
                         arg = alpha_dim * x(i,j,k) + beta_dim * z(i,j,k) - current_phase
 
                         ! Construct dimensional perturbations using pre-interpolated eigenfunction values at y-index 'j'
-                        u_perturb   = U_ref * ( u_r(j,q,l)*cos(arg) - u_i(j,q,l)*sin(arg) )
-                        v_perturb   = U_ref * ( v_r(j,q,l)*cos(arg) - v_i(j,q,l)*sin(arg) )
-                        p_perturb   = P_ref * ( p_r(j,q,l)*cos(arg) - p_i(j,q,l)*sin(arg) )
-                        phi_perturb =      ( phi_r(j,q,l)*cos(arg) - phi_i(j,q,l)*sin(arg) )
-                        m1_perturb =  Rho_ref * ( m1_r(j,q,l)*cos(arg) - m1_i(j,q,l)*sin(arg) )
-                        m2_perturb =  Rho_ref * ( m2_r(j,q,l)*cos(arg) - m2_i(j,q,l)*sin(arg) )
+                        u_perturb = U_ref * ( u_r(j,q,l)*cos(arg) - u_i(j,q,l)*sin(arg) )
+                        v_perturb = U_ref * ( v_r(j,q,l)*cos(arg) - v_i(j,q,l)*sin(arg) )
+                        w_perturb = U_ref * ( w_r(j,q,l)*cos(arg) - w_i(j,q,l)*sin(arg) )
+                        p_perturb = P_ref * ( p_r(j,q,l)*cos(arg) - p_i(j,q,l)*sin(arg) )
+        !                phi_perturb =       ( phi_r(j,q,l)*cos(arg) - phi_i(j,q,l)*sin(arg) )
+        !                m1_perturb = Rho_ref * ( m1_r(j,q,l)*cos(arg) - m1_i(j,q,l)*sin(arg) )
+        !                m2_perturb = Rho_ref * ( m2_r(j,q,l)*cos(arg) - m2_i(j,q,l)*sin(arg) )
 
                         ! Apply the perturbations, scaled by the single amplitude 'epsilonk'
-                        up(i,j,k) = up(i,j,k) + u_perturb
-                        vp(i,j,k) = vp(i,j,k) + v_perturb
-                        wp(i,j,k) = wp(i,j,k) + w_perturb
-                        pp(i,j,k) = pp(i,j,k) + p_perturb
-                        VFp(i,j,k) = VFp(i,j,k) +  phi_perturb
-                        m1p(i,j,k) = m1p(i,j,k) +  m1_perturb 
-                        m2p(i,j,k) = m2p(i,j,k) +  m2_perturb
-
-
-                        u(i,j,k) = u(i,j,k) + epsilonk * u_perturb 
+                        u(i,j,k) = u(i,j,k) + epsilonk * u_perturb
                         v(i,j,k) = v(i,j,k) + epsilonk * v_perturb
                         w(i,j,k) = w(i,j,k) + epsilonk * w_perturb
                         mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk * p_perturb
-        !                mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
-        !                rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb*VF0(i,j,k) + m2_perturb*(1-VF0(i,j,k)) + rho_0*phi_perturb +rho_0_2*(-phi_perturb))
-
+         !               mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
+         !               rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb + m2_perturb)
                     end do
                 end do
             end do
         end do
         end do
 !
+        print *, "end perturb"
         ! --- Finalize mixture properties after all perturbations are added ---
         !mix%material(1)%VF = max(minVF, min(1.0_rkind - minVF, mix%material(1)%VF))
         mix%material(2)%VF = 1.0_rkind - mix%material(1)%VF
@@ -551,6 +582,25 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
 
     end associate
+
+        contains
+
+    real(rkind) function fract(x)
+      real(rkind), intent(in) :: x
+      fract = x - floor(x)
+    end function fract
+    real(rkind) function phase_hash(q,l,seed)
+         use kind_parameters, only: rkind
+         use constants, only: pi, two
+         implicit none
+         integer, intent(in) :: q,l,seed
+         real(rkind) :: t, u
+  
+         t = 12.9898_rkind*real(q,rkind) + 78.233_rkind*real(l,rkind) + 37.719_rkind*real(seed,rkind)
+         u = sin(t) * 43758.5453_rkind
+         u = u - floor(u)          ! fract(u) inline
+         phase_hash = two*pi*u
+    end function phase_hash
 end subroutine initfields
 
 subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge,mask)
@@ -573,7 +623,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     real(rkind), dimension(2), intent(inout) :: rhou, rhov,rhow,rhoe
     integer :: ioUnit,i,iy
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys
-    real(rkind) :: fac, Lr, STRETCH_RATIO = 5.0,int_KE
+    real(rkind) :: fac, Lr, STRETCH_RATIO = 6.0,int_KE
     integer, dimension(2) :: iparams
     real(rkind) :: a0, a0_2, sigma1, sigma2
     integer :: nx,ny,nz,k,ix,j
@@ -609,14 +659,14 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
            mask = 0d0
         endwhere
 
-        rhou(1) = rho(1,1,1)*uref(1,1,1)
-        rhou(2) = rho(1,ny,1)*uref(1,ny,1)
+        rhou(1) = rho(1,1,1)*v0_2!*u(1,1,1)
+        rhou(2) = rho(1,ny,1)*v0_2 !u(1,ny,1)
         rhov(1) = 0 !-1.060981230880199d-5 !rho(1,1,1)*v(1,1,1)
         rhov(2) = 0 !2.175685479370164d-08
         rhow(1) = rho(1,1,1)*w(1,1,1)
         rhow(2) = rho(1,ny,1)*w(1,ny,1)
-        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5d0*(uref(1,1,1)**2d0)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
-        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5d0*(uref(1,ny,1))**2d0) !1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
+        rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5d0*v0_2*v0_2) !(uref(1,1,1)**2d0)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
+        rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5d0*v0_2*v0_2) !(uref(1,ny,1))**2d0) !1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
         do i = 1,2
           mix%material(i)%VF_ref(1) = mix%material(i)%VF(1,1,1)
           mix%material(i)%VF_ref(2) = mix%material(i)%VF(1,ny,1) 
@@ -689,7 +739,7 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, &
                           interface_init, delta, pointy, epsilonk, v0, v0_2, &
                           base_dir, num_modes, alpha_modes, beta_modes, phase_modes, &
-                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes
+                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes, h, run_id
 
      ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -707,6 +757,12 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem.Check the input file.",928)
         end if
+
+        
+        nx = decomp%ysz(1)
+        ny = decomp%ysz(2)
+        nz = decomp%ysz(3)
+
         
         !Ensure temperature equilibrium at start
         if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2

@@ -19,11 +19,11 @@ module ShearLayer4Mode_data
     real(rkind) :: melt_t = one, melt_c = one, melt_t2 = one, melt_c2 = one
     real(rkind) :: kos_b,kos_t,kos_h,kos_g,kos_m,kos_q,kos_f,kos_alpha,kos_beta,kos_e, alpha3, alpha4,alpha2, alpha
     real(rkind) :: kos_b2,kos_t2,kos_h2,kos_g2,kos_m2,kos_q2,kos_f2,kos_alpha2,kos_beta2,kos_e2, v_disturb, epsP = 0, epsRho = 0
-    real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, Nrho = 1, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, epsilonk = 0
-    integer     :: kos_sh,kos_sh2,pointy, pointx
+    real(rkind) :: v0=zero, v0_2=zero, tau0=1d-14, tau0_2=1d-14, Nrho = 1, U0 = zero, m = 1, p_mu = 1, p_mu2 = 1, epsilonk = 0,    run_id
+    integer     :: kos_sh,kos_sh2,pointy, pointx, phase_seed
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx = pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0, delta_d=0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=pi
+    real(rkind) :: Ly = 1.0, Lx =pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0,delta_d=0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=pi
     real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
@@ -174,9 +174,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx - pi/2d0
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx - pi/2.0
                     y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy  - 0.5d0
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz   - pi/2d0
+                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz   - pi/2.0
                 end do
             end do
         end do
@@ -223,7 +223,11 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     logical :: adjustPamb = .FALSE.   ! If true, p_amb is adjusted to ensure p-T equilibrium
 
 
-    real(rkind) :: Lr, STRETCH_RATIO = 5.0d0
+    real(rkind), allocatable :: theta_fix(:,:), theta_rand(:,:)
+    real(rkind) :: mag, magmax
+    integer :: j0
+
+    real(rkind) :: Lr, STRETCH_RATIO = 6.0d0
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: eta,tmp,y_stretched
     ! --- Variables for Eigenfunction Initialization ---
 
@@ -235,12 +239,12 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
     real(rkind), dimension(:), allocatable :: u_base
     real(rkind) :: arg, u_perturb, v_perturb, w_perturb, p_perturb, phi_perturb, m1_perturb, m2_perturb,current_phase
-    real(rkind) :: y_min = -3.5d0, y_max = 6d0
+    real(rkind) :: y_min = -3.5d0, y_max = 6d0, alphar, betar, gammar
     namelist /PROBINPUT/ p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, &
                           interface_init, delta, pointy, epsilonk, v0, v0_2, &
                           base_dir, num_modes, alpha_modes, beta_modes, phase_modes, &
-                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes
+                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes,run_id
 
      ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -341,6 +345,11 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                   p_r(pointy, MAX_MODES,MAX_MODES), p_i(pointy, MAX_MODES,MAX_MODES), m1_r(pointy, MAX_MODES,MAX_MODES),m1_i(pointy, MAX_MODES,MAX_MODES), &
                   m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES))
         allocate(  u_base(pointy) )
+        
+        allocate(theta_fix(MAX_MODES,MAX_MODES))
+        allocate(theta_rand(MAX_MODES,MAX_MODES))
+        theta_fix  = 0.0_rkind
+        theta_rand = 0.0_rkind
 
         ! --- Rank 0 reads all data from files ---
         if (nrank == 0) then
@@ -398,6 +407,29 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
         call MPI_Bcast(u_base, pointy, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
+        do q = 1, num_modes
+            do l = 1, bnum_modes
+          
+              magmax = -1.0_rkind
+              j0 = 1
+              do j = 1, pointy
+                mag = sqrt(u_r(j,q,l)**2 + u_i(j,q,l)**2)
+                if (mag > magmax) then
+                  magmax = mag
+                  j0 = j
+                end if
+              end do
+          
+              if (magmax < 1.0e-14_rkind) then
+                theta_fix(q,l) = 0.0_rkind   ! fallback: mode has ~zero u everywhere
+              else
+                theta_fix(q,l) = atan2(u_i(j0,q,l), u_r(j0,q,l))
+              end if
+          
+            end do
+        end do
+
+
         do j = 1, ny
 
            uref(:,j,:) = u_base(j)*(v0_2 - v0)
@@ -410,7 +442,14 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
           do l = 1, bnum_modes
             alpha_dim = alpha_modes(q) / delta_ref
             beta_dim  = beta_modes(l) / delta_ref
-            current_phase = 2.0_rkind * pi * sin( real(q)*(1.27d0) + real(l)*3.81d0)**2d0
+            alphar = 0.6180339887498949_rkind   ! golden ratio conjugate
+            betar  = 0.4142135623730950_rkind   ! sqrt(2)-1
+            gammar = 0.7320508075688772_rkind   ! sqrt(3)-1
+
+            current_phase = theta_fix(q,l) + two*pi*fract( alphar*real(run_id,rkind) + &
+                                              betar *real(q,rkind)      + &
+                                              gammar*real(l,rkind) )
+            !current_phase = 2.0_rkind * pi * sin( real(q)*(1.27d0) + real(l)*3.81d0)**2d0
             do k = 1, nz
                 do j = 1, ny
                     do i = 1, nx
@@ -473,6 +512,25 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
 
 
     end associate
+
+    contains
+
+  real(rkind) function fract(x)
+    real(rkind), intent(in) :: x
+    fract = x - floor(x)
+  end function fract
+  real(rkind) function phase_hash(q,l,seed)
+       use kind_parameters, only: rkind
+       use constants, only: pi, two
+       implicit none
+       integer, intent(in) :: q,l,seed
+       real(rkind) :: t, u
+
+       t = 12.9898_rkind*real(q,rkind) + 78.233_rkind*real(l,rkind) + 37.719_rkind*real(seed,rkind)
+       u = sin(t) * 43758.5453_rkind
+       u = u - floor(u)          ! fract(u) inline
+       phase_hash = two*pi*u
+  end function phase_hash
 end subroutine initfields
 
 subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge,mask)
@@ -614,7 +672,7 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, &
                           interface_init, delta, pointy, epsilonk, v0, v0_2, &
                           base_dir, num_modes, alpha_modes, beta_modes, phase_modes, &
-                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes
+                          U_ref, Rho_ref, P_ref, delta_ref,p_amb,Nrho,bnum_modes, run_id
 
      ioUnit = 11
     open(unit=ioUnit, file=trim(inputfile), form='FORMATTED')
@@ -632,7 +690,14 @@ subroutine initparam_restart(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,me
         if (mix%ns /= 2) then
             call GracefulExit("Number of species must be 2 for this problem.Check the input file.",928)
         end if
-        
+
+        nx = decomp%ysz(1)
+        ny = decomp%ysz(2)
+        nz = decomp%ysz(3)
+
+        print *, nx
+        print *, ny
+        print *, nz    
         !Ensure temperature equilibrium at start
         if(adjustRgas) Rgas_2 = Rgas * (p_amb+p_infty_2)/(p_amb+p_infty)*rho_0/rho_0_2
         ! speed of sound
