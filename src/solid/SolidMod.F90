@@ -4769,7 +4769,7 @@ contains
         integer :: i
          call interpolateFV(this%decomp,this%interpMid,rho*this%Ys,this%rhoYs_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
          call interpolateFV(this%decomp,this%interpMid,this%VF,this%VF_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-         call interpolateFV(this%decomp,this%interpMid,this%Ys,this%Ys_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+!         call interpolateFV(this%decomp,this%interpMid,this%Ys,this%Ys_mid,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
     end subroutine
     subroutine getYsLAD(this,rho,sos,dx,dy,dz,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)

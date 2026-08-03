@@ -2697,6 +2697,8 @@ contains
 
       end do
 
+      this%mix%material(1)%Ys_mid = this%mix%material(1)%rhoYs_mid / (this%rho_mid)
+      this%mix%material(2)%Ys_mid = 1.0 - this%mix%material(1)%Ys_mid
 !      if (nrank.eq.0) print*,rhou_int(:,:,:,1)-this%u_mid(:,:,:,1)
 !      if (nrank.eq.0) print*,rhov_int(:,:,:,2)-this%v_mid(:,:,:,2)
 
