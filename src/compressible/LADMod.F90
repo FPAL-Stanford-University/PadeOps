@@ -177,7 +177,7 @@ contains
         endif
         mustar = mustar + ytmp1
 
-        mustar = this%Cmu*rho*abs(mustar)*(max(deltakapVF,deltakapYs)+ 1d-3)
+        mustar = this%Cmu*rho*abs(mustar) *(max(deltakapVF,deltakapYs)+ 1d-3)
         
         ! Filter mustar
         call this%filter(mustar, x_bc, y_bc, z_bc)

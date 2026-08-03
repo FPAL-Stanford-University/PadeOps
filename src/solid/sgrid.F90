@@ -583,7 +583,7 @@ contains
          call this%der_nostretch%init(                           this%decomp, &
                               this%dx,       this%dy,        this%dz, &
                             periodicx,     periodicy,      periodicz, &
-                            derivative_x,  derivative_y,   derivative_z, &
+                            "cd10"   ,     "cd10"   ,      "cd10"   , &
                               .false.,       .false.,        .false., &
                               .false.)
 
@@ -1501,7 +1501,7 @@ contains
        real(rkind), dimension(:,:,:), pointer :: x,y,z,eta1,eta2,eta3
        integer :: i,j,k
        integer :: nx, ny, nz, ix1, ixn, iy1, iyn, iz1, izn
-       real(rkind) :: L, STRETCH_RATIO = 6d0 , Lr, Lr_half, y_min = -3.5d0, y_max = 6d0
+       real(rkind) :: L, STRETCH_RATIO = 6d0 , Lr, Lr_half, y_min = -3.5d0, y_max = 6d0, y_lo_anchor, y_hi_anchor
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: y_half,eta2_half,tmpdy2,ymetric_half_exact
        real(rkind), dimension(this%nxp, this%nyp, this%nzp) :: eta2_int,tmp,tmp1,tmp2,tmp3, tmpeta, tmpeta2,y_stretched
        nx = this%decomp%xsz(1); ny = this%decomp%ysz(2); nz = this%decomp%zsz(3)
@@ -1526,6 +1526,11 @@ contains
        !this%eta2 = Lr*tmpeta
        !tmpeta2 = Lr*tmpeta
 
+       !y_lo_anchor = atanh( 2.0d0 * ( 1.0d0/real(ny-1,rkind) - 0.5d0 ) / (1.0d0 + 1.0d0/STRETCH_RATIO) )
+       !y_hi_anchor = atanh( 2.0d0 * ( real(ny-2,rkind)/real(ny-1,rkind) - 0.5d0 ) / (1.0d0 + 1.0d0/STRETCH_RATIO) )
+
+       !y_stretched = atanh(2.0d0 * y / (1.0d0 + 1.0d0/STRETCH_RATIO))
+       !tmpeta2 = y_min + (y_stretched - y_lo_anchor) / (y_hi_anchor - y_lo_anchor) * (y_max - y_min)
        y_stretched = atanh(2.0d0 * this%y / (1.0d0 + 1.0d0/STRETCH_RATIO))
        tmpeta2 = y_min + (y_stretched - minval(y_stretched)) / &
                (maxval(y_stretched) - minval(y_stretched)) * (y_max - y_min)
@@ -1826,7 +1831,7 @@ contains
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
         this%mix%deltakap = 1
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys)),this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF)))
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4.0_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4.0_rkind)
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
             ehmix = this%e
@@ -2142,7 +2147,7 @@ contains
         t1 = MPI_Wtime()
         if(this%intSharp) then
             ! ... initialization ...
-            call this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
+            call     this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
 
         endif
         call this%mix%checkNaN()
@@ -2396,7 +2401,10 @@ contains
                this%mix%intSharp_kFV = zero
              
                !call tic()
-               call this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
+
+                call  this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
+
+
                !call toc(cputime)
                !call message(3,"Interface Sharpening Time (in seconds)",cputime)
 
@@ -2711,9 +2719,9 @@ contains
 
       tmp = this%p
       call this%filter(tmp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fx(this%decomp,this%derStaggd04,this%p-tmp,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fy(this%decomp,this%derStaggd04,this%p-tmp,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fz(this%decomp,this%derStaggd04,this%p-tmp,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fx(this%decomp,this%derStaggd02,this%p-tmp,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fy(this%decomp,this%derStaggd02,this%p-tmp,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fz(this%decomp,this%derStaggd02,this%p-tmp,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
       call interpolateFV(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 !      gradpf1 = gradp(:,:,:,1)
 !      gradpf2 = gradp(:,:,:,2)
@@ -2728,9 +2736,9 @@ contains
       this%mix%material(2)%Ys_mid = 1.0_rkind - this%mix%material(1)%Ys_mid
       this%mix%material(2)%VF_mid = 1.0_rkind - this%mix%material(1)%VF_mid
 
-      mask1 =  (4.0_rkind*abs(VFbar(:,:,:,1)*(1.0_rkind-VFbar(:,:,:,1)) ) )**0.2_rkind    ! (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**(0.3_rkind)
-      mask2 =  (4.0_rkind*abs(VFbar(:,:,:,2)*(1.0_rkind-VFbar(:,:,:,2)) ) )**(0.2_rkind)
-      mask3 =  (4.0_rkind*abs(VFbar(:,:,:,3)*(1.0_rkind-VFbar(:,:,:,3))))**0.2_rkind
+      mask1 =  (4.0_rkind*abs(VFbar(:,:,:,1)*(1.0_rkind-VFbar(:,:,:,1))))**0.2_rkind !**0.2_rkind    ! (1_rkind/0.6598_rkind)*(abs(VFbar(:,:,:,1)*(1-VFbar(:,:,:,1)) ) )**(0.3_rkind)
+      mask2 =  (4.0_rkind*abs(VFbar(:,:,:,2)*(1.0_rkind-VFbar(:,:,:,2))))**0.2_rkind !**(0.2_rkind)
+      mask3 =  (4.0_rkind*abs(VFbar(:,:,:,3)*(1.0_rkind-VFbar(:,:,:,3))))**0.2_rkind   !**0.2_rkind
 
       af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))*this%sos_ratio*rho_ratio  * ( (sqrt( this%u_mid(:,:,:,1)**2.0_rkind  + this%v_mid(:,:,:,1)**2.0_rkind + this%w_mid(:,:,:,1 )**2.0_rkind )) /sos_int(:,:,:,1) )!**2.0_rkind  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
       af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,2)**2.0_rkind + this%v_mid(:,:,:,2)**2.0_rkind + this%w_mid(:,:,:,2 )**2.0_rkind  ) ) /sos_int(:,:,:,2)) !**2.0_rkind
@@ -3590,7 +3598,7 @@ contains
         !call tic()
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys)),this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF)))
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4.0_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4.0_rkind)
         !call toc(cputime)
         !call message(4, "Viscous Stress LAD ", cputime)
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Conductivity LAD        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -3873,7 +3881,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call this%getPhysicalProperties()
         !call
         !this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
-        call  this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys)),this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF)))
+        call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4.0_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4.0_rkind)
 
         if (this%PTeqb) then
             ! subtract elastic energies to determine mixture hydrostatic energy.
@@ -4586,7 +4594,6 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
        w_int = this%w_mid(:,:,:,3)
        p_int = this%p_mid(:,:,:,3)
 
-       call interpolateFV_z(this%decomp,this%interpMid02,this%p, pbar,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
        rho_int = 0.0d0
        rhoe_prim = 0.0d0
        num = 0.0d0
@@ -4610,26 +4617,22 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
            Mv_int = Mv_int + M_int(:,:,:,i)*v_int !tmp2
            Mw_int = Mw_int + M_int(:,:,:,i)*this%w_int
 
-           KE = KE+ 0.5_rkind*(u_int*u_int + v_int*v_int + w_int*w_int )*this%w_int*this%mix%material(i)%rhoYs_mid(:,:,:,3)
            rhou_int = rhou_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*u_int*w_int
            rhov_int = rhov_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*v_int*w_int
            rhow_int = rhow_int + this%mix%material(i)%rhoYs_mid(:,:,:,3)*w_int*this%w_int !this%w_int
-           rhoe_prim = rhoe_prim +this%mix%material(i)%VF_mid(:,:,:,3)*this%mix%material(i)%hydro%onebygam_m1*(p_int +this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)*this%w_int
+!           rhoe_prim = rhoe_prim +this%mix%material(i)%VF_mid(:,:,:,3)*this%mix%material(i)%hydro%onebygam_m1*(p_int +this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)*this%w_int
         enddo
 
+        KE  = 0.5_rkind*rho_int*(u_int*u_int + v_int*v_int + w_int*w_int )
+        do i = 1,2
 
-!      rhou_int = Mw_int*u_int
-!      rhov_int = Mw_int*v_int
-!      rhow_int = Mw_int*w_int
-!       KE  = 0.5*(u_int**2 + v_int**2 + w_int**2 ) !  0.5_rkind* ( Mu_int**2 + Mv_int**2 + Mw_int**2 ) / rho_int
+          rhoe_prim = rhoe_prim +  this%mix%material(i)%hydro%onebygam_m1*( p_int + this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)/(M_int(:,:,:,i)/VF_int(:,:,:,i) ) *  M_int(:,:,:,i)/rho_int
+        enddo
 
-!      do i = 1,2
-!
-!         rhoe_prim = rhoe_prim + this%mix%material(i)%hydro%onebygam_m1*(p_int +this%mix%material(i)%hydro%gam*this%mix%material(i)%hydro%Pinf)/(M_int(:,:,:,i)/VF_int(:,:,:,i)) *  M_int(:,:,:,i)/rho_int
-!       enddo
+        H_int = KE*this%w_int +rhoe_prim*Mw_int + p_int*w_int  !KE*this%u_int +(p_int/rho_int + rhoe_prim ) *Mu_int + pbar*(this%u_int - u_int )
 
 
-        H_int =  KE + rhoe_prim + p_int*w_int   ! KE + rhoe_prim + pbar*(this%w_int - w_int)
+
         flux = 0.0
         buff = rhou_int  - tauxz - Frho*u_int
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -4652,7 +4655,7 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         flux = 0.0
 
 
-        buff = KE + rhoe_prim  - tauzz*w_int - u_int*tauxz-v_int*tauyz  - 0.5_rkind*(u_int*u_int + v_int*v_int + w_int*w_int)*Frho - Fenergy
+        buff = H_int  - tauzz*w_int - u_int*tauxz - v_int*tauyz  - 0.5_rkind*(u_int*u_int + v_int*v_int + w_int*w_int)*Frho - Fenergy
         !buff = ( TE + p_int )*w_int
 
         call gradFV_z(this%decomp,this%derStagg,buff,flux,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
@@ -5114,6 +5117,11 @@ subroutine getRHS_NC(this, rhs, divu, viscwork)
         call interpolateFV_x(this%decomp,this%interpMid,this%bulk,bulk_x,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_y(this%decomp,this%interpMid,this%bulk,bulk_y,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
         call interpolateFV_z(this%decomp,this%interpMid,this%bulk,bulk_z,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+
+        mu_x = mu_x + this%phys_mu1*this%mix%material(1)%VF_mid(:,:,:,1) + this%phys_mu2*this%mix%material(2)%VF_mid(:,:,:,1)
+        mu_y = mu_y + this%phys_mu1*this%mix%material(1)%VF_mid(:,:,:,2) + this%phys_mu2*this%mix%material(2)%VF_mid(:,:,:,2)
+        mu_z = mu_z + this%phys_mu1*this%mix%material(1)%VF_mid(:,:,:,3) + this%phys_mu2*this%mix%material(2)%VF_mid(:,:,:,3)
+
 
         lambda => this%ybuf(:,:,:,1)
         bambda => this%ybuf(:,:,:,2)
