@@ -5226,9 +5226,9 @@ contains
 !          adiff_fil2 = adiff_int(:,:,:,2)
 !          adiff_fil3 = adiff_int(:,:,:,3)
 !          else
-          adiff_fil1 = adiff_int(:,:,:,1)*(one-mask)
-          adiff_fil2 = adiff_int(:,:,:,2)*(one-mask)
-          adiff_fil3 = adiff_int(:,:,:,3)*(one-mask)
+          adiff_fil1 = adiff_int(:,:,:,1)
+          adiff_fil2 = adiff_int(:,:,:,2)
+          adiff_fil3 = adiff_int(:,:,:,3)
 !          endif
           call filter3D(this%decomp, this%gfil, adiff_fil1, 1, x_bc,y_bc,z_bc)
           call filter3D(this%decomp, this%gfil, adiff_fil2, 1, x_bc,y_bc,z_bc)

@@ -921,7 +921,7 @@ contains
         allocate(this%LAD)
         !call
         !this%LAD%init(this%decomp,this%der,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,Cmu,Ckap,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2)
-        call this%LAD%init(this%decomp,this%der,this%derStagg,this%interpMid,this%gfil,2,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1,Cvf2,Ce,Cln,Stretch1Dy)
+        call this%LAD%init(this%decomp,this%der,this%derStagg,this%interpMid,this%gfil,1,this%dx,this%dy,this%dz,Cbeta,CbetaP,Cmu,Ckap,CkapP,Cdiff,CY,Cdiff_g,Cdiff_gt,Cdiff_gp,Cdiff_pe,Cdiff_pe_2,Crho,Cvf1,Cvf2,Ce,Cln,Stretch1Dy)
 
         ! Allocate mixture
         if ( allocated(this%mix) ) deallocate(this%mix)
@@ -1820,6 +1820,18 @@ contains
         call this%gradient(this%v, dvdx, dvdy, dvdz,  this%x_bc, -this%y_bc,  this%z_bc)
         call this%gradient(this%w, dwdx, dwdy, dwdz,  this%x_bc,  this%y_bc, -this%z_bc)
 
+        this%dudx = dudx
+        this%dudy = dudy
+        this%dudz = dudz
+
+        this%dvdx = dvdx
+        this%dvdy = dvdy
+        this%dvdz = dvdz
+
+        this%dwdx = dwdx
+        this%dwdy = dwdy
+        this%dwdz = dwdz
+
         if( .NOT. this%SpongeLayer) then
 
            this%mask = 0d0
@@ -1830,7 +1842,7 @@ contains
         call this%getPhysicalProperties()
         !call this%LAD%get_viscosities(this%rho,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc)
 
-        this%mix%deltakap = 1
+        this%mix%deltakap = 0
         call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4.0_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4.0_rkind)
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
@@ -1850,8 +1862,6 @@ contains
 !              call this%mix%material(imat)%getYsLAD(this%rho,this%sos,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
 !       enddo
 
-        nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
-        deallocate( duidxj )
         
         ! ------------------------------------------------
         if (this%useRestartFile) then
@@ -1906,6 +1916,9 @@ contains
         else
            call this%viz%WriteViz(this%decomp, this%mesh, this%fields, this%mix,this%tsim)
         endif
+
+         nullify(dudx,dudy,dudz,dvdx,dvdy,dvdz,dwdx,dwdy,dwdz,ehmix)
+        deallocate( duidxj )
 
         vizcond = .FALSE.
        

@@ -1797,17 +1797,18 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         rho_int = this%material(1)%rhoYs_mid + this%material(2)%rhoYs_mid
 
         do i = 1 ,this%ns
-            call this%material(i)%getPhysicalProperties()
+           call this%material(i)%getPhysicalProperties()
+        enddo
+         i = 1
+         this%material(i)%adiff = 0
+         this%material(i)%rhodiff = 0
+         this%material(i)%outdiff = 0
+         call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,umag,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,this%deltakap,this%kappaNoFil)
 
-            this%material(i)%adiff = 0
-            this%material(i)%rhodiff = 0
-            this%material(i)%outdiff = 0
-            call this%LAD%get_diffusivity_5eqnOG(rho,this%material(i)%VF,rho*this%material(i)%Ys,umag,minYs(i),this%intSharp_cut,sos,this%material(i)%adiff,this%material(i)%rhodiff,x_bc,y_bc,z_bc,detady,dy_stretch,this%material(i)%elastic%rho0,dt,this%material(i)%OOBVF,this%material(i)%OOBYs,this%material(i)%HighVF,this%material(i)%HighYs,this%deltakap,this%kappaNoFil)
+!       enddo
 
-       enddo
-
-       !this%material(2)%adiff = this%material(1)%adiff
-       !this%material(2)%rhodiff = this%material(1)%adiff
+       this%material(2)%adiff = this%material(1)%adiff
+       this%material(2)%rhodiff = this%material(1)%adiff
 
 
 
@@ -2711,7 +2712,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         use reductions, only : P_MAXVAL
         class(solid_mixture), intent(inout) :: this
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
-        real(rkind), intent(in) :: dx,dy,dz
+        real(rkind), intent(in) :: dx,dz,dy
         real(rkind), dimension(this%nxp,this%nyp,this%nzp),   intent(in) :: rho,u,v,w,p
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: ke_mid
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3), intent(in) :: uFVint,vFVint,wFVint,pFVint
@@ -2719,7 +2720,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: phiint,gradxi,VFint, gradFV_N2F,rhoFVint,NMint
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: antiDiffFVint,rhoiFVint,hiFVint, rhoiFVint_local
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) ::tmp,GVFmag,rhom,H,OOB_mask,Hl,Hh,HYs,HVF,HVF2
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1,tmp2,tmp3
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: tmp1,tmp2,tmp3, delta
         real(rkind), dimension(this%nxp,this%nyp,this%nzp) :: normOffA,normOffB
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,this%ns) :: rhoi,hi
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,this%ns) :: rhoantiDiffFVint
@@ -2729,6 +2730,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
         logical :: useTiwari = .FALSE., useRhoYsbound = .FALSE., useTotalRho = .FALSE.
         logical :: periodicx,periodicy,periodicz, useGradPsi = .FALSE., useRhoLocal = .false., useHighOrder = .TRUE.,useYSbound = .TRUE., useNewSPF = .TRUE., useNewSPFfull = .FALSE.
 
+            delta = (dy*dx*dz)**(1.0_rkind/3.0_rkind)
             do i=1,this%ns
               this%material(i)%intSharp_aFV = zero
               this%material(i)%intSharp_aDiff = zero
@@ -2788,7 +2790,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 
              !surface normal
-             where (GVFmag < eps)
+             where (GVFmag < 1d-8)
                 norm(:,:,:,1) = zero
                 norm(:,:,:,2) = zero
                 norm(:,:,:,3) = zero
@@ -2806,7 +2808,7 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
 
                  !surface normal
-                  where (GVFmag < eps)
+                  where (GVFmag < 1d-8 )
                     norm(:,:,:,1) = zero
                     norm(:,:,:,2) = zero
                     norm(:,:,:,3) = zero
@@ -2867,9 +2869,9 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
 
               if(this%intSharp_d02) then
                 !! This is HIGH ORDER
-                call gradFV_N2Fx(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-                call gradFV_N2Fy(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
-                call gradFV_N2Fz(this%decomp,this%derStaggd02,this%material(i)%VF,gradFV_N2F(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                call gradFV_N2Fx(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,1),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                call gradFV_N2Fy(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,2),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
+                call gradFV_N2Fz(this%decomp,this%derStagg,this%material(i)%VF,gradFV_N2F(:,:,:,3),periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)
 
 
               else
@@ -2900,19 +2902,19 @@ subroutine equilibrateTemperature(this,mixRho,mixE,mixP,mixT,isub, nsubs)
                   !                  this%intdiff =  antiDiffFVint(:,:,:,1,i)
                   do d = 1,3
 
-                    where((this%xi(:,:,:,i)-xiHigh) .GE. 1.5*dx  )
+                    where((phiint(:,:,:,d)-xiHigh) .GE. 1.5*delta )
                        Hh = 0_rkind
-                    elsewhere(((this%xi(:,:,:,i)-xiHigh) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)-xiHigh) .GT. -1.5*dx ) )
-                       Hh = 1 - 1_rkind/2_rkind*(1_rkind + (this%xi(:,:,:,i)-xiHigh)/(1.5_rkind*dx) + 1_rkind/pi*sin(pi*(this%xi(:,:,:,i)-xiHigh)/(1.5*dx)) )
+                    elsewhere(((phiint(:,:,:,d)-xiHigh) .LT. 1.5*delta ) .AND. ((phiint(:,:,:,d)-xiHigh) .GT. -1.5*delta ) )
+                       Hh = 1 - 1_rkind/2_rkind*(1_rkind + (phiint(:,:,:,d)-xiHigh)/(1.5_rkind*delta) + 1_rkind/pi*sin(pi*(phiint(:,:,:,d)-xiHigh)/(1.5*delta)) )
                     elsewhere
                        Hh = 1_rkind
 
                     endwhere
 !!
-                    where((this%xi(:,:,:,i)+xiLow) .GE. 1.5*dx  )
+                    where((phiint(:,:,:,d)+xiLow) .GE. 1.5*delta  )
                        Hl = 1_rkind
-                    elsewhere(((this%xi(:,:,:,i)+xiLow) .LT. 1.5*dx ) .OR. ((this%xi(:,:,:,i)+xiLow) .GT. -1.5*dx ) )
-                       Hl = 1_rkind/2_rkind*(1_rkind + (this%xi(:,:,:,i)+xiLow)/(1.5_rkind*dx) + 1_rkind/pi*sin(pi*(this%xi(:,:,:,i)+xiLow)/(1.5*dx)) )
+                    elsewhere(((phiint(:,:,:,d)+xiLow) .LT. 1.5*delta ) .AND. ((phiint(:,:,:,d)+xiLow) .GT. -1.5*delta ) )
+                       Hl = 1_rkind/2_rkind*(1_rkind + (phiint(:,:,:,d)+xiLow)/(1.5_rkind*delta) + 1_rkind/pi*sin(pi*(phiint(:,:,:,d)+xiLow)/(1.5*delta)) )
                     elsewhere
                        Hl = 0_rkind
 
@@ -5328,7 +5330,7 @@ end subroutine get_intSharp_clean2_optimized
                  GVFmag = sqrt( gradVFk(:,:,:,1)**two + gradVFk(:,:,:,2)**two +gradVFk(:,:,:,3)**two )
                  
             	!surface normal
-           	  where (GVFmag < eps)
+           	  where (GVFmag < 1d-8)
                     this%norm(:,:,:,1) = zero
                     this%norm(:,:,:,2) = zero
                     this%norm(:,:,:,3) = zero
@@ -5393,7 +5395,7 @@ end subroutine get_intSharp_clean2_optimized
             !magnitude of surface vector
             GVFmag = sqrt( gradxi(:,:,:,1)**two + gradxi(:,:,:,2)**two +gradxi(:,:,:,3)**two )
             !surface normal
-            where (GVFmag < eps)
+            where (GVFmag < 1d-8)
               this%norm(:,:,:,1) = zero
               this%norm(:,:,:,2) = zero
               this%norm(:,:,:,3) = zero
@@ -5475,7 +5477,7 @@ end subroutine get_intSharp_clean2_optimized
               GVFmag = sqrt( gradxi(:,:,:,1)**two + gradxi(:,:,:,2)**two+gradxi(:,:,:,3)**two )
 
               !surface normal
-              where (GVFmag < eps)
+              where (GVFmag < 1d-8)
                 this%norm(:,:,:,1) = zero
                 this%norm(:,:,:,2) = zero
                 this%norm(:,:,:,3) = zero
@@ -5521,7 +5523,7 @@ end subroutine get_intSharp_clean2_optimized
 
 
               !surface normal
-              where (GPHImag < eps)
+              where (GPHImag < 1d-8)
                  this%norm(:,:,:,1) = eps
                  this%norm(:,:,:,2) = eps
                  this%norm(:,:,:,3) = eps
@@ -5827,6 +5829,7 @@ end subroutine get_intSharp_clean2_optimized
 
         
     end subroutine get_surfaceTension
+
 
     subroutine interpolateFV(this,nodes,faces,periodicx,periodicy,periodicz,x_bc,y_bc,z_bc)  
         !interpolates from Nodes to faces for finite volume treatment of terms
