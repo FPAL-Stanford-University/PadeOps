@@ -23,11 +23,11 @@ module ShearLayer4Mode_data
     integer     :: kos_sh,kos_sh2,pointy, pointx, phase_seed
     logical     :: explPlast = .FALSE., explPlast2 = .FALSE.
     logical     :: plastic = .FALSE., plastic2 = .FALSE.
-    real(rkind) :: Ly = 1.0, Lx =pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0,delta_d=0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=pi
+    real(rkind) :: Ly = 1.0, Lx =4*pi,interface_init = 10d-3, kwave = 4.0_rkind, ksize = 10d0, etasize = 0.5d0,delta_d=0.0125D0,delta = 0.0125D0, delta_rho = 0.0125D0 , Lz=2*pi
     real(rkind) :: U_ref, Rho_ref, P_ref, delta_ref
     character(len=1024) :: base_dir, folder_path
     character(len=30) :: temp_alpha_str, temp_beta_str
-    integer, parameter :: MAX_MODES = 10
+    integer, parameter :: MAX_MODES = 20
     real(rkind), dimension(MAX_MODES) :: alpha_modes=0.0, beta_modes=0.0, phase_modes=0.0
     integer :: num_modes=0,bnum_modes=0
     real(rkind) :: alpha_dim, beta_dim
@@ -174,9 +174,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh)
         do k=1,size(mesh,3)
             do j=1,size(mesh,2)
                 do i=1,size(mesh,1)
-                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx - pi/2.0
+                    x(i,j,k) = real( ix1 - 1   + i - 1, rkind ) * dx - 2.0*pi
                     y(i,j,k) = real( iy1 - 1  + j - 1, rkind ) * dy  - 0.5d0
-                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz   - pi/2.0
+                    z(i,j,k) = real( iz1 - 1 + k - 1, rkind ) * dz   - pi
                 end do
             end do
         end do
@@ -238,8 +238,13 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         p_r, p_i, m1_r, m1_i, m2_r, m2_i
 
     real(rkind), dimension(:), allocatable :: u_base
-    real(rkind) :: arg, u_perturb, v_perturb, w_perturb, p_perturb, phi_perturb, m1_perturb, m2_perturb,current_phase
-    real(rkind) :: y_min = -3.5d0, y_max = 6d0, alphar, betar, gammar
+    real(rkind) :: arg, u_perturb, v_perturb, w_perturb, p_perturb, phi_perturb, m1_perturb, m2_perturb,current_phase,kmag
+    real(rkind) :: y_min = -3.5d0, y_max = 6d0, alphar, betar, gammar, y_lo_anchor, y_hi_anchor
+    real(rkind), allocatable :: amp_modes(:,:), phase_modes_final(:,:)
+    real(rkind) :: umax_loc, umax_glob, target_amp, epsilonk_sol
+    real(rkind), allocatable :: up(:,:,:), vp(:,:,:), wp(:,:,:), pp_fld(:,:,:)
+
+
     namelist /PROBINPUT/ p_infty, Rgas, gamma, mu, rho_0, p_amb, thick, minVF, &
                           p_infty_2, Rgas_2, gamma_2, mu_2, rho_0_2, &
                           interface_init, delta, pointy, epsilonk, v0, v0_2, &
@@ -287,6 +292,11 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                (maxval(y_stretched) - minval(y_stretched)) * (y_max - y_min)
 
 
+!         y_lo_anchor = atanh( 2.0d0 * ( 1.0d0/real(ny-1,rkind) - 0.5d0 ) / (1.0d0 + 1.0d0/STRETCH_RATIO) )
+!         y_hi_anchor = atanh( 2.0d0 * ( real(ny-2,rkind)/real(ny-1,rkind) - 0.5d0 ) / (1.0d0 + 1.0d0/STRETCH_RATIO) )
+
+!         y_stretched = atanh(2.0d0 * y / (1.0d0 + 1.0d0/STRETCH_RATIO))
+!         eta = y_min + (y_stretched - y_lo_anchor) / (y_hi_anchor - y_lo_anchor) * (y_max - y_min)
 !        if (ny /= pointy) then
 !            call GracefulExit("Grid size mismatch in initfields.", 1)
 !        end if
@@ -336,146 +346,357 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         mix%material(2)%Ys = 1.0_rkind - mix%material(1)%Ys
         mix%material(2)%p  = mix%material(1)%p
 
+        ! =========================================================================
+    ! 3. COMPUTE RANDOM PHASES (seeded by run_id, generated on rank 0, broadcast)
     ! =========================================================================
-    ! 3. READ AND APPLY EIGENFUNCTION PERTURBATIONS
-    ! =========================================================================
-        ! Allocate arrays to hold the read-in data for all modes
-        allocate( phi_r(pointy, MAX_MODES,MAX_MODES), phi_i(pointy, MAX_MODES,MAX_MODES), u_r(pointy, MAX_MODES,MAX_MODES),u_i(pointy, MAX_MODES,MAX_MODES), &
-                  v_r(pointy, MAX_MODES,MAX_MODES), v_i(pointy, MAX_MODES,MAX_MODES), w_r(pointy, MAX_MODES,MAX_MODES), w_i(pointy,MAX_MODES,MAX_MODES), &
-                  p_r(pointy, MAX_MODES,MAX_MODES), p_i(pointy, MAX_MODES,MAX_MODES), m1_r(pointy, MAX_MODES,MAX_MODES),m1_i(pointy, MAX_MODES,MAX_MODES), &
-                  m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES))
-        allocate(  u_base(pointy) )
-        
-        allocate(theta_fix(MAX_MODES,MAX_MODES))
-        allocate(theta_rand(MAX_MODES,MAX_MODES))
-        theta_fix  = 0.0_rkind
-        theta_rand = 0.0_rkind
 
-        ! --- Rank 0 reads all data from files ---
-        if (nrank == 0) then
-            do q = 1, num_modes
-              do l = 1,bnum_modes
+            ! Allocate arrays to hold the read-in data for all modes
+    allocate( phi_r(pointy, MAX_MODES,MAX_MODES), phi_i(pointy, MAX_MODES,MAX_MODES), u_r(pointy, MAX_MODES,MAX_MODES),u_i(pointy, MAX_MODES,MAX_MODES), &
+    v_r(pointy, MAX_MODES,MAX_MODES), v_i(pointy, MAX_MODES,MAX_MODES), w_r(pointy, MAX_MODES,MAX_MODES), w_i(pointy,MAX_MODES,MAX_MODES), &
+    p_r(pointy, MAX_MODES,MAX_MODES), p_i(pointy, MAX_MODES,MAX_MODES), m1_r(pointy, MAX_MODES,MAX_MODES),m1_i(pointy, MAX_MODES,MAX_MODES), &
+    m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES))
+    allocate(  u_base(pointy) )
+    
+    allocate(theta_fix(num_modes, bnum_modes))
+    allocate(theta_rand(num_modes, bnum_modes))
+    theta_fix  = 0.0_rkind
+    theta_rand = 0.0_rkind
 
-
-              ! Write to temporary strings with plenty of space
-              write(temp_alpha_str, '(F20.2)') alpha_modes(q)
-              write(temp_beta_str, '(F20.2)') beta_modes(l)
-
-              ! Assemble the final string, trimming all padding
-              folder_path = 'alpha_' // trim(adjustl(temp_alpha_str)) // &
-              '_beta_' // trim(adjustl(temp_beta_str)) // '/'
-              ! Construct the directory path for the current mode
-              !  write(folder_path, '("alpha_", F0.2, "_beta_", F0.2, "/")') &
-              !                  alpha_modes(q), beta_modes(l)
-                print *, 'Reading from: ', trim(folder_path)
-
-                ! Open, read, and close each file
-                open(unit=22, file=trim(folder_path)//'VF_R.txt', status='old'); read(22,*) phi_r(:,q,l); close(22)
-                open(unit=23, file=trim(folder_path)//'VF_I.txt', status='old'); read(23,*) phi_i(:,q,l); close(23)
-                open(unit=24, file=trim(folder_path)//'u_R.txt', status='old');  read(24,*) u_r(:,q,l);   close(24)
-                open(unit=25, file=trim(folder_path)//'u_I.txt', status='old');  read(25,*) u_i(:,q,l);   close(25)
-                open(unit=26, file=trim(folder_path)//'v_R.txt', status='old');  read(26,*) v_r(:,q,l);   close(26)
-                open(unit=27, file=trim(folder_path)//'v_I.txt', status='old');  read(27,*) v_i(:,q,l);   close(27)
-                open(unit=28, file=trim(folder_path)//'w_R.txt', status='old');  read(28,*) w_r(:,q,l);   close(28)
-                open(unit=29, file=trim(folder_path)//'w_I.txt', status='old');  read(29,*) w_i(:,q,l);   close(29)
-                open(unit=30, file=trim(folder_path)//'p_R.txt', status='old');  read(30,*) p_r(:,q,l);   close(30)
-                open(unit=31, file=trim(folder_path)//'p_I.txt', status='old');  read(31,*) p_i(:,q,l);   close(31)
-                open(unit=32, file=trim(folder_path)//'m1_R.txt', status='old'); read(32,*) m1_r(:,q,l);  close(32)
-                open(unit=33, file=trim(folder_path)//'m1_I.txt', status='old'); read(33,*) m1_i(:,q,l);  close(33)
-                open(unit=34, file=trim(folder_path)//'m2_R.txt', status='old'); read(34,*) m2_r(:,q,l);  close(34)
-                open(unit=35, file=trim(folder_path)//'m2_I.txt', status='old'); read(35,*) m2_i(:,q,l);  close(35)
-                open(unit=36, file=trim(folder_path)//'Ubase.txt', status='old'); read(36,*) u_base;  close(36)
-            end do
-            end do
-        end if
-
-        ! --- Broadcast the data from Rank 0 to all other processes ---
-        call MPI_Bcast(phi_r, pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(phi_i, pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(u_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(u_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(v_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(v_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(w_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(w_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(p_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(p_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(m1_r,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(m1_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(m2_r,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call MPI_Bcast(m2_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-
-        call MPI_Bcast(u_base, pointy, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-
+    ! --- Rank 0 reads all data from files ---
+    if (nrank == 0) then
         do q = 1, num_modes
             do l = 1, bnum_modes
-          
-              magmax = -1.0_rkind
-              j0 = 1
-              do j = 1, pointy
-                mag = sqrt(u_r(j,q,l)**2 + u_i(j,q,l)**2)
-                if (mag > magmax) then
-                  magmax = mag
-                  j0 = j
-                end if
-              end do
-          
-              if (magmax < 1.0e-14_rkind) then
-                theta_fix(q,l) = 0.0_rkind   ! fallback: mode has ~zero u everywhere
-              else
-                theta_fix(q,l) = atan2(u_i(j0,q,l), u_r(j0,q,l))
-              end if
-          
+
+                write(temp_alpha_str, '(F20.2)') alpha_modes(q)
+                write(temp_beta_str,  '(F20.2)') beta_modes(l)
+                folder_path = 'alpha_' // trim(adjustl(temp_alpha_str)) // &
+                              '_beta_' // trim(adjustl(temp_beta_str)) // '/'
+                print *, 'Reading from: ', trim(folder_path)
+
+                open(unit=22, file=trim(folder_path)//'VF_R.txt',  status='old'); read(22,*) phi_r(:,q,l);  close(22)
+                open(unit=23, file=trim(folder_path)//'VF_I.txt',  status='old'); read(23,*) phi_i(:,q,l);  close(23)
+                open(unit=24, file=trim(folder_path)//'u_R.txt',   status='old'); read(24,*) u_r(:,q,l);    close(24)
+                open(unit=25, file=trim(folder_path)//'u_I.txt',   status='old'); read(25,*) u_i(:,q,l);    close(25)
+                open(unit=26, file=trim(folder_path)//'v_R.txt',   status='old'); read(26,*) v_r(:,q,l);    close(26)
+                open(unit=27, file=trim(folder_path)//'v_I.txt',   status='old'); read(27,*) v_i(:,q,l);    close(27)
+                open(unit=28, file=trim(folder_path)//'w_R.txt',   status='old'); read(28,*) w_r(:,q,l);    close(28)
+                open(unit=29, file=trim(folder_path)//'w_I.txt',   status='old'); read(29,*) w_i(:,q,l);    close(29)
+                open(unit=30, file=trim(folder_path)//'p_R.txt',   status='old'); read(30,*) p_r(:,q,l);    close(30)
+                open(unit=31, file=trim(folder_path)//'p_I.txt',   status='old'); read(31,*) p_i(:,q,l);    close(31)
+                open(unit=32, file=trim(folder_path)//'m1_R.txt',  status='old'); read(32,*) m1_r(:,q,l);   close(32)
+                open(unit=33, file=trim(folder_path)//'m1_I.txt',  status='old'); read(33,*) m1_i(:,q,l);   close(33)
+                open(unit=34, file=trim(folder_path)//'m2_R.txt',  status='old'); read(34,*) m2_r(:,q,l);   close(34)
+                open(unit=35, file=trim(folder_path)//'m2_I.txt',  status='old'); read(35,*) m2_i(:,q,l);   close(35)
+                open(unit=36, file=trim(folder_path)//'Ubase.txt', status='old'); read(36,*) u_base;         close(36)
             end do
         end do
 
+        ! --- Generate reproducible random phases seeded by run_id (rank 0 only) ---
+        ! Matches C++: std::mt19937_64 gen(run_id + 0x9E3779B97F4A7C15)
+        ! We use a simple LCG seeded the same way for portability.
+        ! Seed = run_id XOR-mixed constant (matching the C++ seed)
+        block
+            integer(kind=8) :: seed64, a_lcg, c_lcg, state
+            real(rkind) :: raw
+            integer :: qq, ll
+            ! LCG parameters (same quality as a quick hash; reproducible)
+            a_lcg = 6364136223846793005_8   ! Knuth MMIX multiplier
+            c_lcg = 1442695040888963407_8   ! Knuth MMIX increment
+            ! Seed: match C++ -> run_id + 0x9E3779B97F4A7C15
+            seed64 = int(run_id, 8) + int(z'9E3779B97F4A7C15', 8)
+            state  = seed64
+            do qq = 1, num_modes
+                do ll = 1, bnum_modes
+                    ! Advance LCG
+                    state = a_lcg * state + c_lcg
+                    ! Map to [0, 2*pi): take upper 32 bits, normalize
+                    raw = real(iand(int(ishft(state, -32), 8), int(z'FFFFFFFF', 8)), rkind) &
+                          / 4294967296.0_rkind
+                    theta_rand(qq,ll) = two * pi * raw
+                end do
+            end do
+        end block
 
-        do j = 1, ny
+    end if  ! nrank == 0
 
-           uref(:,j,:) = u_base(j)*(v0_2 - v0)
-           u(:,j,:)    = u_base(j)*(v0_2 - v0)
+    ! --- Broadcast all eigenfunction data ---
+    call MPI_Bcast(phi_r,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(phi_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(u_r,    pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(u_i,    pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(v_r,    pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(v_i,    pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(w_r,    pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(w_i,    pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(p_r,    pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(p_i,    pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(m1_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(m1_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(m2_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(m2_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(u_base, pointy,                     MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call MPI_Bcast(theta_rand, num_modes*bnum_modes,   MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
 
-        enddo
+    ! =========================================================================
+    ! 4. COMPUTE theta_fix (phase-lock to eigenfunction peak) + combined phase
+    ! =========================================================================
+    ! Reuse theta_fix to store the FINAL phase = theta_fix + theta_rand
+    ! Store per-mode amplitude (k^-1.5) and final phase in 1D arrays
+    allocate(amp_modes(num_modes, bnum_modes))
+    allocate(phase_modes_final(num_modes, bnum_modes))   ! rename to avoid clash with namelist
 
-        ! --- Loop over modes and add perturbations to the 3D field ---
-        do q = 1, num_modes
-          do l = 1, bnum_modes
+    do q = 1, num_modes
+        do l = 1, bnum_modes
+            ! --- eigenfunction peak phase lock ---
+            magmax = -1.0_rkind
+            j0 = 1
+            do j = 1, pointy
+                mag = sqrt(u_r(j,q,l)**2 + u_i(j,q,l)**2)
+                if (mag > magmax) then
+                    magmax = mag
+                    j0 = j
+                end if
+            end do
+            if (magmax < 1.0e-14_rkind) then
+                theta_fix(q,l) = 0.0_rkind
+            else
+                theta_fix(q,l) = atan2(u_i(j0,q,l), u_r(j0,q,l))
+            end if
+
+            ! --- combined phase: lock + random ---
+            phase_modes_final(q,l) = theta_fix(q,l) + theta_rand(q,l)
+
+            ! --- k^-1.5 spectral amplitude (matches C++ amp_h(m)) ---
+            kmag = sqrt(alpha_modes(q)**2 + beta_modes(l)**2)
+            if (kmag > 1.0e-12_rkind) then
+                amp_modes(q,l) = kmag**(-1.5_rkind)
+            else
+                amp_modes(q,l) = 0.0_rkind
+            end if
+        end do
+    end do
+
+    ! =========================================================================
+    ! 5. SET BASE FLOW
+    ! =========================================================================
+    do j = 1, ny
+        uref(:,j,:) = u_base(j) * (v0_2 - v0)
+        u(:,j,:)    = u_base(j) * (v0_2 - v0)
+    end do
+
+    ! =========================================================================
+    ! 6. ACCUMULATE PERTURBATIONS WITH epsilonk = 1  (into u then find max|u'|)
+    !    Store raw perturbation sums in temporary arrays, then rescale.
+    !    We reuse the existing field 'tmp' for |u'| tracking.
+    ! =========================================================================
+    ! Declare scratch perturbation accumulators
+    allocate(up(nx,ny,nz), vp(nx,ny,nz), wp(nx,ny,nz), pp_fld(nx,ny,nz))
+    up = 0.0_rkind
+    vp = 0.0_rkind
+    wp = 0.0_rkind
+    pp_fld = 0.0_rkind
+
+    do q = 1, num_modes
+        do l = 1, bnum_modes
             alpha_dim = alpha_modes(q) / delta_ref
-            beta_dim  = beta_modes(l) / delta_ref
-            alphar = 0.6180339887498949_rkind   ! golden ratio conjugate
-            betar  = 0.4142135623730950_rkind   ! sqrt(2)-1
-            gammar = 0.7320508075688772_rkind   ! sqrt(3)-1
+            beta_dim  = beta_modes(l)  / delta_ref
+            current_phase = phase_modes_final(q,l)
 
-            current_phase = theta_fix(q,l) + two*pi*fract( alphar*real(run_id,rkind) + &
-                                              betar *real(q,rkind)      + &
-                                              gammar*real(l,rkind) )
-            !current_phase = 2.0_rkind * pi * sin( real(q)*(1.27d0) + real(l)*3.81d0)**2d0
             do k = 1, nz
                 do j = 1, ny
                     do i = 1, nx
                         arg = alpha_dim * x(i,j,k) + beta_dim * z(i,j,k) - current_phase
-
-                        ! Construct dimensional perturbations using pre-interpolated eigenfunction values at y-index 'j'
-                        u_perturb = U_ref * ( u_r(j,q,l)*cos(arg) - u_i(j,q,l)*sin(arg) )
-                        v_perturb = U_ref * ( v_r(j,q,l)*cos(arg) - v_i(j,q,l)*sin(arg) )
-                        w_perturb = U_ref * ( w_r(j,q,l)*cos(arg) - w_i(j,q,l)*sin(arg) )
-                        p_perturb = P_ref * ( p_r(j,q,l)*cos(arg) - p_i(j,q,l)*sin(arg) )
-        !                phi_perturb =       ( phi_r(j,q,l)*cos(arg) - phi_i(j,q,l)*sin(arg) )
-        !                m1_perturb = Rho_ref * ( m1_r(j,q,l)*cos(arg) - m1_i(j,q,l)*sin(arg) )
-        !                m2_perturb = Rho_ref * ( m2_r(j,q,l)*cos(arg) - m2_i(j,q,l)*sin(arg) )
-
-                        ! Apply the perturbations, scaled by the single amplitude 'epsilonk'
-                        u(i,j,k) = u(i,j,k) + epsilonk * u_perturb
-                        v(i,j,k) = v(i,j,k) + epsilonk * v_perturb
-                        w(i,j,k) = w(i,j,k) + epsilonk * w_perturb
-                        mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk * p_perturb
-         !               mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
-         !               rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb + m2_perturb)
+                        up(i,j,k)     = up(i,j,k)     + amp_modes(q,l) * U_ref * &
+                                        ( u_r(j,q,l)*cos(arg) - u_i(j,q,l)*sin(arg) )
+                        vp(i,j,k)     = vp(i,j,k)     + amp_modes(q,l) * U_ref * &
+                                        ( v_r(j,q,l)*cos(arg) - v_i(j,q,l)*sin(arg) )
+                        wp(i,j,k)     = wp(i,j,k)     + amp_modes(q,l) * U_ref * &
+                                        ( w_r(j,q,l)*cos(arg) - w_i(j,q,l)*sin(arg) )
+                        pp_fld(i,j,k) = pp_fld(i,j,k) + amp_modes(q,l) * P_ref * &
+                                        ( p_r(j,q,l)*cos(arg) - p_i(j,q,l)*sin(arg) )
                     end do
                 end do
             end do
         end do
+    end do
+
+    ! =========================================================================
+    ! 7. SOLVE FOR epsilonk: max|u'| -> 2.5% of (v0_2 - v0)
+    ! =========================================================================
+
+    umax_loc = maxval(abs(up))
+    call MPI_Allreduce(umax_loc, umax_glob, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+
+    target_amp   = 0.025_rkind * abs(v0_2 - v0)
+    epsilonk_sol = 0.0_rkind
+    if (umax_glob > 1.0e-30_rkind) epsilonk_sol = target_amp / umax_glob
+
+    if (nrank == 0) then
+        write(*,'(A,ES12.4,A,ES12.4,A,ES12.4)') &
+            'epsilonk solved = ', epsilonk_sol, &
+            '  (umax_glob = ',    umax_glob,    &
+            ', target = ',        target_amp, ')'
+    end if
+
+    ! =========================================================================
+    ! 8. ASSEMBLE FINAL FIELDS: base flow + epsilonk_sol * perturbation
+    ! =========================================================================
+    do k = 1, nz
+        do j = 1, ny
+            do i = 1, nx
+                u(i,j,k) = u(i,j,k) + epsilonk_sol * up(i,j,k)
+                v(i,j,k) = v(i,j,k) + epsilonk_sol * vp(i,j,k)
+                w(i,j,k) = w(i,j,k) + epsilonk_sol * wp(i,j,k)
+                mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk_sol * pp_fld(i,j,k)
+            end do
         end do
+    end do
+
+    deallocate(up, vp, wp, pp_fld)
+    deallocate(amp_modes, phase_modes_final)
+    deallocate(theta_fix, theta_rand)
+
+    ! =========================================================================
+    ! 3. READ AND APPLY EIGENFUNCTION PERTURBATIONS
+    ! =========================================================================
+        ! Allocate arrays to hold the read-in data for all modes
+    !    allocate( phi_r(pointy, MAX_MODES,MAX_MODES), phi_i(pointy, MAX_MODES,MAX_MODES), u_r(pointy, MAX_MODES,MAX_MODES),u_i(pointy, MAX_MODES,MAX_MODES), &
+    !              v_r(pointy, MAX_MODES,MAX_MODES), v_i(pointy, MAX_MODES,MAX_MODES), w_r(pointy, MAX_MODES,MAX_MODES), w_i(pointy,MAX_MODES,MAX_MODES), &
+    !              p_r(pointy, MAX_MODES,MAX_MODES), p_i(pointy, MAX_MODES,MAX_MODES), m1_r(pointy, MAX_MODES,MAX_MODES),m1_i(pointy, MAX_MODES,MAX_MODES), &
+    !              m2_r(pointy, MAX_MODES,MAX_MODES), m2_i(pointy, MAX_MODES,MAX_MODES))
+    !    allocate(  u_base(pointy) )
+    !    
+    !    allocate(theta_fix(MAX_MODES,MAX_MODES))
+    !    allocate(theta_rand(MAX_MODES,MAX_MODES))
+    !    theta_fix  = 0.0_rkind
+    !    theta_rand = 0.0_rkind
+
+    !    ! --- Rank 0 reads all data from files ---
+    !    if (nrank == 0) then
+    !        do q = 1, num_modes
+    !          do l = 1,bnum_modes
+
+
+    !          ! Write to temporary strings with plenty of space
+    !          write(temp_alpha_str, '(F20.2)') alpha_modes(q)
+    !          write(temp_beta_str, '(F20.2)') beta_modes(l)
+
+    !          ! Assemble the final string, trimming all padding
+    !          folder_path = 'alpha_' // trim(adjustl(temp_alpha_str)) // &
+    !          '_beta_' // trim(adjustl(temp_beta_str)) // '/'
+    !          ! Construct the directory path for the current mode
+    !          !  write(folder_path, '("alpha_", F0.2, "_beta_", F0.2, "/")') &
+    !          !                  alpha_modes(q), beta_modes(l)
+    !            print *, 'Reading from: ', trim(folder_path)
+
+    !            ! Open, read, and close each file
+    !            open(unit=22, file=trim(folder_path)//'VF_R.txt', status='old'); read(22,*) phi_r(:,q,l); close(22)
+    !            open(unit=23, file=trim(folder_path)//'VF_I.txt', status='old'); read(23,*) phi_i(:,q,l); close(23)
+    !            open(unit=24, file=trim(folder_path)//'u_R.txt', status='old');  read(24,*) u_r(:,q,l);   close(24)
+    !            open(unit=25, file=trim(folder_path)//'u_I.txt', status='old');  read(25,*) u_i(:,q,l);   close(25)
+    !            open(unit=26, file=trim(folder_path)//'v_R.txt', status='old');  read(26,*) v_r(:,q,l);   close(26)
+    !            open(unit=27, file=trim(folder_path)//'v_I.txt', status='old');  read(27,*) v_i(:,q,l);   close(27)
+    !            open(unit=28, file=trim(folder_path)//'w_R.txt', status='old');  read(28,*) w_r(:,q,l);   close(28)
+    !            open(unit=29, file=trim(folder_path)//'w_I.txt', status='old');  read(29,*) w_i(:,q,l);   close(29)
+    !            open(unit=30, file=trim(folder_path)//'p_R.txt', status='old');  read(30,*) p_r(:,q,l);   close(30)
+    !            open(unit=31, file=trim(folder_path)//'p_I.txt', status='old');  read(31,*) p_i(:,q,l);   close(31)
+    !            open(unit=32, file=trim(folder_path)//'m1_R.txt', status='old'); read(32,*) m1_r(:,q,l);  close(32)
+    !            open(unit=33, file=trim(folder_path)//'m1_I.txt', status='old'); read(33,*) m1_i(:,q,l);  close(33)
+    !            open(unit=34, file=trim(folder_path)//'m2_R.txt', status='old'); read(34,*) m2_r(:,q,l);  close(34)
+    !            open(unit=35, file=trim(folder_path)//'m2_I.txt', status='old'); read(35,*) m2_i(:,q,l);  close(35)
+    !            open(unit=36, file=trim(folder_path)//'Ubase.txt', status='old'); read(36,*) u_base;  close(36)
+    !        end do
+    !        end do
+    !    end if
+
+    !    ! --- Broadcast the data from Rank 0 to all other processes ---
+    !    call MPI_Bcast(phi_r, pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(phi_i, pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(u_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(u_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(v_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(v_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(w_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(w_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(p_r,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(p_i,   pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(m1_r,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(m1_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(m2_r,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    !    call MPI_Bcast(m2_i,  pointy*MAX_MODES*MAX_MODES, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+
+    !    call MPI_Bcast(u_base, pointy, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+
+    !    do q = 1, num_modes
+    !        do l = 1, bnum_modes
+    !      
+    !          magmax = -1.0_rkind
+    !          j0 = 1
+    !          do j = 1, pointy
+    !            mag = sqrt(u_r(j,q,l)**2 + u_i(j,q,l)**2)
+    !            if (mag > magmax) then
+    !              magmax = mag
+    !              j0 = j
+    !            end if
+    !          end do
+    !      
+    !          if (magmax < 1.0e-14_rkind) then
+    !            theta_fix(q,l) = 0.0_rkind   ! fallback: mode has ~zero u everywhere
+    !          else
+    !            theta_fix(q,l) = atan2(u_i(j0,q,l), u_r(j0,q,l))
+    !          end if
+    !      
+    !        end do
+    !    end do
+
+
+    !    do j = 1, ny
+
+    !       uref(:,j,:) = u_base(j)*(v0_2 - v0)
+    !       u(:,j,:)    = u_base(j)*(v0_2 - v0)
+
+    !    enddo
+
+    !    ! --- Loop over modes and add perturbations to the 3D field ---
+    !    do q = 1, num_modes
+    !      do l = 1, bnum_modes
+    !        alpha_dim = alpha_modes(q) / delta_ref
+    !        beta_dim  = beta_modes(l) / delta_ref
+    !        kmag      = sqrt( alpha_dim*alpha_dim + beta_dim*beta_dim)
+    !        alphar = 0.6180339887498949_rkind   ! golden ratio conjugate
+    !        betar  = 0.4142135623730950_rkind   ! sqrt(2)-1
+    !        gammar = 0.7320508075688772_rkind   ! sqrt(3)-1
+
+    !        current_phase = theta_fix(q,l) + two*pi*fract( alphar*real(run_id,rkind) + &
+    !                                          betar *real(q,rkind)      + &
+    !                                          gammar*real(l,rkind) )
+    !        !current_phase = 2.0_rkind * pi * sin( real(q)*(1.27d0) + real(l)*3.81d0)**2d0
+    !        do k = 1, nz
+    !            do j = 1, ny
+    !                do i = 1, nx
+    !                    arg = alpha_dim * x(i,j,k) + beta_dim * z(i,j,k) - current_phase
+
+    !                    ! Construct dimensional perturbations using pre-interpolated eigenfunction values at y-index 'j'
+    !                    u_perturb = kmag**(-3.0_rkind / 2.0_rkind) * U_ref * ( u_r(j,q,l)*cos(arg) - u_i(j,q,l)*sin(arg) )
+    !                    v_perturb = kmag**(-3.0_rkind / 2.0_rkind) * U_ref * ( v_r(j,q,l)*cos(arg) - v_i(j,q,l)*sin(arg) )
+    !                    w_perturb = kmag**(-3.0_rkind / 2.0_rkind) * U_ref * ( w_r(j,q,l)*cos(arg) - w_i(j,q,l)*sin(arg) )
+    !                    p_perturb = kmag**(-3.0_rkind / 2.0_rkind) * P_ref * ( p_r(j,q,l)*cos(arg) - p_i(j,q,l)*sin(arg) )
+    !    !                phi_perturb =       ( phi_r(j,q,l)*cos(arg) - phi_i(j,q,l)*sin(arg) )
+    !    !                m1_perturb = Rho_ref * ( m1_r(j,q,l)*cos(arg) - m1_i(j,q,l)*sin(arg) )
+    !    !                m2_perturb = Rho_ref * ( m2_r(j,q,l)*cos(arg) - m2_i(j,q,l)*sin(arg) )
+
+    !                    ! Apply the perturbations, scaled by the single amplitude 'epsilonk'
+    !                    u(i,j,k) = u(i,j,k) + epsilonk * u_perturb
+    !                    v(i,j,k) = v(i,j,k) + epsilonk * v_perturb
+    !                    w(i,j,k) = w(i,j,k) + epsilonk * w_perturb
+    !                    mix%material(1)%p(i,j,k) = mix%material(1)%p(i,j,k) + epsilonk * p_perturb
+    !     !               mix%material(1)%VF(i,j,k) = mix%material(1)%VF(i,j,k) + epsilonk * phi_perturb
+    !     !               rho(i,j,k) = rho(i,j,k) + epsilonk * (m1_perturb + m2_perturb)
+    !                end do
+    !            end do
+    !        end do
+    !    end do
+    !    end do
 
         ! --- Finalize mixture properties after all perturbations are added ---
         !mix%material(1)%VF = max(minVF, min(1.0_rkind - minVF, mix%material(1)%VF))
@@ -555,7 +776,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp,dum, eta, eta2, yphys,y_stretched
     real(rkind) :: fac, Lr, STRETCH_RATIO = 6.0d0,int_KE
     integer, dimension(2) :: iparams
-    real(rkind) :: a0, a0_2, sigma1, sigma2, y_min = -3.5d0, y_max = 6d0
+    real(rkind) :: a0, a0_2, sigma1, sigma2, y_min = -3.5d0, y_max = 6d0, y_lo_anchor, y_hi_anchor
     integer :: nx,ny,nz,k,ix,j
     integer :: ierr, rank,fh, filesize, chunksize, offset, offset2,totalproc
     integer, allocatable :: data(:), recvbuf(:) 
@@ -574,6 +795,11 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         yphys = y_min + (y_stretched - minval(y_stretched)) / &
                (maxval(y_stretched) - minval(y_stretched)) * (y_max - y_min)
 
+        !y_lo_anchor = atanh( 2.0d0 * ( 1.0d0/real(ny-1,rkind) - 0.5d0 ) / (1.0d0 + 1.0d0/STRETCH_RATIO) )
+        !y_hi_anchor = atanh( 2.0d0 * ( real(ny-2,rkind)/real(ny-1,rkind) - 0.5d0 ) / (1.0d0 + 1.0d0/STRETCH_RATIO) )
+
+        !y_stretched = atanh(2.0d0 * y / (1.0d0 + 1.0d0/STRETCH_RATIO))
+        !yphys = y_min + (y_stretched - y_lo_anchor) / (y_hi_anchor - y_lo_anchor) * (y_max - y_min)
         sigma1 = -1000d0 ! -2400 ! -80000
 
         where(yphys .LE. -2.0d0)
@@ -596,8 +822,8 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         rhou(2) = rho(1,ny,1)*v0_2 !uref(1,ny,1)
         rhov(1) = 0 !-1.060981230880199d-5 !rho(1,1,1)*v(1,1,1)
         rhov(2) = 0 !2.175685479370164d-08
-        rhow(1) = rho(1,1,1)*w(1,1,1)
-        rhow(2) = rho(1,ny,1)*w(1,ny,1)
+        rhow(1) = 0 !rho(1,1,1)*w(1,1,1)
+        rhow(2) = 0 !rho(1,ny,1)*w(1,ny,1)
         rhoe(1) = rho(1,1,1)*(e(1,1,1) + 0.5d0*(v0**2d0)) ! 828.903*(3.4899086 + 0.5*(v0**2)) !1d3*(581967.7419+ 0.5*(v0**2)) !1.d0*(103.176 + 0.5*(v0**2))
         rhoe(2) = rho(1,ny,1)*(e(1,ny,1) + 0.5d0*(v0_2**2d0)) !1d0*(1.785714 + 0.5*(v0_2**2)) !1d0*(250000 + 0.5*(v0_2**2))
         do i = 1,2
@@ -923,9 +1149,15 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
     integer, dimension(2),           intent(in)    :: x_bc,y_bc,z_bc
     
     integer :: nx,ny, i, j
-    real(rkind) :: dy, yspng, tspng, yspngR, yspngL, Lr, STRETCH_RATIO = 6.0 
+    real(rkind) :: dy, yspng, tspng, yspngR, yspngL, Lr, STRETCH_RATIO = 6.0
     real(rkind), dimension(decomp%ysz(1),decomp%ysz(2),decomp%ysz(3)) :: tmp, dum, dumL, dumR, yphys
-    
+
+    ! Coefficients matching C++ homoNeumannBC/dirichletBC (two_phase_shear_layer.cpp)
+    real(rkind), parameter :: nb_ainv = -24.0_rkind/23.0_rkind, nb_bneg = -7.0_rkind/8.0_rkind, &
+                               nb_cneg = -1.0_rkind/8.0_rkind,  nb_dneg =  1.0_rkind/24.0_rkind
+    real(rkind), parameter :: db_ainv =  16.0_rkind/5.0_rkind,  db_bneg = -15.0_rkind/16.0_rkind, &
+                               db_cneg =   5.0_rkind/16.0_rkind, db_dneg = -1.0_rkind/16.0_rkind
+
     nx = decomp%ysz(1)
     ny = decomp%ysz(2)
 
@@ -949,40 +1181,43 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc)
 
 
         if(decomp%yst(2)==1) then
-         if(y_bc(1)==0) then ! Neumann BC on Lower Boundary
-             rho( :,1,:) = rho( :,2,:)
-             u  ( :,1,:) = u( :,2,:)
-             v  ( :,1,:) = v( :,2,:)  ! <-- KEY CHANGE: Extrapolate v, do NOT set to zero.
-             w  ( :,1,:) = w( :,2,:)
+         if(y_bc(1)==0) then
+             ! Matches C++ setBoundaryConditionsAtCollocationPoints, eta_lo:
+             !   u,w,p,rho -> homoNeumannBC(f(j+1),f(j+2),f(j+3))
+             !   v         -> dirichletBC(0.0, ...)
+             !   VF -> phi -> dirichletBC(VFL, ...) ; Ys -> m1/m2 -> dirichletBC(YsL, ...)
+             rho( :,1,:) = nb_ainv*( nb_bneg*rho( :,2,:) + nb_cneg*rho( :,3,:) + nb_dneg*rho( :,4,:) )
+             u  ( :,1,:) = nb_ainv*( nb_bneg*u  ( :,2,:) + nb_cneg*u  ( :,3,:) + nb_dneg*u  ( :,4,:) )
+             v  ( :,1,:) = db_ainv*( db_bneg*v  ( :,2,:) + db_cneg*v  ( :,3,:) + db_dneg*v  ( :,4,:) + zero )
+             w  ( :,1,:) = nb_ainv*( nb_bneg*w  ( :,2,:) + nb_cneg*w  ( :,3,:) + nb_dneg*w  ( :,4,:) )
 
-             mix%material(1)%p(:,1,:) = mix%material(1)%p(:,2,:)
-             mix%material(2)%p(:,1,:) = mix%material(2)%p(:,2,:)
-             p(:,1,:)                 = p(:,2,:)
-             mix%material(1)%VF ( :,1,:) = mix%material(1)%VF ( :,2,:)
-             mix%material(2)%VF ( :,1,:) = mix%material(2)%VF ( :,2,:)
-             mix%material(1)%Ys ( :,1,:) = mix%material(1)%Ys ( :,2,:)
-             mix%material(2)%Ys ( :,1,:) = mix%material(2)%Ys ( :,2,:)
+             mix%material(1)%p(:,1,:) = nb_ainv*( nb_bneg*mix%material(1)%p(:,2,:) + nb_cneg*mix%material(1)%p(:,3,:) + nb_dneg*mix%material(1)%p(:,4,:) )
+             mix%material(2)%p(:,1,:) = nb_ainv*( nb_bneg*mix%material(2)%p(:,2,:) + nb_cneg*mix%material(2)%p(:,3,:) + nb_dneg*mix%material(2)%p(:,4,:) )
+             p(:,1,:)                 = nb_ainv*( nb_bneg*p(:,2,:) + nb_cneg*p(:,3,:) + nb_dneg*p(:,4,:) )
 
-             ! ... and so on for Ys, etc.
+             mix%material(1)%VF ( :,1,:) = db_ainv*( db_bneg*mix%material(1)%VF ( :,2,:) + db_cneg*mix%material(1)%VF ( :,3,:) + db_dneg*mix%material(1)%VF ( :,4,:) + VFL )
+             mix%material(2)%VF ( :,1,:) = one - mix%material(1)%VF ( :,1,:)
+             mix%material(1)%Ys ( :,1,:) = db_ainv*( db_bneg*mix%material(1)%Ys ( :,2,:) + db_cneg*mix%material(1)%Ys ( :,3,:) + db_dneg*mix%material(1)%Ys ( :,4,:) + YsL )
+             mix%material(2)%Ys ( :,1,:) = one - mix%material(1)%Ys ( :,1,:)
          end if
        endif
 
        if(decomp%yen(2)==decomp%ysz(2)) then
-         if(y_bc(2)==0) then ! Neumann BC on Upper Boundary
-             rho( :,ny,:) = rho( :,ny-1,:)
-             u  ( :,ny,:) = u( :,ny-1,:)
-             v  ( :,ny,:) = v( :,ny-1,:) ! <-- KEY CHANGE: Extrapolate v.
-             w  ( :,ny,:) = w( :,ny-1,:)
+         if(y_bc(2)==0) then
+             ! Matches C++ setBoundaryConditionsAtCollocationPoints, eta_hi
+             rho( :,ny,:) = nb_ainv*( nb_bneg*rho( :,ny-1,:) + nb_cneg*rho( :,ny-2,:) + nb_dneg*rho( :,ny-3,:) )
+             u  ( :,ny,:) = nb_ainv*( nb_bneg*u  ( :,ny-1,:) + nb_cneg*u  ( :,ny-2,:) + nb_dneg*u  ( :,ny-3,:) )
+             v  ( :,ny,:) = db_ainv*( db_bneg*v  ( :,ny-1,:) + db_cneg*v  ( :,ny-2,:) + db_dneg*v  ( :,ny-3,:) + zero )
+             w  ( :,ny,:) = nb_ainv*( nb_bneg*w  ( :,ny-1,:) + nb_cneg*w  ( :,ny-2,:) + nb_dneg*w  ( :,ny-3,:) )
 
-             mix%material(1)%p(:,ny,:) = mix%material(1)%p(:,ny-1,:)
-             mix%material(2)%p(:,ny,:) = mix%material(2)%p(:,ny-1,:)
-             p(:,ny,:)                 = p(:,ny-1,:)
-             mix%material(1)%VF ( :,ny,:) = mix%material(1)%VF ( :,ny-1,:)
-             mix%material(2)%VF ( :,ny,:) = mix%material(2)%VF ( :,ny-1,:)
-             mix%material(1)%Ys ( :,ny,:) = mix%material(1)%Ys ( :,ny-1,:)
-             mix%material(2)%Ys ( :,ny,:) = mix%material(2)%Ys ( :,ny-1,:)
+             mix%material(1)%p(:,ny,:) = nb_ainv*( nb_bneg*mix%material(1)%p(:,ny-1,:) + nb_cneg*mix%material(1)%p(:,ny-2,:) + nb_dneg*mix%material(1)%p(:,ny-3,:) )
+             mix%material(2)%p(:,ny,:) = nb_ainv*( nb_bneg*mix%material(2)%p(:,ny-1,:) + nb_cneg*mix%material(2)%p(:,ny-2,:) + nb_dneg*mix%material(2)%p(:,ny-3,:) )
+             p(:,ny,:)                 = nb_ainv*( nb_bneg*p(:,ny-1,:) + nb_cneg*p(:,ny-2,:) + nb_dneg*p(:,ny-3,:) )
 
-             ! ... etc.
+             mix%material(1)%VF ( :,ny,:) = db_ainv*( db_bneg*mix%material(1)%VF ( :,ny-1,:) + db_cneg*mix%material(1)%VF ( :,ny-2,:) + db_dneg*mix%material(1)%VF ( :,ny-3,:) + VFR )
+             mix%material(2)%VF ( :,ny,:) = one - mix%material(1)%VF ( :,ny,:)
+             mix%material(1)%Ys ( :,ny,:) = db_ainv*( db_bneg*mix%material(1)%Ys ( :,ny-1,:) + db_cneg*mix%material(1)%Ys ( :,ny-2,:) + db_dneg*mix%material(1)%Ys ( :,ny-3,:) + YsR )
+             mix%material(2)%Ys ( :,ny,:) = one - mix%material(1)%Ys ( :,ny,:)
          end if
        endif
 
