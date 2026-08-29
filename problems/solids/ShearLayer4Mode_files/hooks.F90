@@ -442,40 +442,312 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     ! =========================================================================
     ! Reuse theta_fix to store the FINAL phase = theta_fix + theta_rand
     ! Store per-mode amplitude (k^-1.5) and final phase in 1D arrays
+    ! =========================================================================
+    ! 4. COMPUTE theta_fix + von Karman amplitude + combined phase
+    ! =========================================================================
+    ! von Karman p=1 spectrum: E(kappa) = r/(1+r^2)^{4/3}, r = kappa/kappa_0
+    !   Low-k  : E ~ kappa^{+1}  (gentle rise, low-k modes alive for symmetry break)
+    !   Peak   : at kappa = kappa_target = 6  (most unstable mode)
+    !   High-k : E ~ kappa^{-5/3} (Kolmogorov inertial range)
+    !
+    ! kappa_0 is shifted from kappa_target because the analytic peak of
+    ! r/(1+r^2)^{4/3} occurs at r=sqrt(3/5), not r=1:
+    !   kappa_0 = kappa_target / sqrt(3/5) = 6 / 0.7746 = 7.7460
+    !
+    ! Amplitude: A_ql = sqrt(E(kappa_ql))   [normalised below so sum(A^2)=1]
+    ! epsilonk_sol (Step 7) then sets the true 2.5% perturbation level.
+    ! =========================================================================
+
     allocate(amp_modes(num_modes, bnum_modes))
-    allocate(phase_modes_final(num_modes, bnum_modes))   ! rename to avoid clash with namelist
+    allocate(phase_modes_final(num_modes, bnum_modes))
 
-    do q = 1, num_modes
-        do l = 1, bnum_modes
-            ! --- eigenfunction peak phase lock ---
-            magmax = -1.0_rkind
-            j0 = 1
-            do j = 1, pointy
-                mag = sqrt(u_r(j,q,l)**2 + u_i(j,q,l)**2)
-                if (mag > magmax) then
-                    magmax = mag
-                    j0 = j
-                end if
+    ! =========================================================================
+    ! 4. PHYSICALLY MOTIVATED SPECTRAL AMPLITUDE
+    ! =========================================================================
+    ! Spectrum: Saffman (s=2) -- physically appropriate for shear layers
+    !
+    !   E(kappa) = (r^2) / (1 + r^2)^{11/6},   r = kappa/kappa_0
+    !
+    ! where kappa_0 is chosen so the peak of E coincides with the
+    ! most unstable wavenumber kappa_delta = 2*pi/delta.
+    !
+    ! Peak of r^s/(1+r^2)^{(s+5/3)/2} is at r = sqrt(s / (5/3)):
+    !   s=2:  r_peak = sqrt(2/(5/3)) = sqrt(6/5) = 1.095
+    !   =>    kappa_0 = kappa_peak / r_peak = kappa_delta / sqrt(6/5)
+    !
+    ! With delta=1:  kappa_delta = 2*pi ~ 6.28
+    !                kappa_0     = 6.28 / 1.095 = 5.74
+    !
+    ! NO FREE PARAMETERS -- everything set by delta.
+    !
+    ! Low-k  (kappa << kappa_0): E ~ kappa^2   (Saffman, momentum-conserving)
+    ! High-k (kappa >> kappa_0): E ~ kappa^{-5/3} (Kolmogorov inertial range)
+    !
+    ! Reference: Saffman (1967), J. Fluid Mech. 27, 581
+    !            Pope (2000), Turbulent Flows, Ch. 6
+    ! =========================================================================
+    ! =========================================================================
+    ! 4. SAFFMAN SPECTRUM WITH SHELL-COUNT CORRECTION
+    ! =========================================================================
+    ! Physical basis:
+    !   E(kappa) = Saffman s=2 spectrum, peak at kappa_delta = 2*sqrt(pi)/delta
+    !   (vorticity thickness = sqrt(pi)*delta for erf profile)
+    !
+    !   Amplitude per mode corrected for shell occupancy:
+    !   A_ql = sqrt( E(kappa_ql) / N_shell(kappa_ql) )
+    !
+    !   This ensures sum_{modes in shell} A^2 = E(kappa)*dkappa
+    !   i.e. the discrete spectrum matches the continuous Saffman spectrum
+    !   regardless of how many modes fall in each wavenumber band.
+    !
+    !   Shell width dkappa = 1 (unit shells in wavenumber space)
+    ! =========================================================================
+
+    ! =========================================================================
+    ! 4. SAFFMAN SPECTRUM WITH LOW-N: FLOOR FOR SYMMETRY BREAKING
+    ! =========================================================================
+    ! Physical basis:
+    !   E(kappa) = max( E_Saffman(kappa), E_floor )
+    !
+    !   E_Saffman: Saffman s=2 spectrum, peak at kappa_dw = 2*pi/delta_w
+    !              where delta_w = sqrt(pi)*delta_sh is vorticity thickness.
+    !              E ~ kappa^2 below peak (momentum conserving)
+    !              E ~ kappa^{-5/3} above peak (Kolmogorov)
+    !
+    !   E_floor = f_floor^2 * E_Saffman(kappa_peak)
+    !              Minimum energy at any wavenumber.
+    !              Ensures low-k modes have at least f_floor fraction
+    !              of the peak-mode amplitude at the interface.
+    !              Physical interpretation: background broadband excitation.
+    !
+    !   f_floor = 0.5: low-k modes at least 50% of peak amplitude
+    !             This guarantees visual symmetry breaking regardless
+    !             of how many high-k modes are present.
+    !
+    !   Amplitude: A_ql = sqrt( E_seeded(kappa_ql) / N_shell )
+    !   Normalisation: sum(A^2 * N_shell) = 1  (unit total spectral energy)
+    !   epsilonk_sol sets the true 2.5% perturbation level.
+    ! =========================================================================
+    block
+        ! bb Physical parameters (no tuning, set by flow) bbbbbbbbbbbbbbbbbbbbb
+        real(rkind), parameter :: s        = 2.0_rkind
+        real(rkind), parameter :: delta_sh = 1.0_rkind
+        real(rkind), parameter :: delta_w  = sqrt(pi) * delta_sh
+        real(rkind), parameter :: kappa_dw = two * pi / delta_w
+        real(rkind), parameter :: r_peak   = sqrt(s * 3.0_rkind/5.0_rkind)
+        real(rkind), parameter :: kappa_0  = kappa_dw / r_peak
+        real(rkind), parameter :: expn     = (s + 5.0_rkind/3.0_rkind)/2.0_rkind
+
+        ! bb Symmetry-breaking floor bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        ! f_floor: minimum amplitude of any mode as fraction of peak-mode amplitude.
+        ! f_floor = 0.5 means low-k modes get at least 50% of peak amplitude.
+        ! Increase toward 1.0 for stronger symmetry breaking (flatter spectrum).
+        ! Decrease toward 0.0 to recover pure Saffman (may under-seed low-k).
+        real(rkind), parameter :: f_floor  = 0.7_rkind
+
+        ! bb Shell counting bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        real(rkind), parameter :: dkappa  = 1.0_rkind
+        integer,     parameter :: nshells = 25
+        integer   :: shell_count(nshells)
+        integer   :: qq, ll, jj, ishell
+        real(rkind) :: r_vk, Ek_vk, E_peak, E_floor_val
+        real(rkind) :: amp_sumsq, amp_norm
+        real(rkind) :: A_mean, A_min, A_max, A_sum
+        integer :: N_in_shell
+
+        ! Compute E at peak wavenumber (r=r_peak -> E_peak = r_peak^s/(1+r_peak^2)^expn)
+        E_peak     = r_peak**s / (one + r_peak**2)**expn
+        E_floor_val = f_floor**2 * E_peak
+
+        if (nrank == 0) then
+            write(*,'(A)')       ''
+            write(*,'(A)')       '========================================'
+            write(*,'(A)')       ' Saffman s=2 + symmetry-breaking floor '
+            write(*,'(A)')       '========================================'
+            write(*,'(A,F8.4)') '  delta_sh   (shear thickness)  = ', delta_sh
+            write(*,'(A,F8.4)') '  delta_w    (vort  thickness)  = ', delta_w
+            write(*,'(A,F8.4)') '  kappa_dw   (peak wavenumber)  = ', kappa_dw
+            write(*,'(A,F8.4)') '  kappa_0    (formula param)    = ', kappa_0
+            write(*,'(A,F8.4)') '  E_peak     (spectrum max)     = ', E_peak
+            write(*,'(A,F8.4)') '  f_floor    (low-k fraction)   = ', f_floor
+            write(*,'(A,F8.4)') '  E_floor    (minimum E)        = ', E_floor_val
+            write(*,'(A)')       '  Spectrum shape:'
+            write(*,'(A)')       '    kappa < kappa_dw: E ~ max(kappa^2, E_floor)'
+            write(*,'(A)')       '    kappa > kappa_dw: E ~ kappa^{-5/3}'
+            write(*,'(A)')       '========================================'
+        end if
+
+        ! bb Shell count bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        shell_count = 0
+        do qq = 1, num_modes
+            do ll = 1, bnum_modes
+                kmag   = sqrt(alpha_modes(qq)**2 + beta_modes(ll)**2)
+                ishell = max(1, min(nshells, int(kmag/dkappa) + 1))
+                shell_count(ishell) = shell_count(ishell) + 1
             end do
-            if (magmax < 1.0e-14_rkind) then
-                theta_fix(q,l) = 0.0_rkind
-            else
-                theta_fix(q,l) = atan2(u_i(j0,q,l), u_r(j0,q,l))
-            end if
-
-            ! --- combined phase: lock + random ---
-            phase_modes_final(q,l) = theta_fix(q,l) + theta_rand(q,l)
-
-            ! --- k^-1.5 spectral amplitude (matches C++ amp_h(m)) ---
-            kmag = sqrt(alpha_modes(q)**2 + beta_modes(l)**2)
-            if (kmag > 1.0e-12_rkind) then
-                amp_modes(q,l) = kmag**(-1.5_rkind)
-            else
-                amp_modes(q,l) = 0.0_rkind
-            end if
         end do
-    end do
 
+        amp_sumsq = 0.0_rkind
+
+        do qq = 1, num_modes
+            do ll = 1, bnum_modes
+
+                ! bb Phase lock bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                magmax = -1.0_rkind
+                j0 = 1
+                do jj = 1, pointy
+                    mag = sqrt(u_r(jj,qq,ll)**2 + u_i(jj,qq,ll)**2)
+                    if (mag > magmax) then
+                        magmax = mag
+                        j0     = jj
+                    end if
+                end do
+                if (magmax < 1.0e-14_rkind) then
+                    theta_fix(qq,ll) = 0.0_rkind
+                else
+                    theta_fix(qq,ll) = atan2(u_i(j0,qq,ll), u_r(j0,qq,ll))
+                end if
+                phase_modes_final(qq,ll) = theta_fix(qq,ll) + theta_rand(qq,ll)
+
+                ! bb Amplitude bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                kmag   = sqrt(alpha_modes(qq)**2 + beta_modes(ll)**2)
+                ishell = max(1, min(nshells, int(kmag/dkappa) + 1))
+
+                if (kmag > 1.0e-12_rkind .and. shell_count(ishell) > 0) then
+
+                    r_vk  = kmag / kappa_0
+                    Ek_vk = r_vk**s / (one + r_vk**2)**expn
+
+                    ! Apply floor: ensures low-k modes always have
+                    ! at least f_floor^2 * E_peak energy per mode
+                    Ek_vk = max(Ek_vk, E_floor_val)
+
+                    amp_modes(qq,ll) = sqrt(Ek_vk / real(shell_count(ishell),rkind))
+                else
+                    amp_modes(qq,ll) = 0.0_rkind
+                end if
+
+                amp_sumsq = amp_sumsq + amp_modes(qq,ll)**2
+
+            end do
+        end do
+
+        ! bb Normalise: sum(A^2) = 1 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        if (amp_sumsq > 1.0e-30_rkind) then
+            amp_norm  = one / sqrt(amp_sumsq)
+            amp_modes = amp_modes * amp_norm
+        end if
+
+        ! bb Diagnostic table bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        if (nrank == 0) then
+            write(*,'(A)') ''
+            write(*,'(A)') '  Per-mode amplitudes:'
+            write(*,'(A)') '   q   l  alpha   beta   kappa  floored?  amp_norm'
+            do qq = 1, num_modes
+                do ll = 1, bnum_modes
+                    kmag  = sqrt(alpha_modes(qq)**2 + beta_modes(ll)**2)
+                    r_vk  = kmag / kappa_0
+                    Ek_vk = r_vk**s / (one + r_vk**2)**expn
+                    write(*,'(2I4, 4F8.3, L6, F10.5)') qq, ll, &
+                        alpha_modes(qq), beta_modes(ll), kmag, Ek_vk, &
+                        (Ek_vk < E_floor_val), amp_modes(qq,ll)
+                end do
+            end do
+
+            ! Shell-summed spectrum check
+            write(*,'(A)') ''
+            write(*,'(A)') '  Shell spectrum (verify low-k not under-seeded):'
+            write(*,'(A)') '  shell  kappa_c   N    A_mean    A_min    A_max'
+            do ishell = 1, nshells
+                if (shell_count(ishell) == 0) cycle
+                A_sum = 0.0_rkind
+                A_min = huge(one)
+                A_max = -huge(one)
+                N_in_shell = 0
+                do qq = 1, num_modes
+                    do ll = 1, bnum_modes
+                        kmag = sqrt(alpha_modes(qq)**2 + beta_modes(ll)**2)
+                        if (max(1,min(nshells,int(kmag/dkappa)+1)) == ishell) then
+                            A_sum      = A_sum + amp_modes(qq,ll)
+                            A_min      = min(A_min, amp_modes(qq,ll))
+                            A_max      = max(A_max, amp_modes(qq,ll))
+                            N_in_shell = N_in_shell + 1
+                        end if
+                    end do
+                end do
+                A_mean = A_sum / max(N_in_shell, 1)
+                write(*,'(I6, F8.3, I5, 3F9.5)') ishell, &
+                    (ishell-0.5_rkind)*dkappa, shell_count(ishell), &
+                    A_mean, A_min, A_max
+            end do
+        end if
+
+    end block
+!    block
+!        real(rkind), parameter :: kappa_target = 1.5_rkind
+!        real(rkind), parameter :: kappa_0_vk   = kappa_target / sqrt(3.0_rkind/5.0_rkind)
+!        ! = 7.74596...  puts E peak exactly at kappa=6
+!        real(rkind) :: r_vk, Ek_vk, amp_sumsq, amp_norm
+!        integer :: qq, ll, jj
+!
+!        amp_sumsq = 0.0_rkind
+!
+!        do qq = 1, num_modes
+!            do ll = 1, bnum_modes
+!
+!                magmax = -1.0_rkind
+!                j0 = 1
+!                do jj = 1, pointy
+!                    mag = sqrt(u_r(jj,qq,ll)**2 + u_i(jj,qq,ll)**2)
+!                    if (mag > magmax) then
+!                        magmax = mag
+!                        j0 = jj
+!                    end if
+!                end do
+!                if (magmax < 1.0e-14_rkind) then
+!                    theta_fix(qq,ll) = 0.0_rkind
+!                else
+!                    theta_fix(qq,ll) = atan2(u_i(j0,qq,ll), u_r(j0,qq,ll))
+!                end if
+!
+!                phase_modes_final(qq,ll) = theta_fix(qq,ll) + theta_rand(qq,ll)
+!
+!                kmag = sqrt(alpha_modes(qq)**2 + beta_modes(ll)**2)
+!                if (kmag > 1.0e-12_rkind) then
+!                    r_vk           = kmag / kappa_0_vk
+!                    Ek_vk          = r_vk / (one + r_vk*r_vk)**(4.0_rkind/3.0_rkind)
+!                    amp_modes(qq,ll) = sqrt(Ek_vk)
+!                else
+!                    amp_modes(qq,ll) = 0.0_rkind
+!                end if
+!
+!                amp_sumsq = amp_sumsq + amp_modes(qq,ll)**2
+!
+!            end do
+!        end do
+!
+!        if (amp_sumsq > 1.0e-30_rkind) then
+!            amp_norm = one / sqrt(amp_sumsq)
+!            amp_modes = amp_modes * amp_norm
+!        end if
+!
+!        if (nrank == 0) then
+!            write(*,'(A,F8.4,A,F8.4)') &
+!                'von Karman: kappa_0 = ', kappa_0_vk, &
+!                '  peak at kappa = ', kappa_target
+!            write(*,'(A,F10.6)') 'sum(amp^2) after norm = ', sum(amp_modes**2)
+!            write(*,'(A)') '  q    l   alpha   beta    kappa     amp_norm'
+!            do qq = 1, num_modes
+!                do ll = 1, bnum_modes
+!                    kmag = sqrt(alpha_modes(qq)**2 + beta_modes(ll)**2)
+!                    write(*,'(2I4, 4F9.3)') qq, ll, &
+!                        alpha_modes(qq), beta_modes(ll), kmag, amp_modes(qq,ll)
+!                end do
+!            end do
+!        end if
+!
+!    end block
+!
     ! =========================================================================
     ! 5. SET BASE FLOW
     ! =========================================================================
@@ -803,7 +1075,7 @@ subroutine get_sponge(decomp,dx,dy,dz,mesh,fields,mix,rhou,rhov,rhow,rhoe,sponge
         sigma1 = -1000d0 ! -2400 ! -80000
 
         where(yphys .LE. -2.0d0)
-           sponge(:,:,:,1) = sigma1*( (yphys + 2.0d0)/0.5d0)**2.0d0 
+           sponge(:,:,:,1) = sigma1*( (yphys + 2.0d0)/0.5d0)**2.0d0 * 2.0d0
            mask  = 1.0
         elsewhere
            sponge(:,:,:,1) = 0d0
