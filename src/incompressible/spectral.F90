@@ -1151,7 +1151,6 @@ contains
         if (present(exhaustiveFFT)) then
             useExhaustiveFFT = exhaustiveFFT
         end if
-
         this%nx_g = nx_g
         this%ny_g = ny_g
         this%nz_g = nz_g

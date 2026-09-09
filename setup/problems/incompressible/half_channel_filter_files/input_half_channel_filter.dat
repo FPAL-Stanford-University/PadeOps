@@ -1,0 +1,18 @@
+&INPUT
+inputdir  = "/scratch/04076/tg833754/half_channel_large/512_amd" ! Directory for input files
+outputdir = "/scratch/04076/tg833754/half_channel_large/512_amd" ! Directory for output files
+RunID  = 45
+nx     = 1536         ! Number of points in X
+ny     = 1536         ! Number of points in Y
+nz     = 512         ! Number of points in Z
+tstart = 4000
+tstop  = 8000
+tstep  = 1000
+Lx     =  18.84955592154d0       ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly     =  9.42477796077d0       ! Domain Width  (appropriate dimesnions/non-dimensionalized)
+Lz     =  1.0d0       ! Domain Height (appropriate dimesnions/non-dimensionalized)
+NumericalSchemeVert = 1
+nx_filt = 192
+ny_filt = 192
+vfilt_times = 8
+/

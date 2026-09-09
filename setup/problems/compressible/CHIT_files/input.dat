@@ -1,0 +1,49 @@
+&INPUT
+
+inputdir  = "/home/akshays/Data/PadeOps/CHIT/N0032"      ! Directory for input files
+outputdir = "/home/akshays/Data/PadeOps/CHIT/N0032"      ! Directory for output files
+
+nx = 32                   ! Number of points in X
+ny = 32                   ! Number of points in Y
+nz = 32                   ! Number of points in Z
+
+dt = 1.0D-3               ! Fixed time step value (Set to negative to disable)
+tstop = 4.0D0             ! Physical time to stop the simulation
+CFL = 0.5D0               ! CFL criterion for calculating the time step (Set to negative to disable)
+nsteps = -1               ! Number of time steps before stopping (Set to negative to disable)
+
+tviz = 1.0D-1             ! Time between visualization dumps (Set to negative to disable)
+vizprefix = "CHIT"        ! Prefix for the visualization files
+
+periodicx = .TRUE.        ! Periodic in X?
+periodicy = .TRUE.        ! Periodic in Y?
+periodicz = .TRUE.        ! Periodic in Z?
+
+derivative_x = "cd10"     ! What derivative to use in X: "cd10", "cd06", "four", "cheb"
+derivative_y = "cd10"     ! What derivative to use in Y: "cd10", "cd06", "four", "cheb"
+derivative_z = "cd10"     ! What derivative to use in Z: "cd10", "cd06", "four", "cheb"
+
+filter_x = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_y = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+filter_z = "cf90"         ! What filter to use in X: "cf90", "gaussian", "lstsq", "spectral"
+
+prow = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+pcol = 0                  ! Number of rows in 2D processor decomposition (set 0 for auto-tuning)
+
+/
+
+&CINPUT
+gam  = 1.4D0              ! Ratio of specific heats
+Rgas = 1.D0               ! Gas constant
+/
+
+&IINPUT
+nu = 0.02D0               ! Kinematic viscosity
+/
+
+&PROBINPUT
+gam  = 1.4D0              ! Ratio of specific heats
+Mt   = 0.6D0              ! Turbulent Mach number
+k0   = 4.0D0              ! Wavenumber of peak KE at initial conditions
+datafile = "/home/akshays/Data/PadeOps/CHIT/setup/CHIT-velocity-k04-N0032.dat" ! Data file for initial velocity
+/

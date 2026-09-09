@@ -173,7 +173,6 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, &
         ! Generate the physical space decomposition
         call decomp_info_init(nx_global, ny_global, nz_global, this%physical)
        
-       
         select case (base_pencil_)
         case ("y") 
             ! Generate the spectral space decomposition
@@ -255,7 +254,7 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, &
             allocate(this%f_xhat_in_xD(this%spectral%xsz(1),this%spectral%xsz(2),this%spectral%xsz(3)))
             allocate(this%f_xyhat_in_yD(this%spectral%ysz(1),this%spectral%ysz(2),this%spectral%ysz(3)))
             allocate(this%f_xyzhat_in_zD(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)),STAT=ierr) 
-
+                
             ! Define real -> complex transform in x
             allocate (temp(this%physical%xsz(1),this%physical%xsz(2),this%physical%xsz(3)))
             
@@ -271,11 +270,11 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, &
                     this%fft_plan)
             
             deallocate (temp)
-        
+
             ! Define complex -> complex transforms in y
             allocate(cmplx_arr_2d(this%spectral%ysz(1),this%spectral%ysz(2)),STAT=ierr)
             allocate(cmplx_arr_2d_oop(this%spectral%ysz(1),this%spectral%ysz(2)),STAT=ierr)
-
+           
             ! fwd transform in y (in place transform)
              call dfftw_plan_many_dft(this%plan_c2c_fwd_y, 1, this%spectral%ysz(2),&  
                     this%spectral%ysz(1), cmplx_arr_2d, this%spectral%ysz(2),this%spectral%ysz(1), &
@@ -287,7 +286,6 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, &
                     this%spectral%ysz(1), cmplx_arr_2d, this%spectral%ysz(2),this%spectral%ysz(1), &
                     1, cmplx_arr_2d, this%spectral%ysz(2), this%spectral%ysz(1),1, &   
                     FFTW_BACKWARD, this%fft_plan)
-            
              ! bwd transform in y (out of place transform)
              call dfftw_plan_many_dft(this%plan_c2c_bwd_y_oop, 1, this%spectral%ysz(2),&  
                     this%spectral%ysz(1), cmplx_arr_2d, this%spectral%ysz(2),this%spectral%ysz(1), &
@@ -295,7 +293,7 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, &
                     FFTW_BACKWARD, this%fft_plan)
 
             deallocate (cmplx_arr_2d,cmplx_arr_2d_oop)
-
+            
             allocate(dummy_in_z(this%spectral%zsz(1),this%spectral%zsz(2),this%spectral%zsz(3)))        
             ! Create plan for bwd transform in z (out-of-place transform)
             call dfftw_plan_many_dft(this%plan_c2c_bwd_z, 1, this%spectral%zsz(3),&  
@@ -361,7 +359,7 @@ function init(this,nx_global,ny_global,nz_global,base_pencil_, dx, dy,dz, &
  
         end select 
 
-                
+       
          this%base_pencil = base_pencil_
          this%normfactor   = 1._rkind/(real(nx_global*ny_global*nz_global,rkind))
          this%normfactor2d = 1._rkind/(real(nx_global*ny_global,rkind))

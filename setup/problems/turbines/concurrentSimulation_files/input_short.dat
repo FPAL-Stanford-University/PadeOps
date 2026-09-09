@@ -1,0 +1,4 @@
+&concurrent
+precInputFile = "/home1/05294/mhowland/PadeOps/problems/turbines/concurrentSimulation_files/input_prec_short.dat"
+mainInputFile = "/home1/05294/mhowland/PadeOps/problems/turbines/concurrentSimulation_files/input_main_short.dat"
+/

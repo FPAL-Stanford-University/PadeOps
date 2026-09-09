@@ -1,0 +1,16 @@
+&INPUT
+nx  = 1280
+ny  = 256
+nz  = 256
+Lx  = 31.415926535897d0                        ! Domain Length (appropriate dimesnions/non-dimensionalized)
+Ly  = 6.2831853071795d0           ! Domain Width  (appropriate dimesions/non-dimensionalized)
+Lz  = 6.2831853071795d0           ! Domain Height (appropriate dimesnions/non-dimensionalized)
+tid = 88000
+runID = 26
+dataDir = "/projects/windFlowModeling/PadeOps/filter_testing/output"
+/
+/
+&FILTER_INFO
+nfilters = 2
+fof_dir  = "/projects/windFlowModeling/PadeOps/filter_testing"
+/

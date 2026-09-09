@@ -56,7 +56,9 @@ endif()
 
 # Create a library called IncompressibleOps
 add_library(IncompressibleOps STATIC ${grid_source_files} ${poisson_source_files} ${incompressible_source_files})
-target_link_libraries(IncompressibleOps PadeOps tf_load ${MPI_LIBRARIES})
+#target_link_libraries(IncompressibleOps PUBLIC PadeOps ${MPI_LIBRARIES})
+target_link_libraries(IncompressibleOps PadeOps ${MPI_LIBRARIES} -qmkl -qopenmp)
+#target_link_libraries(IncompressibleOps PadeOps ${MPI_LIBRARIES} -mkl -qopenmp)
 
 if (MPI_Fortran_COMPILER_FLAGS)
     set_target_properties(IncompressibleOps PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")

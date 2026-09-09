@@ -115,10 +115,12 @@ subroutine initfields_wallM(decompC, decompE, inputfile, mesh, fieldsC, fieldsE)
     epsnd = 5.d0
 
     if (initPurturbations) then
-      u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+      !u = (one/kappa)*log(z/z0init) + epsnd*cos(Yperiods*two*pi*y/Ly)*exp(-half*(z/zpeak/Lz)**2)
+      u = (z-1)**8
       v = epsnd*(z/Lz)*cos(Xperiods*two*pi*x/Lx)*exp(-half*(z/zpeak/Lz)**2)
     else
-      u = (one/kappa)*log(z/z0init) 
+      !u = (one/kappa)*log(z/z0init)
+      u = (z-1)**8 
       v = zero  
     end if 
     wC= zero  
@@ -296,3 +298,14 @@ subroutine setScalar_source(decompC, inpDirectory, mesh, scalar_id, scalarSource
 
     scalarSource = 0.d0
 end subroutine 
+        
+subroutine hook_source(tsim,mesh,Re,urhs,vrhs,wrhs)
+    use kind_parameters, only: rkind
+    real(rkind),                     intent(in)    :: tsim, Re
+    real(rkind), dimension(:,:,:,:), intent(in)    :: mesh
+    real(rkind), dimension(:,:,:),   intent(inout) :: urhs, vrhs, wrhs
+
+    urhs = urhs + 0.d0
+    vrhs = vrhs + 0.d0
+    wrhs = wrhs + 0.d0
+end subroutine

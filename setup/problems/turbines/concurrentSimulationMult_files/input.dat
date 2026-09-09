@@ -1,0 +1,5 @@
+&concurrent
+precInputFile = "/scratch/04769/ghaisasn/runs/PadeOps/concurrent/multrot/4drun3g2/input_prec.dat"
+main1InputFile = "/scratch/04769/ghaisasn/runs/PadeOps/concurrent/multrot/4drun3g2/input_main1.dat"
+main2InputFile = "/scratch/04769/ghaisasn/runs/PadeOps/concurrent/multrot/4drun3g2/input_main2.dat"
+/

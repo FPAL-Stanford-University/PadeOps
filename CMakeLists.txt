@@ -3,10 +3,19 @@ project(PadeOps)
 
 enable_language(Fortran)
 
-set( CMAKE_MODULE_PATH ${PadeOps_SOURCE_DIR} $ENV{PADEOPS_ROOT}/cmake)
+set(CMAKE_MODULE_PATH ${PadeOps_SOURCE_DIR} $ENV{PADEOPS_ROOT}/cmake)
+
+# do this for Torch
+list(APPEND CMAKE_PREFIX_PATH $ENV{Pytorch_ROOT}/share/cmake/Torch)
+
+#set_target_properties (IncompressibleOps PROPERTIES LINKER_LANGUAGE Fortran) 
+
+
+message(STATUS "Torch Cmake in: $ENV{Pytorch_ROOT}/share/cmake/Torch")
 
 cmake_policy(SET CMP0074 NEW)
 find_package(TensorFlow REQUIRED)
+find_package(Torch REQUIRED)
 
 if (NOT CMAKE_BUILD_TYPE)
     message(STATUS "No build type selected, default to Release")
@@ -53,9 +62,10 @@ if ( CMAKE_Fortran_COMPILER_ID MATCHES "Intel" )
 	    set(OPTFLAG $ENV{ARCH_OPT_FLAG})
 	endif()
         #set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -qmkl -heap-arrays 1024 -warn all ${OPTFLAG} -dynamic -qopt-report=2 -qopt-report-phase=vec -qopenmp")
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -qmkl -heap-arrays 1024 ${OPTFLAG} -qopenmp")
+        #set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -qmkl -heap-arrays 1024 ${OPTFLAG} -qopenmp")    
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O3 -traceback -heap-arrays 1024 ${OPTFLAG} -qopenmp")
     elseif ( CMAKE_BUILD_TYPE MATCHES "Debug" )
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -g -traceback -g -qmkl -heap-arrays 1024 -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -O0 -g -traceback -g -qmkl -heap-arrays 1024 -check all -check noarg-temp-created -fpe0 -warn -traceback -debug extended -assume realloc_lhs -fstack-protector -assume protect_parens -implicitnone")
     endif()
 
 # GNU compiler on OSX
@@ -98,7 +108,8 @@ endif()
 
 
 # Add source file directories
-add_subdirectory(TensorFlow)
 add_subdirectory(src)
 add_subdirectory(tests)
+add_subdirectory(TensorFlow)
+add_subdirectory(Pytorch)
 add_subdirectory(problems)

@@ -11,7 +11,7 @@ module kind_parameters
     integer, parameter :: single_kind = kind(0.0)
     integer, parameter :: double_kind = kind(0.d0)
     integer, parameter :: rkind = double_kind
-    integer, parameter :: mpirkind = MPI_DOUBLE_PRECISION
+    integer, parameter :: mpirkind= MPI_DOUBLE_PRECISION
     integer, parameter :: mpickind = MPI_DOUBLE_COMPLEX
    
     integer, parameter :: clen = 256

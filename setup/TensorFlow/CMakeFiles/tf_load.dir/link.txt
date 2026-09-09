@@ -1,0 +1,2 @@
+/usr/bin/ar qc libtf_load.a CMakeFiles/tf_load.dir/tfloadscript_unet.cc.o
+/usr/bin/ranlib libtf_load.a

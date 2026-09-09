@@ -73,6 +73,26 @@
        end if
 
        call this%populate_RHS_extraTerms(copyFringeRHS, .false.)
+       
+!       ! Step 6a: SGS Stress Terms (Now strictly Eddy Viscosity)
+!       if (this%useSGS) then
+!           call this%sgsmodel%getRHS_SGS(this%u_rhs, this%v_rhs, this%w_rhs,      this%duidxjC, this%duidxjE, &
+!                                           this%uhat,  this%vhat,  this%whatC,      this%That,    this%u,       &
+!                                           this%v,     this%wC,    this%T,          this%newTimeStep,this%dTdxC,   this%dTdyC,   & 
+!                                           this%dTdzC, this%dTdxE, this%dTdyE, this%dTdzE, this%step)
+!
+!           if (this%isStratified .or. this%initspinup) then
+!               call this%sgsmodel%getRHS_SGS_Scalar(this%T_rhs, this%dTdxC, this%dTdyC, this%dTdzC, this%dTdzE, &
+!                                           this%u, this%v, this%wC, this%T, this%That, this%duidxjC, this%turbPr)
+!           end if
+!       end if
+!
+!       ! Step 6b: ALWAYS evaluate the stable physical viscous term
+!       if (.not. this%isInviscid) then
+!           call this%addViscousTerm(this%u_rhs, this%v_rhs, this%w_rhs, this%T_rhs)
+!       end if
+!
+!       call this%populate_RHS_extraTerms(copyFringeRHS, .false.)
 
    end subroutine
 

@@ -1,0 +1,23 @@
+&INPUT
+inputdir                      = "/home/aditya90/Codes/PadeOps/data/EkmanLayerGrowth/input_data"    ! Directory for any input (RESTART) files
+outputdir                     = "/home/aditya90/Codes/PadeOps/data/EkmanLayerGrowth/output_data"   ! Directory for all output files
+nx = 256
+ny = 256
+nz = 256 
+restartFile_TID               = 0                  ! TimeID of the restart file being used
+restartFile_RID               = 1                    ! RunID of the restart file being used
+/
+/
+&SGS_MODEL
+SGSModelID                    = 1                     ! 0: smagorinsky (w/ wall function), 1: sigma
+Csgs                          = 1.3d0                 ! Model constant (asymptotic value in case wall function is used)
+WallModelType                 = 0                     ! 1: Moeng, 2: Bou-zeid et. al.
+z0                            = 1.0d-4                ! Roughness length scale (non-dimensional) 
+DynamicProcedureType          = 0                     ! 0: No dynamic procedure, 1: Planar Avg. Dynamic Proc., 2: Global Dynamic Proc.
+useVerticalTfilter            = .false.               ! Use test filtering in vertical direction for dynamic procedure?
+DynProcFreq                   = 5                     ! Dynamic procedure used every DYNPROCFREQ timesteps.
+useWallDamping                = .FALSE.               ! Use the Wall Damping Function
+ncWall                        = 3.d0                  ! Wall Damping Function Exponent
+explicitCalcEdgeEddyViscosity = .true.                ! Explicitly calculate or interpolate edge values for eddy viscosity?
+/
+/

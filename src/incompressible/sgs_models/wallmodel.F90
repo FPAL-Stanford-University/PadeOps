@@ -103,10 +103,25 @@ end subroutine
 
 subroutine embed_WM_stress(this)
    class(sgs_igrid), intent(inout) :: this
-   
+   !print*, this%gpE%xst(3)
+   !print*, this%gpE%xen(3)
+   !print*, SHAPE(this%tau_13(:,:,:))
+
+
    if(this%gpE%xst(3)==1) then
       this%tau_13(:,:,1) = this%tauijWM(:,:,1,1)
       this%tau_23(:,:,1) = this%tauijWM(:,:,1,2)
+      !this%tau_13(:,:,32) = this%tauijWM(:,:,1,1)
+      !this%tau_23(:,:,32) = this%tauijWM(:,:,1,2)
+   endif
+
+   !print*,this%gpE%xen(3)
+   !print*,this%gpE%xsz(3)
+   !if(this%gpE%xen(3)==33) then
+   if(this%gpE%xen(3)==this%gpE%xsz(3)) then
+      !print*, 'entered2'
+      this%tau_13(:,:,this%gpE%xen(3)) = -this%tauijWM(:,:,1,1)
+      this%tau_23(:,:,this%gpE%xen(3)) = -this%tauijWM(:,:,1,2)
    endif
 end subroutine 
 

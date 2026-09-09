@@ -48,6 +48,7 @@ module sgsmod_igrid
         real(rkind), dimension(:,:,:), pointer :: tau_11, tau_12, tau_22, tau_33, tau_13C, tau_23C
         real(rkind), dimension(:,:,:), allocatable :: tau_13, tau_23
         real(rkind), dimension(:,:,:,:), allocatable :: S_ij_C, S_ij_E, R_ij_C, R_ij_E
+        real(rkind), dimension(:,:,:,:), allocatable :: duidxj_C, duidxj_E
         real(rkind), dimension(:,:,:,:), pointer :: rbuffxC, rbuffzC, rbuffyC, rbuffyE, rbuffzE
         real(rkind), dimension(:,:,:), allocatable :: rbuffxE
         complex(rkind), dimension(:,:,:,:), pointer :: cbuffyC, cbuffzC, cbuffyE, cbuffzE
@@ -98,13 +99,17 @@ module sgsmod_igrid
         real(rkind) :: BuoyancyFact = 0.d0
 
         ! Neural network SGS model
-        real(rkind), dimension(:,:,:,:,:), allocatable :: invariants, delta
-        real(rkind), dimension(:,:,:,:,:,:), allocatable :: invariantsLSTM, deltaLSTM
+        real(rkind), dimension(:,:,:,:), allocatable :: flg1
+        real(rkind), dimension(:,:,:,:,:), allocatable :: invariants, delta, delta1, invariantsE, deltaE, delta1E, deltaLSTM, delta1LSTM, & 
+            deltaLSTME, delta1LSTME, finalout, finaloutE, invariantsnorm, invariantsEnorm
+        real(rkind), dimension(:,:,:,:,:,:), allocatable :: invariantsLSTM, invariantsLSTME
         real(rkind), dimension(:,:,:,:,:,:), allocatable :: strain2, strain2_m, &
-          rot2, strainrot_m, rotstrainrot_m, strain2rot_m, rotstrain2_m
+          rot2, rot, strainrot_m, rotstrainrot_m, strain2rot_m, rotstrain2_m, &
+          strain2E, strain2_mE, rot2E, rotE, strainrot_mE, rotstrainrot_mE, strain2rot_mE, rotstrain2_mE
         character(len=clen) :: datadir
         integer :: NNtype
         integer :: runID
+         
         contains 
             !! ALL INIT PROCEDURES
             procedure          :: init
@@ -282,6 +287,7 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
       this%tau_22 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,4)
       this%tau_23 = -two*this%nu_sgs_E*this%S_ij_E(:,:,:,5)
       this%tau_33 = -two*this%nu_sgs_C*this%S_ij_C(:,:,:,6)
+      
   elseif (this%mid == 3) then
       ! Ballouz & Ouellette model
       ! Step 0: Compute Sij
@@ -298,6 +304,8 @@ subroutine getTauSGS(this, duidxjC, duidxjE, uhatC, vhatC, whatC, ThatC, uC, vC,
         this%gpC%xsz(2), this%gpC%xsz(3))
       call getSijRijforNNmod(duidxjE, this%S_ij_E, this%R_ij_E, this%gpE%xsz(1), & 
         this%gpE%xsz(2), this%gpE%xsz(3))
+      call getVijforNN(duidxjC, duidxjE, this%duidxj_C, this%duidxj_E, this%gpC%xsz(1), &
+          this%gpC%xsz(2), this%gpC%xsz(3), this%gpE%xsz(1), this%gpE%xsz(2),this%gpE%xsz(3))
 
       call this%compute_tauij_NN(tid)
    end if

@@ -18,7 +18,7 @@ foreach ( problemfile ${problems_source_files} )
   
     add_executable( ${problemexec} ${problemfile} )
     
-    target_link_libraries( ${problemexec} PadeOps )
+    target_link_libraries( ${problemexec} PUBLIC PadeOps)
 
     if (MPI_Fortran_COMPILER_FLAGS)
         set_target_properties(${problemexec} PROPERTIES COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}")

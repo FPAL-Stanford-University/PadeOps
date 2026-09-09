@@ -1,0 +1,11 @@
+&INPUT
+inputdir  = "/scratch/04076/tg833754/ActuatorDisk_Data/HIT_inflow/Case10/all_vel"  ! Directory for input files
+outputdir = "/scratch/04076/tg833754/ActuatorDisk_Data/HIT_inflow/Case10/all_vel"  ! Directory for output files
+RunID  = 6
+tsnapshot  = 345975 
+nx     = 1280
+ny     = 256
+nz     = 256
+MeanTIDX = 346050
+FilterInfoDir = "/home1/04076/tg833754/Codes/PadeOps/problems/postprocessing_igrid/HIT_AD_dumpRapidSlowPressure_files"
+/

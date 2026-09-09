@@ -6,10 +6,18 @@ subroutine init_amd(this, dx, dy, dz, Csgs)
    this%useCglobal = .true. 
    this%isEddyViscosityModel = .true. 
    
-   this%camd_x = Csgs*1.5d0*dx*sqrt(1.d0/(pi**2))
-   this%camd_y = Csgs*1.5d0*dy*sqrt(1.d0/(pi**2))
-   this%camd_z = Csgs*dz*this%PadeDer%getApproxPoincareConstant()
+   !this%camd_x = Csgs*1.5d0*dx*sqrt(1.d0/(pi**2))
+   !this%camd_y = Csgs*1.5d0*dy*sqrt(1.d0/(pi**2))
+   this%camd_x = Csgs*1.5d0*dx*sqrt(1.d0/12.d0)
+   this%camd_y = Csgs*1.5d0*dy*sqrt(1.d0/12.d0)
+   !this%camd_z = Csgs*dz*this%PadeDer%getApproxPoincareConstant()
+   this%camd_z = Csgs*1.5d0*dz*sqrt(1.d0/12.d0)
+   !this%camd_z = 2*Csgs*1.5d0*dz*sqrt(1.d0/(pi**2))
+
    this%cmodel_global = one  ! Anisotropic model constants 
+   !this%camd_x = Csgs*dx
+   !this%camd_y = Csgs*dy
+   !this%camd_z = Csgs*dz
    call message(1,"AMD model initialized")
 
    if (this%explicitCalcEdgeEddyViscosity) then

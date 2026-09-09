@@ -639,6 +639,7 @@
            call this%viz_hdf5%write_variable(this%u, "uVel")
            call this%viz_hdf5%write_variable(this%v, "vVel")
            call this%viz_hdf5%write_variable(this%wC, "wVel")
+           
            call this%dump_scalar_fields()           
            if (this%isStratified .or. this%initspinup) call this%viz_hdf5%write_variable(this%T,'potT')
            if (this%fastCalcPressure) call this%viz_hdf5%write_variable(this%pressure,'prss')

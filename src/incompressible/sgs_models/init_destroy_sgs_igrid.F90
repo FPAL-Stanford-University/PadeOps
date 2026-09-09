@@ -225,8 +225,10 @@ subroutine init(this, gpC, gpE, spectC, spectE, dx, dy, dz, inputfile, zMeshE, z
     ! Need all 9 components of each tensor to easily compute invariants
 
     ! Strain rate tensor
-    allocate(this%S_ij_C(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
-    allocate(this%S_ij_E(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),9))
+    allocate(this%S_ij_C(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),6))
+    allocate(this%S_ij_E(this%gpE%xsz(1),this%gpE%xsz(2),this%gpE%xsz(3),6))
+    allocate(this%duidxj_C(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
+    allocate(this%duidxj_E(this%gpE%xsz(1), this%gpE%xsz(2), this%gpE%xsz(3),9))
     
     ! Rotation rate tensor
     allocate(this%R_ij_C(this%gpC%xsz(1),this%gpC%xsz(2),this%gpC%xsz(3),9))
