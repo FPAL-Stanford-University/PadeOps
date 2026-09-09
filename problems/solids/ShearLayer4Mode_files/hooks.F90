@@ -415,6 +415,8 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                     theta_rand(qq,ll) = two * pi * raw
                 end do
             end do
+
+
         end block
 
     end if  ! nrank == 0
@@ -529,7 +531,6 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
     !   epsilonk_sol sets the true 2.5% perturbation level.
     ! =========================================================================
     block
-        ! bb Physical parameters (no tuning, set by flow) bbbbbbbbbbbbbbbbbbbbb
         real(rkind), parameter :: s        = 2.0_rkind
         real(rkind), parameter :: delta_sh = 1.0_rkind
         real(rkind), parameter :: delta_w  = sqrt(pi) * delta_sh
@@ -538,14 +539,13 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         real(rkind), parameter :: kappa_0  = kappa_dw / r_peak
         real(rkind), parameter :: expn     = (s + 5.0_rkind/3.0_rkind)/2.0_rkind
 
-        ! bb Symmetry-breaking floor bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-        ! f_floor: minimum amplitude of any mode as fraction of peak-mode amplitude.
-        ! f_floor = 0.5 means low-k modes get at least 50% of peak amplitude.
-        ! Increase toward 1.0 for stronger symmetry breaking (flatter spectrum).
-        ! Decrease toward 0.0 to recover pure Saffman (may under-seed low-k).
+        ! f_floor: minimum amplitude as fraction of peak-mode amplitude.
+        ! Floor is applied ONLY for kappa < kappa_dw (below spectral peak).
+        ! Above kappa_dw: pure Saffman -5/3 rolloff, no floor.
+        ! This prevents artificial boosting of high-k modes that cause ringing
+        ! at high density ratio where eigenfunctions are narrow at interface.
         real(rkind), parameter :: f_floor  = 0.7_rkind
 
-        ! bb Shell counting bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
         real(rkind), parameter :: dkappa  = 1.0_rkind
         integer,     parameter :: nshells = 25
         integer   :: shell_count(nshells)
@@ -555,15 +555,14 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         real(rkind) :: A_mean, A_min, A_max, A_sum
         integer :: N_in_shell
 
-        ! Compute E at peak wavenumber (r=r_peak -> E_peak = r_peak^s/(1+r_peak^2)^expn)
-        E_peak     = r_peak**s / (one + r_peak**2)**expn
+        E_peak      = r_peak**s / (one + r_peak**2)**expn
         E_floor_val = f_floor**2 * E_peak
 
         if (nrank == 0) then
             write(*,'(A)')       ''
-            write(*,'(A)')       '========================================'
-            write(*,'(A)')       ' Saffman s=2 + symmetry-breaking floor '
-            write(*,'(A)')       '========================================'
+            write(*,'(A)')       '================================================'
+            write(*,'(A)')       ' Saffman s=2 + ONE-SIDED symmetry-breaking floor'
+            write(*,'(A)')       '================================================'
             write(*,'(A,F8.4)') '  delta_sh   (shear thickness)  = ', delta_sh
             write(*,'(A,F8.4)') '  delta_w    (vort  thickness)  = ', delta_w
             write(*,'(A,F8.4)') '  kappa_dw   (peak wavenumber)  = ', kappa_dw
@@ -572,12 +571,12 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
             write(*,'(A,F8.4)') '  f_floor    (low-k fraction)   = ', f_floor
             write(*,'(A,F8.4)') '  E_floor    (minimum E)        = ', E_floor_val
             write(*,'(A)')       '  Spectrum shape:'
-            write(*,'(A)')       '    kappa < kappa_dw: E ~ max(kappa^2, E_floor)'
-            write(*,'(A)')       '    kappa > kappa_dw: E ~ kappa^{-5/3}'
-            write(*,'(A)')       '========================================'
+            write(*,'(A)')       '    kappa <  kappa_dw: E = max(E_Saffman, E_floor)'
+            write(*,'(A)')       '    kappa >= kappa_dw: E = E_Saffman  (pure -5/3)'
+            write(*,'(A)')       '    -> high-k modes NOT boosted -> no ringing'
+            write(*,'(A)')       '================================================'
         end if
 
-        ! bb Shell count bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
         shell_count = 0
         do qq = 1, num_modes
             do ll = 1, bnum_modes
@@ -592,7 +591,6 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
         do qq = 1, num_modes
             do ll = 1, bnum_modes
 
-                ! bb Phase lock bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
                 magmax = -1.0_rkind
                 j0 = 1
                 do jj = 1, pointy
@@ -609,18 +607,23 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                 end if
                 phase_modes_final(qq,ll) = theta_fix(qq,ll) + theta_rand(qq,ll)
 
-                ! bb Amplitude bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
                 kmag   = sqrt(alpha_modes(qq)**2 + beta_modes(ll)**2)
                 ishell = max(1, min(nshells, int(kmag/dkappa) + 1))
 
                 if (kmag > 1.0e-12_rkind .and. shell_count(ishell) > 0) then
 
                     r_vk  = kmag / kappa_0
-                    Ek_vk = r_vk**s / (one + r_vk**2)**expn
+                    Ek_vk = r_vk**s / (one + r_vk**2)**expn   ! pure Saffman
 
-                    ! Apply floor: ensures low-k modes always have
-                    ! at least f_floor^2 * E_peak energy per mode
-                    Ek_vk = max(Ek_vk, E_floor_val)
+                    ! OLD: Ek_vk = max(Ek_vk, E_floor_val)
+                    !      (floor applied to ALL kappa -> boosts high-k -> ringing)
+                    !
+                    ! NEW: floor only below spectral peak kappa_dw
+                    !      Above kappa_dw: pure Saffman, no artificial boost
+                    if (kmag < kappa_dw) then
+                        Ek_vk = max(Ek_vk, E_floor_val)
+                    end if
 
                     amp_modes(qq,ll) = sqrt(Ek_vk / real(shell_count(ishell),rkind))
                 else
@@ -632,37 +635,38 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
             end do
         end do
 
-        ! bb Normalise: sum(A^2) = 1 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
         if (amp_sumsq > 1.0e-30_rkind) then
             amp_norm  = one / sqrt(amp_sumsq)
             amp_modes = amp_modes * amp_norm
         end if
 
-        ! bb Diagnostic table bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
         if (nrank == 0) then
             write(*,'(A)') ''
             write(*,'(A)') '  Per-mode amplitudes:'
-            write(*,'(A)') '   q   l  alpha   beta   kappa  floored?  amp_norm'
+            write(*,'(A)') '   q   l  alpha   beta   kappa  side      Ek_raw' // &
+                           '   floored?  amp_norm'
             do qq = 1, num_modes
                 do ll = 1, bnum_modes
                     kmag  = sqrt(alpha_modes(qq)**2 + beta_modes(ll)**2)
                     r_vk  = kmag / kappa_0
-                    Ek_vk = r_vk**s / (one + r_vk**2)**expn
-                    write(*,'(2I4, 4F8.3, L6, F10.5)') qq, ll, &
-                        alpha_modes(qq), beta_modes(ll), kmag, Ek_vk, &
-                        (Ek_vk < E_floor_val), amp_modes(qq,ll)
+                    Ek_vk = r_vk**s / (one + r_vk**2)**expn   ! raw Saffman
+                    write(*,'(2I4, 4F8.3, A8, L9, F10.5)') qq, ll,    &
+                        alpha_modes(qq), beta_modes(ll), kmag, Ek_vk,  &
+                        merge(' low-k  ', ' high-k ', kmag < kappa_dw),&
+                        (kmag < kappa_dw .and. Ek_vk < E_floor_val),   &
+                        amp_modes(qq,ll)
                 end do
             end do
 
-            ! Shell-summed spectrum check
             write(*,'(A)') ''
-            write(*,'(A)') '  Shell spectrum (verify low-k not under-seeded):'
-            write(*,'(A)') '  shell  kappa_c   N    A_mean    A_min    A_max'
+            write(*,'(A)') '  Shell spectrum:'
+            write(*,'(A)') '  shell  kappa_c   N    A_mean    A_min' // &
+                           '    A_max   floored?'
             do ishell = 1, nshells
                 if (shell_count(ishell) == 0) cycle
-                A_sum = 0.0_rkind
-                A_min = huge(one)
-                A_max = -huge(one)
+                A_sum      = 0.0_rkind
+                A_min      = huge(one)
+                A_max      = -huge(one)
                 N_in_shell = 0
                 do qq = 1, num_modes
                     do ll = 1, bnum_modes
@@ -676,13 +680,36 @@ subroutine initfields(decomp,der,derStagg,interpMid,dx,dy,dz,inputfile,mesh,fiel
                     end do
                 end do
                 A_mean = A_sum / max(N_in_shell, 1)
-                write(*,'(I6, F8.3, I5, 3F9.5)') ishell, &
-                    (ishell-0.5_rkind)*dkappa, shell_count(ishell), &
-                    A_mean, A_min, A_max
+                ! shell centre kappa
+                kmag = (ishell - 0.5_rkind) * dkappa
+                write(*,'(I6, F8.3, I5, 3F9.5, A)') ishell,           &
+                    (real(ishell,rkind) - 0.5_rkind)*dkappa,           &
+                    shell_count(ishell),                                &
+                    A_mean, A_min, A_max,                               &
+                    merge('  FLOOR', '       ', kmag < kappa_dw .and.  &
+                          A_min*A_min*real(shell_count(ishell),rkind)   &
+                          < E_floor_val*1.01_rkind)
             end do
+
+            write(*,'(A)') ''
+            write(*,'(A,F7.3,A)') '  Modes below kappa_dw=', kappa_dw, &
+                                   ':  floor ACTIVE  (low-k symmetry breaking)'
+            write(*,'(A,F7.3,A)') '  Modes above kappa_dw=', kappa_dw, &
+                                   ':  pure Saffman  (no boost, no ringing)'
+
         end if
 
-    end block
+        if (nrank == 0) then
+           write(*,'(A)') '  q   l  theta_fix   theta_rand   phase_final   j0    magmax'
+           do qq = 1, num_modes
+               do ll = 1, bnum_modes
+                   write(*,'(2I4, 3F12.6, I6, ES12.4)') qq, ll, &
+                       theta_fix(qq,ll), theta_rand(qq,ll), &
+                       phase_modes_final(qq,ll), j0, magmax
+               end do
+           end do
+       end if
+     end block
 !    block
 !        real(rkind), parameter :: kappa_target = 1.5_rkind
 !        real(rkind), parameter :: kappa_0_vk   = kappa_target / sqrt(3.0_rkind/5.0_rkind)

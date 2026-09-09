@@ -1844,6 +1844,10 @@ contains
 
         this%mix%deltakap = 0
         call this%LAD%get_viscosities(this%rho,this%p,this%sos,duidxj,this%mu,this%bulk,this%x_bc,this%y_bc,this%z_bc,this%dt,this%intSharp_pfloor,this%yMetric,this%dy_stretch,this%mix%deltakap*abs(this%mix%material(1)%Ys*(1-this%mix%material(1)%Ys))*4.0_rkind,this%mix%deltakap*abs(this%mix%material(1)%VF*(1-this%mix%material(1)%VF))*4.0_rkind)
+
+                    ! ... initialization ...
+        call     this%mix%get_intSharp_clean2(this%rho,this%ke_mid,this%x_bc,this%y_bc,this%z_bc,this%dx,this%dy,this%dz,this%periodicx,this%periodicy,this%periodicz,this%u,this%v,this%w,this%p,this%u_mid,this%v_mid,this%w_mid,this%p_mid)
+
         if (this%PTeqb) then
             ehmix => duidxj(:,:,:,4) ! use some storage space
             ehmix = this%e
@@ -2318,7 +2322,7 @@ contains
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: viscwork         ! Viscous work term for species energy eq
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: Fsource, tmp, eta, tmp2,rhofil,efil,m1fil,m2fil,TEfil,rhoufil,rhovfil,rhowfil,VFfil,H1,H2 
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx,drudy,drudz,drvdx,drvdy,drvdz,drwdx,drwdy,drwdz,dredx,dredy,dredz,dVFdx,dVFdy,dVFdz,dm1dx,dm1dy,dm1dz,dm2dx,dm2dy,dm2dz,tmp1,tmp3
-        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx4,drudy4,drudz4,drvdx4,drvdy4,drvdz4,drwdx4,drwdy4,drwdz4,dredx4,dredy4,dredz4,dVFdx4,dVFdy4,dVFdz4,dm1dx4,dm1dy4,dm1dz4,dm2dx4,dm2dy4,dm2dz4
+        real(rkind), dimension(this%nxp,this%nyp,this%nzp)        :: drudx4,drudy4,drudz4,drvdx4,drvdy4,drvdz4,drwdx4,drwdy4,drwdz4,dredx4,dredy4,dredz4,dVFdx4,dVFdy4,dVFdz4,dm1dx4,dm1dy4,dm1dz4,dm2dx4,dm2dy4,dm2dz4,delta
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3)      :: tmpint
         integer :: isub,i,j,k,l,imat,iter,ii,jj,kk
         real(rkind), dimension(:,:,:,:), allocatable, target :: duidxj
@@ -2357,8 +2361,20 @@ contains
 
             endif
 
+            if(this%Stretch1Dy) then
+
+               delta = (this%dx*this%dz*this%dy_stretch)**third        
+
+            else
+
+               delta = (this%dx*this%dz*this%dy)**third
+
+            endif
+
             where(this%mix%material(1)%VF .GT. 1d-8 .OR. this%mix%material(1)%VF  .LT. (1d0-1d-8) )
-               this%mix%deltakap = abs(this%mix%kappaNoFil*(this%dx*this%dz*this%dy_stretch)**third)
+                   
+                    
+               this%mix%deltakap = 0 ! abs(this%mix%kappaNoFil*delta)
             elsewhere
                this%mix%deltakap = 0
             endwhere
@@ -2672,7 +2688,7 @@ contains
 
     subroutine getFaces( this)
         use decomp_2d,  only: nrank
-        use operators, only: interpolateFV,interpolateFV_x,interpolateFV_F2Ny,interpolateFV_y,interpolateFV_F2Nx,filter3D,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz
+        use operators, only: gradient,interpolateFV,interpolateFV_x,interpolateFV_F2Ny,interpolateFV_y,interpolateFV_F2Nx,filter3D,gradFV_N2Fx,gradFV_N2Fy,gradFV_N2Fz
         use timer, only: tic, toc
         use exits,      only: message,nancheck,GracefulExit
         class(sgrid), target, intent(inout) :: this
@@ -2732,22 +2748,36 @@ contains
 !      call this%der%d2dz2(ztmp1,zdum,this%z_bc(1),this%z_bc(2))
 !      call transpose_z_to_y(zdum,tmp3,this%decomp)
 
+!      tmp = this%p_mid(:,:,:,1)
+!      call this%filter(tmp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!      call gradient(this%decomp,this%derD04,this%p_mid(:,:,:,1) - tmp, gradp(:,:,:,1), tmp2, tmp3,  -this%x_bc,  this%y_bc,this%z_bc)
+
+!      tmp = this%p_mid(:,:,:,2)
+!      call this%filter(tmp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!      call gradient(this%decomp,this%derD04,this%p_mid(:,:,:,2) - tmp, tmp2, gradp(:,:,:,2), tmp3,  -this%x_bc,  this%y_bc,this%z_bc)
+
+!      tmp = this%p_mid(:,:,:,3)
+!      call this%filter(tmp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!      call gradient(this%decomp,this%derD04,this%p_mid(:,:,:,3) - tmp, tmp2, tmp3, gradp(:,:,:,3),  -this%x_bc,  this%y_bc,this%z_bc)
+
+
       tmp = this%p
       call this%filter(tmp, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fx(this%decomp,this%derStaggd02,this%p-tmp,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fy(this%decomp,this%derStaggd02,this%p-tmp,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call gradFV_N2Fz(this%decomp,this%derStaggd02,this%p-tmp,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-      call interpolateFV(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
-!      gradpf1 = gradp(:,:,:,1)
-!      gradpf2 = gradp(:,:,:,2)
-!      gradpf3 = gradp(:,:,:,3)
 
-!      call this%filter(gradpf1, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
-!      call this%filter(gradpf2, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
-!      call this%filter(gradpf3, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
-!     gradp(:,:,:,1) = gradp(:,:,:,1) - gradpf1
-!     gradp(:,:,:,2) = gradp(:,:,:,2) - gradpf2
-!     gradp(:,:,:,3) = gradp(:,:,:,3) - gradpf3
+      call gradFV_N2Fx(this%decomp,this%derStaggd04,this%p-tmp,gradp(:,:,:,1),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fy(this%decomp,this%derStaggd04,this%p-tmp,gradp(:,:,:,2),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call gradFV_N2Fz(this%decomp,this%derStaggd04,this%p-tmp,gradp(:,:,:,3),this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+      call interpolateFV(this%decomp,this%interpMid,this%sos,sos_int,this%periodicx,this%periodicy,this%periodicz,this%x_bc,this%y_bc,this%z_bc)
+!!      gradpf1 = gradp(:,:,:,1)
+!!      gradpf2 = gradp(:,:,:,2)
+!!      gradpf3 = gradp(:,:,:,3)
+!
+!!      call this%filter(gradpf1, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!!      call this%filter(gradpf2, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!!      call this%filter(gradpf3, this%fil,1,-this%x_bc,this%y_bc,this%z_bc)
+!!     gradp(:,:,:,1) = gradp(:,:,:,1) - gradpf1
+!!     gradp(:,:,:,2) = gradp(:,:,:,2) - gradpf2
+!!     gradp(:,:,:,3) = gradp(:,:,:,3) - gradpf3
       this%mix%material(2)%Ys_mid = 1.0_rkind - this%mix%material(1)%Ys_mid
       this%mix%material(2)%VF_mid = 1.0_rkind - this%mix%material(1)%VF_mid
 
@@ -2755,9 +2785,9 @@ contains
       mask2 =  (4.0_rkind*abs(VFbar(:,:,:,2)*(1.0_rkind-VFbar(:,:,:,2))))**0.2_rkind !**(0.2_rkind)
       mask3 =  (4.0_rkind*abs(VFbar(:,:,:,3)*(1.0_rkind-VFbar(:,:,:,3))))**0.2_rkind   !**0.2_rkind
 
-      af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))*this%sos_ratio*rho_ratio  * ( (sqrt( this%u_mid(:,:,:,1)**2.0_rkind  + this%v_mid(:,:,:,1)**2.0_rkind + this%w_mid(:,:,:,1 )**2.0_rkind )) /sos_int(:,:,:,1) )!**2.0_rkind  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
-      af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,2)**2.0_rkind + this%v_mid(:,:,:,2)**2.0_rkind + this%w_mid(:,:,:,2 )**2.0_rkind  ) ) /sos_int(:,:,:,2)) !**2.0_rkind
-      af(:,:,:,3) =this%CP*mask3*this%dt/(this%rho_mid(:,:,:,3))*this%sos_ratio*rho_ratio *( ( sqrt( this%u_mid(:,:,:,3)**2.0_rkind + this%v_mid(:,:,:,3)**2.0_rkind + this%w_mid(:,:,:,3 )**2.0_rkind  ) ) /sos_int(:,:,:,3)) !**2.0_rkind
+      af(:,:,:,1) =this%CP*mask1*this%dt/(this%rho_mid(:,:,:,1))*this%sos_ratio*rho_ratio  * (( sqrt( this%u_mid(:,:,:,1)**2.0_rkind  + this%v_mid(:,:,:,1)**2.0_rkind + this%w_mid(:,:,:,1 )**2.0_rkind )) /sos_int(:,:,:,1) )**2.0_rkind  ! sos_int(:,:,:,i)/this%dx ! max( this%rho_mid(:,:,:,i)/this%dt, sos_int(:,:,:,i)/this%dx)
+      af(:,:,:,2) =this%CP*mask2*this%dt/(this%rho_mid(:,:,:,2))*this%sos_ratio*rho_ratio *((  sqrt( this%u_mid(:,:,:,2)**2.0_rkind + this%v_mid(:,:,:,2)**2.0_rkind + this%w_mid(:,:,:,2 )**2.0_rkind  ) ) /sos_int(:,:,:,2)) **2.0_rkind
+      af(:,:,:,3) =this%CP*mask3*this%dt/(this%rho_mid(:,:,:,3))*this%sos_ratio*rho_ratio *((  sqrt( this%u_mid(:,:,:,3)**2.0_rkind + this%v_mid(:,:,:,3)**2.0_rkind + this%w_mid(:,:,:,3 )**2.0_rkind  ) ) /sos_int(:,:,:,3)) **2.0_rkind
 
 
      surfFil=this%surfaceTension_coeff*kappabar*gradVF 
@@ -2786,14 +2816,13 @@ contains
       call transpose_y_to_x(peff(:,:,:,1),xtmp3,this%decomp)
       call transpose_y_to_x(kappabar(:,:,:,1),xtmp4,this%decomp)
 !      call transpose_y_to_x(this%mix%material(1)%VF_mid(:,:,:,1),xtmp5,this%decomp)
-!
+
       do i = 2,nx-1
-!
+
          xtmp1(i,:,:) = xtmp1(i,:,:) - xtmp2(i,:,:) * ( xtmp3(i,:,:))!*(this%dx*this%dy)**two / 4.0_rkind ! - 0.5_rkind*(xtmp3(i+1,:,:) + xtmp3(i-1,:,:) ))
 
-
       enddo
-!
+
       xtmp1(nx,:,:) = xtmp1(nx,:,:) - xtmp2(nx,:,:) * ( xtmp3(nx,:,:) )!*(this%dy*this%dx)**two / 4.0_rkind  !  - 0.5_rkind*(xtmp3(1,:,:) + xtmp3(nx-1,:,:) ))
       xtmp1(1,:,:) = xtmp1(1,:,:) - xtmp2(1,:,:) * ( xtmp3(1,:,:) )!*(this%dx*this%dy)**two / 4.0_rkind      ! - 0.5_rkind*(xtmp3(nx,:,:) + xtmp3(nx,:,:) ))
 
@@ -2804,20 +2833,20 @@ contains
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  Z Correction !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       tmp = this%w_mid(:,:,:,3)
       tmp3 = af(:,:,:,3)
-
+!
       if(nz .GT. 1 ) then
       call transpose_y_to_z(tmp,ztmp1,this%decomp)
       call transpose_y_to_z(tmp3,ztmp2,this%decomp)
       call transpose_y_to_z(peff(:,:,:,3),ztmp3,this%decomp)
       call transpose_y_to_z(kappabar(:,:,:,3),ztmp4,this%decomp)
-!
+!!
       do i = 2,nz-1
 !
          ztmp1(:,:,i) = ztmp1(:,:,i) - ztmp2(:,:,i) * ( ztmp3(:,:,i)) !  - 0.5_rkind*(ztmp3(:,:,i+1) + ztmp3(:,:,i-1) ))
 
 
       enddo
-!
+!!
       ztmp1(:,:,nz) = ztmp1(:,:,nz) - ztmp2(:,:,nz) * ( ztmp3(:,:,nz) ) ! - 0.5_rkind*(ztmp3(:,:,1) + ztmp3(:,:,nz-1) ))
       ztmp1(:,:,1) = ztmp1(:,:,1) - ztmp2(:,:,1) * ( ztmp3(:,:,1) )     !      - 0.5_rkind*(ztmp3(:,:,nz) + ztmp3(:,:,nz) ))
 

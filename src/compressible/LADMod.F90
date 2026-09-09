@@ -134,7 +134,7 @@ contains
 
         real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: mustar, bulkstar,fsw
         real(rkind), dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) :: xtmp1,xtmp2
-        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,func,bulkP
+        real(rkind), dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) ::ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,func,bulkP,dVF,dYs
         real(rkind), dimension(this%decomp%zsz(1),this%decomp%zsz(2),this%decomp%zsz(3)) :: ztmp1,ztmp2
 
         real(rkind), intent(in) :: dt
@@ -177,12 +177,17 @@ contains
         endif
         mustar = mustar + ytmp1
 
-        mustar = this%Cmu*rho*abs(mustar) *(max(deltakapVF,deltakapYs)+ 1d-3)
-        
+        dVF = deltakapVF
+        dYs = deltakapYs
+        call this%filter(dVF, x_bc, y_bc, z_bc)
+        call this%filter(dYs, x_bc, y_bc, z_bc)
+        mustar = this%Cmu*abs(mustar)* (max(deltakapVF,deltakapYs)+ 1d-3)
+      
+         
         ! Filter mustar
         call this%filter(mustar, x_bc, y_bc, z_bc)
         call this%filter(mustar, x_bc, y_bc, z_bc) 
-        mu = mu + mustar
+        mu = mustar
 
         ! -------- Artificial Bulk Viscosity --------
         
@@ -692,7 +697,7 @@ contains
         integer, dimension(2), intent(in) :: x_bc, y_bc, z_bc
         real(rkind),intent(in)  :: rho0,dt
         real(rkind), intent(in) :: minYs, minVF
-        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: diffstar,adiffstar,H1,H2,H3,mask,dil,omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta,mdiffstar,barrier,VFhigh,VFlow,Yslow,Yshigh,Curvstar,divustar,lnYsstar,lnYs
+        real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) ::   diffstar,adiffstar,H1,H2,H3,mask,dil,omega, drYdmag, Ys, outb,VF_bound,HM,outM,delta,mdiffstar,barrier,VFhigh,VFlow,Yslow,Yshigh,Curvstar,divustar,lnYsstar,lnYs,broad_mask
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) :: HVF_outb,HYs_outb,Ys_bound,HYs, HVF,Hbound,Hthresh,Hthresh1
         real(rkind),dimension(this%decomp%xsz(1),this%decomp%xsz(2),this%decomp%xsz(3)) ::xtmp1,xtmp2,xtmp3,xtmp4
         real(rkind),dimension(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)) ::ytmp1,ytmp2,ytmp3,ytmp4,ytmp5,ytmp6,ytmp7
@@ -799,7 +804,12 @@ contains
           ytmp5 = ytmp4*this%dy**4
           Curvstar =    Curvstar + ytmp5
         endif
-        Curvstar = sos*abs(log(abs(rho+1d-16)) ) * abs(Curvstar) !*abs( 1 - 4*abs(VF*(1-VF)) )
+        where (abs(VF*(1-VF)) > 5.d-6)
+           broad_mask = one
+        elsewhere
+           broad_mask = zero
+        end where
+        Curvstar = sos*abs(log(abs(rho+1d-16)) ) * abs(Curvstar) * broad_mask !*abs( 1 - 4*abs(VF*(1-VF)) )
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         !                           lnYs                                    !

@@ -5242,7 +5242,7 @@ end subroutine get_intSharp_clean2_optimized
         real(rkind), dimension(this%nxp,this%nyp,this%nzp)  :: lapVF,udiv, divuphi,VFmag,tanhmask,GVFmag,GPHImag,mask2,updatedKappa, weight, kappaSum, phi, xi, mu,d2vfdx2,d2vfdy2,d2vfdz2,divu,divphiu,dirac,H,tmp1,tmp2,tmp3,lapkappa,nkappa,rexact
         real(rkind), dimension(this%nxp,this%nyp,this%nzp,3) :: gradVF, gradphi, gradxi, gradVFk, p_int, VF_int, gradH,u_int, uphi_int, gradFV,gradVF_l,xi_int,gradkappa,gradkappa_int
 	real(rkind), dimension(this%nxp,this%nyp,this%nzp,3,3) :: NMint,gradVF_FV,gradVFint
-        real(rkind)   :: cut_off = 1d-12
+        real(rkind)   :: cut_off = 1d-6
 	integer :: iflag = one
 	real(rkind) :: r = 0.4D0, nmask = 40, minVF = 1D-6, tmask = 0.2d0, e = 1D-100 
 	!TODO: add additional arrays to be used locally in calculation of surface tension force
@@ -5253,6 +5253,7 @@ end subroutine get_intSharp_clean2_optimized
             call GracefulExit("Surface tension is not defined for single-species, and not implemented for more than 2 species",4634)
         endif
 
+        cut_off = this%intSharp_cut
         !initialize surface tension force and energy source to zero everywhere
         this%surfaceTension_f = 0.0d0
         this%surfaceTension_e = 0.0d0
