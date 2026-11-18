@@ -112,7 +112,7 @@ module CompressibleGrid
         ! stretched and curvilinear meshes
         logical     :: xmetric=.false., ymetric=.false., zmetric=.false.
         real(rkind), dimension(:,:,:), allocatable :: xi, eta, zeta
-        real(rkind), dimension(:,:,:),     allocatable :: dxs, dys, dzs
+        real(rkind), dimension(:,:,:), allocatable :: dxs, dys, dzs, delsq
 
         ! multiblock topology
         logical :: useMultiBlock = .false.
@@ -294,6 +294,7 @@ contains
         allocate(this%dxs(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)))
         allocate(this%dys(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)))
         allocate(this%dzs(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)))
+        allocate(this%delsq(this%decomp%ysz(1),this%decomp%ysz(2),this%decomp%ysz(3)))
 
         this%xmetric = xmetric;   this%ymetric = ymetric;   this%zmetric = zmetric  
         if(this%xmetric) then
@@ -320,6 +321,8 @@ contains
         ! Go to hooks if a different mesh is desired
         call meshgen(this%decomp,this%dx, this%dy, this%dz, this%mesh, inputfile, this%xmetric, this%ymetric, this%zmetric, &
                      this%xi, this%eta, this%zeta, this%dxs, this%dys, this%dzs, this%xbuf, this%zbuf)
+        !this%delsq = this%dxs**2 + this%dys**2 + this%dzs**2
+        this%delsq = (this%dxs * this%dys * this%dzs)**(two/three)
         if (ns .LT. 1) call GracefulExit("Cannot have less than 1 species. Must have ns >= 1.",4568)
 
         ! Allocate mixture
@@ -626,6 +629,7 @@ contains
         if(allocated(this%dxs) ) deallocate(this%dxs)
         if(allocated(this%dys) ) deallocate(this%dys)
         if(allocated(this%dzs) ) deallocate(this%dzs)
+        if(allocated(this%delsq))deallocate(this%delsq)
 
         call this%der%destroy()
         if (allocated(this%der)) deallocate(this%der) 
@@ -1688,10 +1692,16 @@ contains
 
         dtCFL  = this%CFL / P_MAXVAL( ABS(this%u)/this%dxs + ABS(this%v)/this%dys + ABS(this%w)/this%dzs &
                + cs*sqrt( one/(this%dxs**2) + one/(this%dys**2) + one/(this%dzs**2) ))
-        dtmu   = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
-        dtbulk = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
-        dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**4))))**(third) + eps)
-        dtdiff = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%diff ) + eps)
+        !! very conservative dt estimates - very often leads to shear/bulk/conductive
+        !dtmu   = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%mu  / this%rho ) + eps)
+        !dtbulk = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%bulk/ this%rho ) + eps)
+        !dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho* (min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**4))))**(third) + eps)
+        !dtdiff = 0.2_rkind * min(P_MINVAL(this%dxs),P_MINVAL(this%dys),P_MINVAL(this%dzs))**2 / (P_MAXVAL( this%diff ) + eps)
+        !! trying less conservative dt estimates
+        dtmu   = 0.2_rkind * P_MINVAL(this%rho * this%delsq / (this%mu   + eps))
+        dtbulk = 0.2_rkind * P_MINVAL(this%rho * this%delsq / (this%bulk + eps))
+        dtkap  = 0.2_rkind * one / ( (P_MAXVAL( this%kap*this%T/(this%rho*this%delsq*this%delsq)))**(third) + eps)
+        dtdiff = 0.2_rkind * P_MINVAL(this%delsq) / P_MAXVAL(this%diff + eps)
 
         dtlimits(1) = dtCFL;    dtlimits(2) = dtmu;    dtlimits(3) = dtbulk
         dtlimits(4) = dtkap;    dtlimits(5) = dtdiff

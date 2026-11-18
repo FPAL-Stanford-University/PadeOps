@@ -31,6 +31,7 @@ module FlatPlateBL_data
     integer     :: inittype = 1
     character(len=clen) :: fname_prefix
     real(rkind), allocatable, dimension(:,:) :: uleftbc
+    real(rkind), allocatable, dimension(:,:,:) :: Fspngx, Fspngy, dumF
     ! Gaussian filter for sponge
     type(filters) :: mygfil
 
@@ -49,49 +50,49 @@ contains
     real(rkind), dimension(:,:,:),   intent(inout) :: u,v,w,p,rho
     integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
 
-    integer :: i, j, k
-    real(rkind) :: dx, dy, dz, filpt, thickT
-    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
-    character(len=clen) :: outputfile
+    !integer :: i, j, k
+    !real(rkind) :: dx, dy, dz!, filpt, thickT
+    !real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
+    !character(len=clen) :: outputfile
 
-    dx = Lx/real(decomp%xsz(1)-1,rkind)
-    filpt = 2.00_rkind/dx 
-    thickT = real(1.0D0, rkind)
+    !dx = Lx/real(decomp%xsz(1)-1,rkind)
+    !filpt = 2.00_rkind/dx 
+    !thickT = real(1.0D0, rkind)
 
-    ! Gaussian Filter for right side of domain 
-    do i=1,decomp%ysz(1)
-       dumT(i,:,:)=half*(one-tanh( (real(decomp%xsz(1)- (decomp%yst(1) - 1 + i - 1), rkind)-filpt) / thickT ))
-    end do
+    !! Gaussian Filter for right side of domain 
+    !do i=1,decomp%ysz(1)
+    !   dumT(i,:,:)=half*(one-tanh( (real(decomp%xsz(1)- (decomp%yst(1) - 1 + i - 1), rkind)-filpt) / thickT ))
+    !end do
 
-    !! To check whether dumT is calculted correctly !!!
-    if(decomp%yst(2)==1) then
-      write(outputfile, '(a,i3.3,a)') 'Fsponge_x_', nrank, '.dat'
-      open(10,file=outputfile,status='unknown')
-      do i=1,decomp%ysz(1)
-         write(10,'(2(e19.12),1x)') x(i,1,1), dumT(i,1,1)
-      end do
-      close(10)
-    endif
+    !!! To check whether dumT is calculted correctly !!!
+    !if(decomp%yst(2)==1) then
+    !  write(outputfile, '(a,i3.3,a)') 'Fsponge_x_', nrank, '.dat'
+    !  open(10,file=outputfile,status='unknown')
+    !  do i=1,decomp%ysz(1)
+    !     write(10,'(2(e19.12),1x)') x(i,1,1), dumT(i,1,1)
+    !  end do
+    !  close(10)
+    !endif
 
     dumF = u
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    u = u + dumT*(dumF-u) 
+    u = u + Fspngx*(dumF-u) 
 
     dumF = v
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    v = v + dumT*(dumF-v)
+    v = v + Fspngx*(dumF-v)
 
     dumF = w
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    w = w + dumT*(dumF-w)
+    w = w + Fspngx*(dumF-w)
 
     dumF = p
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    p = p + dumT*(dumF-p)
+    p = p + Fspngx*(dumF-p)
 
     dumF = rho
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    rho = rho + dumT*(dumF-rho)
+    rho = rho + Fspngx*(dumF-rho)
 
   end subroutine
    
@@ -108,14 +109,14 @@ contains
     real(rkind), dimension(:,:,:),   intent(inout) :: u,v,w,p,rho
     integer, dimension(2),           intent(in)    :: x_bc, y_bc, z_bc
 
-    integer :: i, j, k
-    real(rkind) :: dx, dy, dz, filpt, thickT
-    real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
-    character(len=clen) :: outputfile
+    !integer :: i, j, k
+    !real(rkind) :: dx, dy, dz!, filpt, thickT
+    !real(rkind), dimension(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)) :: dumT, dumF
+    !character(len=clen) :: outputfile
 
-    dy = Ly/real(decomp%ysz(2)-1,rkind)
-    filpt = 1.0_rkind/dy 
-    thickT = real(2.0D0, rkind)
+    !dy = Ly/real(decomp%ysz(2)-1,rkind)
+    !filpt = 1.0_rkind/dy 
+    !thickT = real(2.0D0, rkind)
         
     !! Gussian Filter for bottom
     !do i=1,decomp%ysz(2)
@@ -142,39 +143,39 @@ contains
     !call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
     !rho = rho + dumT*(dumF-rho)
 
-    ! Gaussian Filter for top
-    do i=1,decomp%ysz(2)
-       dumT(:,i,:)=half*(one-tanh( (real(decomp%ysz(2)- (decomp%yst(2) - 1 + i - 1), rkind)-filpt) / thickT ))
-    end do
+    !! Gaussian Filter for top
+    !do i=1,decomp%ysz(2)
+    !   dumT(:,i,:)=half*(one-tanh( (real(decomp%ysz(2)- (decomp%yst(2) - 1 + i - 1), rkind)-filpt) / thickT ))
+    !end do
 
     dumF = u
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    u = u + dumT*(dumF-u) 
+    u = u + Fspngy*(dumF-u) 
 
     dumF = v
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    v = v + dumT*(dumF-v)
+    v = v + Fspngy*(dumF-v)
 
     dumF = w
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    w = w + dumT*(dumF-w)
+    w = w + Fspngy*(dumF-w)
 
     dumF = p
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    p = p + dumT*(dumF-p)
+    p = p + Fspngy*(dumF-p)
 
     dumF = rho
     call filter3D(decomp,mygfil,dumF,4,x_bc,y_bc,z_bc)
-    rho = rho + dumT*(dumF-rho)
+    rho = rho + Fspngy*(dumF-rho)
    
-    if (decomp%yst(1)==1) then
-      write(outputfile, '(a,i3.3,a)') 'Fsponge_y_', nrank, '.dat'
-      open(10,file=outputfile,status='unknown')
-      do i=1,decomp%ysz(2)
-         write(10,'(2(e19.12),1x)') y(1,i,1), dumT(1,i,1)
-      end do
-      close(10)
-    endif
+    !if (decomp%yst(1)==1) then
+    !  write(outputfile, '(a,i3.3,a)') 'Fsponge_y_', nrank, '.dat'
+    !  open(10,file=outputfile,status='unknown')
+    !  do i=1,decomp%ysz(2)
+    !     write(10,'(2(e19.12),1x)') y(1,i,1), dumT(1,i,1)
+    !  end do
+    !  close(10)
+    !endif
 
     end subroutine
 
@@ -414,8 +415,9 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
     integer     ::  xmetric_flag,  ymetric_flag, zmetric_flag
     real(rkind), allocatable, dimension(:,:) :: metric_params
     character(len=clen) :: outputfile,str
+    real(rkind) :: xcen, ycen, thickX, thickY
 
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype, xplbc_recycle
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype, xplbc_recycle, xcen, ycen, thickX, thickY
     namelist /METRICS/ xmetric_flag, ymetric_flag, zmetric_flag, metric_params
 
     ioUnit = 15
@@ -591,8 +593,9 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     real(rkind), dimension(decomp%ysz(1)) :: x_new
     real(rkind), dimension(decomp%ysz(2)) :: y_new
     real(rkind), dimension(decomp%ysz(3)) :: z_new
+    real(rkind) :: xcen, ycen, thickX, thickY
     
-    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype, xplbc_recycle
+    namelist /PROBINPUT/ ns, Lx, Ly, Lz, y1, Pr, Sc, gam, rho_ref, Tw, Re, Mc, add_pert, fname_prefix, utau, inittype, xplbc_recycle, xcen, ycen, thickX, thickY
 
 !    ioUnit = 11
 !    print *, 'fine inputfile is :: ',inputfile
@@ -710,6 +713,39 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
 
         ! Initialize gaussian filter mygfil
         call mygfil%init(decomp, periodicx, periodicy, periodicz, "gaussian", "gaussian", "gaussian" )
+
+        ! Initialize Fspngx, Fspngy and dummy field
+        allocate(Fspngx(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)))
+        allocate(Fspngy(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)))
+        allocate(  dumF(decomp%ysz(1), decomp%ysz(2), decomp%ysz(3)))
+
+        ! x-direction spnge
+        !xcen = Lx-1.00_rkind; thickX = 1.0_rkind
+        Fspngx = half * (one + tanh( (x - xcen)/(thickX*dx) ))
+    !   dumT(i,:,:)=half*(one-tanh( (real(decomp%xsz(1)- (decomp%yst(1) - 1 + i - 1), rkind)-filpt) / thickT ))
+
+        ! y-direction spnge
+        !ycen = Ly-2.00_rkind; thicky = 1.0_rkind
+        Fspngy = half * (one + tanh( (y - ycen)/(thickY*dy) ))
+
+        ! print to file once for debugging
+        if(decomp%yst(3)==1) then
+          write(outputfile, '(a,i3.3,a)') 'Fsponge_x_', nrank, '.dat'
+          open(10,file=outputfile,status='unknown')
+          do i=1,decomp%ysz(1)
+             write(10,'(2(e19.12),1x)') x(i,1,1), Fspngx(i,1,1)
+          end do
+          close(10)
+        endif
+        if (decomp%yst(1)==1) then
+          write(outputfile, '(a,i3.3,a)') 'Fsponge_y_', nrank, '.dat'
+          open(10,file=outputfile,status='unknown')
+          do i=1,decomp%ysz(2)
+             write(10,'(2(e19.12),1x)') y(1,i,1), Fspngy(1,i,1)
+          end do
+          close(10)
+        endif
+
     end associate
 end subroutine
 
@@ -935,8 +971,10 @@ subroutine hook_bc(decomp,mesh,fields,mix,tsim,x_bc,y_bc,z_bc,newTimeStep,time_s
                !close(iounit)
              endif
  
-             umax = maxval(abs(u)); vmax = maxval(abs(v));  wmax = maxval(abs(w)); 
-             pmax = maxval(abs(p)); rmax = maxval(abs(rho)); 
+             !umax = maxval(abs(u)); vmax = maxval(abs(v));  wmax = maxval(abs(w)); 
+             !pmax = maxval(abs(p)); rmax = maxval(abs(rho)); 
+             umax = maxval(abs(upert(:,:,:,1))); vmax = maxval(abs(upert(:,:,:,2)));  wmax = maxval(abs(upert(:,:,:,3))); 
+             pmax = maxval(abs(upert(:,:,:,4))); rmax = maxval(abs(upert(:,:,:,5))); 
              if(nrank==0) print '(a,e19.12,1x,a,i6.6,1x,a,i4.4,1x,a,5(e19.12,1x))', 'x-inflow bc tsim= ', tsim, ' ttind=', ttind, 'rank=', nrank, "uvwpr=", umax, vmax, wmax, pmax, rmax
           endif
         endif
