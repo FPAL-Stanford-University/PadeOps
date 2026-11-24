@@ -7,6 +7,7 @@ module FlatPlateBL_data
     use basic_io,         only: read_2d_ascii 
     use reductions,       only: P_MAXVAL,P_MINVAL
     use exits,            only: message, message_min_max
+    use gridstretching,   only: init_stretched_grid
     use mpi
 
     implicit none
@@ -478,19 +479,25 @@ subroutine meshgen(decomp, dx, dy, dz, mesh, inputfile, xmetric, ymetric, zmetri
 
     if(xmetric) then
       xi = x
-      call stretched_coordinates(decomp,x,xi,xmetric,xmetric_flag,metric_params(1,1),&
+      !call stretched_coordinates(decomp,x,xi,xmetric,xmetric_flag,metric_params(1,1),&
+      !                           metric_params(1,2),metric_params(1,3),metric_params(1,4))
+      call init_stretched_grid(decomp,x,xi,xmetric,xmetric_flag,metric_params(1,1),&
                                  metric_params(1,2),metric_params(1,3),metric_params(1,4))
     endif
 
     if(ymetric) then
       eta = y
-      call stretched_coordinates(decomp,y,eta,ymetric,ymetric_flag,metric_params(2,1),&
+      !call stretched_coordinates(decomp,y,eta,ymetric,ymetric_flag,metric_params(2,1),&
+      !                           metric_params(2,2),metric_params(2,3),metric_params(2,4))
+      call init_stretched_grid(decomp,y,eta,ymetric,ymetric_flag,metric_params(2,1),&
                                  metric_params(2,2),metric_params(2,3),metric_params(2,4))
     endif
 
     if(zmetric) then
       zeta = z
-      call stretched_coordinates(decomp,z,zeta,zmetric,zmetric_flag,metric_params(3,1),&
+      !call stretched_coordinates(decomp,z,zeta,zmetric,zmetric_flag,metric_params(3,1),&
+      !                           metric_params(3,2),metric_params(3,3),metric_params(3,4))
+      call init_stretched_grid(decomp,z,zeta,zmetric,zmetric_flag,metric_params(3,1),&
                                  metric_params(3,2),metric_params(3,3),metric_params(3,4))
     endif
 

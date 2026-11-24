@@ -7,6 +7,7 @@ module DerivativesMod
     use exits,    only: gracefulExit, message
     use decomp_2d,only: decomp_info, nrank, transpose_x_to_y, transpose_y_to_x, transpose_y_to_z, transpose_z_to_y
     use constants, only: zero, one, half
+    use gridstretching, only: init_metrics_der
     use MultiBlockTopologyMod, only: multiblocktopol
 
     implicit none
@@ -394,8 +395,11 @@ contains
              if(allocated(this%dfdxbuf)) deallocate(this%dfdxbuf)
              allocate(this%dfdxbuf(this%xsz(1), this%xsz(2), this%xsz(3)))
 
-             call this%init_metric(this%xsz(1), this%xsz(2), this%xsz(3), x, xi, xmetric_flag, metric_params(1,:), &
-                                   this%dxidx, this%dxidx_sq, this%d2xidx2)
+             call init_metrics_der(this%xsz(1), this%xsz(2), this%xsz(3), x, xi, xmetric_flag, metric_params(1,:), &
+                                  this%dxidx, this%dxidx_sq, this%d2xidx2)
+
+             !call this%init_metric(this%xsz(1), this%xsz(2), this%xsz(3), x, xi, xmetric_flag, metric_params(1,:), &
+             !                      this%dxidx, this%dxidx_sq, this%d2xidx2)
 
              this%xmetric = .true. 
         end if
@@ -416,7 +420,10 @@ contains
              if(allocated(this%dfdybuf)) deallocate(this%dfdybuf)
              allocate(this%dfdybuf(this%ysz(1), this%ysz(2), this%ysz(3)))
 
-             call this%init_metric(this%ysz(1), this%ysz(2), this%ysz(3), y, eta, ymetric_flag, metric_params(2,:), &
+             !call this%init_metric(this%ysz(1), this%ysz(2), this%ysz(3), y, eta, ymetric_flag, metric_params(2,:), &
+             !                      this%detady, this%detady_sq, this%d2etady2)
+
+             call init_metrics_der(this%ysz(1), this%ysz(2), this%ysz(3), y, eta, ymetric_flag, metric_params(2,:), &
                                    this%detady, this%detady_sq, this%d2etady2)
              !! stretched  :: [x, y, z]  --> uniform :: [xi, eta, zeta]]
              !! [dfdx, dfdy] --> [dfdxi*dxidx + dfdeta*detadx, dfdxi*dxidy + dfdeta*detady]
@@ -441,8 +448,11 @@ contains
              if(allocated(this%dfdzbuf)) deallocate(this%dfdzbuf)
              allocate(this%dfdzbuf(this%zsz(1), this%zsz(2), this%zsz(3)))
 
-             call this%init_metric(this%zsz(1), this%zsz(2), this%zsz(3), z, zeta, zmetric_flag, metric_params(3,:), &
-                                      this%dzetadz, this%dzetadz_sq, this%d2zetadz2)
+             !call this%init_metric(this%zsz(1), this%zsz(2), this%zsz(3), z, zeta, zmetric_flag, metric_params(3,:), &
+             !                      this%dzetadz, this%dzetadz_sq, this%d2zetadz2)
+
+             call init_metrics_der(this%zsz(1), this%zsz(2), this%zsz(3), z, zeta, zmetric_flag, metric_params(3,:), &
+                                   this%dzetadz, this%dzetadz_sq, this%d2zetadz2)
 
              this%zmetric = .true. 
         end if

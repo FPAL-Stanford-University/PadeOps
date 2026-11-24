@@ -622,15 +622,16 @@ subroutine initfields(decomp,dx,dy,dz,inputfile,mesh,fields,mix,tsim,tstop,dt,tv
     read(unit=ioUnit, NML=PROBINPUT)
     close(ioUnit)
 
-    n_prof = 17
-    allocate(y_prof(n_prof), u_prof(n_prof))
-    
+    !! read in the input (blasius) velocity profile
     open(10, file="vel_input_profile.dat", status="old")
-    
-    do i = 1, n_prof
+      ! first read in the number of entries in the velocity profile
+      read(10,*) n_prof
+      ! allocate memory for this size
+      allocate(y_prof(n_prof), u_prof(n_prof))
+      ! now, read in the velocity profile
+      do i = 1, n_prof
         read(10, *) y_prof(i), u_prof(i)
-    end do
-    
+      end do
     close(10) 
     ! Global domain sizes
     nx = decomp%xsz(1);     ny = decomp%ysz(2);    nz = decomp%zsz(3)
